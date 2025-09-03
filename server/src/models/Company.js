@@ -3,51 +3,54 @@ const mongoose = require('mongoose');
 const companySchema = new mongoose.Schema({
   name: {
     type: String,
-    required: true,
+    required: [true, 'Company name is required'],
     trim: true,
-    unique: true
+    maxlength: [100, 'Company name cannot exceed 100 characters']
   },
   tin: {
     type: String,
-    required: true,
+    trim: true,
     unique: true,
-    trim: true
+    sparse: true
   },
   industry: {
     type: String,
-    required: true,
     trim: true
   },
   logoUrl: {
-    type: String,
-    trim: true
+    type: String
   },
   bannerUrl: {
-    type: String,
-    trim: true
+    type: String
   },
   description: {
     type: String,
-    maxlength: 2000
+    maxlength: [1000, 'Description cannot exceed 1000 characters']
+  },
+  address: {
+    type: String,
+    trim: true
+  },
+  phone: {
+    type: String,
+    trim: true
+  },
+  website: {
+    type: String,
+    trim: true
   },
   verified: {
     type: Boolean,
     default: false
   },
-  createdBy: {
+  user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
-  },
-  employees: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }]
+    required: true,
+    unique: true
+  }
 }, {
   timestamps: true
 });
-
-// Add index for better search performance
-companySchema.index({ name: 'text', industry: 'text', description: 'text' });
 
 module.exports = mongoose.model('Company', companySchema);

@@ -1,126 +1,145 @@
 const Company = require('../models/Company');
-const User = require('../models/User');
+const User = require('../models/User'); // ADD THIS IMPORT
+const asyncHandler = require('../middleware/async');
+const ErrorResponse = require('../utils/errorResponse');
 
-// @desc    Create a new company
+// @desc    Create company profile
 // @route   POST /api/companies
-// @access  Private (Company/Organization role)
-exports.createCompany = async (req, res) => {
+// @access  Private (Company role only)
+exports.createCompany = asyncHandler(async (req, res, next) => {
   try {
-    const { name, tin, industry, description } = req.body;
+    console.log('User making request:', req.user);
+    console.log('Request body received:', req.body);
 
-    // Check if company with same name or TIN already exists
-    const existingCompany = await Company.findOne({
-      $or: [{ name }, { tin }]
-    });
-
-    if (existingCompany) {
-      return res.status(400).json({
-        success: false,
-        message: 'Company with this name or TIN already exists'
-      });
+    // Check if user has company role
+    if (req.user.role !== 'company') {
+      return next(new ErrorResponse('Not authorized to create company profile', 403));
     }
 
-    const company = new Company({
-      name,
-      tin,
-      industry,
-      description,
-      createdBy: req.user.userId
+    // Check if company already exists for this user
+    const existingCompany = await Company.findOne({ user: req.user.userId });
+    if (existingCompany) {
+      return next(new ErrorResponse('Company profile already exists for this user', 400));
+    }
+
+    // Create company data with user reference - FIXED: Use req.user.userId
+    const companyData = {
+      ...req.body,
+      user: req.user.userId // Use userId from JWT payload
+    };
+
+    console.log('Company data to create:', companyData);
+
+    const company = await Company.create(companyData);
+
+    // Update user's company profile status
+    await User.findByIdAndUpdate(req.user.userId, { 
+      hasCompanyProfile: true,
+      profileCompleted: true
     });
 
-    await company.save();
-
-    // Add company to user's profile
-    await User.findByIdAndUpdate(req.user.userId, {
-      company: company._id
-    });
+    console.log('Company created successfully:', company._id);
 
     res.status(201).json({
       success: true,
-      message: 'Company created successfully',
-      data: { company }
+      data: company
     });
 
   } catch (error) {
-    console.error('Create company error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
+    console.error('Company creation error:', error);
+    
+    // Handle specific MongoDB errors
+    if (error.code === 11000) {
+      return next(new ErrorResponse('Company name or TIN already exists', 400));
+    }
+    
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(val => val.message);
+      return next(new ErrorResponse(messages.join(', '), 400));
+    }
+    
+    next(error);
+  }
+});
+
+// Also update the getMyCompany function to use userId:
+exports.getMyCompany = asyncHandler(async (req, res, next) => {
+  const company = await Company.findOne({ user: req.user.userId }).populate('user', 'name email');
+      console.log('User from token:', req.user);
+    console.log('User ID:', req.user.id);
+    console.log('User ID (alternative):', req.user.userId);
+  // Return null data instead of error for better frontend handling
+  if (!company) {
+    return res.status(200).json({
+      success: true,
+      data: null,
+      message: 'Company profile not found'
     });
   }
-};
 
-// @desc    Get company profile
+  res.status(200).json({
+    success: true,
+    data: company
+  });
+});
+
+// Update updateMyCompany function as well:
+exports.updateMyCompany = asyncHandler(async (req, res, next) => {
+  const company = await Company.findOne({ user: req.user.userId });
+
+  if (!company) {
+    return next(new ErrorResponse('Company profile not found', 404));
+  }
+
+  const updatedCompany = await Company.findByIdAndUpdate(company._id, req.body, {
+    new: true,
+    runValidators: true
+  });
+
+  res.status(200).json({
+    success: true,
+    data: updatedCompany
+  });
+});
+
+// @desc    Get company by ID
 // @route   GET /api/companies/:id
 // @access  Public
-exports.getCompanyProfile = async (req, res) => {
-  try {
-    const company = await Company.findById(req.params.id)
-      .populate('createdBy', 'name email')
-      .populate('employees', 'name email role');
+exports.getCompany = asyncHandler(async (req, res, next) => {
+  const company = await Company.findById(req.params.id).populate('user', 'name email');
 
-    if (!company) {
-      return res.status(404).json({
-        success: false,
-        message: 'Company not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      data: { company }
-    });
-
-  } catch (error) {
-    console.error('Get company error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
+  if (!company) {
+    return next(new ErrorResponse('Company not found', 404));
   }
-};
+
+  res.status(200).json({
+    success: true,
+    data: company
+  });
+});
 
 // @desc    Update company profile
 // @route   PUT /api/companies/:id
-// @access  Private (Company Admin)
-exports.updateCompanyProfile = async (req, res) => {
-  try {
-    const { name, industry, description } = req.body;
+// @access  Private
+exports.updateCompany = asyncHandler(async (req, res, next) => {
+  let company = await Company.findById(req.params.id);
 
-    // Check if user is the creator of the company
-    const company = await Company.findById(req.params.id);
-    
-    if (!company) {
-      return res.status(404).json({
-        success: false,
-        message: 'Company not found'
-      });
-    }
-
-    if (company.createdBy.toString() !== req.user.userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to update this company'
-      });
-    }
-
-    const updatedCompany = await Company.findByIdAndUpdate(
-      req.params.id,
-      { name, industry, description },
-      { new: true, runValidators: true }
-    );
-
-    res.json({
-      success: true,
-      message: 'Company profile updated successfully',
-      data: { company: updatedCompany }
-    });
-
-  } catch (error) {
-    console.error('Update company error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
+  if (!company) {
+    return next(new ErrorResponse('Company not found', 404));
   }
-};
+
+  // Make sure user is company owner or admin
+  if (company.user.toString() !== req.user.id && req.user.role !== 'admin') {
+    return next(new ErrorResponse('Not authorized to update this company', 403));
+  }
+
+  company = await Company.findByIdAndUpdate(req.params.id, req.body, {
+    new: true,
+    runValidators: true
+  });
+
+  res.status(200).json({
+    success: true,
+    data: company
+  });
+});

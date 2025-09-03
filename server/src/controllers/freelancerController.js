@@ -1,114 +1,120 @@
 const User = require('../models/User');
-const fs = require('fs');
-const path = require('path');
 
-// @desc    Get current user's portfolio
-// @route   GET /api/freelancer/portfolio
-// @access  Private (Freelancer)
+// Get user's portfolio
 exports.getPortfolio = async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId).select('portfolio');
-    res.status(200).json({ success: true, portfolio: user.portfolio });
+    console.log('Getting portfolio for user:', req.user._id);
+    
+    // FIX: Use req.user._id instead of req.user.userId
+    const user = await User.findById(req.user._id).select('portfolio');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    console.log('Found user portfolio:', user.portfolio);
+    res.status(200).json({ success: true, data: user.portfolio });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Server Error' });
+    console.error('Get portfolio error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
-// @desc    Add a new portfolio item
-// @route   POST /api/freelancer/portfolio
-// @access  Private (Freelancer)
+// Add portfolio item
 exports.addPortfolioItem = async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: 'Please upload an image file' });
+    const { title, description, mediaUrl } = req.body;
+    
+    if (!title) {
+      return res.status(400).json({ success: false, message: 'Title is required' });
     }
 
-    const imageUrl = `/uploads/portfolio/${req.file.filename}`;
-    const { title, description, url, skills } = req.body;
-    const skillsArray = skills ? skills.split(',').map(skill => skill.trim()) : [];
+    console.log('Adding portfolio item for user:', req.user._id);
+    
+    // FIX: Use req.user._id instead of req.user.userId
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      {
+        $push: {
+          portfolio: { title, description, mediaUrl }
+        }
+      },
+      { new: true, runValidators: true }
+    ).select('portfolio');
 
-    const newItem = { title, description, url, image: imageUrl, skills: skillsArray };
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
 
-    const user = await User.findById(req.user.userId);
-    user.portfolio.push(newItem);
-    await user.save();
-
-    res.status(201).json({ success: true, portfolioItem: newItem });
+    const newItem = user.portfolio[user.portfolio.length - 1];
+    res.status(201).json({ success: true, data: newItem });
   } catch (error) {
-    console.error(error);
-    if (req.file) {
-      fs.unlink(req.file.path, (err) => { if (err) console.error(err); });
-    }
-    res.status(500).json({ success: false, message: 'Server Error' });
+    console.error('Add portfolio item error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
-// @desc    Update a portfolio item
-// @route   PUT /api/freelancer/portfolio/:itemId
-// @access  Private (Freelancer)
+// Update portfolio item
 exports.updatePortfolioItem = async (req, res) => {
   try {
-    const { itemId } = req.params;
-    const { title, description, url, skills } = req.body;
-    let updateData = { title, description, url, skills };
+    const { id } = req.params;
+    const { title, description, mediaUrl } = req.body;
 
-    const user = await User.findById(req.user.userId);
-    const itemToUpdate = user.portfolio.id(itemId);
-
-    if (!itemToUpdate) {
-      return res.status(404).json({ success: false, message: 'Portfolio item not found' });
+    if (!title) {
+      return res.status(400).json({ success: false, message: 'Title is required' });
     }
 
-    if (req.file) {
-      // Delete old image
-      if (itemToUpdate.image) {
-        const oldImagePath = path.join(process.cwd(), 'public', itemToUpdate.image);
-        fs.unlink(oldImagePath, (err) => { if (err) console.error("Error deleting old image:", err); });
-      }
-      
-      const newImageUrl = `/uploads/portfolio/${req.file.filename}`;
-      updateData.image = newImageUrl;
+    console.log('Updating portfolio item:', id, 'for user:', req.user._id);
+    
+    // FIX: Use req.user._id instead of req.user.userId
+    const user = await User.findOneAndUpdate(
+      { _id: req.user._id, 'portfolio._id': id },
+      {
+        $set: {
+          'portfolio.$.title': title,
+          'portfolio.$.description': description,
+          'portfolio.$.mediaUrl': mediaUrl
+        }
+      },
+      { new: true, runValidators: true }
+    ).select('portfolio');
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Item not found' });
     }
 
-    itemToUpdate.set(updateData);
-    await user.save();
-
-    res.status(200).json({ success: true, portfolioItem: itemToUpdate });
+    const updatedItem = user.portfolio.find(item => item._id.toString() === id);
+    res.status(200).json({ success: true, data: updatedItem });
   } catch (error) {
-    console.error(error);
-    if (req.file) {
-      fs.unlink(req.file.path, (err) => { if (err) console.error(err); });
-    }
-    res.status(500).json({ success: false, message: 'Server Error' });
+    console.error('Update portfolio item error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
-// @desc    Delete a portfolio item
-// @route   DELETE /api/freelancer/portfolio/:itemId
-// @access  Private (Freelancer)
+// Delete portfolio item
 exports.deletePortfolioItem = async (req, res) => {
   try {
-    const { itemId } = req.params;
-    const user = await User.findById(req.user.userId);
-    const itemToDelete = user.portfolio.id(itemId);
+    const { id } = req.params;
 
-    if (!itemToDelete) {
-      return res.status(404).json({ success: false, message: 'Portfolio item not found' });
+    console.log('Deleting portfolio item:', id, 'for user:', req.user._id);
+    
+    // FIX: Use req.user._id instead of req.user.userId
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      {
+        $pull: {
+          portfolio: { _id: id }
+        }
+      },
+      { new: true }
+    ).select('portfolio');
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Delete associated image
-    if (itemToDelete.image) {
-      const imagePath = path.join(process.cwd(), 'public', itemToDelete.image);
-      fs.unlink(imagePath, (err) => { if (err) console.error("Error deleting image:", err); });
-    }
-
-    itemToDelete.deleteOne();
-    await user.save();
-
-    res.status(200).json({ success: true, message: 'Portfolio item deleted' });
+    res.status(200).json({ success: true, message: 'Item deleted successfully', data: user.portfolio });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Server Error' });
+    console.error('Delete portfolio item error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };

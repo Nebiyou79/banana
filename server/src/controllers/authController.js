@@ -51,7 +51,7 @@ exports.registerUser = async (req, res) => {
     await newUser.save();
     console.log('User created successfully:', newUser._id);
 
-    // Generate JWT token
+    // Generate JWT token - FIXED: Include userId in token
     const token = jwt.sign(
       { userId: newUser._id, role: newUser.role },
       JWT_SECRET,
@@ -105,6 +105,7 @@ exports.loginUser = async (req, res) => {
     user.lastLogin = new Date();
     await user.save();
 
+    // FIXED: Include userId in token
     const token = jwt.sign({ userId: user._id, role: user.role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
     res.json({
@@ -133,7 +134,7 @@ exports.logoutUser = (req, res) => {
   res.json({ success: true, message: 'Logout successful' });
 };
 
-// Get current user
+// Get current user - FIXED: Use req.user.userId from middleware
 exports.getCurrentUser = async (req, res) => {
   try {
     const user = await User.findById(req.user.userId);

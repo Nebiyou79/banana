@@ -1,22 +1,23 @@
 const express = require('express');
 const {
+  getMyCompany,
+  getCompany,
   createCompany,
-  getCompanyProfile,
-  updateCompanyProfile
+  updateCompany,
+  updateMyCompany
 } = require('../controllers/companyController');
-const { verifyToken } = require('../middleware/authMiddleware');
-const { restrictTo } = require('../middleware/roleMiddleware');
 
 const router = express.Router();
 
-// Public route
-router.get('/:id', getCompanyProfile);
+const { verifyToken } = require('../middleware/authMiddleware');
+const { restrictTo } = require('../middleware/roleMiddleware');
 
-// Protected routes
 router.use(verifyToken);
-router.use(restrictTo('company', 'organization'));
 
-router.post('/', createCompany);
-router.put('/:id', updateCompanyProfile);
+// Change from '/me' to '/'
+router.get('/', getMyCompany); // This will create /api/v1/company/
+router.post('/', restrictTo('company'), createCompany);
+router.put('/me', updateMyCompany);
+router.put('/:id', updateCompany);
 
 module.exports = router;

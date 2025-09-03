@@ -1,5 +1,7 @@
 const User = require('../models/User');
-const cvUpload = require('../middleware/cvUploadMiddleware');
+const { upload, handleUploadError } = require('../middleware/cvUploadMiddleware');
+const path = require('path');
+const fs = require('fs');
 
 exports.getProfile = async (req, res) => {
   try {
@@ -13,6 +15,8 @@ exports.getProfile = async (req, res) => {
       });
     }
 
+    // Return the CV URL as stored (relative path)
+    // Frontend will handle converting to absolute URL
     res.json({
       success: true,
       data: { user }
@@ -73,17 +77,12 @@ exports.updateProfile = async (req, res) => {
   }
 };
 
-exports.uploadCV = async (req, res) => {
-  try {
-    // Use multer middleware for file upload
-    cvUpload.single('cv')(req, res, async function (err) {
-      if (err) {
-        return res.status(400).json({
-          success: false,
-          message: err.message
-        });
-      }
-
+// Separate middleware for CV upload
+exports.uploadCV = [
+  upload.single('cv'),
+  handleUploadError,
+  async (req, res) => {
+    try {
       if (!req.file) {
         return res.status(400).json({
           success: false,
@@ -91,7 +90,30 @@ exports.uploadCV = async (req, res) => {
         });
       }
 
+      // Store relative path (consistent format)
       const cvUrl = `/uploads/cv/${req.file.filename}`;
+
+      // Get current user to check if they have an existing CV
+      const currentUser = await User.findById(req.user.userId);
+      
+      // Delete old CV file if it exists
+      if (currentUser && currentUser.cvUrl) {
+        try {
+          // Handle both /api/v1/... and /uploads/... formats
+          let oldFilePath = currentUser.cvUrl;
+          if (oldFilePath.startsWith('/api/v1/')) {
+            oldFilePath = oldFilePath.replace('/api/v1', '');
+          }
+          
+          const fullOldPath = path.join(process.cwd(), 'public', oldFilePath);
+          if (fs.existsSync(fullOldPath)) {
+            fs.unlinkSync(fullOldPath);
+            console.log('Deleted old CV file:', fullOldPath);
+          }
+        } catch (deleteError) {
+          console.log('Could not delete old file:', deleteError.message);
+        }
+      }
 
       const user = await User.findByIdAndUpdate(
         req.user.userId,
@@ -102,14 +124,32 @@ exports.uploadCV = async (req, res) => {
       res.json({
         success: true,
         message: 'CV uploaded successfully',
-        data: { user }
+        data: { 
+          user: {
+            cvUrl: cvUrl // Return relative path
+          }
+        }
       });
-    });
-  } catch (error) {
-    console.error('Upload CV error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
+
+    } catch (error) {
+      console.error('Upload CV error:', error);
+      
+      // Clean up uploaded file if error occurred
+      if (req.file) {
+        try {
+          const filePath = path.join(req.file.destination, req.file.filename);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        } catch (cleanupError) {
+          console.log('Could not clean up file:', cleanupError.message);
+        }
+      }
+      
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
   }
-};
+];

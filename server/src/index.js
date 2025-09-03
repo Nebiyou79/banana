@@ -3,6 +3,7 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const dotenv = require('dotenv');
 const connectDB = require('./config/db');
+const path = require('path');
 
 // Load environment variables FIRST
 dotenv.config();
@@ -20,22 +21,31 @@ if (missingEnvVars.length > 0) {
 const app = express();
 
 // Middleware
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 app.use(cors({
   origin: process.env.CORS_ORIGIN || "http://localhost:3000",
   credentials: true
 }));
 
+// FIX: Serve static files from the correct path
+// Serve uploaded files directly from /uploads path
+app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
+console.log('Serving static files from:', path.join(process.cwd(), 'public', 'uploads'));
+
 // Import routes
 const authRoutes = require('./routes/authRoutes');
 const candidateRoutes = require('./routes/candidateRoutes');
 const freelanceRoutes = require('./routes/freelancerRoutes');
+const companyRoutes = require('./routes/companyRoutes');
+const jobRoutes = require('./routes/jobRoutes');
 // Routes
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/candidate', candidateRoutes);
 app.use('/api/v1/freelancer', freelanceRoutes);
-
+app.use('/api/v1/company', companyRoutes);
+app.use('/api/v1/job', jobRoutes);
 
 // Simple test route
 app.get('/api/test', (req, res) => {
@@ -92,6 +102,7 @@ async function startServer() {
       console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
       console.log(`🧪 Test route: http://localhost:${PORT}/api/test`);
       console.log(`🔐 Auth routes: http://localhost:${PORT}/api/v1/auth`);
+      console.log(`📁 Static files: http://localhost:${PORT}/uploads/`);
     });
     
   } catch (error) {

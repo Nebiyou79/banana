@@ -8,18 +8,12 @@ const {
 } = require('../controllers/freelancerController');
 const { verifyToken } = require('../middleware/authMiddleware');
 const { restrictTo } = require('../middleware/roleMiddleware');
-const upload = require('../middleware/uploadMiddleware');
 
-// All routes require authentication and freelancer role
 router.use(verifyToken);
-router.use(restrictTo('freelancer'));
 
-router.route('/portfolio')
-  .get(getPortfolio)
-  .post(upload.single('image'), addPortfolioItem);
-
-router.route('/portfolio/:itemId')
-  .put(upload.single('image'), updatePortfolioItem)
-  .delete(deletePortfolioItem);
+router.get('/portfolio', getPortfolio);
+router.post('/portfolio', addPortfolioItem);
+router.put('/portfolio/:id', updatePortfolioItem);
+router.delete('/portfolio/:id', deletePortfolioItem);
 
 module.exports = router;

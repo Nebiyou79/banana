@@ -17,7 +17,7 @@ exports.verifyToken = async (req, res, next) => {
 
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    // Check if user still exists and is active
+    // Check if user still exists and is active - FIXED: Get full user object
     const user = await User.findById(decoded.userId);
     if (!user || !user.isActive) {
       return res.status(401).json({ 
@@ -26,7 +26,17 @@ exports.verifyToken = async (req, res, next) => {
       });
     }
 
-    req.user = decoded;
+    // FIX: Set req.user to the actual user object from database, not just decoded token
+    req.user = {
+      _id: user._id,
+      userId: user._id, // Add userId for compatibility
+      id: user._id, // Add id for compatibility
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      // Add other user properties as needed
+    };
+    
     next();
   } catch (error) {
     console.error('Token verification error:', error);
@@ -61,7 +71,15 @@ exports.optionalAuth = async (req, res, next) => {
         const decoded = jwt.verify(token, JWT_SECRET);
         const user = await User.findById(decoded.userId);
         if (user && user.isActive) {
-          req.user = decoded;
+          // FIX: Set full user object, not just decoded token
+          req.user = {
+            _id: user._id,
+            userId: user._id,
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+          };
         }
       } catch (error) {
         // Silently ignore invalid tokens for optional auth

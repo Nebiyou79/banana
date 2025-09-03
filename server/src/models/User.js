@@ -21,6 +21,25 @@ const experienceSchema = new mongoose.Schema({
   skills: [String]
 });
 
+// Portfolio item schema
+const portfolioItemSchema = new mongoose.Schema({
+  title: { 
+    type: String, 
+    required: true, 
+    trim: true 
+  },
+  description: { 
+    type: String, 
+    trim: true 
+  },
+  mediaUrl: { 
+    type: String, 
+    trim: true 
+  }
+}, {
+  timestamps: true
+});
+
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
@@ -41,16 +60,11 @@ const userSchema = new mongoose.Schema({
     trim: true
   },
   company: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: 'Company'
-},
-  portfolio: [{
-    title: String,
-    description: String,
-    url: String,
-    image: String,
-    skills: [String]
-  }],
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Company'
+  },
+  // Updated portfolio field with proper schema
+  portfolio: [portfolioItemSchema],
   bio: {
     type: String,
     trim: true,
@@ -72,10 +86,15 @@ const userSchema = new mongoose.Schema({
     linkedin: String,
     github: String,
     twitter: String
-  }
+  },
+  hasCompanyProfile: {
+    type: Boolean,
+    default: false
+  },
 }, {
   timestamps: true
 });
+
 // Hash password before saving
 userSchema.pre('save', async function(next) {
   if (!this.isModified('passwordHash')) return next();
@@ -101,6 +120,13 @@ userSchema.methods.toJSON = function() {
   const user = this.toObject();
   delete user.passwordHash;
   return user;
+};
+
+userSchema.methods.isProfileComplete = function() {
+  if (this.role === 'company') {
+    return this.hasCompanyProfile && this.profileCompleted;
+  }
+  return this.profileCompleted;
 };
 
 module.exports = mongoose.model('User', userSchema);
