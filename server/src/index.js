@@ -35,8 +35,8 @@ const corsOptions = {
       'http://localhost:3001', 
       'http://127.0.0.1:3000',
       'http://127.0.0.1:3001',
-      'https://yourdomain.com',
-      'https://www.yourdomain.com',
+      'https://getbananalink.com',
+      'https://www.getbananalink.com',
       process.env.CORS_ORIGIN
     ].filter(Boolean);
     
