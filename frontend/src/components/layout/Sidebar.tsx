@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { 
   Home, User, Briefcase, FileText, CheckCircle, 
   LogOut, Folder, Users, 
-  ClipboardList, Award, Bookmark,
+  ClipboardList,
   TestTubeIcon, List, Plus, X
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
