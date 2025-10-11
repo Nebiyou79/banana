@@ -9,7 +9,6 @@ import {
   Briefcase, 
   Calendar, 
   CheckCircle, 
-  Star,
   Clock,
   Building2,
   Eye,
@@ -19,11 +18,9 @@ import {
   GraduationCap,
   Globe,
   Shield,
-  Heart,
   ExternalLink
 } from 'lucide-react';
 import Image from 'next/image';
-import { toast } from '@/hooks/use-toast';
 
 interface CandidateJobCardProps {
   job: Job;

@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { FileText, Scale, Shield, Users, BookOpen, Mail, ArrowLeft } from 'lucide-react';

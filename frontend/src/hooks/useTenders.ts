@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // /src/hooks/useTenders.ts
 import { useState, useCallback } from 'react';
-import { tenderService, Tender, TenderFilters } from '@/services/tenderService';
+import {  Tender, TenderFilters, TenderService } from '@/services/tenderService';
 
 export const useTenders = () => {
   const [tenders, setTenders] = useState<Tender[]>([]);
@@ -13,7 +13,7 @@ export const useTenders = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await tenderService.getTenders(filters);
+      const response = await TenderService.getTenders(filters);
       setTenders(response.data);
       setPagination(response.pagination);
     } catch (err) {
@@ -27,7 +27,7 @@ export const useTenders = () => {
     setLoading(true);
     setError(null);
     try {
-      const tender = await tenderService.getTender(id);
+      const tender = await TenderService.getTender(id);
       return tender;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch tender');

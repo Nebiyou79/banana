@@ -12,7 +12,6 @@ import {
   ArrowLeft, 
   Briefcase, 
   CheckCircle,
-  AlertCircle,
   Rocket,
   Target,
   Users,
