@@ -443,9 +443,9 @@ export default function RegisterPage() {
                           <SelectItem value="company" className="text-base py-3 hover:bg-blue-50 focus:bg-blue-50">
                             Company 
                           </SelectItem>
-                          <SelectItem value="organization" className="text-base py-3 hover:bg-blue-50 focus:bg-blue-50">
+                          {/* <SelectItem value="organization" className="text-base py-3 hover:bg-blue-50 focus:bg-blue-50">
                             Organization
-                          </SelectItem>
+                          </SelectItem> */}
                         </SelectContent>
                       </Select>
                       <FormMessage className="text-red-500 text-sm font-medium" />
