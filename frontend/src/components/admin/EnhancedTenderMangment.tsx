@@ -6,7 +6,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/Input';
 import {
   Select,
@@ -35,6 +34,7 @@ import {
   Calendar,
   DollarSign
 } from 'lucide-react';
+import { Checkbox } from '../ui/Checkbox';
 
 interface Tender {
   _id: string;
