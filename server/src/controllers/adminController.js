@@ -19,7 +19,7 @@ exports.getDashboardStats = async (req, res) => {
     
     // Job statistics
     const totalJobs = await Job.countDocuments();
-    const activeJobs = await Job.countDocuments({ status: 'published' });
+  const activeJobs = await Job.countDocuments({ status: 'active' });
     const draftJobs = await Job.countDocuments({ status: 'draft' });
     const closedJobs = await Job.countDocuments({ status: 'closed' });
     
@@ -44,18 +44,29 @@ exports.getDashboardStats = async (req, res) => {
     
     // Popular job categories
     const popularCategories = await Job.aggregate([
-      { $match: { status: 'published' } },
+      { $match: { status: 'active' } },
       { $group: { _id: '$category', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 5 }
     ]);
     
-    // Recent activities
-    const recentActivities = await AdminActivityLog.find()
+    // Recent activities (transform for frontend)
+    const recentActivitiesRaw = await AdminActivityLog.find()
       .populate('adminId', 'name email')
       .sort({ timestamp: -1 })
       .limit(10);
-    
+
+    const recentActivities = recentActivitiesRaw.map(activity => ({
+      id: activity._id,
+      user: activity.adminId ? {
+        name: activity.adminId.name,
+        email: activity.adminId.email
+      } : undefined,
+      action: activity.action,
+      target: activity.targetModel || '',
+      timestamp: activity.timestamp
+    }));
+
     res.json({
       users: {
         total: totalUsers,
@@ -184,6 +195,10 @@ exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
+    // Fix: If company is an empty string, set to null to avoid CastError
+    if (typeof updates.company !== 'undefined' && updates.company === "") {
+      updates.company = null;
+    }
     
     // Don't allow password updates through this endpoint
     if (updates.password) {
@@ -321,39 +336,38 @@ exports.getAllJobs = async (req, res) => {
       ];
     }
     
-    // Use lean() to get plain objects and handle population separately
+    // Get jobs with proper query
     const jobs = await Job.find(filter)
-      .select('-applications') // Exclude heavy data if not needed
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit))
       .sort({ createdAt: -1 })
-      .lean(); // Convert to plain JavaScript objects
+      .lean();
     
-    // If you need company information, fetch it separately
-    const jobsWithCompanies = await Promise.all(
-      jobs.map(async (job) => {
-        if (job.companyId) {
-          try {
-            const company = await Company.findById(job.companyId)
-              .select('name email logo')
-              .lean();
-            return { ...job, company };
-          } catch (error) {
-            console.error('Error fetching company:', error);
-            return job; // Return job without company info if there's an error
-          }
-        }
-        return job;
-      })
-    );
+    // Transform the data for frontend
+    const transformedJobs = jobs.map(job => ({
+      _id: job._id,
+      title: job.title,
+      company: job.company || job.companyName || job.employer || 'Unknown Company',
+      status: job.status,
+      applications: job.applicationsCount || job.applications?.length || 0,
+      createdAt: job.createdAt,
+      description: job.description,
+      location: job.location,
+      salary: job.salary,
+      type: job.type
+    }));
     
     const total = await Job.countDocuments(filter);
     
     res.json({
-      jobs: jobsWithCompanies,
-      totalPages: Math.ceil(total / Number(limit)),
-      currentPage: Number(page),
-      total
+      jobs: transformedJobs,
+      pagination: {
+        totalPages: Math.ceil(total / Number(limit)),
+        currentPage: Number(page),
+        total,
+        hasNext: Number(page) < Math.ceil(total / Number(limit)),
+        hasPrev: Number(page) > 1
+      }
     });
   } catch (error) {
     console.error('Error getting jobs:', error);
@@ -362,19 +376,52 @@ exports.getAllJobs = async (req, res) => {
 };
 
 // Update job
+// In your adminController.js - Fix the updateJob function
 exports.updateJob = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
     
+    console.log('Updating job:', id, 'with data:', updates);
+    
+    // Validate required fields
+    if (!updates.title || !updates.status) {
+      return res.status(400).json({ 
+        message: 'Title and status are required fields' 
+      });
+    }
+    
+    // Find the job first to ensure it exists
+    const existingJob = await Job.findById(id);
+    if (!existingJob) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+    
+    // Only allow specific fields to be updated
+    const allowedUpdates = {
+      title: updates.title,
+      status: updates.status,
+      description: updates.description || existingJob.description,
+      location: updates.location || existingJob.location,
+      salary: updates.salary || existingJob.salary,
+      type: updates.type || existingJob.type
+    };
+    
+    // Remove undefined values
+    Object.keys(allowedUpdates).forEach(key => {
+      if (allowedUpdates[key] === undefined) {
+        delete allowedUpdates[key];
+      }
+    });
+    
     const job = await Job.findByIdAndUpdate(
       id, 
-      updates, 
+      allowedUpdates, 
       { new: true, runValidators: true }
     );
     
     if (!job) {
-      return res.status(404).json({ message: 'Job not found' });
+      return res.status(404).json({ message: 'Job not found after update' });
     }
     
     // Log this activity
@@ -383,16 +430,24 @@ exports.updateJob = async (req, res) => {
       action: 'UPDATE',
       targetModel: 'Job',
       targetId: job._id,
-      changes: updates,
+      changes: allowedUpdates,
       ipAddress: req.ip,
       userAgent: req.get('User-Agent')
     });
     await activityLog.save();
     
-    res.json(job);
+    res.json({
+      success: true,
+      message: 'Job updated successfully',
+      data: job
+    });
   } catch (error) {
     console.error('Error updating job:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      details: error.errors ? Object.values(error.errors).map(e => e.message) : null
+    });
   }
 };
 
@@ -924,6 +979,614 @@ exports.getAllProposals = async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message
+    });
+  }
+};
+// controllers/adminController.js - ADD THESE NEW METHODS
+
+// Enhanced Tender Statistics
+exports.getTenderStats = async (req, res) => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const [
+      totalTenders,
+      publishedTenders,
+      draftTenders,
+      completedTenders,
+      cancelledTenders,
+      tendersLast30Days,
+      totalProposals,
+      highValueTenders,
+      categoryStats,
+      statusTrend,
+      recentTenders
+    ] = await Promise.all([
+      // Basic counts
+      Tender.countDocuments(),
+      Tender.countDocuments({ status: 'published' }),
+      Tender.countDocuments({ status: 'draft' }),
+      Tender.countDocuments({ status: 'completed' }),
+      Tender.countDocuments({ status: 'cancelled' }),
+      Tender.countDocuments({ createdAt: { $gte: thirtyDaysAgo } }),
+      Tender.aggregate([{ $group: { _id: null, total: { $sum: { $size: '$proposals' } } } }]),
+      Tender.countDocuments({ 'budget.max': { $gte: 5000 } }),
+      
+      // Category statistics
+      Tender.aggregate([
+        { $group: { _id: '$category', count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
+      ]),
+      
+      // Status trend (last 7 days)
+      Tender.aggregate([
+        { $match: { createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } } },
+        { $group: { 
+          _id: { 
+            status: '$status',
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }
+          }, 
+          count: { $sum: 1 } 
+        }},
+        { $sort: { '_id.date': 1 } }
+      ]),
+      
+      // Recent tenders for activity
+      Tender.find()
+        .populate('company', 'name industry')
+        .populate('createdBy', 'name email')
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .select('title status budget createdAt company createdBy')
+    ]);
+
+    const avgProposalsPerTender = totalTenders > 0 ? 
+      (totalProposals[0]?.total || 0) / totalTenders : 0;
+    
+    const completionRate = totalTenders > 0 ? 
+      (completedTenders / totalTenders) * 100 : 0;
+
+    res.json({
+      success: true,
+      data: {
+        overview: {
+          totalTenders,
+          publishedTenders,
+          draftTenders,
+          completedTenders,
+          cancelledTenders,
+          tendersLast30Days,
+          totalProposals: totalProposals[0]?.total || 0,
+          avgProposalsPerTender: Math.round(avgProposalsPerTender * 100) / 100,
+          highValueTenders,
+          completionRate: Math.round(completionRate * 100) / 100
+        },
+        categories: categoryStats,
+        trends: statusTrend,
+        recentActivity: recentTenders
+      }
+    });
+  } catch (error) {
+    console.error('Error getting tender stats:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error', 
+      error: error.message 
+    });
+  }
+};
+
+// Get all tenders with advanced filtering
+exports.getAllTenders = async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      status, 
+      category, 
+      search, 
+      company,
+      minBudget,
+      maxBudget,
+      dateFrom,
+      dateTo,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+    
+    // Build filter object
+    const filter = {};
+    
+    if (status && status !== 'all') filter.status = status;
+    if (category && category !== 'all') filter.category = category;
+    if (company) filter.company = company;
+    
+    // Budget filter
+    if (minBudget || maxBudget) {
+      filter.budget = {};
+      if (minBudget) filter.budget.min = { $gte: Number(minBudget) };
+      if (maxBudget) filter.budget.max = { $lte: Number(maxBudget) };
+    }
+    
+    // Date range filter
+    if (dateFrom || dateTo) {
+      filter.createdAt = {};
+      if (dateFrom) filter.createdAt.$gte = new Date(dateFrom);
+      if (dateTo) filter.createdAt.$lte = new Date(dateTo);
+    }
+    
+    // Search filter
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { 'company.name': { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const sortOptions = {};
+    sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    const tenders = await Tender.find(filter)
+      .populate('company', 'name industry verified website')
+      .populate('createdBy', 'name email')
+      .limit(Number(limit))
+      .skip((Number(page) - 1) * Number(limit))
+      .sort(sortOptions);
+
+    const total = await Tender.countDocuments(filter);
+
+    // Log admin activity
+    const activityLog = new AdminActivityLog({
+      adminId: req.user._id,
+      action: 'VIEW_TENDERS',
+      targetModel: 'Tender',
+      targetId: req.user._id,
+      changes: { filter },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+    await activityLog.save();
+
+    res.json({
+      success: true,
+      data: tenders,
+      pagination: {
+        totalPages: Math.ceil(total / Number(limit)),
+        currentPage: Number(page),
+        total,
+        hasNext: Number(page) < Math.ceil(total / Number(limit)),
+        hasPrev: Number(page) > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error getting tenders:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error', 
+      error: error.message 
+    });
+  }
+};
+
+// Get tender details
+exports.getTenderDetails = async (req, res) => {
+  try {
+    const tender = await Tender.findById(req.params.id)
+      .populate('company', 'name email industry verified website description')
+      .populate('createdBy', 'name email phone')
+      .populate('proposals.freelancer', 'name email skills profilePhoto rating')
+      .populate('invitedFreelancers', 'name email skills profilePhoto');
+
+    if (!tender) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Tender not found' 
+      });
+    }
+
+    res.json({
+      success: true,
+      data: tender
+    });
+  } catch (error) {
+    console.error('Error getting tender details:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error', 
+      error: error.message 
+    });
+  }
+};
+
+// Update tender status (admin override)
+exports.updateTenderStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, reason } = req.body;
+
+    const validStatuses = ['draft', 'published', 'completed', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid status' 
+      });
+    }
+
+    const tender = await Tender.findById(id);
+    if (!tender) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Tender not found' 
+      });
+    }
+
+    const oldStatus = tender.status;
+    tender.status = status;
+    
+    if (reason) {
+      tender.adminNotes = reason;
+      tender.adminActionAt = new Date();
+      tender.adminActionBy = req.user._id;
+    }
+
+    await tender.save();
+
+    // Log admin activity
+    const activityLog = new AdminActivityLog({
+      adminId: req.user._id,
+      action: 'UPDATE_TENDER_STATUS',
+      targetModel: 'Tender',
+      targetId: tender._id,
+      changes: { 
+        from: oldStatus, 
+        to: status, 
+        reason 
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+    await activityLog.save();
+
+    res.json({ 
+      success: true,
+      message: 'Tender status updated successfully',
+      data: tender 
+    });
+  } catch (error) {
+    console.error('Error updating tender status:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error', 
+      error: error.message 
+    });
+  }
+};
+
+// Moderate tender (flag/approve)
+exports.moderateTender = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, reason } = req.body;
+
+    if (!['flag', 'approve'].includes(action)) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid action' 
+      });
+    }
+
+    const tender = await Tender.findById(id);
+    if (!tender) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Tender not found' 
+      });
+    }
+
+    if (action === 'flag') {
+      tender.moderated = true;
+      tender.moderationReason = reason;
+      tender.status = 'cancelled';
+      tender.adminActionAt = new Date();
+      tender.adminActionBy = req.user._id;
+    } else if (action === 'approve') {
+      tender.moderated = false;
+      tender.moderationReason = null;
+      if (tender.status === 'cancelled' && tender.moderated) {
+        tender.status = 'published';
+      }
+    }
+
+    await tender.save();
+
+    // Log admin activity
+    const activityLog = new AdminActivityLog({
+      adminId: req.user._id,
+      action: action === 'flag' ? 'FLAG_TENDER' : 'APPROVE_TENDER',
+      targetModel: 'Tender',
+      targetId: tender._id,
+      changes: { action, reason },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+    await activityLog.save();
+
+    res.json({
+      success: true,
+      message: `Tender ${action === 'flag' ? 'flagged' : 'approved'} successfully`,
+      data: tender
+    });
+  } catch (error) {
+    console.error('Error moderating tender:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error', 
+      error: error.message 
+    });
+  }
+};
+
+// Bulk tender actions
+exports.bulkTenderActions = async (req, res) => {
+  try {
+    const { action, tenderIds, data } = req.body;
+
+    if (!action || !tenderIds || !Array.isArray(tenderIds)) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid request' 
+      });
+    }
+
+    let update = {};
+    let result;
+
+    switch (action) {
+      case 'publish':
+        update = { status: 'published' };
+        break;
+      case 'unpublish':
+        update = { status: 'draft' };
+        break;
+      case 'complete':
+        update = { status: 'completed' };
+        break;
+      case 'cancel':
+        update = { status: 'cancelled' };
+        break;
+      case 'flag':
+        update = { 
+          moderated: true, 
+          moderationReason: data?.reason || 'Flagged by admin',
+          status: 'cancelled',
+          adminActionAt: new Date(),
+          adminActionBy: req.user._id
+        };
+        break;
+      case 'delete':
+        // Delete tenders (only if no proposals)
+        const tendersWithProposals = await Tender.find({
+          _id: { $in: tenderIds },
+          'proposals.0': { $exists: true }
+        });
+        
+        if (tendersWithProposals.length > 0) {
+          return res.status(400).json({
+            success: false,
+            message: `Cannot delete ${tendersWithProposals.length} tender(s) with existing proposals`
+          });
+        }
+        
+        result = await Tender.deleteMany({ _id: { $in: tenderIds } });
+        break;
+      default:
+        return res.status(400).json({ 
+          success: false,
+          message: 'Invalid action' 
+        });
+    }
+
+    if (action !== 'delete') {
+      result = await Tender.updateMany(
+        { _id: { $in: tenderIds } },
+        update
+      );
+    }
+
+    // Log activity
+    const activityLog = new AdminActivityLog({
+      adminId: req.user._id,
+      action: 'BULK_TENDER_ACTION',
+      targetModel: 'Tender',
+      targetId: req.user._id,
+      changes: { action, tenderIds, update },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+    await activityLog.save();
+
+    res.json({ 
+      success: true,
+      message: `Successfully ${action}ed ${result.modifiedCount || result.deletedCount} tenders`,
+      modifiedCount: result.modifiedCount || result.deletedCount
+    });
+  } catch (error) {
+    console.error('Error with bulk tender actions:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error', 
+      error: error.message 
+    });
+  }
+};
+
+// Get suspicious tenders (fraud detection)
+exports.getSuspiciousTenders = async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+
+    // Criteria for suspicious tenders
+    const suspiciousTenders = await Tender.find({
+      $or: [
+        { 'budget.max': { $gt: 100000 } }, // Unusually high budget
+        { title: { $regex: 'urgent|immediate|quick cash|earn fast', $options: 'i' } },
+        { 'metadata.views': { $lt: 5, $gt: 0 } }, // Low views but exists
+        { 
+          $expr: { 
+            $and: [
+              { $gt: [{ $size: '$proposals' }, 0] },
+              { $lt: ['$metadata.views', 10] }
+            ]
+          }
+        },
+        { 'company.verified': false, 'budget.max': { $gt: 10000 } }, // High budget from unverified
+        { description: { $regex: 'wire transfer|western union|money gram', $options: 'i' } }
+      ]
+    })
+    .populate('company', 'name verified createdAt')
+    .populate('createdBy', 'name email')
+    .limit(Number(limit))
+    .skip((Number(page) - 1) * Number(limit))
+    .sort({ createdAt: -1 });
+
+    const total = await Tender.countDocuments({
+      $or: [
+        { 'budget.max': { $gt: 100000 } },
+        { title: { $regex: 'urgent|immediate|quick cash|earn fast', $options: 'i' } },
+        { 'metadata.views': { $lt: 5, $gt: 0 } },
+        { 
+          $expr: { 
+            $and: [
+              { $gt: [{ $size: '$proposals' }, 0] },
+              { $lt: ['$metadata.views', 10] }
+            ]
+          }
+        },
+        { 'company.verified': false, 'budget.max': { $gt: 10000 } },
+        { description: { $regex: 'wire transfer|western union|money gram', $options: 'i' } }
+      ]
+    });
+
+    res.json({
+      success: true,
+      data: suspiciousTenders,
+      pagination: {
+        totalPages: Math.ceil(total / Number(limit)),
+        currentPage: Number(page),
+        total,
+        hasNext: Number(page) < Math.ceil(total / Number(limit)),
+        hasPrev: Number(page) > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error getting suspicious tenders:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error', 
+      error: error.message 
+    });
+  }
+};
+
+// Get tender analytics
+exports.getTenderAnalytics = async (req, res) => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const [
+      dailyTenders,
+      categoryPerformance,
+      companyStats,
+      proposalStats,
+      topPerformers
+    ] = await Promise.all([
+      // Daily tender creation for last 30 days
+      Tender.aggregate([
+        { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+        { $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          count: { $sum: 1 },
+          avgBudget: { $avg: '$budget.max' }
+        }},
+        { $sort: { _id: 1 } }
+      ]),
+
+      // Category performance
+      Tender.aggregate([
+        { $group: {
+          _id: '$category',
+          total: { $sum: 1 },
+          avgProposals: { $avg: { $size: '$proposals' } },
+          avgBudget: { $avg: '$budget.max' },
+          completionRate: {
+            $avg: {
+              $cond: [{ $eq: ['$status', 'completed'] }, 1, 0]
+            }
+          }
+        }},
+        { $sort: { total: -1 } }
+      ]),
+
+      // Company statistics
+      Tender.aggregate([
+        { $group: {
+          _id: '$company',
+          tenderCount: { $sum: 1 },
+          totalBudget: { $sum: '$budget.max' },
+          avgProposals: { $avg: { $size: '$proposals' } }
+        }},
+        { $sort: { tenderCount: -1 } },
+        { $limit: 10 }
+      ]),
+
+      // Proposal statistics
+      Tender.aggregate([
+        { $project: {
+          proposalCount: { $size: '$proposals' },
+          budgetMax: '$budget.max'
+        }},
+        { $group: {
+          _id: null,
+          avgProposalsPerTender: { $avg: '$proposalCount' },
+          maxProposals: { $max: '$proposalCount' },
+          proposalToBudgetCorrelation: {
+            $avg: {
+              $multiply: [
+                { $size: '$proposals' },
+                '$budget.max'
+              ]
+            }
+          }
+        }}
+      ]),
+
+      // Top performing tenders
+      Tender.find({ status: 'completed' })
+        .populate('company', 'name industry')
+        .sort({ 'proposals.length': -1 })
+        .limit(5)
+        .select('title budget proposals company createdAt')
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        dailyTrends: dailyTenders,
+        categoryPerformance,
+        topCompanies: companyStats,
+        proposalAnalytics: proposalStats[0] || {},
+        topPerformers
+      }
+    });
+  } catch (error) {
+    console.error('Error getting tender analytics:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error', 
+      error: error.message 
     });
   }
 };

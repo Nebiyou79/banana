@@ -1,7 +1,10 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+// src/components/admin/UserManagement.tsx
 import React, { useState, useEffect } from 'react';
 import UserTable from './UserTable';
+import UserModal from './UserModal';
+import DeleteModal from './DeleteModal';
 import { useAdminData } from '../../hooks/useAdmin';
+import { User } from '../../services/adminService';
 
 const UserManagement: React.FC = () => {
   const [filters, setFilters] = useState({
@@ -12,8 +15,12 @@ const UserManagement: React.FC = () => {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
-  const { getUsers, data, loading, error } = useAdminData();
+  const { getUsers, createUser, updateUser, deleteUser, data, loading, error } = useAdminData();
 
   useEffect(() => {
     loadUsers();
@@ -37,17 +44,78 @@ const UserManagement: React.FC = () => {
     setCurrentPage(1);
   };
 
-  const handleEditUser = (user: any) => {
-    console.log('Edit user:', user);
-    // Implement edit functionality
-  };
-
-  const handleDeleteUser = (userId: string) => {
-    if (confirm('Are you sure you want to delete this user?')) {
-      console.log('Delete user:', userId);
-      // Implement delete functionality
+  const handleCreateUser = async (userData: User) => {
+    try {
+      await createUser(userData);
+      await loadUsers(); // Refresh the list
+    } catch (error) {
+      console.error('Failed to create user:', error);
+      throw error; // Re-throw to let modal handle the error
     }
   };
+
+  const handleEditUser = async (userData: User) => {
+    try {
+      if (selectedUser?._id) {
+        await updateUser(selectedUser._id, userData);
+        await loadUsers(); // Refresh the list
+      }
+    } catch (error) {
+      console.error('Failed to update user:', error);
+      throw error; // Re-throw to let modal handle the error
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    try {
+      if (selectedUser?._id) {
+        await deleteUser(selectedUser._id);
+        await loadUsers(); // Refresh the list
+      }
+    } catch (error) {
+      console.error('Failed to delete user:', error);
+      throw error; // Re-throw to let modal handle the error
+    }
+  };
+
+  const openEditModal = (user: User) => {
+    setSelectedUser(user);
+    setIsEditModalOpen(true);
+  };
+
+  const openDeleteModal = (user: User) => {
+    setSelectedUser(user);
+    setIsDeleteModalOpen(true);
+  };
+
+  const closeModals = () => {
+    setIsCreateModalOpen(false);
+    setIsEditModalOpen(false);
+    setIsDeleteModalOpen(false);
+    setSelectedUser(null);
+  };
+
+  // FIXED: Use the correct API response structure
+  const users = data?.data || []; // Users are in data.data array
+  const pagination = data?.pagination || { // Pagination is in data.pagination
+    page: 1,
+    limit: itemsPerPage,
+    total: 0,
+    pages: 1
+  };
+
+  // FIXED: Safe calculations with proper values from API
+  const currentPageNum = Number(pagination.page) || 1;
+  const limitNum = Number(pagination.limit) || itemsPerPage;
+  const totalNum = Number(pagination.total) || 0;
+  const totalPagesNum = Number(pagination.pages) || 1;
+
+  const hasPrev = currentPageNum > 1;
+  const hasNext = currentPageNum < totalPagesNum;
+
+  // FIXED: Calculate showing range safely
+  const startItem = totalNum > 0 ? ((currentPageNum - 1) * limitNum) + 1 : 0;
+  const endItem = Math.min(currentPageNum * limitNum, totalNum);
 
   return (
     <div className="space-y-6">
@@ -56,7 +124,10 @@ const UserManagement: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">User Management</h1>
           <p className="text-gray-600 dark:text-gray-400">Manage all users in the system</p>
         </div>
-        <button className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+        <button 
+          onClick={() => setIsCreateModalOpen(true)}
+          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
+        >
           + Add User
         </button>
       </div>
@@ -139,6 +210,7 @@ const UserManagement: React.FC = () => {
             value={itemsPerPage}
             onChange={(e) => setItemsPerPage(Number(e.target.value))}
             className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            disabled={loading}
           >
             <option value="10">10 per page</option>
             <option value="25">25 per page</option>
@@ -157,33 +229,33 @@ const UserManagement: React.FC = () => {
 
       {/* User Table */}
       <UserTable
-        users={data?.users || []}
+        users={users}
         loading={loading}
-        onEdit={handleEditUser}
-        onDelete={handleDeleteUser}
+        onEdit={openEditModal}
+        // onDelete={openDeleteModal}
       />
 
-      {/* Pagination */}
-      {data?.pagination && (
+      {/* Pagination - FIXED: Using correct API structure */}
+      {totalNum > 0 && (
         <div className="flex justify-between items-center bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
           <div>
             <p className="text-sm text-gray-700 dark:text-gray-300">
-              Showing <span className="font-medium">{(data.pagination.currentPage - 1) * data.pagination.limit + 1}</span> to{' '}
-              <span className="font-medium">{Math.min(data.pagination.currentPage * data.pagination.limit, data.pagination.total)}</span> of{' '}
-              <span className="font-medium">{data.pagination.total}</span> users
+              Showing <span className="font-medium">{startItem}</span> to{' '}
+              <span className="font-medium">{endItem}</span> of{' '}
+              <span className="font-medium">{totalNum}</span> users
             </p>
           </div>
           <div className="flex space-x-2">
             <button
-              onClick={() => setCurrentPage(data.pagination.currentPage - 1)}
-              disabled={!data.pagination.hasPrev}
+              onClick={() => setCurrentPage(currentPageNum - 1)}
+              disabled={!hasPrev || loading}
               className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
             >
               Previous
             </button>
             <button
-              onClick={() => setCurrentPage(data.pagination.currentPage + 1)}
-              disabled={!data.pagination.hasNext}
+              onClick={() => setCurrentPage(currentPageNum + 1)}
+              disabled={!hasNext || loading}
               className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
             >
               Next
@@ -191,6 +263,38 @@ const UserManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Show message when no users found */}
+      {!loading && users.length === 0 && !error && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 text-center">
+          <p className="text-gray-500 dark:text-gray-400">No users found matching your criteria.</p>
+        </div>
+      )}
+
+      {/* Modals */}
+      <UserModal
+        isOpen={isCreateModalOpen}
+        onClose={closeModals}
+        onSave={handleCreateUser}
+        title="Create New User"
+      />
+
+      <UserModal
+        isOpen={isEditModalOpen}
+        onClose={closeModals}
+        onSave={handleEditUser}
+        user={selectedUser}
+        title="Edit User"
+      />
+
+      <DeleteModal
+        isOpen={isDeleteModalOpen}
+        onClose={closeModals}
+        onConfirm={handleDeleteUser}
+        title="Delete User"
+        message="Are you sure you want to delete user"
+        itemName={selectedUser?.name || ''}
+      />
     </div>
   );
 };

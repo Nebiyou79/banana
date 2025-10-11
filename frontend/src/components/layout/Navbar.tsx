@@ -1,12 +1,17 @@
-// Updated Navbar with modern design
+// /src/components/layouts/Navbar.tsx
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from '@/contexts/AuthContext';
 import { 
   Briefcase, User, Building, LogOut, Menu, X, 
-  Bell, MessageSquare, Search, ChevronDown 
+  Bell, MessageSquare, Search, ChevronDown, ClipboardList,
+  FileText,
+  Award
 } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
+import { colors } from '@/utils/color';
+import Image from "next/image";
 
 export default function Navbar() {
   const [role, setRole] = useState<string | null>(null);
@@ -30,9 +35,18 @@ export default function Navbar() {
   const handleLogout = async () => {
     try {
       await logout();
+      toast({
+        title: 'Logged Out',
+        description: 'You have been successfully logged out',
+      });
       router.push("/");
     } catch (error) {
       console.error("Logout error:", error);
+      toast({
+        title: 'Logout Error',
+        description: 'Failed to logout. Please try again.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -48,18 +62,27 @@ export default function Navbar() {
         ];
       case "freelancer":
         return [
-          { href: "/dashboard/freelancer/jobs", label: "Find Work", icon: <Search className="w-4 h-4" /> },
+          { href: "/tenders", label: "Browse Tenders", icon: <ClipboardList className="w-4 h-4" /> },
+          { href: "/dashboard/freelancer/proposals", label: "My Proposals", icon: <FileText className="w-4 h-4" /> },
           { href: "/dashboard/freelancer", label: "Dashboard", icon: <User className="w-4 h-4" /> },
           { href: "/dashboard/freelancer/portfolio", label: "Portfolio", icon: <Briefcase className="w-4 h-4" /> },
         ];
       case "company":
         return [
+          { href: "/tenders", label: "Browse Tenders", icon: <ClipboardList className="w-4 h-4" /> },
+          { href: "/dashboard/company/tenders/create", label: "Create Tender", icon: <Award className="w-4 h-4" /> },
           { href: "/talents", label: "Find Talent", icon: <Search className="w-4 h-4" /> },
           { href: "/dashboard/company", label: "Dashboard", icon: <Building className="w-4 h-4" /> },
-          { href: "/dashboard/company/jobs", label: "Post Job", icon: <Briefcase className="w-4 h-4" /> },
+        ];
+      case "organization":
+        return [
+          { href: "/organization/company/tenders/create", label: "Create Tender", icon: <Award className="w-4 h-4" /> },
+          { href: "/talents", label: "Find Talent", icon: <Search className="w-4 h-4" /> },
+          { href: "/organization/company", label: "Dashboard", icon: <Building className="w-4 h-4" /> },
         ];
       case "admin":
         return [
+          { href: "/dashboard/admin/tenders", label: "Manage Tenders", icon: <ClipboardList className="w-4 h-4" /> },
           { href: "/dashboard/admin", label: "Dashboard", icon: <Building className="w-4 h-4" /> },
           { href: "/dashboard/admin/jobs", label: "Manage Jobs", icon: <Briefcase className="w-4 h-4" /> },
           { href: "/dashboard/admin/users", label: "Users", icon: <User className="w-4 h-4" /> },
@@ -81,11 +104,14 @@ export default function Navbar() {
         <div className="flex justify-between items-center">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center">
-              <Briefcase className="w-6 h-6 text-white" />
+            <div 
+              className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{ backgroundColor: colors.white }}
+            >
+              <Image src="/logo2.png" alt="Banana Jobs" width={370} height={170} />
             </div>
-            <span className="text-2xl font-bold text-gray-900">
-              Banana <span className="bg-clip-text text-transparent bg-gradient-to-r from-yellow-500 to-gray-500">Jobs</span>
+            <span className="text-2xl font-bold" style={{ color: colors.darkNavy }}>
+              Banana <span style={{ color: colors.gold }}>Jobs</span>
             </span>
           </Link>
 
@@ -93,13 +119,16 @@ export default function Navbar() {
           <div className="hidden md:flex items-center space-x-8">
             {!user ? (
               <>
-                <Link href="/jobs" className="text-gray-700 hover:text-blue-600 transition-colors font-medium">
+                <Link href="/jobs" className="transition-colors font-medium" style={{ color: colors.darkNavy }}>
                   Find Jobs
                 </Link>
-                <Link href="/companies" className="text-gray-700 hover:text-blue-600 transition-colors font-medium">
+                <Link href="/tenders" className="transition-colors font-medium" style={{ color: colors.darkNavy }}>
+                  Browse Tenders
+                </Link>
+                <Link href="/companies" className="transition-colors font-medium" style={{ color: colors.darkNavy }}>
                   Find Companies
                 </Link>
-                <Link href="/freelancers" className="text-gray-700 hover:text-blue-600 transition-colors font-medium">
+                <Link href="/freelancers" className="transition-colors font-medium" style={{ color: colors.darkNavy }}>
                   Find Talent
                 </Link>
               </>
@@ -109,7 +138,8 @@ export default function Navbar() {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="flex items-center space-x-1 text-gray-700 hover:text-blue-600 transition-colors font-medium"
+                    className="flex items-center space-x-1 transition-colors font-medium"
+                    style={{ color: colors.darkNavy }}
                   >
                     {link.icon}
                     <span>{link.label}</span>
@@ -123,15 +153,15 @@ export default function Navbar() {
           <div className="flex items-center space-x-4">
             {user ? (
               <>
-                <button className="p-2 text-gray-600 hover:text-blue-600 transition-colors relative">
+                <button className="p-2 transition-colors relative" style={{ color: colors.darkNavy }}>
                   <MessageSquare className="w-5 h-5" />
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1 w-4 h-4 text-xs rounded-full flex items-center justify-center" style={{ backgroundColor: colors.orange, color: colors.white }}>
                     3
                   </span>
                 </button>
-                <button className="p-2 text-gray-600 hover:text-blue-600 transition-colors relative">
+                <button className="p-2 transition-colors relative" style={{ color: colors.darkNavy }}>
                   <Bell className="w-5 h-5" />
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1 w-4 h-4 text-xs rounded-full flex items-center justify-center" style={{ backgroundColor: colors.blue, color: colors.white }}>
                     5
                   </span>
                 </button>
@@ -141,33 +171,39 @@ export default function Navbar() {
                     onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
                     className="flex items-center space-x-2"
                   >
-                    <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
+                    <div 
+                      className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold"
+                      style={{ backgroundColor: colors.goldenMustard }}
+                    >
                       {user.name?.charAt(0).toUpperCase() || 'U'}
                     </div>
-                    <ChevronDown className="w-4 h-4 text-gray-600" />
+                    <ChevronDown className="w-4 h-4" style={{ color: colors.darkNavy }} />
                   </button>
                   
                   {isProfileDropdownOpen && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-2 border border-gray-200">
-                      <div className="px-4 py-2 border-b border-gray-100">
-                        <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                        <p className="text-xs text-gray-500">{user.email}</p>
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-2 border" style={{ borderColor: colors.gray100 }}>
+                      <div className="px-4 py-2 border-b" style={{ borderColor: colors.gray100 }}>
+                        <p className="text-sm font-medium" style={{ color: colors.darkNavy }}>{user.name}</p>
+                        <p className="text-xs" style={{ color: colors.gray400 }}>{user.email}</p>
                       </div>
                       <Link 
                         href={`/dashboard/${user.role}/profile`}
-                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        className="block px-4 py-2 text-sm transition-colors hover:bg-gray-100"
+                        style={{ color: colors.darkNavy }}
                       >
                         Your Profile
                       </Link>
                       <Link 
                         href="/settings"
-                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        className="block px-4 py-2 text-sm transition-colors hover:bg-gray-100"
+                        style={{ color: colors.darkNavy }}
                       >
                         Settings
                       </Link>
                       <button
                         onClick={handleLogout}
-                        className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                        className="block w-full text-left px-4 py-2 text-sm transition-colors hover:bg-gray-100"
+                        style={{ color: colors.orange }}
                       >
                         Sign out
                       </button>
@@ -179,13 +215,15 @@ export default function Navbar() {
               <>
                 <Link 
                   href="/login" 
-                  className="text-gray-600 hover:text-blue-600 font-medium transition-colors"
+                  className="font-medium transition-colors"
+                  style={{ color: colors.darkNavy }}
                 >
                   Sign In
                 </Link>
                 <Link 
                   href="/register" 
-                  className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-6 py-2 rounded-xl font-semibold hover:from-blue-600 hover:to-purple-600 transition-all duration-300 shadow-md hover:shadow-lg"
+                  className="text-white px-6 py-2 rounded-xl font-semibold transition-all duration-300 shadow-md hover:shadow-lg"
+                  style={{ backgroundColor: colors.goldenMustard }}
                 >
                   Sign Up
                 </Link>
@@ -196,7 +234,8 @@ export default function Navbar() {
           {/* Mobile menu button */}
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="md:hidden p-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
+            className="md:hidden p-2 rounded-lg transition-colors"
+            style={{ color: colors.darkNavy }}
           >
             {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
@@ -204,17 +243,20 @@ export default function Navbar() {
 
         {/* Mobile Navigation */}
         {isMenuOpen && (
-          <div className="md:hidden mt-4 bg-white rounded-lg shadow-lg p-4 border border-gray-200">
+          <div className="md:hidden mt-4 bg-white rounded-lg shadow-lg p-4 border" style={{ borderColor: colors.gray100 }}>
             <div className="flex flex-col space-y-3">
               {!user ? (
                 <>
-                  <Link href="/jobs" className="text-gray-700 hover:text-blue-600 transition-colors font-medium py-2">
+                  <Link href="/jobs" className="font-medium py-2 transition-colors" style={{ color: colors.darkNavy }}>
                     Find Jobs
                   </Link>
-                  <Link href="/companies" className="text-gray-700 hover:text-blue-600 transition-colors font-medium py-2">
+                  <Link href="/tenders" className="font-medium py-2 transition-colors" style={{ color: colors.darkNavy }}>
+                    Browse Tenders
+                  </Link>
+                  <Link href="/companies" className="font-medium py-2 transition-colors" style={{ color: colors.darkNavy }}>
                     Find Companies
                   </Link>
-                  <Link href="/freelancers" className="text-gray-700 hover:text-blue-600 transition-colors font-medium py-2">
+                  <Link href="/freelancers" className="font-medium py-2 transition-colors" style={{ color: colors.darkNavy }}>
                     Find Talent
                   </Link>
                 </>
@@ -224,7 +266,8 @@ export default function Navbar() {
                     <Link
                       key={link.href}
                       href={link.href}
-                      className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 transition-colors font-medium py-2"
+                      className="flex items-center space-x-2 font-medium py-2 transition-colors"
+                      style={{ color: colors.darkNavy }}
                       onClick={() => setIsMenuOpen(false)}
                     >
                       {link.icon}
@@ -234,19 +277,21 @@ export default function Navbar() {
                 </>
               )}
               
-              <div className="border-t border-gray-200 pt-3 mt-3">
+              <div className="border-t pt-3 mt-3" style={{ borderColor: colors.gray100 }}>
                 {!user ? (
                   <div className="flex flex-col space-y-3">
                     <Link 
                       href="/login" 
-                      className="text-blue-600 hover:text-blue-700 font-medium text-center py-2"
+                      className="font-medium text-center py-2 transition-colors"
+                      style={{ color: colors.goldenMustard }}
                       onClick={() => setIsMenuOpen(false)}
                     >
                       Sign In
                     </Link>
                     <Link 
                       href="/register" 
-                      className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-6 py-2 rounded-xl font-semibold text-center hover:from-blue-600 hover:to-purple-600 transition-all duration-300"
+                      className="text-white px-6 py-2 rounded-xl font-semibold text-center transition-all duration-300"
+                      style={{ backgroundColor: colors.goldenMustard }}
                       onClick={() => setIsMenuOpen(false)}
                     >
                       Sign Up
@@ -258,7 +303,8 @@ export default function Navbar() {
                       handleLogout();
                       setIsMenuOpen(false);
                     }}
-                    className="flex items-center space-x-2 text-red-600 hover:text-red-700 transition-colors font-medium w-full py-2"
+                    className="flex items-center space-x-2 transition-colors font-medium w-full py-2"
+                    style={{ color: colors.orange }}
                   >
                     <LogOut className="w-4 h-4" />
                     <span>Logout</span>

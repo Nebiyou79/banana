@@ -14,6 +14,7 @@ const { restrictTo } = require('../middleware/roleMiddleware');
 
 const router = express.Router();
 
+// Protect all routes
 router.use(verifyToken);
 
 // Freelancer routes
@@ -25,7 +26,7 @@ router.put('/:id', restrictTo('freelancer'), updateProposal);
 router.get('/tender/:tenderId', restrictTo('company', 'admin'), getTenderProposals);
 router.put('/:id/status', restrictTo('company', 'admin'), updateProposalStatus);
 
-// Admin routes
+// Admin/Freelancer routes
 router.delete('/:id', restrictTo('freelancer', 'admin'), deleteProposal);
 
 module.exports = router;

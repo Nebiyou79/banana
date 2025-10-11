@@ -1,3 +1,4 @@
+// /server/src/index.js (Fixed)
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -24,8 +25,44 @@ if (missingEnvVars.length > 0) {
 
 const app = express();
 
+// Enhanced CORS configuration - MOVE THIS TO THE TOP
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:3001', 
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001',
+      'https://yourdomain.com',
+      'https://www.yourdomain.com',
+      process.env.CORS_ORIGIN
+    ].filter(Boolean);
+    
+    if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
+};
+
+// Apply CORS middleware FIRST
+app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
+
 // Security middleware
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" } // Allow cross-origin resources
+}));
 app.use(compression());
 
 // Rate limiting
@@ -37,11 +74,11 @@ const generalLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 login requests per windowMs
+  max: 50, // limit each IP to 5 login requests per windowMs
   message: 'Too many login attempts from this IP, please try again later.'
 });
 
-const adminLimiter = rateLimit({
+const adminLimiter = rateLimit({ 
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 200, // limit each IP to 200 requests per windowMs
   message: 'Too many admin requests from this IP, please try again later.'
@@ -59,10 +96,6 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || "http://localhost:3000",
-  credentials: true
-}));
 
 // FIX: Serve static files from the correct path
 // Serve uploaded files directly from /uploads path
@@ -137,6 +170,23 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+// CORS error handling middleware
+app.use((err, req, res, next) => {
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({
+      success: false,
+      message: 'CORS policy: Request not allowed',
+      allowedOrigins: [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:3001'
+      ]
+    });
+  }
+  next(err);
+});
+
 // Port
 const PORT = process.env.PORT || 4000;
 
@@ -156,6 +206,12 @@ async function startServer() {
       console.log(`🔐 Auth routes: http://localhost:${PORT}/api/v1/auth`);
       console.log(`👑 Admin routes: http://localhost:${PORT}/api/v1/admin`);
       console.log(`📁 Static files: http://localhost:${PORT}/uploads/`);
+      console.log('🌐 CORS enabled for origins:', [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:3001'
+      ]);
     });
     
   } catch (error) {

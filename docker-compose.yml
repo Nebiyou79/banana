@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - ./backend/.env.production
+    restart: unless-stopped
+    volumes:
+      - ./backend/public/uploads:/app/public/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - ./frontend/.env.production
+    depends_on:
+      - backend
+    restart: unless-stopped

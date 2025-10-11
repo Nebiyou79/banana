@@ -1,14 +1,6 @@
+// src/components/admin/UserTable.tsx
 import React, { useState } from 'react';
-
-interface User {
-  _id: string;
-  name: string;
-  email: string;
-  role: string;
-  status: string;
-  verified: boolean;
-  createdAt: string;
-}
+import { User } from '@/services/adminService'; // Import the correct User interface
 
 interface UserTableProps {
   users: User[];
@@ -28,7 +20,7 @@ const UserTable: React.FC<UserTableProps> = ({
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
-      setSelectedUsers(users.map(user => user._id));
+      setSelectedUsers(users.map(user => user._id || ''));
     } else {
       setSelectedUsers([]);
     }
@@ -42,7 +34,7 @@ const UserTable: React.FC<UserTableProps> = ({
     );
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string = 'active') => {
     const statusConfig = {
       active: { color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300', label: 'Active' },
       inactive: { color: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300', label: 'Inactive' },
@@ -59,7 +51,7 @@ const UserTable: React.FC<UserTableProps> = ({
     );
   };
 
-  const getRoleBadge = (role: string) => {
+  const getRoleBadge = (role: string = 'candidate') => {
     const roleConfig = {
       admin: { color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300', label: 'Admin' },
       candidate: { color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300', label: 'Candidate' },
@@ -134,8 +126,8 @@ const UserTable: React.FC<UserTableProps> = ({
                 <td className="px-6 py-4 whitespace-nowrap">
                   <input
                     type="checkbox"
-                    checked={selectedUsers.includes(user._id)}
-                    onChange={() => handleSelectUser(user._id)}
+                    checked={selectedUsers.includes(user._id || '')}
+                    onChange={() => handleSelectUser(user._id || '')}
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                 </td>
@@ -163,10 +155,13 @@ const UserTable: React.FC<UserTableProps> = ({
                   {getStatusBadge(user.status)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className={`w-3 h-3 rounded-full ${user.verified ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                  <div className={`w-3 h-3 rounded-full ${
+                    user.verificationStatus === 'full' ? 'bg-green-500' : 
+                    user.verificationStatus === 'partial' ? 'bg-yellow-500' : 'bg-gray-300'
+                  }`}></div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                  {new Date(user.createdAt).toLocaleDateString()}
+                  {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                   <button
@@ -176,7 +171,7 @@ const UserTable: React.FC<UserTableProps> = ({
                     Edit
                   </button>
                   <button
-                    onClick={() => onDelete?.(user._id)}
+                    onClick={() => onDelete?.(user._id || '')}
                     className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
                   >
                     Delete
@@ -191,4 +186,4 @@ const UserTable: React.FC<UserTableProps> = ({
   );
 };
 
-export default UserTable
+export default UserTable;

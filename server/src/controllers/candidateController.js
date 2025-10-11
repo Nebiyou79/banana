@@ -1,13 +1,39 @@
 const User = require('../models/User');
-const { upload, handleUploadError } = require('../middleware/cvUploadMiddleware');
+const Tender = require('../models/Tender');
+const { validationResult } = require('express-validator');
 const path = require('path');
 const fs = require('fs');
-const Tender = require('../models/Tender');
-exports.getProfile = async (req, res) => {
+
+// SIMPLIFIED update function - no complex validation
+exports.updateProfile = async (req, res) => {
+  console.log('=== UPDATE PROFILE STARTED ===');
+  console.log('Request body received:', Object.keys(req.body));
+  
   try {
-    const user = await User.findById(req.user.userId)
-      .select('name email role verificationStatus profileCompleted skills education experience cvUrl portfolio bio location phone website socialLinks');
+    // Set timeout for the request
+    req.setTimeout(30000); // 30 seconds
     
+    const userId = req.user.userId;
+    const updateData = { ...req.body, updatedAt: new Date() };
+
+    console.log('Update data:', Object.keys(updateData));
+
+    // Remove fields that shouldn't be updated
+    delete updateData._id;
+    delete updateData.email;
+    delete updateData.role;
+
+    // SIMPLE update without complex validation
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $set: updateData },
+      { 
+        new: true,
+        runValidators: false, // Disable validators for performance
+        lean: true
+      }
+    ).select('name email role verificationStatus profileCompleted skills education experience cvs portfolio bio location phone website socialLinks');
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -15,8 +41,49 @@ exports.getProfile = async (req, res) => {
       });
     }
 
-    // Return the CV URL as stored (relative path)
-    // Frontend will handle converting to absolute URL
+    console.log('=== UPDATE PROFILE COMPLETED SUCCESSFULLY ===');
+    
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: { user }
+    });
+
+  } catch (error) {
+    console.error('Update profile error:', error);
+    
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed: ' + error.message
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Server error: ' + error.message
+    });
+  }
+};
+
+// Keep your other methods but simplify getProfile too
+exports.getProfile = async (req, res) => {
+  try {
+    console.log('=== GET PROFILE STARTED ===');
+    
+    const user = await User.findById(req.user.userId)
+      .select('name email role verificationStatus profileCompleted skills education experience cvs portfolio bio location phone website socialLinks lastLogin')
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    console.log('=== GET PROFILE COMPLETED ===');
+    
     res.json({
       success: true,
       data: { user }
@@ -31,45 +98,130 @@ exports.getProfile = async (req, res) => {
   }
 };
 
-exports.updateProfile = async (req, res) => {
+exports.uploadCV = async (req, res) => {
   try {
-    const {
-      skills,
-      education,
-      experience,
-      bio,
-      location,
-      phone,
-      website,
-      socialLinks
-    } = req.body;
+    console.log('=== [uploadCV] called ===');
+    
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No files uploaded'
+      });
+    }
 
-    const updateData = {
-      ...(skills !== undefined && { skills }),
-      ...(education !== undefined && { education }),
-      ...(experience !== undefined && { experience }),
-      ...(bio !== undefined && { bio }),
-      ...(location !== undefined && { location }),
-      ...(phone !== undefined && { phone }),
-      ...(website !== undefined && { website }),
-      ...(socialLinks !== undefined && { socialLinks }),
-      profileCompleted: true
-    };
+    const userId = req.user.userId;
+    const user = await User.findById(userId);
 
-    const user = await User.findByIdAndUpdate(
-      req.user.userId,
-      updateData,
-      { new: true, runValidators: true }
-    ).select('name email role verificationStatus profileCompleted skills education experience cvUrl portfolio bio location phone website socialLinks');
+    if (!user) {
+      // Clean up uploaded files
+      req.files.forEach(file => {
+        try {
+          fs.unlinkSync(file.path);
+        } catch (cleanupError) {
+          console.log('File cleanup error:', cleanupError.message);
+        }
+      });
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
 
+    // Check CV limit (max 5)
+    if (user.cvs.length + req.files.length > 5) {
+      // Clean up uploaded files
+      req.files.forEach(file => {
+        try {
+          fs.unlinkSync(file.path);
+        } catch (cleanupError) {
+          console.log('File cleanup error:', cleanupError.message);
+        }
+      });
+      return res.status(400).json({
+        success: false,
+        message: `Maximum 5 CVs allowed. You currently have ${user.cvs.length} CVs.`
+      });
+    }
+
+    // Process uploaded files
+    const uploadedCVs = req.files.map((file, index) => ({
+      filename: file.filename,
+      originalName: file.originalname,
+      path: `/uploads/cv/${file.filename}`, // Correct path
+      uploadedAt: new Date(),
+      isPrimary: user.cvs.length === 0 && index === 0 // Set first as primary if no CVs exist
+    }));
+
+    // Add new CVs
+    user.cvs.push(...uploadedCVs);
+    await user.save();
+
+    console.log('=== [uploadCV] successful - uploaded', uploadedCVs.length, 'files ===');
+    
     res.json({
       success: true,
-      message: 'Profile updated successfully',
-      data: { user }
+      message: `Successfully uploaded ${uploadedCVs.length} CV(s)`,
+      data: { cvs: uploadedCVs }
     });
 
   } catch (error) {
-    console.error('Update profile error:', error);
+    console.error('Upload CV error:', error);
+    
+    // Clean up uploaded files on error
+    if (req.files) {
+      req.files.forEach(file => {
+        try {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        } catch (cleanupError) {
+          console.log('File cleanup error:', cleanupError.message);
+        }
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error during CV upload: ' + error.message
+    });
+  }
+};
+
+exports.setPrimaryCV = async (req, res) => {
+  try {
+    console.log('--- [setPrimaryCV] called ---');
+    
+    const { cvId } = req.params;
+    const userId = req.user.userId;
+
+    // First, set all CVs to non-primary
+    await User.updateOne(
+      { _id: userId },
+      { $set: { 'cvs.$[].isPrimary': false } }
+    );
+
+    // Then set the specific CV as primary
+    const result = await User.updateOne(
+      { _id: userId, 'cvs._id': cvId },
+      { $set: { 'cvs.$.isPrimary': true } }
+    );
+
+    if (result.modifiedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'CV not found'
+      });
+    }
+
+    console.log('--- [setPrimaryCV] successful ---');
+    
+    res.json({
+      success: true,
+      message: 'Primary CV updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Set primary CV error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -77,87 +229,69 @@ exports.updateProfile = async (req, res) => {
   }
 };
 
-// Separate middleware for CV upload
-exports.uploadCV = [
-  upload.single('cv'),
-  handleUploadError,
-  async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({
-          success: false,
-          message: 'CV file is required'
-        });
-      }
+exports.deleteCV = async (req, res) => {
+  try {
+    console.log('--- [deleteCV] called ---');
+    
+    const { cvId } = req.params;
+    const userId = req.user.userId;
 
-      // Store relative path (consistent format)
-      const cvUrl = `/uploads/cv/${req.file.filename}`;
-
-      // Get current user to check if they have an existing CV
-      const currentUser = await User.findById(req.user.userId);
-      
-      // Delete old CV file if it exists
-      if (currentUser && currentUser.cvUrl) {
-        try {
-          // Handle both /api/v1/... and /uploads/... formats
-          let oldFilePath = currentUser.cvUrl;
-          if (oldFilePath.startsWith('/api/v1/')) {
-            oldFilePath = oldFilePath.replace('/api/v1', '');
-          }
-          
-          const fullOldPath = path.join(process.cwd(), 'public', oldFilePath);
-          if (fs.existsSync(fullOldPath)) {
-            fs.unlinkSync(fullOldPath);
-            console.log('Deleted old CV file:', fullOldPath);
-          }
-        } catch (deleteError) {
-          console.log('Could not delete old file:', deleteError.message);
-        }
-      }
-
-      const user = await User.findByIdAndUpdate(
-        req.user.userId,
-        { cvUrl },
-        { new: true }
-      ).select('name email cvUrl');
-
-      res.json({
-        success: true,
-        message: 'CV uploaded successfully',
-        data: { 
-          user: {
-            cvUrl: cvUrl // Return relative path
-          }
-        }
-      });
-
-    } catch (error) {
-      console.error('Upload CV error:', error);
-      
-      // Clean up uploaded file if error occurred
-      if (req.file) {
-        try {
-          const filePath = path.join(req.file.destination, req.file.filename);
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-          }
-        } catch (cleanupError) {
-          console.log('Could not clean up file:', cleanupError.message);
-        }
-      }
-      
-      res.status(500).json({
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
         success: false,
-        message: 'Internal server error'
+        message: 'User not found'
       });
     }
+
+    const cvToDelete = user.cvs.id(cvId);
+    if (!cvToDelete) {
+      return res.status(404).json({
+        success: false,
+        message: 'CV not found'
+      });
+    }
+
+    // Delete file from filesystem
+    try {
+      const filePath = path.join(process.cwd(), 'public', cvToDelete.path);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (fileError) {
+      console.log('File deletion error:', fileError.message);
+    }
+
+    // Remove CV from user's CVs array
+    user.cvs.pull(cvId);
+    
+    // If deleted CV was primary and other CVs exist, set first one as primary
+    if (cvToDelete.isPrimary && user.cvs.length > 0) {
+      user.cvs[0].isPrimary = true;
+    }
+
+    await user.save();
+
+    console.log('--- [deleteCV] successful ---');
+    
+    res.json({
+      success: true,
+      message: 'CV deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Delete CV error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
   }
-];
+};
 
-
-// Get all open tenders for candidates
 exports.getOpenTenders = async (req, res) => {
   try {
+    console.log('--- [getOpenTenders] called ---');
+    
     const {
       page = 1,
       limit = 12,
@@ -169,18 +303,18 @@ exports.getOpenTenders = async (req, res) => {
       sortOrder = 'desc'
     } = req.query;
 
+    // Build filter
     const filter = {
       status: 'open',
-      deadline: { $gt: new Date() },
-      moderated: false
+      deadline: { $gt: new Date() }
     };
 
     if (category && category !== 'all') filter.category = category;
+    
     if (search) {
       filter.$or = [
         { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { skillsRequired: { $in: [new RegExp(search, 'i')] } }
+        { description: { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -190,15 +324,20 @@ exports.getOpenTenders = async (req, res) => {
       if (maxBudget) filter.budget.$lte = Number(maxBudget);
     }
 
-    const tenders = await Tender.find(filter)
-      .populate('company', 'name logo industry')
-      .populate('createdBy', 'name')
-      .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+    // Parallel execution for better performance
+    const [tenders, total] = await Promise.all([
+      Tender.find(filter)
+        .populate('company', 'name logo industry')
+        .populate('createdBy', 'name')
+        .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
+        .limit(limit * 1)
+        .skip((page - 1) * limit)
+        .lean(),
+      Tender.countDocuments(filter)
+    ]);
 
-    const total = await Tender.countDocuments(filter);
-
+    console.log('--- [getOpenTenders] successful ---');
+    
     res.json({
       success: true,
       data: tenders,
@@ -209,19 +348,29 @@ exports.getOpenTenders = async (req, res) => {
         pages: Math.ceil(total / limit)
       }
     });
+
   } catch (error) {
+    console.error('Get open tenders error:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: 'Internal server error'
     });
   }
 };
 
-// Save/unsave tender for candidate
 exports.toggleSaveTender = async (req, res) => {
   try {
+    console.log('--- [toggleSaveTender] called ---');
+    
     const { tenderId } = req.params;
-    const userId = req.user._id;
+    const userId = req.user.userId;
+
+    if (!tenderId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tender ID is required'
+      });
+    }
 
     const tender = await Tender.findById(tenderId);
     if (!tender) {
@@ -232,52 +381,71 @@ exports.toggleSaveTender = async (req, res) => {
     }
 
     const user = await User.findById(userId);
-    const isSaved = user.savedTenders.includes(tenderId);
+    const isSaved = user.savedJobs.includes(tenderId);
 
     if (isSaved) {
       // Remove from saved
-      user.savedTenders.pull(tenderId);
+      user.savedJobs.pull(tenderId);
       tender.savedBy.pull(userId);
     } else {
       // Add to saved
-      user.savedTenders.push(tenderId);
+      user.savedJobs.push(tenderId);
       tender.savedBy.push(userId);
     }
 
     await Promise.all([user.save(), tender.save()]);
 
+    console.log('--- [toggleSaveTender] successful ---');
+    
     res.json({
       success: true,
       message: isSaved ? 'Tender removed from saved' : 'Tender saved successfully',
       data: { saved: !isSaved }
     });
+
   } catch (error) {
+    console.error('Toggle save tender error:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: 'Internal server error'
     });
   }
 };
 
-// Get saved tenders for candidate
 exports.getSavedTenders = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).populate({
-      path: 'savedTenders',
-      populate: [
-        { path: 'company', select: 'name logo industry' },
-        { path: 'createdBy', select: 'name' }
-      ]
-    });
+    console.log('--- [getSavedTenders] called ---');
+    
+    const user = await User.findById(req.user.userId)
+      .populate({
+        path: 'savedJobs',
+        match: { status: 'open', deadline: { $gt: new Date() } },
+        populate: [
+          { path: 'company', select: 'name logo industry' },
+          { path: 'createdBy', select: 'name' }
+        ]
+      })
+      .lean();
 
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    console.log('--- [getSavedTenders] successful ---');
+    
     res.json({
       success: true,
-      data: user.savedTenders
+      data: user.savedJobs || []
     });
+
   } catch (error) {
+    console.error('Get saved tenders error:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: 'Internal server error'
     });
   }
 };

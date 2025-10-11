@@ -1,36 +1,54 @@
+// src/services/tenderService.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// services/tenderService.tsx
-import api from '@/lib/axios';
+import api from '@/lib/axios'; // FIXED IMPORT
+import { handleError, handleSuccess } from '@/lib/error-handler'; // ADD THIS IMPORT
 
-export interface Company {
-  _id: string;
-  name: string;
-  logo?: string;
-  industry?: string;
-  description?: string;
-  website?: string;
+export interface Budget {
+  isNegotiable: boolean | undefined;
+  min: number;
+  max: number;
+  currency: string;
 }
 
-export interface User {
-  _id: string;
-  name: string;
-  email: string;
-  avatar?: string;
-  role?: string;
+export interface LanguageRequirement {
+  language: string;
+  proficiency: string;
+}
+
+export interface Requirements {
+  experienceLevel: string;
+  location: string;
+  specificLocation?: string;
+  languageRequirements: LanguageRequirement[];
 }
 
 export interface Tender {
   _id: string;
   title: string;
   description: string;
-  budget: number;
-  deadline: string;
   category: string;
-  status: 'open' | 'closed' | 'awarded';
-  location?: string;
-  attachments?: string[];
-  company: Company;
-  createdBy: User;
+  skillsRequired: string[];
+  budget: Budget;
+  deadline: string;
+  duration: number;
+  visibility: 'public' | 'invite_only';
+  status: 'draft' | 'published' | 'open' | 'completed' | 'cancelled';
+  invitedFreelancers: string[];
+  requirements: Requirements;
+  company: {
+    description: any;
+    _id: string;
+    name: string;
+    logo: string;
+    industry: string;
+    verified: boolean;
+  };
+  createdBy: string;
+  proposals: any[];
+  metadata: {
+    savedBy: string[];
+    views: number;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -38,118 +56,193 @@ export interface Tender {
 export interface TenderFilters {
   page?: number;
   limit?: number;
-  search?: string;
   category?: string;
-  status?: string;
   minBudget?: number;
   maxBudget?: number;
+  skills?: string | string[];
+  search?: string;
+  status?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 }
 
-export interface PaginationInfo {
-  currentPage: number;
-  totalPages: number;
-  totalItems: number;
-  itemsPerPage: number;
-  hasNext: boolean;
-  hasPrev: boolean;
+export interface CreateTenderData {
+  title: string;
+  description: string;
+  category: string;
+  skillsRequired: string[];
+  budget: Budget;
+  deadline: string;
+  duration: number;
+  visibility?: 'public' | 'invite_only';
+  invitedFreelancers?: string[];
+  requirements?: Partial<Requirements>;
+  status?: 'draft' | 'published';
 }
 
-export interface TenderResponse {
-  success: boolean;
-  data: Tender;
-  message?: string;
+export interface UpdateTenderData {
+  title?: string;
+  description?: string;
+  category?: string;
+  skillsRequired?: string[];
+  budget?: Budget;
+  deadline?: string;
+  duration?: number;
+  visibility?: 'public' | 'invite_only';
+  invitedFreelancers?: string[];
+  requirements?: Partial<Requirements>;
+  status?: string;
 }
 
-export interface TenderListResponse {
-  message: string;
-  success: boolean;
-  data: Tender[];
-  pagination: PaginationInfo;
-}
-
-export const tenderService = {
-  // ✅ Create tender (company only)
-  createTender: async (data: Partial<Tender>): Promise<Tender> => {
+export const TenderService = {
+  // Create a new tender
+  async createTender(tenderData: CreateTenderData): Promise<{ success: boolean; data: { tender: Tender }; message: string }> {
     try {
-      const response = await api.post<TenderResponse>('/tender', data);
-      if (response.data.success) {
-        return response.data.data;
-      }
-      throw new Error(response.data.message || 'Failed to create tender');
+      const response = await api.post('/tender', tenderData);
+      handleSuccess('Tender created successfully');
+      return response.data;
     } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Failed to create tender');
+      handleError(error, 'Failed to create tender');
+      return Promise.reject(error);
     }
   },
 
-  // ✅ Get all tenders with filters
-  getTenders: async (filters: TenderFilters = {}): Promise<{ data: Tender[]; pagination: PaginationInfo }> => {
+  // Get all tenders with filtering and pagination
+  async getTenders(filters: TenderFilters = {}): Promise<{
+    success: boolean;
+    data: Tender[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+    };
+  }> {
     try {
-      const response = await api.get<TenderListResponse>('/tender', { params: filters });
-      if (response.data.success) {
-        return {
-          data: response.data.data,
-          pagination: response.data.pagination
-        };
-      }
-      throw new Error(response.data.message || 'Failed to fetch tenders');
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Failed to fetch tenders');
-    }
-  },
-
-  // ✅ Get single tender
-  getTender: async (id: string): Promise<Tender> => {
-    try {
-      const response = await api.get<TenderResponse>(`/tender/${id}`);
-      if (response.data.success) {
-        return response.data.data;
-      }
-      throw new Error(response.data.message || 'Failed to fetch tender');
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Failed to fetch tender');
-    }
-  },
-
-  // ✅ Update tender
-  updateTender: async (id: string, data: Partial<Tender>): Promise<Tender> => {
-    try {
-      const response = await api.put<TenderResponse>(`/tender/${id}`, data);
-      if (response.data.success) {
-        return response.data.data;
-      }
-      throw new Error(response.data.message || 'Failed to update tender');
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Failed to update tender');
-    }
-  },
-
-  // ✅ Delete tender
-  deleteTender: async (id: string): Promise<void> => {
-    try {
-      const response = await api.delete(`/tender/${id}`);
-      if (response.data.success) {
-        return;
-      }
-      throw new Error(response.data.message || 'Failed to delete tender');
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Failed to delete tender');
-    }
-  },
-
-  // ✅ Get company tenders
-  getCompanyTenders: async (companyId: string, status?: string): Promise<Tender[]> => {
-    try {
-      const response = await api.get<TenderListResponse>(`/tender/company/${companyId}`, {
-        params: { status }
+      const params = new URLSearchParams();
+      
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          if (Array.isArray(value)) {
+            value.forEach(item => params.append(key, item));
+          } else {
+            params.append(key, value.toString());
+          }
+        }
       });
-      if (response.data.success) {
-        return response.data.data;
-      }
-      throw new Error(response.data.message || 'Failed to fetch company tenders');
+
+      const response = await api.get(`/tender?${params}`);
+      return response.data;
     } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Failed to fetch company tenders');
+      handleError(error, 'Failed to fetch tenders');
+      return Promise.reject(error);
     }
   },
+
+  // Get single tender details
+  async getTender(id: string): Promise<{ success: boolean; data: { tender: Tender } }> {
+    try {
+      if (!id || id === 'undefined') {
+        handleError('Tender ID is required');
+        return Promise.reject(new Error('Tender ID is required'));
+      }
+      const response = await api.get(`/tender/${id}`);
+      return response.data;
+    } catch (error: any) {
+      handleError(error, 'Failed to fetch tender');
+      return Promise.reject(error);
+    }
+  },
+
+  // Update tender
+  async updateTender(id: string, updateData: UpdateTenderData): Promise<{ success: boolean; data: { tender: Tender }; message: string }> {
+    try {
+      if (!id || id === 'undefined') {
+        handleError('Tender ID is required');
+        return Promise.reject(new Error('Tender ID is required'));
+      }
+      const response = await api.put(`/tender/${id}`, updateData);
+      handleSuccess('Tender updated successfully');
+      return response.data;
+    } catch (error: any) {
+      handleError(error, 'Failed to update tender');
+      return Promise.reject(error);
+    }
+  },
+
+  // Delete tender
+  async deleteTender(id: string): Promise<{ success: boolean; message: string }> {
+    try {
+      if (!id || id === 'undefined') {
+        handleError('Tender ID is required');
+        return Promise.reject(new Error('Tender ID is required'));
+      }
+      const response = await api.delete(`/tender/${id}`);
+      handleSuccess('Tender deleted successfully');
+      return response.data;
+    } catch (error: any) {
+      handleError(error, 'Failed to delete tender');
+      return Promise.reject(error);
+    }
+  },
+
+  // Get company's tenders
+  async getMyTenders(): Promise<{ success: boolean; data: { tenders: Tender[] } }> {
+    try {
+      const response = await api.get('/tender/company/my-tenders');
+      return response.data;
+    } catch (error: any) {
+      handleError(error, 'Failed to fetch company tenders');
+      return Promise.reject(error);
+    }
+  },
+
+  // Save/unsave tender
+  async toggleSaveTender(id: string): Promise<{ success: boolean; data: { saved: boolean }; message: string }> {
+    try {
+      if (!id || id === 'undefined') {
+        handleError('Tender ID is required');
+        return Promise.reject(new Error('Tender ID is required'));
+      }
+      const response = await api.post(`/tender/${id}/save`);
+      
+      const message = response.data.data.saved 
+        ? 'Tender saved successfully' 
+        : 'Tender removed from saved';
+      handleSuccess(message);
+      
+      return response.data;
+    } catch (error: any) {
+      handleError(error, 'Failed to toggle save tender');
+      return Promise.reject(error);
+    }
+  },
+
+  // Get saved tenders
+  async getSavedTenders(): Promise<{ success: boolean; data: { tenders: Tender[] } }> {
+    try {
+      const response = await api.get('/tender/saved/saved');
+      return response.data;
+    } catch (error: any) {
+      handleError(error, 'Failed to fetch saved tenders');
+      return Promise.reject(error);
+    }
+  },
+
+  // Check if tender is saved
+  async checkTenderSaved(id: string): Promise<boolean> {
+    try {
+      if (!id || id === 'undefined') {
+        handleError('Tender ID is required');
+        return Promise.reject(new Error('Tender ID is required'));
+      }
+      const response = await this.getTender(id);
+      return response.data.tender.metadata.savedBy.includes(
+        localStorage.getItem('userId') || ''
+      );
+    } catch (error) {
+      handleError(error, 'Failed to check if tender is saved');
+      return false;
+    }
+  }
 };

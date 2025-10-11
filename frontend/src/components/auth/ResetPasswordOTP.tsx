@@ -1,11 +1,12 @@
+// src/components/auth/ResetPasswordOTP.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/router';
 import { Loader2, ArrowLeft, Mail, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { authService } from '@/services/authService';
 import Button from '@/components/forms/Button';
 import { Input } from '@/components/ui/Input';
+import { colors } from '@/utils/color';
 
 interface ResetPasswordOTPProps {
   email: string;
@@ -81,29 +82,33 @@ export default function ResetPasswordOTP({ email, onBack, onSuccess }: ResetPass
   };
 
   return (
-    <div className="w-full max-w-md mx-auto">
+    <div className="w-full max-w-md mx-auto bg-white p-8 rounded-2xl shadow-lg">
       <button
         onClick={onBack}
-        className="flex items-center text-gray-600 hover:text-gray-800 mb-6 transition-colors"
+        className="flex items-center mb-6 transition-colors"
+        style={{ color: colors.gray800 }}
       >
         <ArrowLeft className="w-5 h-5 mr-2" />
         Back to reset password
       </button>
 
       <div className="text-center mb-8">
-        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Mail className="w-8 h-8 text-blue-600" />
+        <div 
+          className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+          style={{ backgroundColor: colors.blue + '20' }}
+        >
+          <Mail className="w-8 h-8" style={{ color: colors.blue }} />
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Verify Your Identity</h2>
-        <p className="text-gray-600">
+        <h2 className="text-2xl font-bold mb-2" style={{ color: colors.darkNavy }}>Verify Your Identity</h2>
+        <p style={{ color: colors.gray800 }}>
           Enter the 6-digit code sent to{' '}
-          <span className="font-semibold text-blue-600">{email}</span>
+          <span className="font-semibold" style={{ color: colors.blue }}>{email}</span>
         </p>
       </div>
 
       <form onSubmit={handleVerify} className="space-y-6">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium mb-2" style={{ color: colors.darkNavy }}>
             Verification Code
           </label>
           <Input
@@ -115,6 +120,7 @@ export default function ResetPasswordOTP({ email, onBack, onSuccess }: ResetPass
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
             placeholder="Enter 6-digit code"
             className="text-center text-xl tracking-widest font-mono h-16"
+            style={{ borderColor: colors.gray400 }}
             required
             disabled={isLoading}
           />
@@ -122,7 +128,11 @@ export default function ResetPasswordOTP({ email, onBack, onSuccess }: ResetPass
 
         <Button
           type="submit"
-          className="w-full h-12"
+          className="w-full h-12 rounded-lg font-semibold"
+          style={{ 
+            backgroundColor: colors.goldenMustard,
+            color: colors.darkNavy
+          }}
           disabled={isLoading || otp.length !== 6}
         >
           {isLoading ? (
@@ -137,17 +147,18 @@ export default function ResetPasswordOTP({ email, onBack, onSuccess }: ResetPass
       </form>
 
       <div className="mt-6 text-center">
-        <p className="text-gray-600 text-sm">
+        <p className="text-sm" style={{ color: colors.gray800 }}>
           Didn`t receive the code?{' '}
           {countdown > 0 ? (
-            <span className="text-gray-400">
+            <span style={{ color: colors.gray400 }}>
               Resend in {countdown}s
             </span>
           ) : (
             <button
               onClick={handleResendOTP}
               disabled={isResending}
-              className="text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
+              className="font-medium disabled:opacity-50"
+              style={{ color: colors.goldenMustard }}
             >
               {isResending ? (
                 <>

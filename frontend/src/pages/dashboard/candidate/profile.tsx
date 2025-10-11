@@ -13,12 +13,13 @@ import {
   FormMessage,
 } from '@/components/ui/Form';
 import { Badge } from '@/components/ui/Badge';
-import { Loader2, Save, Upload, FileText, Download, X } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { candidateService, CandidateProfile } from '@/services/candidateService';
+import { Loader2, Save, Upload, FileText, Download, X, Plus, Trash2, Briefcase } from 'lucide-react';
+import { candidateService, CV } from '@/services/candidateService';
 import { useAuth } from '@/contexts/AuthContext';
 import Button from '@/components/forms/Button';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { applyBgColor, applyColor, applyBorderColor } from '@/utils/color';
+import { toast } from '@/utils/Toast';
 
 interface ProfileFormData {
   skills: string[];
@@ -47,13 +48,14 @@ interface ProfileFormData {
 }
 
 export default function CandidateProfilePage() {
+  console.log('[CandidateProfilePage] Render start');
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [cvUrl, setCvUrl] = useState<string | undefined>(undefined);
+  const [cvs, setCvs] = useState<CV[]>([]);
   const [dragOver, setDragOver] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const { toast } = useToast();
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -70,18 +72,13 @@ export default function CandidateProfilePage() {
   });
 
   useEffect(() => {
+    console.log('[CandidateProfilePage] useEffect (loadProfile), user:', user);
     const loadProfile = async () => {
       try {
         setIsLoading(true);
         const profile = await candidateService.getProfile();
-        
-        // If the CV URL is a relative path, convert it to full URL
-        let finalCvUrl = profile.cvUrl;
-        if (profile.cvUrl && profile.cvUrl.startsWith('/uploads/')) {
-          finalCvUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}${profile.cvUrl}`;
-        }
-        setCvUrl(finalCvUrl);
-        
+        console.log('Loaded profile:', profile); // Debug log
+        setCvs(profile.cvs || []);
         const formData: ProfileFormData = {
           skills: profile.skills || [],
           bio: profile.bio || '',
@@ -91,107 +88,106 @@ export default function CandidateProfilePage() {
           education: profile.education || [],
           experience: profile.experience || []
         };
-        
         form.reset(formData);
+        console.log('[CandidateProfilePage] Form reset with:', formData);
       } catch (error: any) {
         console.error('Failed to load profile:', error);
-        toast({
-          title: 'Error',
-          description: error.message || 'Failed to load profile',
-          variant: 'destructive'
-        });
+        toast.error(error.message || 'Failed to load profile');
       } finally {
         setIsLoading(false);
+        console.log('[CandidateProfilePage] Loading finished');
       }
     };
-
-    loadProfile();
-  }, [form, toast]);
+    if (user) {
+      console.log('[CandidateProfilePage] user exists, loading profile...');
+      loadProfile();
+    } else {
+      console.log('[CandidateProfilePage] user not available, skipping loadProfile');
+    }
+  }, [form, user]);
 
   const onSubmit = async (values: ProfileFormData) => {
+    // Frontend validation for required education/experience fields
+    const eduErrors = (values.education || []).map((edu, idx) => {
+      if (!edu.institution || !edu.degree || !edu.startDate) {
+        return `Education #${idx + 1}: Institution, Degree, and Start Date are required.`;
+      }
+      return null;
+    }).filter(Boolean);
+
+    const expErrors = (values.experience || []).map((exp, idx) => {
+      if (!exp.company || !exp.position || !exp.startDate) {
+        return `Experience #${idx + 1}: Company, Position, and Start Date are required.`;
+      }
+      return null;
+    }).filter(Boolean);
+
+    const allErrors = [...eduErrors, ...expErrors].filter((msg): msg is string => Boolean(msg));
+    if (allErrors.length > 0) {
+      allErrors.forEach((msg) => toast.error(msg));
+      return;
+    }
+
     try {
       setIsSaving(true);
+      console.log('Submitting profile data:', values); // Debug log
       await candidateService.updateProfile(values);
-      toast({
-        title: 'Success',
-        description: 'Profile updated successfully'
-      });
+      toast.success('Profile updated successfully');
     } catch (error: any) {
       console.error('Failed to update profile:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to update profile',
-        variant: 'destructive'
-      });
+      toast.error(error.message || 'Failed to update profile');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleFileSelect = (file: File): boolean => {
-    const fileExtension = file.name.split('.').pop()?.toLowerCase();
-    if (!['pdf', 'doc', 'docx'].includes(fileExtension || '')) {
-      toast({
-        title: 'Error',
-        description: 'Please upload a PDF, DOC, or DOCX file',
-        variant: 'destructive'
-      });
-      return false;
-    }
+  const handleFileSelect = (files: FileList): File[] => {
+    const validFiles: File[] = [];
+    
+    Array.from(files).forEach(file => {
+      const fileExtension = file.name.split('.').pop()?.toLowerCase();
+      if (!['pdf', 'doc', 'docx'].includes(fileExtension || '')) {
+        toast.error('Please upload only PDF, DOC, or DOCX files');
+        return;
+      }
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast({
-        title: 'Error',
-        description: 'File size must be less than 10MB',
-        variant: 'destructive'
-      });
-      return false;
-    }
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error('File size must be less than 10MB');
+        return;
+      }
 
-    setSelectedFile(file);
-    return true;
+      validFiles.push(file);
+    });
+
+    return validFiles;
   };
 
-  const handleFileUpload = async (file: File) => {
+  const handleFileUpload = async (files: File[]) => {
     try {
       setIsUploading(true);
-      const result = await candidateService.uploadCV(file);
-      
-      // Convert relative URL to absolute URL for frontend access
-      let finalCvUrl = result.cvUrl;
-      if (result.cvUrl && result.cvUrl.startsWith('/uploads/')) {
-        finalCvUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}${result.cvUrl}`;
-      }
-      setCvUrl(finalCvUrl);
-      setSelectedFile(null);
-      
-      toast({
-        title: 'Success',
-        description: 'CV uploaded successfully'
-      });
+      const uploadedCVs = await candidateService.uploadCVs(files);
+      setCvs(prev => [...prev, ...uploadedCVs]);
+      setSelectedFiles([]);
+      toast.success('CVs uploaded successfully');
     } catch (error: any) {
-      console.error('Failed to upload CV:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to upload CV',
-        variant: 'destructive'
-      });
+      console.error('Failed to upload CVs:', error);
+      toast.error(error.message || 'Failed to upload CVs');
     } finally {
       setIsUploading(false);
     }
   };
 
   const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      if (handleFileSelect(file)) {
-        handleFileUpload(file);
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      const validFiles = handleFileSelect(files);
+      if (validFiles.length > 0) {
+        setSelectedFiles(validFiles);
       }
     }
   };
 
   const handleSelectFileClick = () => {
-    // Programmatically click the hidden file input
     if (fileInputRef.current) {
       fileInputRef.current.click();
     }
@@ -214,58 +210,107 @@ export default function CandidateProfilePage() {
     e.stopPropagation();
     setDragOver(false);
 
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0 && handleFileSelect(files[0])) {
-      handleFileUpload(files[0]);
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const validFiles = handleFileSelect(files);
+      if (validFiles.length > 0) {
+        setSelectedFiles(validFiles);
+      }
     }
   }, []);
 
-  const handleDownloadCV = () => {
-    if (cvUrl) {
-      console.log('Current CV URL:', cvUrl);
-      
-      let downloadUrl = cvUrl;
-      
-      // FIX: Handle URL construction correctly
-      if (cvUrl.startsWith('http')) {
-        // Already a full URL, use as-is
-        downloadUrl = cvUrl;
-      } else if (cvUrl.startsWith('/api/v1/')) {
-        // Remove the incorrect prefix
-        downloadUrl = cvUrl.replace('/api/v1', '');
-      }
-      
-      // Construct correct URL - files are served from /uploads, not /api/v1/uploads
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-      
-      // If it's not already a full URL, prepend the backend URL
-      if (!downloadUrl.startsWith('http')) {
-        // Ensure proper URL format
-        if (downloadUrl.startsWith('/')) {
-          downloadUrl = `${backendUrl}${downloadUrl}`;
-        } else {
-          downloadUrl = `${backendUrl}/${downloadUrl}`;
-        }
-      }
-      
-      console.log('Final download URL:', downloadUrl);
-      window.open(downloadUrl, '_blank');
+  const handleDownloadCV = (cv: CV) => {
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+    let downloadUrl = cv.path;
+    // Always use /uploads/cv/filename path
+    if (!downloadUrl.startsWith('http')) {
+      // Remove any /api/v1/uploads prefix and ensure /uploads/cv/filename
+      downloadUrl = downloadUrl.replace(/^\/api\/v1\/uploads/, '/uploads');
+      downloadUrl = `${backendUrl}${downloadUrl}`;
+    }
+    window.open(downloadUrl, '_blank');
+  };
+
+  const handleSetPrimaryCV = async (cvId: string) => {
+    try {
+      await candidateService.setPrimaryCV(cvId);
+      setCvs(prev => prev.map(cv => ({
+        ...cv,
+        isPrimary: cv._id === cvId
+      })));
+      toast.success('Primary CV updated successfully');
+    } catch (error: any) {
+      console.error('Failed to set primary CV:', error);
+      toast.error(error.message || 'Failed to set primary CV');
     }
   };
 
-  const removeSelectedFile = () => {
-    setSelectedFile(null);
-    // Reset the file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+  const handleDeleteCV = async (cvId: string) => {
+    if (!confirm('Are you sure you want to delete this CV?')) return;
+
+    try {
+      await candidateService.deleteCV(cvId);
+      setCvs(prev => prev.filter(cv => cv._id !== cvId));
+      toast.success('CV deleted successfully');
+    } catch (error: any) {
+      console.error('Failed to delete CV:', error);
+      toast.error(error.message || 'Failed to delete CV');
     }
+  };
+
+  const removeSelectedFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadSelectedFiles = () => {
+    if (selectedFiles.length > 0) {
+      handleFileUpload(selectedFiles);
+    }
+  };
+
+  const addEducation = () => {
+    const currentEducation = form.getValues('education') || [];
+    form.setValue('education', [
+      ...currentEducation,
+      {
+        institution: '',
+        degree: '',
+        field: '',
+        startDate: '',
+        current: false
+      }
+    ]);
+  };
+
+  const removeEducation = (index: number) => {
+    const currentEducation = form.getValues('education') || [];
+    form.setValue('education', currentEducation.filter((_, i) => i !== index));
+  };
+
+  const addExperience = () => {
+    const currentExperience = form.getValues('experience') || [];
+    form.setValue('experience', [
+      ...currentExperience,
+      {
+        company: '',
+        position: '',
+        startDate: '',
+        current: false,
+        skills: []
+      }
+    ]);
+  };
+
+  const removeExperience = (index: number) => {
+    const currentExperience = form.getValues('experience') || [];
+    form.setValue('experience', currentExperience.filter((_, i) => i !== index));
   };
 
   if (isLoading) {
     return (
-    <DashboardLayout requiredRole="candidate">
+      <DashboardLayout requiredRole="candidate">
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <Loader2 className="h-8 w-8 animate-spin" style={applyColor('gold')} />
           <span className="ml-2 text-gray-600">Loading profile...</span>
         </div>
       </DashboardLayout>
@@ -273,12 +318,14 @@ export default function CandidateProfilePage() {
   }
 
   const currentSkills = form.watch('skills') || [];
+  const education = form.watch('education') || [];
+  const experience = form.watch('experience') || [];
 
   return (
     <DashboardLayout requiredRole="candidate">
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">Profile Management</h1>
+          <h1 className="text-3xl font-bold" style={applyColor('darkNavy')}>Profile Management</h1>
           <p className="text-gray-600">Update your candidate profile and CV</p>
         </div>
 
@@ -288,7 +335,7 @@ export default function CandidateProfilePage() {
               {/* Basic Information */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Basic Information</CardTitle>
+                  <CardTitle style={applyColor('darkNavy')}>Basic Information</CardTitle>
                   <CardDescription>Your personal details</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -370,8 +417,8 @@ export default function CandidateProfilePage() {
               {/* CV Upload */}
               <Card>
                 <CardHeader>
-                  <CardTitle>CV/Resume</CardTitle>
-                  <CardDescription>Upload your latest CV</CardDescription>
+                  <CardTitle style={applyColor('darkNavy')}>CV/Resume</CardTitle>
+                  <CardDescription>Upload your latest CVs (max 5)</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Drag & Drop Area */}
@@ -387,53 +434,66 @@ export default function CandidateProfilePage() {
                   >
                     <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                     
-                    {selectedFile ? (
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <FileText className="h-4 w-4 text-blue-600" />
-                            <span className="text-sm font-medium truncate">
-                              {selectedFile.name}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
-                            </span>
+                    {selectedFiles.length > 0 ? (
+                      <div className="space-y-3">
+                        {selectedFiles.map((file, index) => (
+                          <div key={index} className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <FileText className="h-4 w-4 text-blue-600" />
+                                <span className="text-sm font-medium truncate">
+                                  {file.name}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                                </span>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeSelectedFile(index)}
+                                type="button"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
+                        ))}
+                        <div className="flex space-x-2">
                           <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={removeSelectedFile}
-                            type="button"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <div className="mt-2">
-                          <Button
-                            onClick={() => handleFileUpload(selectedFile)}
+                            onClick={uploadSelectedFiles}
                             disabled={isUploading}
-                            className="w-full"
+                            className="flex-1"
+                            style={applyBgColor('gold')}
                           >
                             {isUploading ? (
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             ) : null}
-                            {isUploading ? 'Uploading...' : 'Upload CV'}
+                            {isUploading ? 'Uploading...' : 'Upload All'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => setSelectedFiles([])}
+                            type="button"
+                          >
+                            Cancel
                           </Button>
                         </div>
                       </div>
                     ) : (
                       <>
                         <p className="text-sm text-gray-600 mb-4">
-                          Drag & drop your CV here or click to browse
+                          Drag & drop your CVs here or click to browse
                         </p>
                         <Button 
                           variant="outline" 
                           disabled={isUploading} 
                           onClick={handleSelectFileClick}
                           type="button"
+                          style={applyBorderColor('gold')}
                         >
                           <Upload className="mr-2 h-4 w-4" />
-                          Select File
+                          Select Files
                         </Button>
                         <input
                           ref={fileInputRef}
@@ -443,46 +503,72 @@ export default function CandidateProfilePage() {
                           className="hidden"
                           onChange={handleFileInputChange}
                           disabled={isUploading}
+                          multiple
                         />
                         <p className="text-xs text-gray-500 mt-2">
-                          PDF, DOC, or DOCX files (max 10MB)
+                          PDF, DOC, or DOCX files (max 10MB each)
                         </p>
                       </>
                     )}
                   </div>
 
-                  {/* Current CV Status */}
-                  {cvUrl && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <FileText className="h-6 w-6 text-green-600" />
-                          <div>
-                            <p className="font-medium text-green-800">CV Uploaded</p>
-                            <p className="text-sm text-green-600">
-                              Ready for employers to view
-                            </p>
+                  {/* Current CVs */}
+                  {cvs.length > 0 && (
+                    <div className="space-y-3">
+                      <h3 className="font-medium">Your CVs</h3>
+                      {cvs.map((cv) => (
+                        <div key={cv._id} className={`border rounded-lg p-3 ${cv.isPrimary ? 'border-blue-300 bg-blue-50' : 'border-gray-200'}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <FileText className="h-5 w-5 text-blue-600" />
+                              <div>
+                                <p className="font-medium">{cv.originalName}</p>
+                                <p className="text-sm text-gray-600">
+                                  Uploaded: {new Date(cv.uploadedAt).toLocaleDateString()}
+                                  {cv.isPrimary && <span className="ml-2 text-blue-600 font-semibold">• Primary</span>}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex space-x-2">
+                              {!cv.isPrimary && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleSetPrimaryCV(cv._id)}
+                                  style={applyBorderColor('gold')}
+                                >
+                                  Set Primary
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDownloadCV(cv)}
+                                style={applyBorderColor('teal')}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDeleteCV(cv._id)}
+                                style={applyBorderColor('orange')}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleDownloadCV}
-                          type="button"
-                        >
-                          <Download className="mr-2 h-4 w-4" />
-                          View CV
-                        </Button>
-                      </div>
+                      ))}
                     </div>
                   )}
 
-                  {!cvUrl && !selectedFile && (
+                  {cvs.length === 0 && selectedFiles.length === 0 && (
                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                       <div className="flex items-center space-x-3">
                         <FileText className="h-6 w-6 text-yellow-600" />
                         <div>
-                          <p className="font-medium text-yellow-800">No CV Uploaded</p>
+                          <p className="font-medium text-yellow-800">No CVs Uploaded</p>
                           <p className="text-sm text-yellow-600">
                             Upload your CV to apply for jobs
                           </p>
@@ -497,7 +583,7 @@ export default function CandidateProfilePage() {
             {/* Skills Section */}
             <Card>
               <CardHeader>
-                <CardTitle>Skills</CardTitle>
+                <CardTitle style={applyColor('darkNavy')}>Skills</CardTitle>
                 <CardDescription>Your technical and professional skills</CardDescription>
               </CardHeader>
               <CardContent>
@@ -520,11 +606,327 @@ export default function CandidateProfilePage() {
                 />
                 <div className="flex flex-wrap gap-2 mt-3">
                   {currentSkills.map((skill, index) => (
-                    <Badge key={index} variant="secondary">
+                    <Badge key={index} variant="secondary" style={applyBgColor('gold')}>
                       {skill}
                     </Badge>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Education Section */}
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle style={applyColor('darkNavy')}>Education</CardTitle>
+                    <CardDescription>Your educational background</CardDescription>
+                  </div>
+                  <Button type="button" onClick={addEducation} size="sm" style={applyBgColor('gold')}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Education
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {education.map((edu, index) => (
+                  <div key={index} className="border rounded-lg p-4 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h4 className="font-medium">Education #{index + 1}</h4>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => removeEducation(index)}
+                        style={applyBorderColor('orange')}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name={`education.${index}.institution`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Institution</FormLabel>
+                            <FormControl>
+                              <Input {...field} value={field.value || ''} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name={`education.${index}.degree`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Degree</FormLabel>
+                            <FormControl>
+                              <Input {...field} value={field.value || ''} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name={`education.${index}.field`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Field of Study</FormLabel>
+                            <FormControl>
+                              <Input {...field} value={field.value || ''} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name={`education.${index}.startDate`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Start Date</FormLabel>
+                            <FormControl>
+                              <Input type="date" {...field} value={field.value || ''} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name={`education.${index}.endDate`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>End Date</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="date" 
+                                {...field} 
+                                value={field.value || ''}
+                                disabled={form.watch(`education.${index}.current`)}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name={`education.${index}.current`}
+                        render={({ field }) => (
+                          <FormItem className="flex items-center space-x-2">
+                            <FormControl>
+                              <input
+                                type="checkbox"
+                                checked={field.value || false}
+                                onChange={field.onChange}
+                                className="rounded"
+                              />
+                            </FormControl>
+                            <FormLabel className="!mt-0">Currently studying here</FormLabel>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    
+                    <FormField
+                      control={form.control}
+                      name={`education.${index}.description`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Description</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Describe your studies, achievements, etc."
+                              rows={3}
+                              {...field}
+                              value={field.value || ''}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                ))}
+                
+                {education.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <FileText className="mx-auto h-12 w-12 text-gray-400" />
+                    <p className="mt-2">No education entries yet</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Experience Section */}
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle style={applyColor('darkNavy')}>Experience</CardTitle>
+                    <CardDescription>Your work experience</CardDescription>
+                  </div>
+                  <Button type="button" onClick={addExperience} size="sm" style={applyBgColor('gold')}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Experience
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {experience.map((exp, index) => (
+                  <div key={index} className="border rounded-lg p-4 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h4 className="font-medium">Experience #{index + 1}</h4>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => removeExperience(index)}
+                        style={applyBorderColor('orange')}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name={`experience.${index}.company`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Company</FormLabel>
+                            <FormControl>
+                              <Input {...field} value={field.value || ''} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name={`experience.${index}.position`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Position</FormLabel>
+                            <FormControl>
+                              <Input {...field} value={field.value || ''} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name={`experience.${index}.startDate`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Start Date</FormLabel>
+                            <FormControl>
+                              <Input type="date" {...field} value={field.value || ''} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name={`experience.${index}.endDate`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>End Date</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="date" 
+                                {...field} 
+                                value={field.value || ''}
+                                disabled={form.watch(`experience.${index}.current`)}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name={`experience.${index}.current`}
+                        render={({ field }) => (
+                          <FormItem className="flex items-center space-x-2">
+                            <FormControl>
+                              <input
+                                type="checkbox"
+                                checked={field.value || false}
+                                onChange={field.onChange}
+                                className="rounded"
+                              />
+                            </FormControl>
+                            <FormLabel className="!mt-0">Current position</FormLabel>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    
+                    <FormField
+                      control={form.control}
+                      name={`experience.${index}.description`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Description</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Describe your responsibilities and achievements"
+                              rows={3}
+                              {...field}
+                              value={field.value || ''}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name={`experience.${index}.skills`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Skills used (comma-separated)</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="e.g., JavaScript, React, Node.js"
+                              value={field.value.join(', ')}
+                              onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                ))}
+                
+                {experience.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <Briefcase className="mx-auto h-12 w-12 text-gray-400" />
+                    <p className="mt-2">No experience entries yet</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -533,10 +935,11 @@ export default function CandidateProfilePage() {
                 type="button" 
                 variant="outline"
                 onClick={() => window.history.back()}
+                style={applyBorderColor('gray400')}
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSaving}>
+              <Button type="submit" disabled={isSaving} style={applyBgColor('gold')}>
                 {isSaving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -553,6 +956,7 @@ export default function CandidateProfilePage() {
           </form>
         </Form>
       </div>
+      {/* {console.log('[CandidateProfilePage] Render end, isLoading:', isLoading, 'user:', user)} */}
     </DashboardLayout>
   );
 }

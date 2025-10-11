@@ -5,17 +5,30 @@ const OTP = require('../models/OTP');
 const bcrypt = require("bcrypt");
 const PasswordReset = require('../models/PasswordReset');
 const { sendOTPEmail, sendPasswordResetEmail } = require('../services/emailService');
+const { validationResult } = require('express-validator');
+const AppError = require('../utils/AppError');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
-const MAX_LOGIN_ATTEMPTS = parseInt(process.env.MAX_LOGIN_ATTEMPTS) || 5;
-const ACCOUNT_LOCK_TIME = parseInt(process.env.ACCOUNT_LOCK_TIME) || 15; // minutes
-
+const MAX_LOGIN_ATTEMPTS = process.env.MAX_LOGIN_ATTEMPTS ? parseInt(process.env.MAX_LOGIN_ATTEMPTS) : 5;
 // Generate OTP
 const generateOTP = () => crypto.randomInt(100000, 999999).toString();
 
+// Validation middleware (to be used in routes)
+exports.validateRegistration = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: errors.array()
+    });
+  }
+  next();
+};
+
 // Register new user with OTP verification
-exports.registerUser = async (req, res) => {
+exports.registerUser = async (req, res, next) => {
   try {
     const { name, email, password, confirmPassword, role } = req.body;
 
@@ -33,9 +46,9 @@ exports.registerUser = async (req, res) => {
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       console.log('User already exists:', email);
-      return res.status(400).json({
+      return res.status(409).json({
         success: false,
-        message: 'User already exists with this email'
+        message: 'Email already exists'
       });
     }
 
@@ -93,6 +106,25 @@ exports.registerUser = async (req, res) => {
 
   } catch (error) {
     console.error('Registration error:', error);
+    
+    // Handle duplicate key error
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: 'Email already exists'
+      });
+    }
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: messages
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -101,9 +133,16 @@ exports.registerUser = async (req, res) => {
 };
 
 // Verify OTP
-exports.verifyOTP = async (req, res) => {
+exports.verifyOTP = async (req, res, next) => {
   try {
     const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and OTP are required'
+      });
+    }
 
     const otpRecord = await OTP.findOne({ email, otp, type: 'register' });
     if (!otpRecord || !otpRecord.isValid()) {
@@ -158,9 +197,16 @@ exports.verifyOTP = async (req, res) => {
 };
 
 // Resend OTP
-exports.resendOTP = async (req, res) => {
+exports.resendOTP = async (req, res, next) => {
   try {
     const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
 
     const user = await User.findOne({ email });
     if (!user) {
@@ -207,9 +253,16 @@ exports.resendOTP = async (req, res) => {
 };
 
 // Enhanced Login with security features
-exports.loginUser = async (req, res) => {
+exports.loginUser = async (req, res, next) => {
   try {
     const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required'
+      });
+    }
 
     const user = await User.findOne({ email }).select('+passwordHash');
     
@@ -223,7 +276,7 @@ exports.loginUser = async (req, res) => {
 
     // Check if account is locked
     if (user.isLocked) {
-      const lockTimeLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
+      const lockTimeLeft = Math.ceil((user.lockUntil - Date.now()) / 100000000);
       return res.status(401).json({
         success: false,
         message: `Account locked. Try again in ${lockTimeLeft} minutes.`
@@ -234,7 +287,7 @@ exports.loginUser = async (req, res) => {
     if (!user.emailVerified) {
       return res.status(401).json({
         success: false,
-        message: 'Please verify your email first',
+        message: 'EMAIL_VERIFICATION_REQUIRED',
         requiresVerification: true,
         email: user.email
       });
@@ -296,9 +349,16 @@ exports.loginUser = async (req, res) => {
 };
 
 // Forgot password - Send OTP instead of token
-exports.forgotPassword = async (req, res) => {
+exports.forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
 
     const user = await User.findOne({ email });
     if (!user) {
@@ -338,9 +398,16 @@ exports.forgotPassword = async (req, res) => {
 };
 
 // Verify OTP for password reset
-exports.verifyResetOTP = async (req, res) => {
+exports.verifyResetOTP = async (req, res, next) => {
   try {
     const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and OTP are required'
+      });
+    }
 
     const otpRecord = await OTP.findOne({ 
       email, 
@@ -388,9 +455,16 @@ exports.verifyResetOTP = async (req, res) => {
 };
 
 // Reset password
-exports.resetPassword = async (req, res) => {
+exports.resetPassword = async (req, res, next) => {
   try {
     const { token, password, confirmPassword } = req.body;
+
+    if (!token || !password || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token, password, and confirmation are required'
+      });
+    }
 
     if (password !== confirmPassword) {
       return res.status(400).json({
@@ -436,7 +510,7 @@ exports.logoutUser = (req, res) => {
 };
 
 // Get current user
-exports.getCurrentUser = async (req, res) => {
+exports.getCurrentUser = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.userId);
     if (!user) {
@@ -461,16 +535,28 @@ exports.getCurrentUser = async (req, res) => {
   } catch (error) {
     console.error('Get current user error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
-  }};
-  // Create admin user (protected - only existing admins can create new admins)
-exports.createAdmin = async (req, res) => {
+  }
+};
+
+// Create admin user (protected - only existing admins can create new admins)
+exports.createAdmin = async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, email, and password are required'
+      });
+    }
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(409).json({ 
+        success: false,
+        message: 'User already exists' 
+      });
     }
 
     // Hash password
@@ -484,8 +570,8 @@ exports.createAdmin = async (req, res) => {
       passwordHash,
       role: 'admin',
       profileCompleted: true,
-      verified: true,
-      status: 'active'
+      emailVerified: true,
+      isActive: true
     });
 
     await adminUser.save();
@@ -497,39 +583,50 @@ exports.createAdmin = async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    // Log this activity
-    const activityLog = new AdminActivityLog({
-      adminId: req.user._id,
-      action: 'CREATE',
-      targetModel: 'User',
-      targetId: adminUser._id,
-      changes: { email, role: 'admin' },
-      ipAddress: req.ip,
-      userAgent: req.get('User-Agent')
-    });
-    await activityLog.save();
-
     res.status(201).json({
+      success: true,
       message: 'Admin user created successfully',
-      user: {
-        id: adminUser._id,
-        name: adminUser.name,
-        email: adminUser.email,
-        role: adminUser.role
-      },
-      token
+      data: {
+        user: {
+          id: adminUser._id,
+          name: adminUser.name,
+          email: adminUser.email,
+          role: adminUser.role
+        },
+        token
+      }
     });
   } catch (error) {
     console.error('Error creating admin user:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: 'User already exists with this email'
+      });
+    }
+    
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: messages
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error' 
+    });
   }
 };
 
 // Get all admin users
-exports.getAdmins = async (req, res) => {
+exports.getAdmins = async (req, res, next) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    
+
     const admins = await User.find({ role: 'admin' })
       .select('-passwordHash')
       .limit(Number(limit))
@@ -539,7 +636,8 @@ exports.getAdmins = async (req, res) => {
     const total = await User.countDocuments({ role: 'admin' });
     
     res.json({
-      admins,
+      success: true,
+      data: admins,
       pagination: {
         totalPages: Math.ceil(total / Number(limit)),
         currentPage: Number(page),
@@ -550,6 +648,9 @@ exports.getAdmins = async (req, res) => {
     });
   } catch (error) {
     console.error('Error getting admins:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error' 
+    });
   }
 };

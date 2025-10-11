@@ -1,3 +1,4 @@
+// /src/components/ui/Button.tsx
 import React from "react";
 
 type Variant = "primary" | "secondary" | "outline" | "ghost";
@@ -6,7 +7,7 @@ type Size = "sm" | "md" | "lg";
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   size?: Size;
-  asChild: true
+  // REMOVED: asChild: true - This was causing the error
 }
 
 export const Button: React.FC<ButtonProps> = ({ 

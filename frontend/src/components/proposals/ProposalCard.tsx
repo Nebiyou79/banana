@@ -49,7 +49,7 @@ const ProposalCard: React.FC<Props> = ({
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD',
+  currency: 'Birr',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);

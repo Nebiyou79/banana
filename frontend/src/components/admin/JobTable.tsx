@@ -1,4 +1,5 @@
 import React from 'react';
+import { useToast } from '@/hooks/use-toast';
 
 interface Job {
   _id: string;
@@ -7,6 +8,10 @@ interface Job {
   status: string;
   applications: number;
   createdAt: string;
+  description?: string;
+  location?: string;
+  salary?: string;
+  type?: string;
 }
 
 interface JobTableProps {
@@ -17,9 +22,11 @@ interface JobTableProps {
 }
 
 const JobTable: React.FC<JobTableProps> = ({ jobs, loading, onEdit, onDelete }) => {
+  const { toast } = useToast();
+
   const getStatusBadge = (status: string) => {
     const statusConfig = {
-      published: { color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300', label: 'Published' },
+      active: { color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300', label: 'Active' },
       draft: { color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300', label: 'Draft' },
       closed: { color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300', label: 'Closed' },
       archived: { color: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300', label: 'Archived' },
@@ -31,6 +38,12 @@ const JobTable: React.FC<JobTableProps> = ({ jobs, loading, onEdit, onDelete }) 
         {config.label}
       </span>
     );
+  };
+
+  const handleDeleteClick = (job: Job) => {
+    if (window.confirm(`Are you sure you want to delete the job "${job.title}"?`)) {
+      onDelete?.(job._id);
+    }
   };
 
   if (loading) {
@@ -80,6 +93,9 @@ const JobTable: React.FC<JobTableProps> = ({ jobs, loading, onEdit, onDelete }) 
                 <div className="text-sm font-medium text-gray-900 dark:text-white">
                   {job.title}
                 </div>
+                {job.location && (
+                  <div className="text-sm text-gray-500 dark:text-gray-400">{job.location}</div>
+                )}
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="text-sm text-gray-900 dark:text-white">{job.company}</div>
@@ -96,13 +112,13 @@ const JobTable: React.FC<JobTableProps> = ({ jobs, loading, onEdit, onDelete }) 
               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                 <button
                   onClick={() => onEdit?.(job)}
-                  className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                  className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20"
                 >
                   Edit
                 </button>
                 <button
-                  onClick={() => onDelete?.(job._id)}
-                  className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                  onClick={() => handleDeleteClick(job)}
+                  className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
                 >
                   Delete
                 </button>
@@ -111,6 +127,11 @@ const JobTable: React.FC<JobTableProps> = ({ jobs, loading, onEdit, onDelete }) 
           ))}
         </tbody>
       </table>
+      {jobs.length === 0 && (
+        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+          No jobs found
+        </div>
+      )}
     </div>
   );
 };

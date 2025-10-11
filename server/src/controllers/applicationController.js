@@ -15,7 +15,7 @@ exports.applyJob = asyncHandler(async (req, res, next) => {
   if (!mongoose.Types.ObjectId.isValid(jobId)) {
     return next(new ErrorResponse('Invalid jobId format', 400));
   }
-
+ 
   // Prevent duplicate application
   const existing = await Application.findOne({ jobId, candidateId });
   if (existing) return next(new ErrorResponse('You have already applied to this job', 409));

@@ -1,6 +1,8 @@
+// src/hooks/useAuthRedirect.ts
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { authService } from '@/services/authService';
+import { toast } from '@/hooks/use-toast';
 
 // Define all routes accessible without login
 const PUBLIC_ROUTES = [
@@ -19,17 +21,21 @@ export const useAuthRedirect = () => {
   useEffect(() => {
     const checkAuth = () => {
       const isAuthenticated = authService.isAuthenticated();
-      // router.asPath ensures query strings like /terms?ref=signup still work
       const currentPath = router.asPath.split('?')[0].replace(/\/$/, '');
-
       const isPublic = PUBLIC_ROUTES.some(route => 
         currentPath === route || currentPath.startsWith(`${route}/`)
       );
-
-      console.log('Auth Check:', { currentPath, isAuthenticated, isPublic });
+      const userRole = localStorage.getItem('role');
+      console.log('[useAuthRedirect] isAuthenticated:', isAuthenticated, '| currentPath:', currentPath, '| isPublic:', isPublic, '| userRole:', userRole);
 
       // 🚫 Not authenticated and not on a public route → redirect to login
       if (!isAuthenticated && !isPublic) {
+        toast({
+          title: 'Authentication Required',
+          description: 'Please login to access this page',
+          variant: 'destructive',
+        });
+        console.log('[useAuthRedirect] Redirecting to /login');
         router.replace('/login');
         return;
       }
@@ -44,8 +50,9 @@ export const useAuthRedirect = () => {
       ].includes(currentPath);
       
       if (isAuthenticated && isAuthRoute) {
-        const userRole = localStorage.getItem('role') || 'candidate';
-        router.replace(`/dashboard/${userRole}`);
+        const role = userRole || 'candidate';
+        console.log('[useAuthRedirect] Redirecting to /dashboard/' + role);
+        router.replace(`/dashboard/${role}`);
       }
     };
 

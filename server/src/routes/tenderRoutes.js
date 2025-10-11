@@ -1,4 +1,3 @@
-// routes/tenderRoutes.js - Enhanced
 const express = require('express');
 const {
   createTender,
@@ -6,25 +5,52 @@ const {
   getTender,
   updateTender,
   deleteTender,
-  getCompanyTenders
-} = require('../controllers/tenderControllers');
-
+  getMyTenders,
+  toggleSaveTender,
+  getSavedTenders
+} = require('../controllers/tenderController');
 const { verifyToken } = require('../middleware/authMiddleware');
 const { restrictTo } = require('../middleware/roleMiddleware');
 
 const router = express.Router();
 
-// Public routes (with optional auth)
-router.get('/public', getTenders); // Get public tenders
+// Public routes - anyone can view tenders
+router.get('/', getTenders);
+router.get('/:id', getTender);
 
 // Protected routes
 router.use(verifyToken);
 
-router.post('/', restrictTo('company'), createTender);
-router.get('/', getTenders); // With filters for authenticated users
-router.get('/:id', getTender);
-router.put('/:id', restrictTo('company', 'admin'), updateTender);
-router.delete('/:id', restrictTo('company', 'admin'), deleteTender);
-router.get('/company/:companyId', getCompanyTenders);
+// Company routes - only companies can create/update/delete tenders
+router.post('/', 
+  restrictTo('company', 'admin'),
+  createTender
+);
+
+router.get('/company/my-tenders',
+  restrictTo('company', 'admin'),
+  getMyTenders
+);
+
+router.put('/:id',
+  restrictTo('company', 'admin'),
+  updateTender
+);
+
+router.delete('/:id',
+  restrictTo('company', 'admin'),
+  deleteTender
+);
+
+// Freelancer routes - only freelancers can save tenders
+router.post('/:id/save',
+  restrictTo('freelancer'),
+  toggleSaveTender
+);
+
+router.get('/saved/saved',
+  restrictTo('freelancer'),
+  getSavedTenders
+);
 
 module.exports = router;

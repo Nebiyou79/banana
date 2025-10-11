@@ -8,6 +8,7 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import JobForm from '@/components/job/JobForm';
+import { toast } from '@/hooks/use-toast';
 
 const CompanyJobDetailPage: React.FC = () => {
   const router = useRouter();
@@ -15,7 +16,6 @@ const CompanyJobDetailPage: React.FC = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
-  const [error, setError] = useState('');
 
   const { data: job, isLoading, error: fetchError } = useQuery({
     queryKey: ['companyJob', id],
@@ -31,42 +31,64 @@ const CompanyJobDetailPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['companyJob', id] });
       queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
       setIsEditing(false);
-      setError('');
+      toast({
+        title: 'Job updated successfully',
+        description: 'Your job changes have been saved',
+      });
     },
     onError: (error: any) => {
-      setError(error.message || 'Failed to update job');
+      toast({
+        title: 'Failed to update job',
+        description: error.message || 'Please try again',
+        variant: 'destructive',
+      });
     },
   });
 
-  // Status change mutation
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      jobService.updateJob(id, { status }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['companyJob', id] });
-      queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
-      setError('');
-    },
-    onError: (error: any) => {
-      setError(error.message || 'Failed to update job status');
-    },
-  });
+const statusMutation = useMutation({
+  mutationFn: ({ id, status }: { 
+    id: string; 
+    status: "draft" | "active" | "paused" | "closed" | "archived"; 
+  }) =>
+    jobService.updateJob(id, { status }),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
+    toast({
+      title: 'Status updated',
+      description: 'Job status has been changed',
+    });
+  },
+  onError: (error: any) => {
+    toast({
+      title: 'Failed to update status',
+      description: error.message || 'Please try again',
+      variant: 'destructive',
+    });
+  },
+});
 
-  const handleUpdateJob = (data: any) => {
+
+  const handleUpdateJob = async (data: Partial<Job>) => {
     if (id) {
-      updateMutation.mutate({ id: id as string, data });
+      await updateMutation.mutateAsync({ id: id as string, data });
     }
   };
 
-  const handleStatusChange = (newStatus: string) => {
-    if (id && job) {
-      statusMutation.mutate({ id: id as string, status: newStatus });
-    }
-  };
+ const handleStatusChange = async (
+  newStatus: "draft" | "active" | "paused" | "closed" | "archived"
+) => {
+  if (id && job) {
+    await statusMutation.mutateAsync({
+      id: id as string,
+      status: newStatus,
+    });
+  }
+};
+
+  
 
   const handleEditToggle = () => {
     setIsEditing(!isEditing);
-    setError('');
   };
 
   if (isLoading) {
@@ -111,20 +133,12 @@ const CompanyJobDetailPage: React.FC = () => {
     });
   };
 
-  const formatSalary = (salary: Job['salary']) => {
-    if (!salary || !salary.min || !salary.max) return 'Not specified';
-    
-    const formatNumber = (num: number) => 
-      new Intl.NumberFormat('en-US').format(num);
-    
-    return `$${formatNumber(salary.min)} - $${formatNumber(salary.max)} ${salary.currency}/${salary.period}`;
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-800 border-green-200';
       case 'draft': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'closed': return 'bg-red-100 text-red-800 border-red-200';
+      case 'paused': return 'bg-orange-100 text-orange-800 border-orange-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
@@ -143,10 +157,19 @@ const CompanyJobDetailPage: React.FC = () => {
       case 'active':
         return (
           <button
-            onClick={() => handleStatusChange('closed')}
-            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+            onClick={() => handleStatusChange('paused')}
+            className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
           >
-            Close Job
+            Pause Job
+          </button>
+        );
+      case 'paused':
+        return (
+          <button
+            onClick={() => handleStatusChange('active')}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+          >
+            Resume Job
           </button>
         );
       case 'closed':
@@ -163,17 +186,12 @@ const CompanyJobDetailPage: React.FC = () => {
     }
   };
 
+  const isInternational = job.location.region === 'international';
+
   return (
     <DashboardLayout requiredRole="company">
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Error Message */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6">
-              {error}
-            </div>
-          )}
-
           {/* Header */}
           <div className="flex justify-between items-start mb-8">
             <div>
@@ -209,6 +227,8 @@ const CompanyJobDetailPage: React.FC = () => {
                   onSubmit={handleUpdateJob}
                   loading={updateMutation.isPending}
                   onCancel={handleEditToggle}
+                  mode="edit"
+                  // companyVerified={user?.companyVerified || false}
                 />
               </div>
             </div>
@@ -217,16 +237,16 @@ const CompanyJobDetailPage: React.FC = () => {
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div className="bg-white rounded-2xl p-6 shadow-lg text-center">
-              <div className="text-3xl font-bold text-blue-600 mb-2">{job.views}</div>
+              <div className="text-3xl font-bold text-blue-600 mb-2">{job.viewCount || 0}</div>
               <div className="text-gray-600">Total Views</div>
             </div>
             <div className="bg-white rounded-2xl p-6 shadow-lg text-center">
-              <div className="text-3xl font-bold text-green-600 mb-2">{job.applicationCount}</div>
+              <div className="text-3xl font-bold text-green-600 mb-2">{job.applicationCount || 0}</div>
               <div className="text-gray-600">Applications</div>
             </div>
             <div className="bg-white rounded-2xl p-6 shadow-lg text-center">
               <div className="text-3xl font-bold text-purple-600 mb-2">
-                {job.remote ? 'Remote' : 'On-site'}
+                {job.remote === 'remote' ? 'Remote' : job.remote === 'hybrid' ? 'Hybrid' : 'On-site'}
               </div>
               <div className="text-gray-600">Work Type</div>
             </div>
@@ -248,7 +268,10 @@ const CompanyJobDetailPage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium text-gray-600">Location</label>
-                    <p className="text-gray-900">{job.location}</p>
+                    <p className="text-gray-900">
+                      {job.location.city}, {jobService.getEthiopianRegions().find(r => r.slug === job.location.region)?.name}
+                      {!isInternational && <span className="text-green-600 ml-2">🇪🇹</span>}
+                    </p>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-600">Job Type</label>
@@ -256,11 +279,11 @@ const CompanyJobDetailPage: React.FC = () => {
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-600">Experience Level</label>
-                    <p className="text-gray-900 capitalize">{job.experienceLevel}</p>
+                    <p className="text-gray-900 capitalize">{job.experienceLevel.replace('-', ' ')}</p>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-600">Salary Range</label>
-                    <p className="text-gray-900">{formatSalary(job.salary)}</p>
+                    <p className="text-gray-900">{jobService.formatSalary(job.salary)}</p>
                   </div>
                   {job.category && (
                     <div>
@@ -312,6 +335,48 @@ const CompanyJobDetailPage: React.FC = () => {
                   </ul>
                 </div>
               )}
+
+              {/* Ethiopian Requirements */}
+              {!isInternational && job.ethiopianRequirements && (
+                <div className="bg-white rounded-2xl p-6 shadow-lg">
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4">Ethiopian Specific Requirements</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {job.ethiopianRequirements.knowledgeOfLocalLanguages.length > 0 && (
+                      <div>
+                        <h3 className="font-medium text-gray-900 mb-2">Local Languages</h3>
+                        <div className="flex flex-wrap gap-2">
+                          {job.ethiopianRequirements.knowledgeOfLocalLanguages.map((language, index) => (
+                            <span key={index} className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
+                              {language}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="space-y-2">
+                      {job.ethiopianRequirements.workPermitRequired && (
+                        <div className="flex items-center text-gray-700">
+                          <span className="text-green-500 mr-2">✓</span>
+                          Work Permit Required
+                        </div>
+                      )}
+                      {job.ethiopianRequirements.drivingLicense && (
+                        <div className="flex items-center text-gray-700">
+                          <span className="text-green-500 mr-2">✓</span>
+                          Driving License Required
+                        </div>
+                      )}
+                      {job.ethiopianRequirements.governmentClearance && (
+                        <div className="flex items-center text-gray-700">
+                          <span className="text-green-500 mr-2">✓</span>
+                          Government Clearance Required
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Right Column - Actions & Info */}
@@ -324,7 +389,7 @@ const CompanyJobDetailPage: React.FC = () => {
                     href={`/dashboard/company/jobs/${job._id}/applications`}
                     className="block w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors text-center"
                   >
-                    View Applications ({job.applicationCount})
+                    View Applications ({job.applicationCount || 0})
                   </Link>
                   <button className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors">
                     Share Job
@@ -332,14 +397,7 @@ const CompanyJobDetailPage: React.FC = () => {
                   <button className="w-full bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors">
                     Copy Link
                   </button>
-                  {job.status === 'active' && (
-                    <button 
-                      onClick={() => handleStatusChange('draft')}
-                      className="w-full bg-yellow-600 text-white py-2 px-4 rounded-lg hover:bg-yellow-700 transition-colors"
-                    >
-                      Pause Job
-                    </button>
-                  )}
+                  {getStatusActions()}
                 </div>
               </div>
 

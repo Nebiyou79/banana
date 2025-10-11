@@ -11,6 +11,7 @@ import Button from '@/components/forms/Button';
 import Link from 'next/link';
 import { authService } from '@/services/authService';
 import { useAuthRedirect } from '@/hooks/useAuthRedirect';
+import { colors } from '@/utils/color';
 
 const resetPasswordSchema = z.object({
   password: z.string()
@@ -109,19 +110,26 @@ export default function ResetPasswordPage() {
 
   if (isSuccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8 text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle className="w-8 h-8 text-green-600" />
+      <div 
+        className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8"
+        style={{ backgroundColor: colors.gray100 }}
+      >
+        <div className="max-w-md w-full space-y-8 text-center bg-white p-8 rounded-2xl shadow-lg">
+          <div 
+            className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+            style={{ backgroundColor: colors.teal + '20' }}
+          >
+            <CheckCircle className="w-8 h-8" style={{ color: colors.teal }} />
           </div>
-          <h2 className="text-3xl font-bold text-gray-900">Password Reset Successfully!</h2>
-          <p className="text-gray-600 mt-4">
+          <h2 className="text-3xl font-bold mb-4" style={{ color: colors.darkNavy }}>Password Reset Successfully!</h2>
+          <p style={{ color: colors.gray800 }}>
             Your password has been successfully reset. Redirecting to login...
           </p>
           <div className="mt-6">
             <Link 
               href="/login" 
-              className="text-blue-600 hover:text-blue-800 font-medium text-sm"
+              className="font-medium text-sm"
+              style={{ color: colors.goldenMustard }}
             >
               Go to Login immediately
             </Link>
@@ -133,25 +141,36 @@ export default function ResetPasswordPage() {
 
   if (!isValidToken) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8 text-center">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <AlertCircle className="w-8 h-8 text-red-600" />
+      <div 
+        className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8"
+        style={{ backgroundColor: colors.gray100 }}
+      >
+        <div className="max-w-md w-full space-y-8 text-center bg-white p-8 rounded-2xl shadow-lg">
+          <div 
+            className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+            style={{ backgroundColor: colors.orange + '20' }}
+          >
+            <AlertCircle className="w-8 h-8" style={{ color: colors.orange }} />
           </div>
-          <h2 className="text-3xl font-bold text-gray-900">Invalid Reset Link</h2>
-          <p className="text-gray-600 mt-4">
+          <h2 className="text-3xl font-bold mb-4" style={{ color: colors.darkNavy }}>Invalid Reset Link</h2>
+          <p style={{ color: colors.gray800 }}>
             This password reset link is invalid, expired, or has already been used.
           </p>
           <div className="mt-6 space-y-4">
             <Button
               onClick={() => router.push('/forgot-password')}
-              className="w-full bg-blue-600 hover:bg-blue-700"
+              className="w-full py-3 rounded-lg font-semibold"
+              style={{ 
+                backgroundColor: colors.goldenMustard,
+                color: colors.darkNavy
+              }}
             >
               Request New Reset Link
             </Button>
             <Link 
               href="/login" 
-              className="block text-blue-600 hover:text-blue-800 font-medium text-sm"
+              className="block font-medium text-sm"
+              style={{ color: colors.goldenMustard }}
             >
               Back to Login
             </Link>
@@ -162,14 +181,20 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-2xl shadow-xl border border-gray-100">
+    <div 
+      className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8"
+      style={{ backgroundColor: colors.gray100 }}
+    >
+      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-2xl shadow-lg">
         <div className="text-center">
-          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Lock className="w-8 h-8 text-blue-600" />
+          <div 
+            className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+            style={{ backgroundColor: colors.blue + '20' }}
+          >
+            <Lock className="w-8 h-8" style={{ color: colors.blue }} />
           </div>
-          <h2 className="text-3xl font-bold text-gray-900">Set New Password</h2>
-          <p className="text-gray-600 mt-2 flex items-center justify-center">
+          <h2 className="text-3xl font-bold mb-2" style={{ color: colors.darkNavy }}>Set New Password</h2>
+          <p className="flex items-center justify-center" style={{ color: colors.gray800 }}>
             <Mail className="w-4 h-4 mr-2" />
             {userEmail}
           </p>
@@ -177,20 +202,22 @@ export default function ResetPasswordPage() {
 
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium mb-2" style={{ color: colors.darkNavy }}>
               New Password
             </label>
             <div className="relative group">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5 z-10" />
+              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 z-10" style={{ color: colors.gray400 }} />
               <Input
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Enter your new password"
                 {...form.register('password')}
-                className="pl-10 pr-10 py-3 w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
+                className="pl-10 pr-10 py-3 w-full rounded-lg"
+                style={{ borderColor: colors.gray400 }}
               />
               <button
                 type="button"
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 transition-colors"
+                style={{ color: colors.gray400 }}
                 onClick={() => setShowPassword(!showPassword)}
               >
                 {showPassword ? (
@@ -201,27 +228,29 @@ export default function ResetPasswordPage() {
               </button>
             </div>
             {form.formState.errors.password && (
-              <p className="text-red-600 text-sm mt-1">
+              <p className="text-sm mt-1" style={{ color: colors.orange }}>
                 {form.formState.errors.password.message}
               </p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium mb-2" style={{ color: colors.darkNavy }}>
               Confirm Password
             </label>
             <div className="relative group">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5 z-10" />
+              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 z-10" style={{ color: colors.gray400 }} />
               <Input
                 type={showConfirmPassword ? 'text' : 'password'}
                 placeholder="Confirm your new password"
                 {...form.register('confirmPassword')}
-                className="pl-10 pr-10 py-3 w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
+                className="pl-10 pr-10 py-3 w-full rounded-lg"
+                style={{ borderColor: colors.gray400 }}
               />
               <button
                 type="button"
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 transition-colors"
+                style={{ color: colors.gray400 }}
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
               >
                 {showConfirmPassword ? (
@@ -232,7 +261,7 @@ export default function ResetPasswordPage() {
               </button>
             </div>
             {form.formState.errors.confirmPassword && (
-              <p className="text-red-600 text-sm mt-1">
+              <p className="text-sm mt-1" style={{ color: colors.orange }}>
                 {form.formState.errors.confirmPassword.message}
               </p>
             )}
@@ -240,7 +269,11 @@ export default function ResetPasswordPage() {
 
           <Button
             type="submit"
-            className="w-full py-3 rounded-lg text-base font-semibold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
+            className="w-full py-3 rounded-lg font-semibold transition-all duration-300"
+            style={{ 
+              backgroundColor: colors.goldenMustard,
+              color: colors.darkNavy
+            }}
             disabled={isLoading}
           >
             {isLoading ? (
@@ -254,12 +287,13 @@ export default function ResetPasswordPage() {
           </Button>
         </form>
 
-        <div className="text-center pt-4 border-t border-gray-200">
-          <p className="text-gray-600 text-sm">
+        <div className="text-center pt-4 border-t" style={{ borderColor: colors.gray400 }}>
+          <p className="text-sm" style={{ color: colors.gray800 }}>
             Remember your password?{' '}
             <Link 
               href="/login" 
-              className="text-blue-600 hover:text-blue-800 font-medium transition-colors"
+              className="font-medium transition-colors"
+              style={{ color: colors.goldenMustard }}
             >
               Sign in
             </Link>

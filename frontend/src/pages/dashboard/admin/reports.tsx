@@ -1,9 +1,11 @@
-import AdminLayout from '@/components/admin/adminLayout';
+import AdminLayout from '@/components/admin/AdminLayout';
+import { AdminRouteGuard } from '@/components/admin/AdminRouteGuard';
 import React from 'react';
 
 const ReportsPage: React.FC = () => {
   return (
-    <AdminLayout>
+    <AdminRouteGuard>
+          <AdminLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Reports & Analytics</h1>
@@ -15,6 +17,8 @@ const ReportsPage: React.FC = () => {
         </div>
       </div>
     </AdminLayout>
+    </AdminRouteGuard>
+
   );
 };
 

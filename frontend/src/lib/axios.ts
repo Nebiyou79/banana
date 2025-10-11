@@ -1,10 +1,13 @@
+// src/lib/axios.ts
 import axios from 'axios';
+import { toast } from '@/hooks/use-toast';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
+  timeout: 10000,
 });
 
 // Helper function to safely access localStorage
@@ -49,11 +52,38 @@ api.interceptors.response.use(
         localStorage.removeItem('token');
         localStorage.removeItem('role');
         localStorage.removeItem('userId');
+        localStorage.removeItem('user');
+        
+        // Show toast message
+        toast({
+          title: 'Session Expired',
+          description: 'Please login again to continue',
+          variant: 'destructive',
+        });
+        
         // Only redirect if we're not already on the login page
         if (!window.location.pathname.includes('/login')) {
           window.location.href = '/login';
         }
       }
+    }
+    
+    // Handle network errors
+    if (error.code === 'ECONNREFUSED' || error.message === 'Network Error') {
+      toast({
+        title: 'Connection Error',
+        description: 'Cannot connect to server. Please check your internet connection.',
+        variant: 'destructive',
+      });
+    }
+    
+    // Handle timeout errors
+    if (error.code === 'ECONNABORTED') {
+      toast({
+        title: 'Timeout',
+        description: 'Request took too long. Please try again.',
+        variant: 'destructive',
+      });
     }
     
     return Promise.reject(error);

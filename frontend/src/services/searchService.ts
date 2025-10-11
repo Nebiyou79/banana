@@ -1,6 +1,7 @@
+// src/services/searchService.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// services/searchService.ts
-import api from './api';
+import api from '@/lib/axios'; // FIXED IMPORT
+import { handleError } from '@/lib/error-handler'; // ADD THIS IMPORT
 
 export interface SearchParams {
   query?: string;
@@ -41,7 +42,7 @@ export const searchJobs = async (params: SearchParams): Promise<SearchResponse> 
     const response = await api.get(`/api/search/jobs?${queryParams}`);
     return response.data;
   } catch (error: any) {
-    console.error('Search jobs error:', error);
-    throw new Error(error.response?.data?.message || 'Failed to search jobs');
+    handleError(error, 'Failed to search jobs');
+    return Promise.reject(error);
   }
 };

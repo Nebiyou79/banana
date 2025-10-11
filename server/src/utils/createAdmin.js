@@ -6,7 +6,7 @@ const path = require('path');
 const User = require('../models/User'); // adjust if your models path is different
 
 async function ensureMongooseConnected() {
-  const mongoUri = process.env.MONGODB_URI;
+  const mongoUri = process.env.MONGODB;
   if (!mongoUri) {
     throw new Error('MONGO_URI is not set in .env');
   }

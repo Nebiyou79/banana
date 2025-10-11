@@ -1,8 +1,10 @@
-import AdminLayout from '@/components/admin/adminLayout';
+import AdminLayout from '@/components/admin/AdminLayout';
+import { AdminRouteGuard } from '@/components/admin/AdminRouteGuard';
 import React from 'react';
 
 const TemplatesPage: React.FC = () => {
   return (
+    <AdminRouteGuard>
     <AdminLayout>
       <div className="space-y-6">
         <div>
@@ -15,6 +17,8 @@ const TemplatesPage: React.FC = () => {
         </div>
       </div>
     </AdminLayout>
+    </AdminRouteGuard>
+
   );
 };
 

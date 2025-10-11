@@ -1,23 +1,44 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { useAdmin } from '@/contexts/AdminContext';
+import { useAuth } from '@/contexts/AuthContext';
+import AdminLayout from '@/components/admin/AdminLayout';
+import Dashboard from '@/components/admin/Dashboard';
+import { Loader2 } from 'lucide-react';
 
 const AdminIndex: React.FC = () => {
-  const { state } = useAdmin();
+  const { user, isLoading, isAuthenticated } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (state.isAuthenticated) {
-      router.replace('/admin/dashboard');
-    } else {
-      router.replace('/admin/login');
+    console.log('[AdminDashboard] isLoading:', isLoading, '| isAuthenticated:', isAuthenticated, '| user:', user);
+    if (!isLoading && !isAuthenticated) {
+      console.log('[AdminDashboard] Not authenticated, redirecting to /login');
+      router.push('/login');
+      return;
     }
-  }, [state.isAuthenticated, router]);
+    if (!isLoading && isAuthenticated && user?.role !== 'admin') {
+      console.log(`[AdminDashboard] Authenticated but wrong role (${user?.role}), redirecting to /dashboard/${user?.role}`);
+      router.push(`/dashboard/${user?.role}`);
+      return;
+    }
+  }, [isLoading, isAuthenticated, user, router]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || user?.role !== 'admin') {
+    return null;
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-    </div>
+    <AdminLayout>
+      <Dashboard />
+    </AdminLayout>
   );
 };
 

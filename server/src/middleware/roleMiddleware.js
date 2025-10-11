@@ -1,6 +1,7 @@
 // Restrict access to specific roles
 exports.restrictTo = (...roles) => {
   return (req, res, next) => {
+    console.log('--- [restrictTo] called ---', roles, 'User:', req.user && req.user.role);
     if (!req.user) {
       return res.status(401).json({
         success: false,

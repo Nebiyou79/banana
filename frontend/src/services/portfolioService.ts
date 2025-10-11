@@ -1,10 +1,12 @@
+// src/services/freelancerService.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import api from '@/lib/axios';
+import { handleError, handleSuccess } from '@/lib/error-handler'; // ADD THIS IMPORT
 
 export interface PortfolioFormData {
   title: string;
-  description: string; // Change from optional to required
-  mediaUrl: string;    // Change from optional to required
+  description: string;
+  mediaUrl: string;
   projectUrl?: string;
   category?: string;
   technologies?: string[];
@@ -17,8 +19,8 @@ export interface PortfolioFormData {
 export interface PortfolioItem {
   _id: string;
   title: string;
-  description: string; // Change from optional to required
-  mediaUrl: string;    // Change from optional to required
+  description: string;
+  mediaUrl: string;
   projectUrl?: string;
   category?: string;
   technologies?: string[];
@@ -29,6 +31,7 @@ export interface PortfolioItem {
   createdAt: string;
   updatedAt: string;
 }
+
 export interface PortfolioResponse {
   success: boolean;
   message?: string;
@@ -58,22 +61,23 @@ export interface UserProfile {
   verificationStatus: string;
 }
 
-// Helper function to handle API errors consistently
-const handleApiError = (error: any, defaultMessage: string) => {
-  console.error('API Error:', error);
-  throw new Error(error.response?.data?.message || defaultMessage);
-};
-
 export const portfolioService = {
   // Get current user's portfolio
   getPortfolio: async (): Promise<PortfolioItem[]> => {
     try {
       const response = await api.get<PortfolioResponse>('/freelancer/portfolio');
+      
+      if (!response.data.success) {
+        handleError('Failed to fetch portfolio');
+        return Promise.reject(new Error('Failed to fetch portfolio'));
+      }
+      
       return Array.isArray(response.data.data) 
         ? response.data.data 
         : [response.data.data];
     } catch (error: any) {
-      return handleApiError(error, 'Failed to fetch portfolio');
+      handleError(error, 'Failed to fetch portfolio');
+      return Promise.reject(error);
     }
   },
 
@@ -81,9 +85,17 @@ export const portfolioService = {
   addPortfolioItem: async (data: PortfolioFormData): Promise<PortfolioItem> => {
     try {
       const response = await api.post<PortfolioResponse>('/freelancer/portfolio', data);
+      
+      if (!response.data.success) {
+        handleError('Failed to add portfolio item');
+        return Promise.reject(new Error('Failed to add portfolio item'));
+      }
+      
+      handleSuccess('Portfolio item added successfully');
       return response.data.data as PortfolioItem;
     } catch (error: any) {
-      return handleApiError(error, 'Failed to add portfolio item');
+      handleError(error, 'Failed to add portfolio item');
+      return Promise.reject(error);
     }
   },
 
@@ -91,18 +103,34 @@ export const portfolioService = {
   updatePortfolioItem: async (id: string, data: PortfolioFormData): Promise<PortfolioItem> => {
     try {
       const response = await api.put<PortfolioResponse>(`/freelancer/portfolio/${id}`, data);
+      
+      if (!response.data.success) {
+        handleError('Failed to update portfolio item');
+        return Promise.reject(new Error('Failed to update portfolio item'));
+      }
+      
+      handleSuccess('Portfolio item updated successfully');
       return response.data.data as PortfolioItem;
     } catch (error: any) {
-      return handleApiError(error, 'Failed to update portfolio item');
+      handleError(error, 'Failed to update portfolio item');
+      return Promise.reject(error);
     }
   },
 
   // Delete portfolio item
   deletePortfolioItem: async (id: string): Promise<void> => {
     try {
-      await api.delete<{ success: boolean; message: string }>(`/freelancer/portfolio/${id}`);
+      const response = await api.delete<{ success: boolean; message: string }>(`/freelancer/portfolio/${id}`);
+      
+      if (!response.data.success) {
+        handleError('Failed to delete portfolio item');
+        return Promise.reject(new Error('Failed to delete portfolio item'));
+      }
+      
+      handleSuccess('Portfolio item deleted successfully');
     } catch (error: any) {
-      return handleApiError(error, 'Failed to delete portfolio item');
+      handleError(error, 'Failed to delete portfolio item');
+      return Promise.reject(error);
     }
   },
 
@@ -110,9 +138,16 @@ export const portfolioService = {
   getProfile: async (): Promise<UserProfile> => {
     try {
       const response = await api.get<{ success: boolean; data: UserProfile }>('/freelancer/profile');
+      
+      if (!response.data.success) {
+        handleError('Failed to fetch profile');
+        return Promise.reject(new Error('Failed to fetch profile'));
+      }
+      
       return response.data.data;
     } catch (error: any) {
-      return handleApiError(error, 'Failed to fetch profile');
+      handleError(error, 'Failed to fetch profile');
+      return Promise.reject(error);
     }
   },
 
@@ -120,9 +155,17 @@ export const portfolioService = {
   updateProfile: async (data: ProfileData): Promise<UserProfile> => {
     try {
       const response = await api.put<{ success: boolean; data: UserProfile }>('/freelancer/profile', data);
+      
+      if (!response.data.success) {
+        handleError('Failed to update profile');
+        return Promise.reject(new Error('Failed to update profile'));
+      }
+      
+      handleSuccess('Profile updated successfully');
       return response.data.data;
     } catch (error: any) {
-      return handleApiError(error, 'Failed to update profile');
+      handleError(error, 'Failed to update profile');
+      return Promise.reject(error);
     }
   }
 };
