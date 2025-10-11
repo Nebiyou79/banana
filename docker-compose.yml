@@ -3,17 +3,17 @@ version: '3.8'
 services:
   backend:
     build: 
-      context: ./backend
+      context: ./server
       dockerfile: Dockerfile
     ports:
       - "4000:4000"
     environment:
       - NODE_ENV=production
     env_file:
-      - ./backend/.env.production
+      - ./server/.env.production
     restart: unless-stopped
     volumes:
-      - ./backend/public/uploads:/app/public/uploads
+      - ./server/public/uploads:/app/public/uploads
 
   frontend:
     build:
