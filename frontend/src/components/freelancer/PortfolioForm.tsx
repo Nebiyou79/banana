@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+// components/freelancer/PortfolioForm.tsx
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { PortfolioItem } from '@/services/portfolioService';
+import { PortfolioItem, PortfolioFormData, freelancerService } from '@/services/freelancerService';
 import { 
   XMarkIcon, 
   PhotoIcon, 
@@ -11,70 +12,73 @@ import {
   TagIcon,
   CurrencyDollarIcon,
   CalendarIcon,
-  ClockIcon
+  ClockIcon,
+  StarIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import Image from 'next/image';
+import { colorClasses } from '@/utils/color';
 
 interface PortfolioFormProps {
   item?: PortfolioItem | null;
-  onSubmit: (data: PortfolioFormData) => void;
+  onSubmit: (data: PortfolioFormData) => Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
 }
 
-export interface PortfolioFormData {
-  title: string;
-  description: string;
-  mediaUrl: string;
-  projectUrl?: string;
-  category?: string;
-  technologies?: string[];
-  budget?: string;
-  duration?: string;
-  client?: string;
-  completionDate?: string;
-}
-
 const PortfolioForm: React.FC<PortfolioFormProps> = ({ item, onSubmit, onCancel, isLoading = false }) => {
   const [formData, setFormData] = useState<PortfolioFormData>({
-    title: item?.title || '',
-    description: item?.description || '',
-    mediaUrl: item?.mediaUrl || '',
-    projectUrl: item?.projectUrl || '',
-    category: item?.category || '',
-    technologies: item?.technologies || [],
-    budget: item?.budget || '',
-    duration: item?.duration || '',
-    client: item?.client || '',
-    completionDate: item?.completionDate || ''
+    title: '',
+    description: '',
+    mediaUrls: [],
+    projectUrl: '',
+    category: '',
+    technologies: [],
+    budget: undefined,
+    budgetType: 'fixed',
+    duration: '',
+    client: '',
+    completionDate: '',
+    featured: false,
+    visibility: 'public'
   });
 
-  const [imageError, setImageError] = useState(false);
+  const [imageErrors, setImageErrors] = useState<boolean[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
   const [newTechnology, setNewTechnology] = useState('');
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (item) {
       setFormData({
         title: item.title || '',
         description: item.description || '',
-        mediaUrl: item.mediaUrl || '',
+        mediaUrls: item.mediaUrls || [],
         projectUrl: item.projectUrl || '',
         category: item.category || '',
         technologies: item.technologies || [],
-        budget: item.budget || '',
+        budget: item.budget,
+        budgetType: item.budgetType || 'fixed',
         duration: item.duration || '',
         client: item.client || '',
-        completionDate: item.completionDate || ''
+        completionDate: item.completionDate || '',
+        featured: item.featured || false,
+        visibility: item.visibility || 'public'
       });
-      setImageError(false);
+      setImageErrors(new Array(item.mediaUrls?.length || 0).fill(false));
     }
   }, [item]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    setUploadError(null);
+    try {
+      await onSubmit(formData);
+    } catch (error) {
+      console.error('Failed to submit form:', error);
+    }
   };
 
   const handleInputChange = (field: keyof PortfolioFormData, value: any) => {
@@ -91,35 +95,64 @@ const PortfolioForm: React.FC<PortfolioFormProps> = ({ item, onSubmit, onCancel,
     setIsDragging(false);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
+    setUploadError(null);
     
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      const file = files[0];
-      if (file.type.startsWith('image/')) {
-        setUploadedFile(file);
-        handleInputChange('mediaUrl', URL.createObjectURL(file));
-        setImageError(false);
-      }
-    }
-  }, []);
+    const files = Array.from(e.dataTransfer.files);
+    await handleFileUpload(files);
+  }, [formData.mediaUrls]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      const file = files[0];
-      if (file.type.startsWith('image/')) {
-        setUploadedFile(file);
-        handleInputChange('mediaUrl', URL.createObjectURL(file));
-        setImageError(false);
-      }
+      await handleFileUpload(Array.from(files));
     }
   };
 
-  const handleImageError = () => {
-    setImageError(true);
+  const handleFileUpload = async (files: File[]) => {
+    if (files.length === 0) return;
+    
+    setUploadingFiles(true);
+    setUploadError(null);
+    
+    try {
+      const uploadedFiles = await freelancerService.uploadPortfolioFiles(files);
+      const newUrls = uploadedFiles.map(file => file.url);
+      
+      handleInputChange('mediaUrls', [...formData.mediaUrls, ...newUrls]);
+      setImageErrors(prev => [...prev, ...new Array(files.length).fill(false)]);
+    } catch (error: any) {
+      console.error('Failed to upload files:', error);
+      setUploadError(error.message || 'Failed to upload files. Please try again.');
+    } finally {
+      setUploadingFiles(false);
+    }
+  };
+
+  const formatDateForInput = (dateString: string) => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      return date.toISOString().split('T')[0];
+    } catch {
+      return '';
+    }
+  };
+
+  const removeImage = (index: number) => {
+    const newUrls = formData.mediaUrls.filter((_, i) => i !== index);
+    handleInputChange('mediaUrls', newUrls);
+    setImageErrors(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleImageError = (index: number) => {
+    setImageErrors(prev => {
+      const newErrors = [...prev];
+      newErrors[index] = true;
+      return newErrors;
+    });
   };
 
   const addTechnology = () => {
@@ -133,219 +166,277 @@ const PortfolioForm: React.FC<PortfolioFormProps> = ({ item, onSubmit, onCancel,
     handleInputChange('technologies', formData.technologies?.filter(t => t !== tech) || []);
   };
 
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addTechnology();
+    }
+  };
+
+  const categories = [
+    'Web Development',
+    'Mobile App',
+    'UI/UX Design',
+    'E-commerce',
+    'API Development',
+    'DevOps',
+    'Consulting',
+    'Data Science',
+    'Machine Learning',
+    'Blockchain'
+  ];
+
+  const isFormValid = formData.title.trim() && 
+                     formData.description.trim() && 
+                     formData.mediaUrls.length > 0;
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn overflow-y-auto py-8">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        {/* Header - Fixed */}
-        <div className="p-6 border-b border-gray-200 flex-shrink-0">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto py-8">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col border border-gray-200">
+        {/* Header */}
+        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-amber-50 to-orange-50 rounded-t-2xl flex-shrink-0">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-800">
-              {item ? 'Edit Portfolio Item' : 'Add Portfolio Item'}
-            </h2>
+            <div>
+              <h2 className={`text-2xl font-bold ${colorClasses.text.darkNavy}`}>
+                {item ? 'Edit Portfolio Project' : 'Add New Project'}
+              </h2>
+              <p className="text-gray-600 mt-1">
+                Showcase your best work to attract potential clients
+              </p>
+            </div>
             <button
               onClick={onCancel}
-              className="p-1 hover:bg-gray-100 rounded-full transition-colors duration-200"
+              className="p-2 hover:bg-white/50 rounded-xl transition-all duration-200 hover:scale-105"
               disabled={isLoading}
+              type="button"
             >
               <XMarkIcon className="w-6 h-6 text-gray-500" />
             </button>
           </div>
         </div>
         
-        {/* Scrollable Content */}
+        {/* Form Content */}
         <div className="p-6 overflow-y-auto flex-1">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Project Title */}
-            <div>
-              <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
-                Project Title *
-              </label>
-              <input
-                type="text"
-                id="title"
-                value={formData.title}
-                onChange={(e) => handleInputChange('title', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                placeholder="e.g., E-commerce Website Development"
-                required
-                disabled={isLoading}
-              />
-            </div>
-
-            {/* Project Description */}
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                Project Description *
-              </label>
-              <textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => handleInputChange('description', e.target.value)}
-                rows={4}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                placeholder="Describe the project, your role, challenges faced, and the outcome..."
-                required
-                disabled={isLoading}
-              />
-            </div>
-
-            {/* Project Details Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Category */}
-              <div>
-                <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-2">
-                  Category
-                </label>
-                <select
-                  id="category"
-                  value={formData.category}
-                  onChange={(e) => handleInputChange('category', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  disabled={isLoading}
-                >
-                  <option value="">Select category</option>
-                  <option value="web-development">Web Development</option>
-                  <option value="mobile-app">Mobile App</option>
-                  <option value="ui-ux">UI/UX Design</option>
-                  <option value="e-commerce">E-commerce</option>
-                  <option value="api-development">API Development</option>
-                  <option value="devops">DevOps</option>
-                  <option value="consulting">Consulting</option>
-                </select>
-              </div>
-
-              {/* Client */}
-              <div>
-                <label htmlFor="client" className="block text-sm font-medium text-gray-700 mb-2">
-                  Client
-                </label>
-                <input
-                  type="text"
-                  id="client"
-                  value={formData.client}
-                  onChange={(e) => handleInputChange('client', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Client name or company"
-                  disabled={isLoading}
-                />
-              </div>
-
-              {/* Budget */}
-              <div>
-                <label htmlFor="budget" className="block text-sm font-medium text-gray-700 mb-2">
-                  Budget
-                </label>
-                <div className="relative">
-                  <CurrencyDollarIcon className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
+            {/* Basic Information */}
+            <div className="bg-white rounded-xl border border-amber-100 p-6">
+              <h3 className={`text-lg font-semibold ${colorClasses.text.darkNavy} mb-4 flex items-center`}>
+                <div className="w-3 h-3 bg-amber-500 rounded-full mr-3"></div>
+                Basic Information
+              </h3>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Project Title *
+                  </label>
                   <input
                     type="text"
-                    id="budget"
-                    value={formData.budget}
-                    onChange={(e) => handleInputChange('budget', e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., $5,000 or $50/hour"
+                    value={formData.title}
+                    onChange={(e) => handleInputChange('title', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200"
+                    placeholder="E-commerce Website Development"
+                    required
                     disabled={isLoading}
                   />
                 </div>
-              </div>
 
-              {/* Duration */}
-              <div>
-                <label htmlFor="duration" className="block text-sm font-medium text-gray-700 mb-2">
-                  Duration
-                </label>
-                <div className="relative">
-                  <ClockIcon className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Client
+                  </label>
                   <input
                     type="text"
-                    id="duration"
-                    value={formData.duration}
-                    onChange={(e) => handleInputChange('duration', e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., 3 months, 2 weeks"
+                    value={formData.client}
+                    onChange={(e) => handleInputChange('client', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200"
+                    placeholder="Client name or company"
+                    disabled={isLoading}
+                  />
+                </div>
+
+                <div className="lg:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Project Description *
+                  </label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => handleInputChange('description', e.target.value)}
+                    rows={4}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 resize-none"
+                    placeholder="Describe the project, your role, challenges faced, and the outcome..."
+                    required
                     disabled={isLoading}
                   />
                 </div>
               </div>
+            </div>
 
-              {/* Completion Date */}
-              <div>
-                <label htmlFor="completionDate" className="block text-sm font-medium text-gray-700 mb-2">
-                  Completion Date
-                </label>
-                <div className="relative">
-                  <CalendarIcon className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
-                  <input
-                    type="date"
-                    id="completionDate"
-                    value={formData.completionDate}
-                    onChange={(e) => handleInputChange('completionDate', e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            {/* Project Details */}
+            <div className="bg-white rounded-xl border border-amber-100 p-6">
+              <h3 className={`text-lg font-semibold ${colorClasses.text.darkNavy} mb-4 flex items-center`}>
+                <div className="w-3 h-3 bg-teal-500 rounded-full mr-3"></div>
+                Project Details
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Category
+                  </label>
+                  <select
+                    value={formData.category}
+                    onChange={(e) => handleInputChange('category', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                     disabled={isLoading}
-                  />
+                  >
+                    <option value="">Select category</option>
+                    {categories.map(cat => (
+                      <option key={cat} value={cat.toLowerCase().replace(' ', '-')}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              </div>
 
-              {/* Project URL */}
-              <div>
-                <label htmlFor="projectUrl" className="block text-sm font-medium text-gray-700 mb-2">
-                  Project URL
-                </label>
-                <div className="relative">
-                  <LinkIcon className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
-                  <input
-                    type="url"
-                    id="projectUrl"
-                    value={formData.projectUrl}
-                    onChange={(e) => handleInputChange('projectUrl', e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="https://live-project.com"
-                    disabled={isLoading}
-                  />
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Budget
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="flex-1 relative">
+                      <CurrencyDollarIcon className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
+                      <input
+                        type="number"
+                        value={formData.budget || ''}
+                        onChange={(e) => handleInputChange('budget', e.target.value ? Number(e.target.value) : undefined)}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                        placeholder="5000"
+                        disabled={isLoading}
+                        min="0"
+                      />
+                    </div>
+                    <select
+                      value={formData.budgetType}
+                      onChange={(e) => handleInputChange('budgetType', e.target.value)}
+                      className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent min-w-32"
+                      disabled={isLoading}
+                    >
+                      <option value="fixed">Fixed</option>
+                      <option value="hourly">Hourly</option>
+                      <option value="daily">Daily</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Duration
+                  </label>
+                  <div className="relative">
+                    <ClockIcon className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
+                    <input
+                      type="text"
+                      value={formData.duration}
+                      onChange={(e) => handleInputChange('duration', e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                      placeholder="3 months"
+                      disabled={isLoading}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Completion Date
+                  </label>
+                  <div className="relative">
+                    <CalendarIcon className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
+                    <input
+                      type="date"
+                      value={formatDateForInput(formData.completionDate || '')}
+                      onChange={(e) => handleInputChange('completionDate', e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                      disabled={isLoading}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Project URL
+                  </label>
+                  <div className="relative">
+                    <LinkIcon className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
+                    <input
+                      type="url"
+                      value={formData.projectUrl}
+                      onChange={(e) => handleInputChange('projectUrl', e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                      placeholder="https://live-project.com"
+                      disabled={isLoading}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="featured"
+                      checked={formData.featured}
+                      onChange={(e) => handleInputChange('featured', e.target.checked)}
+                      className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500"
+                      disabled={isLoading}
+                    />
+                    <label htmlFor="featured" className="ml-2 text-sm font-semibold text-gray-700 flex items-center">
+                      <StarIcon className="w-4 h-4 mr-1" />
+                      Featured
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Technologies */}
-            <div>
-              <label htmlFor="technologies" className="block text-sm font-medium text-gray-700 mb-2">
+            <div className="bg-white rounded-xl border border-amber-100 p-6">
+              <h3 className={`text-lg font-semibold ${colorClasses.text.darkNavy} mb-4 flex items-center`}>
+                <div className="w-3 h-3 bg-purple-500 rounded-full mr-3"></div>
                 Technologies & Skills
-              </label>
-              <div className="flex gap-2 mb-3">
+              </h3>
+              
+              <div className="flex gap-3 mb-4">
                 <div className="relative flex-1">
                   <TagIcon className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
                   <input
                     type="text"
                     value={newTechnology}
                     onChange={(e) => setNewTechnology(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onKeyPress={handleKeyPress}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                     placeholder="Add technology (React, Node.js, etc.)"
                     disabled={isLoading}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        addTechnology();
-                      }
-                    }}
                   />
                 </div>
                 <button
                   type="button"
                   onClick={addTechnology}
-                  className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center disabled:opacity-50"
+                  className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl hover:from-purple-700 hover:to-purple-800 transition-all duration-200 flex items-center font-semibold disabled:opacity-50"
                   disabled={isLoading || !newTechnology.trim()}
                 >
                   Add
                 </button>
               </div>
+              
               <div className="flex flex-wrap gap-2">
                 {formData.technologies?.map((tech, index) => (
-                  <span key={index} className="bg-blue-100 text-blue-800 px-3 py-2 rounded-full text-sm flex items-center">
+                  <span key={index} className="bg-gradient-to-r from-purple-50 to-purple-100 text-purple-700 px-3 py-2 rounded-lg text-sm font-semibold border border-purple-200 flex items-center group">
                     {tech}
                     <button
                       type="button"
                       onClick={() => removeTechnology(tech)}
-                      className="ml-2 text-blue-600 hover:text-blue-800"
+                      className="ml-2 text-purple-500 hover:text-purple-700 transition-colors duration-200"
                       disabled={isLoading}
                     >
                       <XMarkIcon className="w-4 h-4" />
@@ -355,95 +446,110 @@ const PortfolioForm: React.FC<PortfolioFormProps> = ({ item, onSubmit, onCancel,
               </div>
             </div>
 
-            {/* Project Image */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Project Image *
-              </label>
+            {/* Project Images */}
+            <div className="bg-white rounded-xl border border-amber-100 p-6">
+              <h3 className={`text-lg font-semibold ${colorClasses.text.darkNavy} mb-4 flex items-center`}>
+                <div className="w-3 h-3 bg-orange-500 rounded-full mr-3"></div>
+                Project Images *
+              </h3>
               
-              {/* Drag & Drop Area */}
+              {uploadError && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center">
+                  <ExclamationTriangleIcon className="w-5 h-5 text-red-500 mr-3" />
+                  <p className="text-red-700 text-sm font-medium">{uploadError}</p>
+                </div>
+              )}
+
               <div
-                className={`border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 cursor-pointer ${
+                className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-200 cursor-pointer mb-6 ${
                   isDragging 
-                    ? 'border-blue-500 bg-blue-50' 
-                    : 'border-gray-300 hover:border-gray-400'
-                }`}
+                    ? 'border-amber-500 bg-amber-50' 
+                    : 'border-gray-300 hover:border-amber-400 bg-gray-50'
+                } ${uploadingFiles ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                onClick={() => document.getElementById('file-upload')?.click()}
+                onClick={() => !uploadingFiles && document.getElementById('file-upload')?.click()}
               >
-                <CloudArrowUpIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-sm text-gray-600 mb-2">
-                  Drag & drop your image here, or click to browse
-                </p>
-                <p className="text-xs text-gray-500">
-                  PNG, JPG, GIF up to 10MB
-                </p>
+                {uploadingFiles ? (
+                  <div className="flex flex-col items-center">
+                    <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                    <p className="text-lg font-medium text-gray-700">Uploading files...</p>
+                  </div>
+                ) : (
+                  <>
+                    <CloudArrowUpIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-lg font-medium text-gray-700 mb-2">
+                      Drag & drop your images here
+                    </p>
+                    <p className="text-sm text-gray-500 mb-4">
+                      or click to browse files
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      PNG, JPG, GIF up to 10MB each
+                    </p>
+                  </>
+                )}
                 <input
                   type="file"
                   accept="image/*"
                   onChange={handleFileSelect}
                   className="hidden"
                   id="file-upload"
+                  multiple
+                  disabled={uploadingFiles}
                 />
               </div>
 
-              {/* URL Input as fallback */}
-              <div className="mt-4">
-                <label htmlFor="mediaUrl" className="block text-sm font-medium text-gray-700 mb-2">
-                  Or enter image URL *
-                </label>
-                <input
-                  type="url"
-                  id="mediaUrl"
-                  value={formData.mediaUrl}
-                  onChange={(e) => {
-                    handleInputChange('mediaUrl', e.target.value);
-                    setImageError(false);
-                    setUploadedFile(null);
-                  }}
-                  placeholder="https://example.com/project-screenshot.jpg"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-            </div>
-
-            {(formData.mediaUrl || uploadedFile) && (
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <p className="text-sm font-medium text-gray-700 mb-2">Preview:</p>
-                <div className="w-full h-48 bg-gray-100 rounded-lg overflow-hidden border relative">
-                  {formData.mediaUrl && !imageError ? (
-                    <Image 
-                      src={formData.mediaUrl} 
-                      alt="Preview"
-                      width={500}
-                      height={500}
-                      className="w-full h-full object-cover"
-                      onError={handleImageError}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                      <PhotoIcon className="w-12 h-12 mb-2" />
-                      <p className="text-sm">Unable to load image</p>
-                      <p className="text-xs">Please check the URL or upload a new file</p>
-                    </div>
-                  )}
+              {/* Image Previews */}
+              {formData.mediaUrls.length > 0 && (
+                <div>
+                  <p className="text-sm font-semibold text-gray-700 mb-3">
+                    Image Previews ({formData.mediaUrls.length})
+                  </p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {formData.mediaUrls.map((url, index) => (
+                      <div key={index} className="relative group">
+                        <div className="aspect-square rounded-xl overflow-hidden border border-gray-200 bg-gray-100">
+                          {!imageErrors[index] ? (
+                            <Image
+                              src={url}
+                              alt={`Project image ${index + 1}`}
+                              width={200}
+                              height={200}
+                              className="w-full h-full object-cover"
+                              onError={() => handleImageError(index)}
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-400">
+                              <PhotoIcon className="w-8 h-8" />
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeImage(index)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-lg hover:bg-red-600"
+                          disabled={isLoading}
+                        >
+                          <XMarkIcon className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </form>
         </div>
 
-        {/* Fixed Footer */}
-        <div className="p-6 border-t border-gray-200 bg-white flex-shrink-0">
-          <div className="flex justify-end space-x-3">
+        {/* Footer */}
+        <div className="p-6 border-t border-gray-200 bg-gray-50 rounded-b-2xl flex-shrink-0">
+          <div className="flex justify-between items-center">
             <button
               type="button"
               onClick={onCancel}
-              className="px-6 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-all duration-200 disabled:opacity-50"
+              className="px-8 py-3 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-all duration-200 disabled:opacity-50"
               disabled={isLoading}
             >
               Cancel
@@ -451,8 +557,8 @@ const PortfolioForm: React.FC<PortfolioFormProps> = ({ item, onSubmit, onCancel,
             <button
               type="submit"
               onClick={handleSubmit}
-              className="px-6 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={isLoading || !formData.title.trim() || !formData.description.trim() || !formData.mediaUrl.trim()}
+              className="px-8 py-3 text-sm font-semibold text-white bg-gradient-to-r from-amber-500 to-amber-600 rounded-xl hover:from-amber-600 hover:to-amber-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              disabled={isLoading || !isFormValid || uploadingFiles}
             >
               {isLoading ? (
                 <div className="flex items-center">
@@ -460,7 +566,10 @@ const PortfolioForm: React.FC<PortfolioFormProps> = ({ item, onSubmit, onCancel,
                   {item ? 'Updating...' : 'Adding...'}
                 </div>
               ) : (
-                item ? 'Update Project' : 'Add Project'
+                <div className="flex items-center">
+                  <CheckCircleIcon className="w-4 h-4 mr-2" />
+                  {item ? 'Update Project' : 'Add Project'}
+                </div>
               )}
             </button>
           </div>

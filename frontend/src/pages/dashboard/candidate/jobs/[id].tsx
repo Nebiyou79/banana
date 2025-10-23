@@ -1,13 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+// pages/dashboard/candidate/jobs/[id].tsx
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useQuery } from '@tanstack/react-query';
 import { jobService, Job } from '@/services/jobService';
+import { candidateService } from '@/services/candidateService';
 import { useAuth } from '@/contexts/AuthContext';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import CandidateJobCard from '@/components/job/CandidateJobCard';
-// import LoadingSpinner from '@/components/LoadingSpinner';
-import Link from 'next/link';
 import { 
   ArrowLeft, 
   MapPin, 
@@ -17,24 +17,22 @@ import {
   CheckCircle, 
   Clock,
   Loader2,
-  Star,
   Share2,
   Building2,
-  Globe,
   GraduationCap,
   DollarSign,
   Calendar,
   Shield,
-  Languages,
-  Car,
-  FileCheck
+  Bookmark,
 } from 'lucide-react';
-import { toast } from '@/hooks/use-toast';
+import Link from 'next/link';
+import { useToast } from '@/hooks/use-toast';
 
 const JobDetailPage: React.FC = () => {
   const router = useRouter();
   const { id } = router.query;
   const { user, isAuthenticated } = useAuth();
+  const { toast } = useToast();
   
   const [saving, setSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -52,12 +50,12 @@ const JobDetailPage: React.FC = () => {
     enabled: !!id,
   });
 
-  // Fetch similar jobs (you'll need to implement this in your service)
+  // Fetch similar jobs
   const { data: similarJobs } = useQuery({
-    queryKey: ['similarJobs', id],
+    queryKey: ['similarJobs', id, job?.category],
     queryFn: () => jobService.getJobs({ 
       category: job?.category,
-      limit: 3,
+      limit: 4,
       page: 1 
     }),
     enabled: !!id && !!job,
@@ -67,17 +65,15 @@ const JobDetailPage: React.FC = () => {
   // Fetch saved jobs to check if current job is saved
   const { data: savedJobs } = useQuery({
     queryKey: ['savedJobs'],
-    queryFn: async () => {
-      // Note: You'll need to implement getSavedJobs in your jobService
-      // return await jobService.getSavedJobs();
-      return [];
-    },
-    enabled: isAuthenticated,
+    queryFn: () => candidateService.getSavedJobs(),
+    enabled: isAuthenticated && !!job,
   });
 
+  // Check if job is saved
   useEffect(() => {
     if (savedJobs && job) {
-      setIsSaved(savedJobs.some((savedJob: Job) => savedJob._id === job._id));
+      const saved = savedJobs.some((savedJob: Job) => savedJob._id === job._id);
+      setIsSaved(saved);
     }
   }, [savedJobs, job]);
 
@@ -87,29 +83,50 @@ const JobDetailPage: React.FC = () => {
       return;
     }
 
+    if (!job) return;
+
     setSaving(true);
     try {
-      if (isSaved) {
-        // Note: You'll need to implement unsaveJob in your jobService
-        // await jobService.unsaveJob(id as string);
-        setIsSaved(false);
-        toast({
-          title: 'Job removed',
-          description: 'Job has been removed from your saved jobs',
-        });
-      } else {
-        // Note: You'll need to implement saveJob in your jobService
-        // await jobService.saveJob(id as string);
-        setIsSaved(true);
-        toast({
-          title: 'Job saved',
-          description: 'Job has been added to your saved jobs',
-        });
-      }
+      const result = await candidateService.saveJob(job._id);
+      setIsSaved(true);
+      
+      toast({
+        title: 'Job saved',
+        description: 'Job has been added to your saved jobs',
+        variant: 'success',
+      });
     } catch (error: any) {
       toast({
         title: 'Error',
         description: error.message || 'Failed to save job',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUnsaveJob = async () => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    if (!job) return;
+
+    setSaving(true);
+    try {
+      const result = await candidateService.unsaveJob(job._id);
+      setIsSaved(false);
+      
+      toast({
+        title: 'Job removed',
+        description: 'Job has been removed from your saved jobs',
+        variant: 'default',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to remove job',
         variant: 'destructive',
       });
     } finally {
@@ -122,7 +139,7 @@ const JobDetailPage: React.FC = () => {
       try {
         await navigator.share({
           title: job?.title,
-          text: `Check out this job: ${job?.title} at ${job?.company.name}`,
+          text: `Check out this job: ${job?.title} at ${job?.company?.name || job?.organization?.name}`,
           url: window.location.href,
         });
       } catch (error) {
@@ -146,27 +163,6 @@ const JobDetailPage: React.FC = () => {
     setShowApplicationForm(true);
   };
 
-  const handleApplicationSubmit = async (applicationData: any) => {
-    setApplying(true);
-    try {
-      // Note: You'll need to implement applyToJob in your jobService
-      // await jobService.applyToJob(id as string, applicationData);
-      setShowApplicationForm(false);
-      toast({
-        title: 'Application submitted',
-        description: 'Your application has been submitted successfully',
-      });
-    } catch (error: any) {
-      toast({
-        title: 'Application failed',
-        description: error.message || 'Failed to submit application',
-        variant: 'destructive',
-      });
-    } finally {
-      setApplying(false);
-    }
-  };
-
   const formatSalary = () => {
     return jobService.formatSalary(job?.salary);
   };
@@ -177,6 +173,45 @@ const JobDetailPage: React.FC = () => {
       month: 'long',
       day: 'numeric'
     });
+  };
+
+  const getLocationText = () => {
+    if (!job?.location) return '';
+    
+    if (job.location.region === 'international') return '🌍 Remote Worldwide';
+    
+    const city = job.location.city || job.location.region;
+    const country = job.location.country === 'Ethiopia' ? 'ET' : job.location.country;
+    return `${city}, ${country}`;
+  };
+
+  const getOwnerInfo = () => {
+    if (!job) return null;
+    
+    if (job.jobType === 'organization' && job.organization) {
+      return {
+        name: job.organization.name,
+        logoUrl: job.organization.logoUrl,
+        verified: job.organization.verified,
+        industry: job.organization.industry,
+        description: job.organization.description,
+        website: job.organization.website
+      };
+    }
+    
+    if (job.jobType === 'company' && job.company) {
+      return {
+        name: job.company.name,
+        logoUrl: job.company.logoUrl,
+        verified: job.company.verified,
+        industry: job.company.industry,
+        description: job.company.description,
+        website: job.company.website,
+        size: job.company.size
+      };
+    }
+    
+    return null;
   };
 
   if (isLoading) {
@@ -229,6 +264,7 @@ const JobDetailPage: React.FC = () => {
     );
   }
 
+  const ownerInfo = getOwnerInfo();
   const isInternational = job.location.region === 'international';
   const isUrgent = job.urgent || (job.applicationDeadline && 
     new Date(job.applicationDeadline).getTime() - Date.now() < 3 * 24 * 60 * 60 * 1000);
@@ -270,16 +306,21 @@ const JobDetailPage: React.FC = () => {
                           💎 Premium
                         </span>
                       )}
+                      {job.jobType === 'organization' && (
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                          🌟 {jobService.getJobTypeDisplayLabel(job)}
+                        </span>
+                      )}
                     </div>
                     
                     <h1 className="text-3xl font-bold text-gray-900 mb-3">{job.title}</h1>
                     
                     <div className="flex items-center space-x-4 mb-4">
                       <div className="flex items-center">
-                        {job.company.logoUrl ? (
+                        {ownerInfo?.logoUrl ? (
                           <img 
-                            src={job.company.logoUrl} 
-                            alt={job.company.name}
+                            src={ownerInfo.logoUrl} 
+                            alt={ownerInfo.name}
                             className="w-12 h-12 rounded-lg object-cover border border-gray-200 mr-3"
                           />
                         ) : (
@@ -288,11 +329,11 @@ const JobDetailPage: React.FC = () => {
                           </div>
                         )}
                         <div>
-                          <p className="text-lg font-semibold text-gray-900">{job.company.name}</p>
-                          {job.company.verified && (
+                          <p className="text-lg font-semibold text-gray-900">{ownerInfo?.name}</p>
+                          {ownerInfo?.verified && (
                             <span className="inline-flex items-center text-sm text-green-600">
                               <CheckCircle className="w-4 h-4 mr-1" />
-                              Verified Company
+                              Verified {job.jobType === 'organization' ? 'Organization' : 'Company'}
                             </span>
                           )}
                         </div>
@@ -302,19 +343,23 @@ const JobDetailPage: React.FC = () => {
                   
                   <div className="flex items-center space-x-2">
                     <button
-                      onClick={handleSaveJob}
+                      onClick={isSaved ? handleUnsaveJob : handleSaveJob}
                       disabled={saving}
                       className={`p-3 rounded-lg border transition-colors ${
                         isSaved 
-                          ? 'bg-yellow-50 border-yellow-200 text-yellow-600' 
-                          : 'bg-gray-50 border-gray-200 text-gray-400 hover:text-yellow-500 hover:border-yellow-200'
+                          ? 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100' 
+                          : 'bg-gray-50 border-gray-200 text-gray-400 hover:text-blue-500 hover:border-blue-200 hover:bg-blue-50'
                       }`}
                     >
-                      <Star className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
+                      {saving ? (
+                        <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Bookmark className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
+                      )}
                     </button>
                     <button
                       onClick={handleShare}
-                      className="p-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-400 hover:text-blue-600 hover:border-blue-200 transition-colors"
+                      className="p-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-400 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 transition-colors"
                     >
                       <Share2 className="w-5 h-5" />
                     </button>
@@ -326,9 +371,7 @@ const JobDetailPage: React.FC = () => {
                   <div className="flex items-center text-gray-700">
                     <MapPin className="w-5 h-5 mr-3 text-blue-600" />
                     <div>
-                      <div className="font-medium">
-                        {job.location.city}, {jobService.getEthiopianRegions().find(r => r.slug === job.location.region)?.name}
-                      </div>
+                      <div className="font-medium">{getLocationText()}</div>
                       {!isInternational && (
                         <div className="flex items-center text-sm text-gray-600 mt-1">
                           <Shield className="w-4 h-4 mr-1 text-green-600" />
@@ -342,7 +385,7 @@ const JobDetailPage: React.FC = () => {
                     <Briefcase className="w-5 h-5 mr-3 text-blue-600" />
                     <div>
                       <div className="font-medium">{jobService.getJobTypeLabel(job.type)}</div>
-                      <div className="text-sm text-gray-600">{job.workArrangement}</div>
+                      <div className="text-sm text-gray-600 capitalize">{job.workArrangement?.replace('-', ' ')}</div>
                     </div>
                   </div>
                   
@@ -370,7 +413,7 @@ const JobDetailPage: React.FC = () => {
                   <div className="flex items-center space-x-6 text-sm text-gray-600">
                     <span className="flex items-center">
                       <Eye className="w-4 h-4 mr-2" />
-                      {job.viewCount || 0} views
+                      {job.viewCount || job.views || 0} views
                     </span>
                     <span className="flex items-center">
                       <Users className="w-4 h-4 mr-2" />
@@ -404,8 +447,8 @@ const JobDetailPage: React.FC = () => {
                 {/* Job Description */}
                 <div className="mb-8">
                   <h2 className="text-2xl font-semibold text-gray-900 mb-4">Job Description</h2>
-                  <div className="prose prose-lg text-gray-700">
-                    <p>{job.description}</p>
+                  <div className="prose prose-lg text-gray-700 max-w-none">
+                    <p className="whitespace-pre-wrap">{job.description}</p>
                   </div>
                 </div>
 
@@ -471,57 +514,12 @@ const JobDetailPage: React.FC = () => {
                   </div>
                 )}
 
-                {/* Ethiopian Requirements */}
-                {!isInternational && job.ethiopianRequirements && (
-                  <div className="mb-8">
-                    <h2 className="text-2xl font-semibold text-gray-900 mb-4">Additional Requirements</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {job.ethiopianRequirements.knowledgeOfLocalLanguages.length > 0 && (
-                        <div>
-                          <h3 className="font-medium text-gray-900 mb-2 flex items-center">
-                            <Languages className="w-4 h-4 mr-2" />
-                            Local Languages
-                          </h3>
-                          <div className="flex flex-wrap gap-2">
-                            {job.ethiopianRequirements.knowledgeOfLocalLanguages.map((language, index) => (
-                              <span key={index} className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
-                                {language}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
-                      <div className="space-y-2">
-                        {job.ethiopianRequirements.workPermitRequired && (
-                          <div className="flex items-center text-gray-700">
-                            <FileCheck className="w-4 h-4 text-green-500 mr-2" />
-                            Work Permit Required
-                          </div>
-                        )}
-                        {job.ethiopianRequirements.drivingLicense && (
-                          <div className="flex items-center text-gray-700">
-                            <Car className="w-4 h-4 text-green-500 mr-2" />
-                            Driving License Required
-                          </div>
-                        )}
-                        {job.ethiopianRequirements.governmentClearance && (
-                          <div className="flex items-center text-gray-700">
-                            <Shield className="w-4 h-4 text-green-500 mr-2" />
-                            Government Clearance Required
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 {/* Apply Button */}
                 <div className="mt-8 pt-8 border-t border-gray-200">
                   <button
                     onClick={handleApplyClick}
                     disabled={applying}
-                    className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-semibold text-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg hover:shadow-xl disabled:opacity-50"
+                    className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-semibold text-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {applying ? (
                       <div className="flex items-center justify-center">
@@ -532,6 +530,12 @@ const JobDetailPage: React.FC = () => {
                       'Apply for This Position'
                     )}
                   </button>
+                  
+                  {job.applicationDeadline && new Date(job.applicationDeadline) < new Date() && (
+                    <p className="text-red-600 text-sm mt-2 text-center">
+                      This job posting has expired
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -544,7 +548,7 @@ const JobDetailPage: React.FC = () => {
                       <CandidateJobCard 
                         key={similarJob._id} 
                         job={similarJob}
-                        showActions={false}
+                        showActions={true}
                       />
                     ))}
                   </div>
@@ -554,45 +558,49 @@ const JobDetailPage: React.FC = () => {
 
             {/* Sidebar */}
             <div className="space-y-6">
-              {/* Company Info */}
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">About {job.company.name}</h2>
-                
-                {job.company.industry && (
-                  <div className="mb-3">
-                    <span className="text-sm font-medium text-gray-700">Industry:</span>
-                    <p className="text-gray-600">{job.company.industry}</p>
-                  </div>
-                )}
-                
-                {job.company.size && (
-                  <div className="mb-3">
-                    <span className="text-sm font-medium text-gray-700">Company Size:</span>
-                    <p className="text-gray-600">{job.company.size}</p>
-                  </div>
-                )}
-                
-                {job.company.description && (
-                  <div className="mb-4">
-                    <p className="text-gray-700 text-sm leading-relaxed">{job.company.description}</p>
-                  </div>
-                )}
-                
-                {job.company.website && (
-                  <a 
-                    href={job.company.website} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center font-medium text-blue-600 hover:text-blue-700 transition-colors"
-                  >
-                    Visit Website
-                    <svg className="w-4 h-4 ml-1" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
-                      <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
-                    </svg>
-                  </a>
-                )}
-              </div>
+              {/* Company/Organization Info */}
+              {ownerInfo && (
+                <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200">
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                    About {ownerInfo.name}
+                  </h2>
+                  
+                  {ownerInfo.industry && (
+                    <div className="mb-3">
+                      <span className="text-sm font-medium text-gray-700">Industry:</span>
+                      <p className="text-gray-600">{ownerInfo.industry}</p>
+                    </div>
+                  )}
+                  
+                  {'size' in ownerInfo && ownerInfo.size && (
+                    <div className="mb-3">
+                      <span className="text-sm font-medium text-gray-700">Company Size:</span>
+                      <p className="text-gray-600">{ownerInfo.size}</p>
+                    </div>
+                  )}
+                  
+                  {ownerInfo.description && (
+                    <div className="mb-4">
+                      <p className="text-gray-700 text-sm leading-relaxed">{ownerInfo.description}</p>
+                    </div>
+                  )}
+                  
+                  {ownerInfo.website && (
+                    <a 
+                      href={ownerInfo.website} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                    >
+                      Visit Website
+                      <svg className="w-4 h-4 ml-1" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+                        <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
+                      </svg>
+                    </a>
+                  )}
+                </div>
+              )}
 
               {/* Job Summary */}
               <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200">
@@ -605,7 +613,7 @@ const JobDetailPage: React.FC = () => {
                   <div className="flex justify-between">
                     <span className="text-gray-600">Location:</span>
                     <span className="font-medium text-gray-900">
-                      {job.location.city}, {jobService.getEthiopianRegions().find(r => r.slug === job.location.region)?.name}
+                      {getLocationText()}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -623,7 +631,7 @@ const JobDetailPage: React.FC = () => {
                   <div className="flex justify-between">
                     <span className="text-gray-600">Remote Work:</span>
                     <span className="font-medium text-gray-900">
-                      {job.remote === 'remote' ? 'Yes' : job.remote === 'hybrid' ? 'Hybrid' : 'No'}
+                      {job.remote === 'remote' ? 'Yes' : job.remote === 'hybrid' ? 'Hybrid' : 'On-site'}
                     </span>
                   </div>
                   {job.applicationDeadline && (
@@ -642,16 +650,20 @@ const JobDetailPage: React.FC = () => {
                   Make sure your profile is up to date before applying to increase your chances.
                 </p>
                 <div className="space-y-3">
-                  {/* <button
+                  <button
                     onClick={handleApplyClick}
-                    disabled={applying}
-                    className="w-full py-3 bg-white text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-colors disabled:opacity-50"
+                    className="w-full py-3 bg-white text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {applying ? 'Applying...' : 'Apply Now'}
-                  </button> */}
+                  </button>
                   <Link href="/dashboard/candidate/profile">
                     <button className="w-full py-3 border border-white text-white rounded-lg font-semibold hover:bg-blue-500 transition-colors">
                       Update Profile
+                    </button>
+                  </Link>
+                  <Link href="/dashboard/candidate/saved-jobs">
+                    <button className="w-full py-3 border border-white text-white rounded-lg font-semibold hover:bg-blue-500 transition-colors">
+                      View Saved Jobs
                     </button>
                   </Link>
                 </div>

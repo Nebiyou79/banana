@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+// pages/dashboard/company/jobs/index.tsx - UPDATED WITH MODAL
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { jobService, Job } from '@/services/jobService';
@@ -6,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import JobForm from '@/components/job/JobForm';
 import JobCard from '@/components/job/JobCard';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import ConfirmationModal from '@/components/ui/ConfirmationModal';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { toast } from '@/hooks/use-toast';
 
@@ -14,6 +16,8 @@ const CompanyJobsPage: React.FC = () => {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState<string | null>(null);
 
   // Fetch company jobs
   const { 
@@ -35,6 +39,7 @@ const CompanyJobsPage: React.FC = () => {
       toast({
         title: 'Job created successfully',
         description: 'Your job is now live and visible to candidates',
+        variant: 'success',
       });
     },
     onError: (error: any) => {
@@ -56,6 +61,7 @@ const CompanyJobsPage: React.FC = () => {
       toast({
         title: 'Job updated successfully',
         description: 'Your job changes have been saved',
+        variant: 'success',
       });
     },
     onError: (error: any) => {
@@ -75,6 +81,7 @@ const CompanyJobsPage: React.FC = () => {
       toast({
         title: 'Job deleted successfully',
         description: 'The job has been permanently removed',
+        variant: 'success',
       });
     },
     onError: (error: any) => {
@@ -84,34 +91,43 @@ const CompanyJobsPage: React.FC = () => {
         variant: 'destructive',
       });
     },
+    onSettled: () => {
+      setDeleteModalOpen(false);
+      setJobToDelete(null);
+    },
   });
 
   // Status toggle mutation
-const statusMutation = useMutation({
-  mutationFn: ({ id, status }: { 
-    id: string; 
-    status: "draft" | "active" | "paused" | "closed" | "archived"; 
-  }) =>
-    jobService.updateJob(id, { status }),
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
-    toast({
-      title: 'Status updated',
-      description: 'Job status has been changed',
-    });
-  },
-  onError: (error: any) => {
-    toast({
-      title: 'Failed to update status',
-      description: error.message || 'Please try again',
-      variant: 'destructive',
-    });
-  },
-});
-
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { 
+      id: string; 
+      status: "draft" | "active" | "paused" | "closed" | "archived"; 
+    }) =>
+      jobService.updateJob(id, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
+      toast({
+        title: 'Status updated',
+        description: 'Job status has been changed',
+        variant: 'success',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to update status',
+        description: error.message || 'Please try again',
+        variant: 'destructive',
+      });
+    },
+  });
 
   const handleCreateJob = async (data: Partial<Job>) => {
-    await createMutation.mutateAsync(data);
+    // Ensure jobType is set for company with proper type
+    const jobData: Partial<Job> = {
+      ...data,
+      jobType: 'company',
+    };
+    await createMutation.mutateAsync(jobData);
   };
 
   const handleUpdateJob = async (data: Partial<Job>) => {
@@ -120,19 +136,28 @@ const statusMutation = useMutation({
     }
   };
 
-  const handleDeleteJob = async (jobId: string) => {
-    if (confirm('Are you sure you want to delete this job? This action cannot be undone.')) {
-      await deleteMutation.mutateAsync(jobId);
+  const handleDeleteClick = (jobId: string) => {
+    setJobToDelete(jobId);
+    setDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (jobToDelete) {
+      await deleteMutation.mutateAsync(jobToDelete);
     }
   };
 
-const handleToggleStatus = async (
-  jobId: string,
-  newStatus: "draft" | "active" | "paused" | "closed" | "archived"
-) => {
-  await statusMutation.mutateAsync({ id: jobId, status: newStatus });
-};
+  const handleCancelDelete = () => {
+    setDeleteModalOpen(false);
+    setJobToDelete(null);
+  };
 
+  const handleToggleStatus = async (
+    jobId: string,
+    newStatus: "draft" | "active" | "paused" | "closed" | "archived"
+  ) => {
+    await statusMutation.mutateAsync({ id: jobId, status: newStatus });
+  };
 
   const handleViewStats = (jobId: string) => {
     // Navigate to job stats page or open stats modal
@@ -157,9 +182,10 @@ const handleToggleStatus = async (
     totalJobs: jobs.length,
     activeJobs: jobs.filter((job: Job) => job.status === 'active').length,
     draftJobs: jobs.filter((job: Job) => job.status === 'draft').length,
+    pausedJobs: jobs.filter((job: Job) => job.status === 'paused').length,
+    closedJobs: jobs.filter((job: Job) => job.status === 'closed').length,
     totalApplications: jobs.reduce((sum: number, job: Job) => sum + (job.applicationCount || 0), 0),
     totalViews: jobs.reduce((sum: number, job: Job) => sum + (job.viewCount || 0), 0),
-    avgSalary: 0 // You can calculate this if needed
   };
 
   return (
@@ -182,22 +208,30 @@ const handleToggleStatus = async (
 
           {/* Stats Overview */}
           {stats && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200 text-center">
-                <div className="text-3xl font-bold text-blue-600 mb-2">{stats.totalJobs || 0}</div>
-                <div className="text-gray-600">Total Jobs</div>
+            <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
+              <div className="bg-white rounded-xl p-4 shadow-lg border border-gray-200 text-center">
+                <div className="text-2xl font-bold text-blue-600 mb-1">{stats.totalJobs || 0}</div>
+                <div className="text-sm text-gray-600">Total Jobs</div>
               </div>
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200 text-center">
-                <div className="text-3xl font-bold text-green-600 mb-2">{stats.activeJobs || 0}</div>
-                <div className="text-gray-600">Active Jobs</div>
+              <div className="bg-white rounded-xl p-4 shadow-lg border border-gray-200 text-center">
+                <div className="text-2xl font-bold text-green-600 mb-1">{stats.activeJobs || 0}</div>
+                <div className="text-sm text-gray-600">Active</div>
               </div>
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200 text-center">
-                <div className="text-3xl font-bold text-yellow-600 mb-2">{stats.draftJobs || 0}</div>
-                <div className="text-gray-600">Draft Jobs</div>
+              <div className="bg-white rounded-xl p-4 shadow-lg border border-gray-200 text-center">
+                <div className="text-2xl font-bold text-yellow-600 mb-1">{stats.draftJobs || 0}</div>
+                <div className="text-sm text-gray-600">Drafts</div>
               </div>
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200 text-center">
-                <div className="text-3xl font-bold text-purple-600 mb-2">{stats.totalApplications || 0}</div>
-                <div className="text-gray-600">Total Applications</div>
+              <div className="bg-white rounded-xl p-4 shadow-lg border border-gray-200 text-center">
+                <div className="text-2xl font-bold text-orange-600 mb-1">{stats.pausedJobs || 0}</div>
+                <div className="text-sm text-gray-600">Paused</div>
+              </div>
+              <div className="bg-white rounded-xl p-4 shadow-lg border border-gray-200 text-center">
+                <div className="text-2xl font-bold text-red-600 mb-1">{stats.closedJobs || 0}</div>
+                <div className="text-sm text-gray-600">Closed</div>
+              </div>
+              <div className="bg-white rounded-xl p-4 shadow-lg border border-gray-200 text-center">
+                <div className="text-2xl font-bold text-purple-600 mb-1">{stats.totalApplications || 0}</div>
+                <div className="text-sm text-gray-600">Applications</div>
               </div>
             </div>
           )}
@@ -210,7 +244,7 @@ const handleToggleStatus = async (
                   onSubmit={handleCreateJob}
                   loading={createMutation.isPending}
                   onCancel={() => setShowForm(false)}
-                  // companyVerified={user?.companyVerified || false}
+                  jobType="company"
                 />
               </div>
             </div>
@@ -225,7 +259,7 @@ const handleToggleStatus = async (
                   loading={updateMutation.isPending}
                   onCancel={() => setEditingJob(null)}
                   mode="edit"
-                  // companyVerified={user?.companyVerified || false}
+                  jobType="company"
                 />
               </div>
             </div>
@@ -239,10 +273,10 @@ const handleToggleStatus = async (
                   key={job._id}
                   job={job}
                   showActions={true}
-                  onEdit={setEditingJob}
-                  onDelete={handleDeleteJob}
+                  onDelete={handleDeleteClick}
                   onViewStats={handleViewStats}
                   onToggleStatus={handleToggleStatus}
+                  isOrganizationView={false}
                 />
               ))
             ) : (
@@ -291,8 +325,21 @@ const handleToggleStatus = async (
             </div>
           )}
 
+          {/* Delete Confirmation Modal */}
+          <ConfirmationModal
+            isOpen={deleteModalOpen}
+            onClose={handleCancelDelete}
+            onConfirm={handleConfirmDelete}
+            title="Delete Job"
+            message="Are you sure you want to delete this job posting? This action cannot be undone and all associated data will be permanently removed."
+            confirmText="Delete Job"
+            cancelText="Keep Job"
+            variant="danger"
+            isLoading={deleteMutation.isPending}
+          />
+
           {/* Loading States */}
-          {(createMutation.isPending || updateMutation.isPending || deleteMutation.isPending || statusMutation.isPending) && (
+          {(createMutation.isPending || updateMutation.isPending || statusMutation.isPending) && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white rounded-xl p-6 flex items-center space-x-3">
                 <LoadingSpinner />

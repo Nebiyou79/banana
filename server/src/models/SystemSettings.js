@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const SystemSettingsSchema = new mongoose.Schema({
-  siteName: { type: String, default: 'Banana Jobs Platform' },
+  siteName: { type: String, default: 'Banana Platform' },
   siteLogo: { type: String, default: '' },
   adminEmail: { type: String, default: 'admin@example.com' },
   allowRegistrations: { type: Boolean, default: true },

@@ -21,6 +21,7 @@ const router = express.Router();
 // Apply auth middleware to all routes
 router.use(verifyToken);
 
+// 🔥 FIXED: All routes now under /api/v1/organization prefix
 // Get current user's organization
 router.get('/', getMyOrganization);
 

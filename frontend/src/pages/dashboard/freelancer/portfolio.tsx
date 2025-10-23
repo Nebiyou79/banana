@@ -1,165 +1,160 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+// pages/dashboard/freelancer/portfolio.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PortfolioFormData, PortfolioItem, portfolioService } from '@/services/portfolioService';
-import { useAuth } from '@/contexts/AuthContext';
-import { PlusIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { FreelancerLayout } from '@/components/layout/FreelancerLayout';
+import { PortfolioItem, PortfolioFormData, freelancerService } from '@/services/freelancerService';
 import PortfolioList from '@/components/freelancer/PortfolioList';
 import PortfolioForm from '@/components/freelancer/PortfolioForm';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { colorClasses } from '@/utils/color';
+import { PlusIcon, PhotoIcon } from '@heroicons/react/24/outline';
 
-const PortfolioPage: React.FC = () => {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
+const FreelancerPortfolio = () => {
+  const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState<PortfolioItem | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fetch portfolio items
-  const { 
-    data: portfolioItems = [], 
-    isLoading, 
-    error: fetchError, 
-    refetch 
-  } = useQuery({
-    queryKey: ['portfolio'],
-    queryFn: portfolioService.getPortfolio,
-    enabled: !!user,
-  });
+  useEffect(() => {
+    loadPortfolio();
+  }, []);
 
-  // Add/Update mutation
-  const portfolioMutation = useMutation({
-    mutationFn: (data: { id?: string; data: PortfolioFormData }) => 
-      data.id 
-        ? portfolioService.updatePortfolioItem(data.id, data.data)
-        : portfolioService.addPortfolioItem(data.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['portfolio'] });
-      setShowForm(false);
-      setEditingItem(null);
-      setError(null);
-    },
-    onError: (err: any) => {
-      setError(err.message || 'Failed to save portfolio item');
+  const loadPortfolio = async () => {
+    try {
+      setIsLoading(true);
+      const response = await freelancerService.getPortfolio();
+      setPortfolioItems(response.items);
+    } catch (error) {
+      console.error('Failed to load portfolio:', error);
+    } finally {
+      setIsLoading(false);
     }
-  });
-
-  // Update the handleAddItem function
-  const handleAddItem = (data: PortfolioFormData) => {
-    portfolioMutation.mutate({
-      id: editingItem?._id,
-      data
-    });
   };
 
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: portfolioService.deletePortfolioItem,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['portfolio'] });
-      setError(null);
-    },
-    onError: (err: any) => {
-      setError(err.message || 'Failed to delete portfolio item');
+  const handleAddItem = async (data: PortfolioFormData) => {
+    try {
+      setIsSubmitting(true);
+      await freelancerService.addPortfolioItem(data);
+      await loadPortfolio();
+      setShowForm(false);
+    } catch (error) {
+      console.error('Failed to add portfolio item:', error);
+      throw error;
+    } finally {
+      setIsSubmitting(false);
     }
-  });
+  };
 
-  const handleEditItem = (item: PortfolioItem) => {
+  const handleEditItem = async (data: PortfolioFormData) => {
+    if (!editingItem) return;
+    
+    try {
+      setIsSubmitting(true);
+      await freelancerService.updatePortfolioItem(editingItem._id, data);
+      await loadPortfolio();
+      setEditingItem(null);
+      setShowForm(false);
+    } catch (error) {
+      console.error('Failed to update portfolio item:', error);
+      throw error;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteItem = async (id: string) => {
+    try {
+      await freelancerService.deletePortfolioItem(id);
+      await loadPortfolio();
+    } catch (error) {
+      console.error('Failed to delete portfolio item:', error);
+    }
+  };
+
+  const handleEditClick = (item: PortfolioItem) => {
     setEditingItem(item);
     setShowForm(true);
   };
 
-  const handleDeleteItem = (id: string) => {
-    deleteMutation.mutate(id);
-  };
-
-  const handleCancelForm = () => {
+  const handleFormClose = () => {
     setShowForm(false);
     setEditingItem(null);
   };
 
-  useEffect(() => {
-    if (fetchError) {
-      setError((fetchError as Error).message || 'Failed to load portfolio');
-    }
-  }, [fetchError]);
-
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center min-h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your portfolio...</p>
+      <FreelancerLayout>
+        <div className="flex items-center justify-center min-h-96">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500"></div>
         </div>
-      </div>
+      </FreelancerLayout>
     );
   }
 
   return (
-    <DashboardLayout requiredRole="freelancer">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+    <FreelancerLayout>
+      <div className="p-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">My Portfolio</h1>
-            <p className="text-gray-600">
-              Showcase your best work to potential clients and employers
+            <h1 className={`text-2xl font-bold ${colorClasses.text.darkNavy}`}>
+              My Portfolio
+            </h1>
+            <p className="text-gray-600 mt-1">
+              Showcase your best work and attract potential clients
             </p>
           </div>
-          
-          <div className="flex gap-3">
-            <button
-              onClick={() => refetch()}
-              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors duration-200 flex items-center"
-              title="Refresh portfolio"
-            >
-              <ArrowPathIcon className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setShowForm(true)}
-              className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 flex items-center shadow-lg shadow-blue-500/25"
-            >
-              <PlusIcon className="w-5 h-5 mr-2" />
-              Add New Item
-            </button>
-          </div>
+          <button
+            onClick={() => setShowForm(true)}
+            className="mt-4 sm:mt-0 flex items-center px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl hover:from-amber-600 hover:to-amber-700 transition-all duration-200 font-semibold shadow-lg shadow-amber-500/25"
+          >
+            <PlusIcon className="w-5 h-5 mr-2" />
+            Add New Project
+          </button>
         </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-xl mb-6 flex justify-between items-center">
-            <div>
-              <p className="font-medium">Error</p>
-              <p>{error}</p>
-            </div>
-            <button 
-              onClick={() => setError(null)}
-              className="text-red-800 hover:text-red-900 font-bold text-lg"
-            >
-              ×
-            </button>
-          </div>
-        )}
-
+        {/* Portfolio Content */}
         <PortfolioList
           items={portfolioItems}
-          onEdit={handleEditItem}
+          onEdit={handleEditClick}
           onDelete={handleDeleteItem}
           isOwnProfile={true}
-          emptyMessage="You haven't added any portfolio items yet. Showcase your work to stand out!"
+          emptyMessage={
+            <div className="text-center py-16">
+              <div className="w-32 h-32 mx-auto mb-6 text-amber-400">
+                <PhotoIcon className="w-full h-full opacity-60" />
+              </div>
+              <h3 className={`text-2xl font-bold ${colorClasses.text.darkNavy} mb-4`}>
+                No Portfolio Items Yet
+              </h3>
+              <p className="text-gray-600 text-lg max-w-md mx-auto leading-relaxed mb-8">
+                Showcase your best work to demonstrate your skills and attract potential clients. 
+                Add your first project to start building your professional portfolio.
+              </p>
+              <button
+                onClick={() => setShowForm(true)}
+                className="px-8 py-4 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl hover:from-amber-600 hover:to-amber-700 transition-all duration-200 font-semibold text-lg shadow-lg shadow-amber-500/25"
+              >
+                <PlusIcon className="w-5 h-5 mr-2 inline" />
+                Create Your First Project
+              </button>
+            </div>
+          }
         />
 
+        {/* Portfolio Form Modal */}
         {showForm && (
           <PortfolioForm
             item={editingItem}
-            onSubmit={handleAddItem}
-            onCancel={handleCancelForm}
-            isLoading={portfolioMutation.isPending}
+            onSubmit={editingItem ? handleEditItem : handleAddItem}
+            onCancel={handleFormClose}
+            isLoading={isSubmitting}
           />
         )}
       </div>
-    </DashboardLayout>
+    </FreelancerLayout>
   );
 };
 
-export default PortfolioPage;
+export default FreelancerPortfolio;

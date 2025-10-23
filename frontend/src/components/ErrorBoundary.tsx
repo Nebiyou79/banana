@@ -1,6 +1,6 @@
-// src/components/ErrorBoundary.tsx
+// components/ErrorBoundary.tsx
 import React from 'react';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from '@/hooks/use-toast';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -9,6 +9,7 @@ interface ErrorBoundaryState {
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
+  fallback?: React.ReactNode;
 }
 
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
@@ -22,25 +23,28 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    console.error('Error Boundary Caught:', error, errorInfo);
+    
+    // Convert runtime errors to toast notifications
+    toast({
+      title: 'Something went wrong',
+      description: 'An unexpected error occurred. Please try again.',
+      variant: 'destructive',
+    });
   }
 
   render() {
     if (this.state.hasError) {
+      if (this.props.fallback) {
+        return this.props.fallback;
+      }
+      
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="max-w-md w-full bg-white p-6 rounded-lg shadow-lg">
-            <h2 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h2>
-            <p className="text-gray-600 mb-4">
-              {this.state.error?.message || 'An unexpected error occurred.'}
-            </p>
-            <button
-              onClick={() => this.setState({ hasError: false })}
-              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-            >
-              Try Again
-            </button>
-          </div>
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+          <h3 className="text-red-800 font-medium">Something went wrong</h3>
+          <p className="text-red-600 text-sm mt-1">
+            Please refresh the page and try again.
+          </p>
         </div>
       );
     }
@@ -48,21 +52,5 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
     return this.props.children;
   }
 }
-
-// Hook version for functional components
-export const useErrorHandler = () => {
-  const { toast } = useToast();
-
-  const handleError = (error: Error, context?: string) => {
-    console.error(`Error in ${context}:`, error);
-    toast({
-      title: "Error",
-      description: error.message || "Something went wrong",
-      variant: "destructive",
-    });
-  };
-
-  return { handleError };
-};
 
 export default ErrorBoundary;

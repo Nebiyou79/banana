@@ -1,351 +1,589 @@
-// src/components/organization/OrganizationForm.tsx
-import React, { useState, useEffect } from 'react';
-import { organizationService, OrganizationProfile } from '@/services/organizationService';
-import { colors, colorClasses } from '@/utils/color';
+// src/components/organization/OrganizationForm.tsx - UPDATED WITH SECONDARY PHONE
+import { useState, useRef, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { OrganizationProfile } from '@/services/organizationService';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/Form';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Building2, Target, X, Upload, Trash2, ImageDown, Phone } from 'lucide-react';
+import Button from '../forms/Button';
+import { organizationService } from '@/services/organizationService';
 
-interface OrganizationFormProps {
-  organization?: OrganizationProfile | null;
-  onSubmit?: (data: OrganizationProfile) => void;
-  mode?: 'create' | 'edit';
-}
-
-export const OrganizationForm: React.FC<OrganizationFormProps> = ({
-  organization,
-  onSubmit,
-  mode = 'create'
-}) => {
-  const [formData, setFormData] = useState<Partial<OrganizationProfile>>({
-    name: '',
-    registrationNumber: '',
-    organizationType: 'non-profit',
-    industry: '',
-    description: '',
-    address: '',
-    phone: '',
-    website: '',
-    mission: ''
-  });
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    if (organization && mode === 'edit') {
-      setFormData({
-        name: organization.name || '',
-        registrationNumber: organization.registrationNumber || '',
-        organizationType: organization.organizationType || 'non-profit',
-        industry: organization.industry || '',
-        description: organization.description || '',
-        address: organization.address || '',
-        phone: organization.phone || '',
-        website: organization.website || '',
-        mission: organization.mission || ''
-      });
-    }
-  }, [organization, mode]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
-    // Clear error when user starts typing
-    if (errors[name]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: ''
-      }));
-    }
-  };
-
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.name?.trim()) {
-      newErrors.name = 'Organization name is required';
-    } else if (formData.name.trim().length < 2) {
-      newErrors.name = 'Organization name must be at least 2 characters long';
-    }
-
-    if (formData.website && !isValidUrl(formData.website)) {
-      newErrors.website = 'Please enter a valid website URL';
-    }
-
-    if (formData.description && formData.description.length > 1000) {
-      newErrors.description = 'Description cannot exceed 1000 characters';
-    }
-
-    if (formData.mission && formData.mission.length > 500) {
-      newErrors.mission = 'Mission statement cannot exceed 500 characters';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const isValidUrl = (url: string): boolean => {
+const organizationFormSchema = z.object({
+  name: z.string().min(2, 'Organization name must be at least 2 characters'),
+  registrationNumber: z.string().optional(),
+  organizationType: z.string().optional(),
+  industry: z.string().optional(),
+  description: z.string().max(1000, 'Description cannot exceed 1000 characters').optional(),
+  mission: z.string().max(500, 'Mission cannot exceed 500 characters').optional(),
+  address: z.string().optional(),
+  phone: z.string().optional(),
+  secondaryPhone: z.string().optional(),
+  website: z.string().optional(),
+}).refine((data) => {
+  // Custom validation for website - only validate if provided
+  if (data.website && data.website.trim() !== '') {
     try {
-      new URL(url);
+      new URL(data.website);
       return true;
     } catch {
       return false;
     }
+  }
+  return true;
+}, {
+  message: 'Please enter a valid URL (include http:// or https://)',
+  path: ['website'],
+});
+
+type OrganizationFormValues = z.infer<typeof organizationFormSchema>;
+
+interface OrganizationFormProps {
+  organization?: OrganizationProfile | null;
+  onSubmit: (data: OrganizationFormValues & { logoFile?: File; bannerFile?: File }) => Promise<void>;
+  onCancel: () => void;
+  loading?: boolean;
+}
+
+export default function OrganizationForm({ 
+  organization, 
+  onSubmit, 
+  onCancel, 
+  loading = false 
+}: OrganizationFormProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string>('');
+  const [bannerPreview, setBannerPreview] = useState<string>('');
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+
+  // Initialize previews from existing organization
+  useEffect(() => {
+    if (organization?.logoUrl) {
+      const url = organizationService.getFullImageUrl(organization.logoUrl);
+      if (url) setLogoPreview(url);
+    }
+    if (organization?.bannerUrl) {
+      const url = organizationService.getFullImageUrl(organization.bannerUrl);
+      if (url) setBannerPreview(url);
+    }
+  }, [organization]);
+
+  const form = useForm<OrganizationFormValues>({
+    resolver: zodResolver(organizationFormSchema),
+    defaultValues: {
+      name: organization?.name || '',
+      registrationNumber: organization?.registrationNumber || '',
+      organizationType: organization?.organizationType || 'non-profit',
+      industry: organization?.industry || '',
+      description: organization?.description || '',
+      mission: organization?.mission || '',
+      address: organization?.address || '',
+      phone: organization?.phone || '',
+      secondaryPhone: organization?.secondaryPhone || '',
+      website: organization?.website || '',
+    },
+  });
+
+  const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      if (file.size > 5 * 1024 * 1024) {
+        console.error('Logo file too large');
+        return;
+      }
+      if (!file.type.startsWith('image/')) {
+        console.error('Invalid logo file type');
+        return;
+      }
+      setLogoFile(file);
+      const previewUrl = URL.createObjectURL(file);
+      setLogoPreview(previewUrl);
+    } catch (error) {
+      console.error('Error processing logo file:', error);
+    }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
+  const handleBannerChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-    setLoading(true);
     try {
-      let result: OrganizationProfile;
-      
-      if (mode === 'create') {
-        result = await organizationService.createOrganization(formData);
-      } else {
-        result = await organizationService.updateMyOrganization(formData);
+      if (file.size > 5 * 1024 * 1024) {
+        console.error('Banner file too large');
+        return;
       }
+      if (!file.type.startsWith('image/')) {
+        console.error('Invalid banner file type');
+        return;
+      }
+      setBannerFile(file);
+      const previewUrl = URL.createObjectURL(file);
+      setBannerPreview(previewUrl);
+    } catch (error) {
+      console.error('Error processing banner file:', error);
+    }
+  };
 
-      if (onSubmit) {
-        onSubmit(result);
+  const removeLogo = () => {
+    try {
+      if (logoPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(logoPreview);
+      }
+      setLogoFile(null);
+      setLogoPreview('');
+      if (logoInputRef.current) {
+        logoInputRef.current.value = '';
       }
     } catch (error) {
-      // Error handling is done in the service
-    } finally {
-      setLoading(false);
+      console.error('Error removing logo:', error);
     }
   };
+
+  const removeBanner = () => {
+    try {
+      if (bannerPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(bannerPreview);
+      }
+      setBannerFile(null);
+      setBannerPreview('');
+      if (bannerInputRef.current) {
+        bannerInputRef.current.value = '';
+      }
+    } catch (error) {
+      console.error('Error removing banner:', error);
+    }
+  };
+
+  const handleSubmit = async (data: OrganizationFormValues) => {
+    setIsSubmitting(true);
+    try {
+      await onSubmit({
+        ...data,
+        logoFile: logoFile || undefined,
+        bannerFile: bannerFile || undefined
+      });
+      // Success toast is handled by the service layer
+    } catch (error) {
+      // Errors are now handled by the service layer through toast
+      console.error('Form submission error:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCancel = () => {
+    try {
+      // Cleanup blob URLs
+      if (logoPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(logoPreview);
+      }
+      if (bannerPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(bannerPreview);
+      }
+      onCancel();
+    } catch (error) {
+      console.error('Error canceling form:', error);
+    }
+  };
+
+  // Cleanup blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (logoPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(logoPreview);
+      }
+      if (bannerPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(bannerPreview);
+      }
+    };
+  }, [logoPreview, bannerPreview]);
 
   const organizationTypeOptions = organizationService.getOrganizationTypeOptions();
 
   return (
-    <div className={`min-h-screen ${colorClasses.bg.gray100} py-8`}>
-      <div className="max-w-4xl mx-auto px-4">
-        <div className={`${colorClasses.bg.white} rounded-2xl shadow-lg p-8`}>
-          <div className="text-center mb-8">
-            <h1 className={`text-3xl font-bold ${colorClasses.text.darkNavy} mb-2`}>
-              {mode === 'create' ? 'Create Organization Profile' : 'Edit Organization Profile'}
-            </h1>
-            <p className={`${colorClasses.text.gray400}`}>
-              {mode === 'create' 
-                ? 'Set up your organization profile to start posting opportunities' 
-                : 'Update your organization information'
-              }
-            </p>
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-2xl flex items-center gap-2">
+              <Building2 className="w-6 h-6" />
+              {organization ? 'Edit Organization Profile' : 'Create Organization Profile'}
+            </CardTitle>
+            <CardDescription>
+              {organization ? 'Update your organization information' : 'Fill in your organization details to get started'}
+            </CardDescription>
           </div>
+          <Button variant="ghost" size="md" onClick={handleCancel} disabled={isSubmitting}>
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
+            {/* Logo and Banner Upload Section */}
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Logo Upload */}
+                <div className="space-y-4">
+                  <FormLabel>Organization Logo</FormLabel>
+                  <div className="border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center hover:border-gray-400 transition-colors">
+                    {logoPreview ? (
+                      <div className="relative">
+                        <div className="w-32 h-32 rounded-xl overflow-hidden mx-auto">
+                          <img 
+                            src={logoPreview} 
+                            alt="Logo preview" 
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="absolute -top-2 -right-2 w-6 h-6 p-0 rounded-full"
+                          onClick={removeLogo}
+                          disabled={isSubmitting}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto">
+                          <ImageDown className="w-6 h-6 text-gray-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">Upload Logo</p>
+                          <p className="text-xs text-gray-500">PNG, JPG up to 5MB</p>
+                        </div>
+                      </div>
+                    )}
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoChange}
+                      className="hidden"
+                      id="logo-upload"
+                      disabled={isSubmitting}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => logoInputRef.current?.click()}
+                      disabled={isSubmitting}
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      {logoPreview ? 'Change Logo' : 'Select Logo'}
+                    </Button>
+                  </div>
+                </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Basic Information */}
+                {/* Banner Upload */}
+                <div className="space-y-4">
+                  <FormLabel>Organization Banner</FormLabel>
+                  <div className="border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center hover:border-gray-400 transition-colors">
+                    {bannerPreview ? (
+                      <div className="relative">
+                        <div className="w-full h-24 rounded-lg overflow-hidden">
+                          <img 
+                            src={bannerPreview} 
+                            alt="Banner preview" 
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="absolute -top-2 -right-2 w-6 h-6 p-0 rounded-full"
+                          onClick={removeBanner}
+                          disabled={isSubmitting}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto">
+                          <ImageDown className="w-6 h-6 text-gray-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">Upload Banner</p>
+                          <p className="text-xs text-gray-500">PNG, JPG up to 5MB</p>
+                        </div>
+                      </div>
+                    )}
+                    <input
+                      ref={bannerInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleBannerChange}
+                      className="hidden"
+                      id="banner-upload"
+                      disabled={isSubmitting}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => bannerInputRef.current?.click()}
+                      disabled={isSubmitting}
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      {bannerPreview ? 'Change Banner' : 'Select Banner'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Organization Details Form */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className={`block text-sm font-medium ${colorClasses.text.darkNavy} mb-2`}>
-                  Organization Name *
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
-                    errors.name 
-                      ? 'border-red-500 focus:ring-red-200' 
-                      : `${colorClasses.border.gray400} focus:ring-${colorClasses.border.gold} focus:border-${colorClasses.border.gold}`
-                  }`}
-                  placeholder="Enter organization name"
-                />
-                {errors.name && (
-                  <p className="text-red-500 text-sm mt-1">{errors.name}</p>
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Organization Name *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter organization name" {...field} disabled={isSubmitting} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )}
-              </div>
+              />
 
-              <div>
-                <label className={`block text-sm font-medium ${colorClasses.text.darkNavy} mb-2`}>
-                  Registration Number
-                </label>
-                <input
-                  type="text"
-                  name="registrationNumber"
-                  value={formData.registrationNumber}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${colorClasses.border.gray400} focus:ring-${colorClasses.border.gold} focus:border-${colorClasses.border.gold}`}
-                  placeholder="Enter registration number"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className={`block text-sm font-medium ${colorClasses.text.darkNavy} mb-2`}>
-                  Organization Type
-                </label>
-                <select
-                  name="organizationType"
-                  value={formData.organizationType}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${colorClasses.border.gray400} focus:ring-${colorClasses.border.gold} focus:border-${colorClasses.border.gold}`}
-                >
-                  {organizationTypeOptions.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className={`block text-sm font-medium ${colorClasses.text.darkNavy} mb-2`}>
-                  Industry
-                </label>
-                <input
-                  type="text"
-                  name="industry"
-                  value={formData.industry}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${colorClasses.border.gray400} focus:ring-${colorClasses.border.gold} focus:border-${colorClasses.border.gold}`}
-                  placeholder="Enter industry"
-                />
-              </div>
-            </div>
-
-            {/* Contact Information */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className={`block text-sm font-medium ${colorClasses.text.darkNavy} mb-2`}>
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${colorClasses.border.gray400} focus:ring-${colorClasses.border.gold} focus:border-${colorClasses.border.gold}`}
-                  placeholder="Enter phone number"
-                />
-              </div>
-
-              <div>
-                <label className={`block text-sm font-medium ${colorClasses.text.darkNavy} mb-2`}>
-                  Website
-                </label>
-                <input
-                  type="url"
-                  name="website"
-                  value={formData.website}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
-                    errors.website 
-                      ? 'border-red-500 focus:ring-red-200' 
-                      : `${colorClasses.border.gray400} focus:ring-${colorClasses.border.gold} focus:border-${colorClasses.border.gold}`
-                  }`}
-                  placeholder="https://example.com"
-                />
-                {errors.website && (
-                  <p className="text-red-500 text-sm mt-1">{errors.website}</p>
+              <FormField
+                control={form.control}
+                name="registrationNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Registration Number</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter registration number" {...field} disabled={isSubmitting} />
+                    </FormControl>
+                    <FormDescription>Official registration identifier</FormDescription>
+                    <FormMessage />
+                  </FormItem>
                 )}
-              </div>
-            </div>
+              />
 
-            <div>
-              <label className={`block text-sm font-medium ${colorClasses.text.darkNavy} mb-2`}>
-                Address
-              </label>
-              <input
-                type="text"
+              <FormField
+                control={form.control}
+                name="organizationType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Organization Type</FormLabel>
+                    <FormControl>
+                      <select
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition-colors"
+                        {...field}
+                        disabled={isSubmitting}
+                      >
+                        {organizationTypeOptions.map(option => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="industry"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Industry</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., Education, Healthcare, Environment" {...field} disabled={isSubmitting} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <Phone className="w-4 h-4" />
+                      Primary Phone
+                    </FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="+1 (555) 123-4567" 
+                        {...field}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          field.onChange(value);
+                        }}
+                        disabled={isSubmitting}
+                      />
+                    </FormControl>
+                    <FormDescription>Optional - include country code</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="secondaryPhone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <Phone className="w-4 h-4" />
+                      Secondary Phone
+                    </FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="+1 (555) 123-4567" 
+                        {...field}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          field.onChange(value);
+                        }}
+                        disabled={isSubmitting}
+                      />
+                    </FormControl>
+                    <FormDescription>Optional - alternative contact</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="website"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Website</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="https://yourorganization.org" 
+                        {...field}
+                        onChange={(e) => {
+                          let value = e.target.value;
+                          // Auto-prepend https:// if user doesn't provide protocol
+                          if (value && !value.startsWith('http://') && !value.startsWith('https://') && value.includes('.')) {
+                            value = 'https://' + value;
+                          }
+                          field.onChange(value);
+                        }}
+                        disabled={isSubmitting}
+                      />
+                    </FormControl>
+                    <FormDescription>Include http:// or https://</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
                 name="address"
-                value={formData.address}
-                onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${colorClasses.border.gray400} focus:ring-${colorClasses.border.gold} focus:border-${colorClasses.border.gold}`}
-                placeholder="Enter full address"
-              />
-            </div>
-
-            {/* Description & Mission */}
-            <div>
-              <label className={`block text-sm font-medium ${colorClasses.text.darkNavy} mb-2`}>
-                Organization Description
-              </label>
-              <textarea
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                rows={4}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
-                  errors.description 
-                    ? 'border-red-500 focus:ring-red-200' 
-                    : `${colorClasses.border.gray400} focus:ring-${colorClasses.border.gold} focus:border-${colorClasses.border.gold}`
-                }`}
-                placeholder="Describe your organization, its values, and what you do..."
-              />
-              <div className="flex justify-between text-sm mt-1">
-                {errors.description ? (
-                  <p className="text-red-500">{errors.description}</p>
-                ) : (
-                  <p className={`${colorClasses.text.gray400}`}>
-                    {formData.description?.length || 0}/1000 characters
-                  </p>
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Address</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter organization address" {...field} disabled={isSubmitting} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )}
-              </div>
-            </div>
+              />
 
-            <div>
-              <label className={`block text-sm font-medium ${colorClasses.text.darkNavy} mb-2`}>
-                Mission Statement
-              </label>
-              <textarea
+              <FormField
+                control={form.control}
                 name="mission"
-                value={formData.mission}
-                onChange={handleChange}
-                rows={3}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
-                  errors.mission 
-                    ? 'border-red-500 focus:ring-red-200' 
-                    : `${colorClasses.border.gray400} focus:ring-${colorClasses.border.gold} focus:border-${colorClasses.border.gold}`
-                }`}
-                placeholder="What is your organization's mission and purpose?"
-              />
-              <div className="flex justify-between text-sm mt-1">
-                {errors.mission ? (
-                  <p className="text-red-500">{errors.mission}</p>
-                ) : (
-                  <p className={`${colorClasses.text.gray400}`}>
-                    {formData.mission?.length || 0}/500 characters
-                  </p>
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel className="flex items-center gap-2">
+                      <Target className="w-4 h-4" />
+                      Mission Statement
+                    </FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="What is your organization's mission and purpose?"
+                        className="min-h-24"
+                        {...field}
+                        disabled={isSubmitting}
+                      />
+                    </FormControl>
+                    <FormDescription>Max 500 characters</FormDescription>
+                    <FormMessage />
+                  </FormItem>
                 )}
-              </div>
+              />
+
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Describe your organization, services, and impact..."
+                        className="min-h-32"
+                        {...field}
+                        disabled={isSubmitting}
+                      />
+                    </FormControl>
+                    <FormDescription>Max 1000 characters</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
-            {/* Submit Button */}
-            <div className="flex justify-end pt-6">
-              <button
-                type="submit"
-                disabled={loading}
-                className={`px-8 py-3 rounded-lg font-semibold text-white transition-all duration-200 ${
-                  loading 
-                    ? `${colorClasses.bg.gray400} cursor-not-allowed` 
-                    : `${colorClasses.bg.goldenMustard} hover:${colorClasses.bg.gold} transform hover:scale-105`
-                }`}
-              >
-                {loading ? (
-                  <span className="flex items-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    {mode === 'create' ? 'Creating...' : 'Updating...'}
-                  </span>
+            <div className="flex gap-4 pt-4 border-t">
+              <Button type="submit" disabled={isSubmitting || loading} className="min-w-32">
+                {isSubmitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Saving...
+                  </>
+                ) : organization ? (
+                  'Update Profile'
                 ) : (
-                  mode === 'create' ? 'Create Organization' : 'Update Profile'
+                  'Create Profile'
                 )}
-              </button>
+              </Button>
+              <Button type="button" variant="outline" onClick={handleCancel} disabled={isSubmitting}>
+                Cancel
+              </Button>
             </div>
           </form>
-        </div>
-      </div>
-    </div>
+        </Form>
+      </CardContent>
+    </Card>
   );
-};
+}

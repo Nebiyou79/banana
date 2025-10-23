@@ -1,7 +1,7 @@
 // src/services/tenderService.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import api from '@/lib/axios'; // FIXED IMPORT
-import { handleError, handleSuccess } from '@/lib/error-handler'; // ADD THIS IMPORT
+import api from '@/lib/axios';
+import { handleError, handleSuccess } from '@/lib/error-handler';
 
 export interface Budget {
   isNegotiable: boolean | undefined;
@@ -23,6 +23,7 @@ export interface Requirements {
 }
 
 export interface Tender {
+  isSaved: boolean;
   _id: string;
   title: string;
   description: string;
@@ -33,15 +34,24 @@ export interface Tender {
   duration: number;
   visibility: 'public' | 'invite_only';
   status: 'draft' | 'published' | 'open' | 'completed' | 'cancelled';
+  tenderType: 'company' | 'organization';
   invitedFreelancers: string[];
   requirements: Requirements;
-  company: {
-    description: any;
+  company?: {
     _id: string;
     name: string;
     logo: string;
     industry: string;
     verified: boolean;
+    description: string; // Make sure this exists
+  };
+  organization?: {
+    _id: string;
+    name: string;
+    logo: string;
+    industry: string;
+    verified: boolean;
+    description: string; // Make sure this exists
   };
   createdBy: string;
   proposals: any[];
@@ -64,6 +74,7 @@ export interface TenderFilters {
   status?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  tenderType?: 'company' | 'organization' | 'all'; // Add this
 }
 
 export interface CreateTenderData {
@@ -78,6 +89,7 @@ export interface CreateTenderData {
   invitedFreelancers?: string[];
   requirements?: Partial<Requirements>;
   status?: 'draft' | 'published';
+  tenderType?: 'company' | 'organization'; // Add this
 }
 
 export interface UpdateTenderData {
@@ -193,6 +205,27 @@ export const TenderService = {
       return response.data;
     } catch (error: any) {
       handleError(error, 'Failed to fetch company tenders');
+      return Promise.reject(error);
+    }
+  },
+
+  async getMyOrganizationTenders(): Promise<{ success: boolean; data: { tenders: Tender[] } }> {
+    try {
+      const response = await api.get('/tender/organization/my-tenders');
+      return response.data;
+    } catch (error: any) {
+      handleError(error, 'Failed to fetch organization tenders');
+      return Promise.reject(error);
+    }
+  },
+
+  // Get all user's tenders (both company and organization)
+  async getMyAllTenders(): Promise<{ success: boolean; data: { tenders: Tender[] } }> {
+    try {
+      const response = await api.get('/tender/user/my-tenders');
+      return response.data;
+    } catch (error: any) {
+      handleError(error, 'Failed to fetch user tenders');
       return Promise.reject(error);
     }
   },

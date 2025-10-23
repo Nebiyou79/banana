@@ -9,8 +9,8 @@ export default function PrivacyPolicy() {
   return (
     <>
       <Head>
-        <title>Privacy Policy | Banana Jobs</title>
-        <meta name="description" content="Banana Jobs Privacy Policy" />
+        <title>Privacy Policy | Banana</title>
+        <meta name="description" content="Banana Privacy Policy" />
       </Head>
 
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-8">
@@ -18,7 +18,7 @@ export default function PrivacyPolicy() {
           {/* Header */}
           <header className="flex justify-between items-center py-6 mb-4">
             <Link href="/" className="flex items-center text-2xl font-bold text-blue-700">
-              <Shield className="mr-2" /> Banana Jobs
+              <Shield className="mr-2" /> Banana
             </Link>
             <div className="flex space-x-4">
               <Link href="/login" className="px-4 py-2 text-blue-600 hover:text-blue-800 font-medium">
@@ -44,7 +44,7 @@ export default function PrivacyPolicy() {
             <p className="text-gray-500 mb-8">Last Updated: January 15, 2024</p>
 
             <p className="text-gray-700 mb-6">
-              At Banana Jobs, we respect your privacy and are committed to protecting your personal data. 
+              At Banana, we respect your privacy and are committed to protecting your personal data. 
               This privacy policy will inform you about how we look after your personal data when you 
               visit our platform and tell you about your privacy rights and how the law protects you.
             </p>
@@ -127,16 +127,16 @@ export default function PrivacyPolicy() {
                 If you have any questions about this Privacy Policy, please contact us at:
               </p>
               <p className="text-gray-700">
-                Email: <span className="text-blue-600">privacy@Banana Jobs.com</span>
+                Email: <span className="text-blue-600">privacy@Banana.com</span>
               </p>
               <p className="text-gray-700">
-                Address: Banana Jobs Inc., 123 Tech Park Drive, San Francisco, CA 94107, USA
+                Address: Banana Inc., 123 Tech Park Drive, San Francisco, CA 94107, USA
               </p>
             </div>
           </div>
 
           <footer className="text-center text-gray-500 text-sm">
-            <p>© 2024 Banana Jobs. All rights reserved.</p>
+            <p>© 2024 Banana. All rights reserved.</p>
           </footer>
         </div>
       </div>

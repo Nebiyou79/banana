@@ -99,8 +99,17 @@ app.use(cookieParser());
 
 // FIX: Serve static files from the correct path
 // Serve uploaded files directly from /uploads path
-app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
-console.log('Serving static files from:', path.join(process.cwd(), 'public', 'uploads'));
+app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads'), {
+  maxAge: '1d',
+  etag: true,
+  index: false
+}));
+
+// Add this for better error handling
+app.use('/uploads', (req, res, next) => {
+  res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+});console.log('Serving static files from:', path.join(process.cwd(), 'public', 'uploads'));
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -112,6 +121,7 @@ const searchRoutes = require('./routes/searchRoutes');
 const applicationRoutes = require('./routes/applicationRoutes');
 const proposalRoutes = require('./routes/proposalRoutes');
 const tenderRoutes = require('./routes/tenderRoutes');
+const organizationRoutes = require('./routes/organizationRoutes');
 
 // Import admin routes
 const adminRoutes = require('./routes/adminRoutes');
@@ -127,6 +137,9 @@ app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/applications', applicationRoutes);
 app.use('/api/v1/proposals', proposalRoutes);
 app.use('/api/v1/tender', tenderRoutes);
+app.use('/api/v1/tender', tenderRoutes);
+app.use('/api/v1/organization', organizationRoutes);
+
 
 // Admin routes
 app.use('/api/v1/admin', adminRoutes);

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { 
@@ -7,29 +8,40 @@ import {
   FileText, 
   Bookmark, 
   ArrowRight,
-  TrendingUp,
   CheckCircle,
   Loader2,
   GraduationCap,
   MapPin,
   Phone,
   Globe,
-  Mail
+  Mail,
+  Award,
 } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
 import { DashboardLayout } from "@/components/layout/DashboardLayout"
-import { useEffect, useState } from "react"
+import ProfileCompletionCard from "@/components/candidate/ProfileCompletionCard"
+import QuickStatsCard from "@/components/candidate/QuickStatsCard"
 import { candidateService, CandidateProfile } from "@/services/candidateService"
-import { colors, applyBgColor, applyColor } from "@/utils/color"
-import { applyBorderColor } from "@/utils/color"
+import { applyBgColor, applyColor, applyBorderColor } from "@/utils/color"
 import { useToast } from "@/hooks/use-toast"
-import { SleekButton } from "@/components/ui/SleekButton"
 
-export default function CandidateDashboard() {
+interface DashboardStats {
+  totalApplications: number;
+  profileViews: number;
+  savedJobs: number;
+  interviewsScheduled: number;
+  skillsCount: number;
+  experienceCount: number;
+  educationCount: number;
+  cvCount: number;
+  certificationsCount: number;
+}
+
+const CandidateDashboard: React.FC = () => {
   const { user } = useAuth()
   const [profile, setProfile] = useState<CandidateProfile | null>(null)
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<DashboardStats>({
     totalApplications: 0,
     profileViews: 0,
     savedJobs: 0,
@@ -37,7 +49,8 @@ export default function CandidateDashboard() {
     skillsCount: 0,
     experienceCount: 0,
     educationCount: 0,
-    cvCount: 0
+    cvCount: 0,
+    certificationsCount: 0
   })
   const [loading, setLoading] = useState(true)
   const { toast } = useToast()
@@ -50,7 +63,7 @@ export default function CandidateDashboard() {
         setProfile(profileData)
         
         // Calculate real statistics from profile data
-        const realStats = {
+        const realStats: DashboardStats = {
           totalApplications: profileData.experience?.length || 0,
           profileViews: Math.floor(Math.random() * 50) + 10,
           savedJobs: (profileData as any)?.savedJobs?.length || 0,
@@ -58,15 +71,17 @@ export default function CandidateDashboard() {
           skillsCount: profileData.skills?.length || 0,
           experienceCount: profileData.experience?.length || 0,
           educationCount: profileData.education?.length || 0,
-          cvCount: profileData.cvs?.length || 0
+          cvCount: profileData.cvs?.length || 0,
+          certificationsCount: (profileData as any)?.certifications?.length || 0
         }
         
         setStats(realStats)
       } catch (error: any) {
         console.error('Failed to load dashboard data:', error)
+        // Error is already handled by the service, just show generic message
         toast({
           title: 'Error',
-          description: error.message || 'Failed to load dashboard data',
+          description: 'Failed to load dashboard data',
           variant: 'destructive',
         })
       } finally {
@@ -86,7 +101,7 @@ export default function CandidateDashboard() {
       change: `+${stats.skillsCount}`,
       icon: CheckCircle,
       description: "Total skills",
-      color: colors.blue
+      color: '#3B82F6' // blue
     },
     {
       title: "Experience",
@@ -94,7 +109,7 @@ export default function CandidateDashboard() {
       change: `+${stats.experienceCount}`,
       icon: Briefcase,
       description: "Work experiences",
-      color: colors.teal
+      color: '#14B8A6' // teal
     },
     {
       title: "Education",
@@ -102,7 +117,15 @@ export default function CandidateDashboard() {
       change: `+${stats.educationCount}`,
       icon: GraduationCap,
       description: "Education entries",
-      color: colors.orange
+      color: '#F97316' // orange
+    },
+    {
+      title: "Certifications",
+      value: stats.certificationsCount.toString(),
+      change: `+${stats.certificationsCount}`,
+      icon: Award,
+      description: "Certifications & courses",
+      color: '#8B5CF6' // purple
     },
     {
       title: "CVs",
@@ -110,67 +133,77 @@ export default function CandidateDashboard() {
       change: `+${stats.cvCount}`,
       icon: FileText,
       description: "Uploaded resumes",
-      color: colors.gold
+      color: '#EAB308' // gold
     }
   ]
 
   const getStatusBadge = (status: string) => {
-    const statusConfig = {
-      none: { label: "Not Verified", variant: "destructive" as const, color: colors.orange },
-      partial: { label: "Partially Verified", variant: "default" as const, color: colors.gold },
-      full: { label: "Fully Verified", variant: "success" as const, color: colors.teal },
-    };
-    
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.none;
-    return (
-      <Badge variant={config.variant} style={applyBgColor(status === 'full' ? 'teal' : status === 'partial' ? 'gold' : 'orange')}>
-        {config.label}
-      </Badge>
-    )
-  }
+    try {
+      const statusConfig = {
+        none: { label: "Not Verified", variant: "destructive", color: "orange" },
+        partial: { label: "Partially Verified", variant: "default", color: "gold" },
+        full: { label: "Fully Verified", variant: "success", color: "teal" },
+      } as const;
+
+      const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.none;
+
+      return (
+        <Badge variant={config.variant} style={applyBgColor(config.color)}>
+          {config.label}
+        </Badge>
+      );
+    } catch (error) {
+      console.error('Status badge error:', error);
+      return (
+        <Badge variant="destructive" style={applyBgColor('orange')}>
+          Unknown
+        </Badge>
+      );
+    }
+  };
 
   const calculateProfileCompletion = (profile: CandidateProfile | null) => {
-    if (!profile) return 0
-    
-    const totalPoints = 100
-    let completedPoints = 0
+    try {
+      if (!profile) return 0
+      
+      const totalPoints = 100
+      let completedPoints = 0
 
-    // Basic info (20 points)
-    if (profile.name) completedPoints += 10
-    if (profile.email) completedPoints += 10
+      // Basic info (20 points)
+      if (profile.name) completedPoints += 10
+      if (profile.email) completedPoints += 10
 
-    // Profile details (30 points)
-    if (profile.bio) completedPoints += 10
-    if (profile.location) completedPoints += 10
-    if (profile.phone) completedPoints += 5
-    if (profile.website) completedPoints += 5
+      // Profile details (30 points)
+      if (profile.bio) completedPoints += 10
+      if (profile.location) completedPoints += 10
+      if (profile.phone) completedPoints += 5
+      if (profile.website) completedPoints += 5
 
-    // Professional info (50 points)
-    if ((profile.skills?.length || 0) > 0) completedPoints += 15
-    if ((profile.experience?.length || 0) > 0) completedPoints += 15
-    if ((profile.education?.length || 0) > 0) completedPoints += 10
-    if ((profile.cvs?.length || 0) > 0) completedPoints += 10
+      // Professional info (50 points)
+      if ((profile.skills?.length || 0) > 0) completedPoints += 15
+      if ((profile.experience?.length || 0) > 0) completedPoints += 15
+      if ((profile.education?.length || 0) > 0) completedPoints += 10
+      if ((profile.cvs?.length || 0) > 0) completedPoints += 10
 
-    return Math.min(Math.round((completedPoints / totalPoints) * 100), 100)
+      return Math.min(Math.round((completedPoints / totalPoints) * 100), 100)
+    } catch (error) {
+      console.error('Profile completion calculation error:', error);
+      return 0;
+    }
   }
 
   const profileCompletion = calculateProfileCompletion(profile)
 
-  const getCompletionStatus = () => {
-    if (profileCompletion >= 90) return { label: "Excellent", color: "teal" }
-    if (profileCompletion >= 70) return { label: "Good", color: "gold" }
-    if (profileCompletion >= 50) return { label: "Average", color: "orange" }
-    return { label: "Needs Work", color: "orange" }
-  }
-
-  const completionStatus = getCompletionStatus()
-
-  // Safe profile data accessors
-  const profileSkills = profile?.skills || []
-  const profileExperience = profile?.experience || []
-  const profileEducation = profile?.education || []
-  const profileCvs = profile?.cvs || []
-  const primaryCv = profileCvs.find(cv => cv.isPrimary)
+  const completionItems = [
+    { label: "Basic Information", completed: !!(profile?.name && profile?.email), weight: 20, route: "/dashboard/candidate/profile" },
+    { label: "Profile Bio", completed: !!profile?.bio, weight: 10, route: "/dashboard/candidate/profile" },
+    { label: "Contact Info", completed: !!(profile?.location || profile?.phone), weight: 15, route: "/dashboard/candidate/profile" },
+    { label: "Skills", completed: (profile?.skills?.length || 0) > 0, weight: 15, route: "/dashboard/candidate/profile" },
+    { label: "Work Experience", completed: (profile?.experience?.length || 0) > 0, weight: 15, route: "/dashboard/candidate/profile" },
+    { label: "Education", completed: (profile?.education?.length || 0) > 0, weight: 10, route: "/dashboard/candidate/profile" },
+    { label: "Certifications", completed: ((profile as any)?.certifications?.length || 0) > 0, weight: 5, route: "/dashboard/candidate/profile" },
+    { label: "CV/Resume", completed: (profile?.cvs?.length || 0) > 0, weight: 10, route: "/dashboard/candidate/profile" },
+  ]
 
   if (loading) {
     return (
@@ -183,41 +216,48 @@ export default function CandidateDashboard() {
     )
   }
 
+  const profileSkills = profile?.skills || []
+  const profileExperience = profile?.experience || []
+  const profileEducation = profile?.education || []
+  const profileCvs = profile?.cvs || []
+  const profileCertifications = (profile as any)?.certifications || []
+  const primaryCv = profileCvs.find(cv => cv.isPrimary)
+
   return (
     <DashboardLayout requiredRole="candidate">
       <div className="space-y-8">
         {/* Welcome Header with Real Profile Data */}
-        <div className="bg-white rounded-lg p-6 shadow-md">
+        <div className="bg-white rounded-lg p-6 shadow-md border border-gray-200">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-3xl font-bold" style={applyColor('darkNavy')}>
-                Welcome back, {user?.name}!
+                Welcome back, {user?.name || 'Candidate'}!
               </h1>
-              <p className="text-gray-600 mt-2">
-                {profile?.bio || "Complete your profile to get better job matches"}
+              <p className="text-gray-600 mt-2 max-w-2xl">
+                {profile?.bio || "Complete your profile to get better job matches and increase your chances of getting hired."}
               </p>
               
               {/* Profile Quick Info */}
               <div className="flex flex-wrap gap-4 mt-4">
                 {profile?.location && (
-                  <div className="flex items-center text-sm text-gray-600">
+                  <div className="flex items-center text-sm text-gray-600 bg-gray-50 px-3 py-1.5 rounded-lg">
                     <MapPin className="h-4 w-4 mr-1" />
                     {profile.location}
                   </div>
                 )}
                 {profile?.phone && (
-                  <div className="flex items-center text-sm text-gray-600">
+                  <div className="flex items-center text-sm text-gray-600 bg-gray-50 px-3 py-1.5 rounded-lg">
                     <Phone className="h-4 w-4 mr-1" />
                     {profile.phone}
                   </div>
                 )}
                 {profile?.website && (
-                  <div className="flex items-center text-sm text-gray-600">
+                  <div className="flex items-center text-sm text-gray-600 bg-gray-50 px-3 py-1.5 rounded-lg">
                     <Globe className="h-4 w-4 mr-1" />
                     {profile.website}
                   </div>
                 )}
-                <div className="flex items-center text-sm text-gray-600">
+                <div className="flex items-center text-sm text-gray-600 bg-gray-50 px-3 py-1.5 rounded-lg">
                   <Mail className="h-4 w-4 mr-1" />
                   {user?.email}
                 </div>
@@ -225,37 +265,18 @@ export default function CandidateDashboard() {
             </div>
             
             <div className="mt-4 md:mt-0">
-              {getStatusBadge(user?.verificationStatus || "none")}
+              {getStatusBadge(profile?.verificationStatus || "none")}
             </div>
           </div>
         </div>
 
         {/* Stats Overview with Real Data */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {dashboardStats.map((stat, index) => (
-            <Card key={index} className="border-0 shadow-md hover:shadow-lg transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium" style={applyColor('darkNavy')}>
-                  {stat.title}
-                </CardTitle>
-                <stat.icon className="h-4 w-4" style={{ color: stat.color }} />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold" style={applyColor('darkNavy')}>
-                  {stat.value}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  <span style={applyColor('teal')}>{stat.change}</span> {stat.description}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <QuickStatsCard stats={dashboardStats} />
 
         {/* Profile Overview and Quick Actions */}
         <div className="grid gap-6 md:grid-cols-2">
           {/* Quick Actions */}
-          <Card>
+          <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle style={applyColor('darkNavy')}>Quick Actions</CardTitle>
               <CardDescription>
@@ -263,93 +284,46 @@ export default function CandidateDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <SleekButton className="w-full justify-start" style={applyBgColor('gold')}>
-                <Link href="/dashboard/candidate/profile" className="flex items-center w-full">
-                  <User className="mr-2 h-4 w-4" />
+              <Link href="/dashboard/candidate/profile" className="block">
+                <button className="w-full flex items-center justify-start px-4 py-3 text-white rounded-xl font-medium transition-all hover:shadow-lg" style={applyBgColor('gold')}>
+                  <User className="mr-3 h-5 w-5" />
                   Edit Profile
-                </Link>
-              </SleekButton>
+                </button>
+              </Link>
               
-              <SleekButton variant="outline" className="w-full justify-start" style={applyBorderColor('gold')}>
-                <Link href="/dashboard/candidate/jobs" className="flex items-center w-full">
-                  <Briefcase className="mr-2 h-4 w-4" />
+              <Link href="/dashboard/candidate/jobs" className="block">
+                <button className="w-full flex items-center justify-start px-4 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-all" style={applyBorderColor('gold')}>
+                  <Briefcase className="mr-3 h-5 w-5" />
                   Browse Jobs
-                </Link>
-              </SleekButton>
+                </button>
+              </Link>
               
-              <SleekButton variant="outline" className="w-full justify-start" style={applyBorderColor('gold')}>
-                <Link href="/dashboard/candidate/applications" className="flex items-center w-full">
-                  <FileText className="mr-2 h-4 w-4" />
+              <Link href="/dashboard/candidate/applications" className="block">
+                <button className="w-full flex items-center justify-start px-4 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-all" style={applyBorderColor('gold')}>
+                  <FileText className="mr-3 h-5 w-5" />
                   View Applications
-                </Link>
-              </SleekButton>
+                </button>
+              </Link>
               
-              <SleekButton variant="outline" className="w-full justify-start" style={applyBorderColor('gold')}>
-                <Link href="/dashboard/candidate/verification" className="flex items-center w-full">
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Verify Account
-                </Link>
-              </SleekButton>
+              <Link href="/dashboard/candidate/saved-jobs" className="block">
+                <button className="w-full flex items-center justify-start px-4 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-all" style={applyBorderColor('gold')}>
+                  <Bookmark className="mr-3 h-5 w-5" />
+                  Saved Jobs
+                </button>
+              </Link>
             </CardContent>
           </Card>
 
           {/* Profile Completion */}
-          <Card>
-            <CardHeader>
-              <CardTitle style={applyColor('darkNavy')}>Profile Completion</CardTitle>
-              <CardDescription>
-                {completionStatus.label} - {profileCompletion}% Complete
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {/* Progress Bar */}
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div 
-                    className="h-3 rounded-full transition-all duration-500" 
-                    style={{ 
-                      width: `${profileCompletion}%`,
-                      backgroundColor: colors[completionStatus.color as keyof typeof colors]
-                    }}
-                  ></div>
-                </div>
-
-                <div className="space-y-3">
-                  {[
-                    { label: "Basic Information", completed: !!(profile?.name && profile?.email), weight: 20 },
-                    { label: "Profile Bio", completed: !!profile?.bio, weight: 10 },
-                    { label: "Contact Info", completed: !!(profile?.location || profile?.phone), weight: 15 },
-                    { label: "Skills", completed: profileSkills.length > 0, weight: 15 },
-                    { label: "Work Experience", completed: profileExperience.length > 0, weight: 15 },
-                    { label: "Education", completed: profileEducation.length > 0, weight: 10 },
-                    { label: "CV/Resume", completed: profileCvs.length > 0, weight: 15 },
-                  ].map((item, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm font-medium">{item.label}</span>
-                      <Badge 
-                        variant="outline" 
-                        className={item.completed ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-600"}
-                      >
-                        {item.completed ? "✓ Complete" : "✗ Missing"}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-                
-                <SleekButton className="w-full" style={applyBgColor('gold')}>
-                  <Link href="/dashboard/candidate/profile" className="flex items-center justify-center w-full">
-                    Improve Profile
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </SleekButton>
-              </div>
-            </CardContent>
-          </Card>
+          <ProfileCompletionCard 
+            completion={profileCompletion}
+            items={completionItems}
+          />
         </div>
 
         {/* Skills Overview */}
         {profileSkills.length > 0 && (
-          <Card>
+          <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle style={applyColor('darkNavy')}>Your Skills</CardTitle>
               <CardDescription>
@@ -359,7 +333,7 @@ export default function CandidateDashboard() {
             <CardContent>
               <div className="flex flex-wrap gap-2">
                 {profileSkills.slice(0, 15).map((skill, index) => (
-                  <Badge key={index} variant="secondary" style={applyBgColor('gold')}>
+                  <Badge key={`skill-${index}-${skill}`} variant="secondary" style={applyBgColor('gold')}>
                     {skill}
                   </Badge>
                 ))}
@@ -373,11 +347,11 @@ export default function CandidateDashboard() {
           </Card>
         )}
 
-        {/* Recent Experience & Education Summary */}
-        <div className="grid gap-6 md:grid-cols-2">
+        {/* Recent Experience, Education & Certifications Summary */}
+        <div className="grid gap-6 md:grid-cols-3">
           {/* Recent Experience */}
           {profileExperience.length > 0 && (
-            <Card>
+            <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
               <CardHeader>
                 <CardTitle style={applyColor('darkNavy')}>Recent Experience</CardTitle>
                 <CardDescription>
@@ -387,8 +361,8 @@ export default function CandidateDashboard() {
               <CardContent>
                 <div className="space-y-4">
                   {profileExperience.slice(0, 2).map((exp, index) => (
-                    <div key={index} className="border-l-4 border-gold pl-4 py-1">
-                      <p className="font-semibold">{exp.position}</p>
+                    <div key={`experience-${index}-${exp.company}`} className="border-l-4 border-gold pl-4 py-1">
+                      <p className="font-semibold text-gray-900">{exp.position}</p>
                       <p className="text-sm text-gray-600">{exp.company}</p>
                       <p className="text-xs text-gray-500">
                         {new Date(exp.startDate).toLocaleDateString()} - 
@@ -397,12 +371,12 @@ export default function CandidateDashboard() {
                     </div>
                   ))}
                   {profileExperience.length > 2 && (
-                    <SleekButton variant="outline" className="w-full" style={applyBorderColor('gold')}>
-                      <Link href="/dashboard/candidate/profile" className="flex items-center justify-center w-full">
+                    <Link href="/dashboard/candidate/profile">
+                      <button className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all" style={applyBorderColor('gold')}>
                         View All {profileExperience.length} Experiences
                         <ArrowRight className="ml-2 h-4 w-4" />
-                      </Link>
-                    </SleekButton>
+                      </button>
+                    </Link>
                   )}
                 </div>
               </CardContent>
@@ -411,7 +385,7 @@ export default function CandidateDashboard() {
 
           {/* Education Summary */}
           {profileEducation.length > 0 && (
-            <Card>
+            <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
               <CardHeader>
                 <CardTitle style={applyColor('darkNavy')}>Education</CardTitle>
                 <CardDescription>
@@ -421,8 +395,8 @@ export default function CandidateDashboard() {
               <CardContent>
                 <div className="space-y-4">
                   {profileEducation.slice(0, 2).map((edu, index) => (
-                    <div key={index} className="border-l-4 border-teal pl-4 py-1">
-                      <p className="font-semibold">{edu.degree}</p>
+                    <div key={`education-${index}-${edu.institution}`} className="border-l-4 border-teal pl-4 py-1">
+                      <p className="font-semibold text-gray-900">{edu.degree}</p>
                       <p className="text-sm text-gray-600">{edu.institution}</p>
                       <p className="text-xs text-gray-500">
                         {new Date(edu.startDate).toLocaleDateString()} - 
@@ -431,12 +405,49 @@ export default function CandidateDashboard() {
                     </div>
                   ))}
                   {profileEducation.length > 2 && (
-                    <SleekButton variant="outline" className="w-full" style={applyBorderColor('teal')}>
-                      <Link href="/dashboard/candidate/profile" className="flex items-center justify-center w-full">
+                    <Link href="/dashboard/candidate/profile">
+                      <button className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all" style={applyBorderColor('teal')}>
                         View All {profileEducation.length} Education Entries
                         <ArrowRight className="ml-2 h-4 w-4" />
-                      </Link>
-                    </SleekButton>
+                      </button>
+                    </Link>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Certifications Summary */}
+          {profileCertifications.length > 0 && (
+            <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <CardTitle style={applyColor('darkNavy')}>Certifications</CardTitle>
+                <CardDescription>
+                  Your certifications & courses
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {profileCertifications.slice(0, 2).map((cert: any, index: number) => (
+                    <div key={`certification-${index}-${cert.name}`} className="border-l-4 border-purple pl-4 py-1">
+                      <p className="font-semibold text-gray-900">{cert.name}</p>
+                      <p className="text-sm text-gray-600">{cert.issuer}</p>
+                      <p className="text-xs text-gray-500">
+                        Issued: {new Date(cert.issueDate).toLocaleDateString()}
+                        {cert.expiryDate && ` • Expires: ${new Date(cert.expiryDate).toLocaleDateString()}`}
+                      </p>
+                      {cert.credentialId && (
+                        <p className="text-xs text-gray-500">ID: {cert.credentialId}</p>
+                      )}
+                    </div>
+                  ))}
+                  {profileCertifications.length > 2 && (
+                    <Link href="/dashboard/candidate/profile">
+                      <button className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all" style={applyBorderColor('blue')}>
+                        View All {profileCertifications.length} Certifications
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </button>
+                    </Link>
                   )}
                 </div>
               </CardContent>
@@ -445,7 +456,7 @@ export default function CandidateDashboard() {
         </div>
 
         {/* CV/Resume Status */}
-        <Card>
+        <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
           <CardHeader>
             <CardTitle style={applyColor('darkNavy')}>CV/Resume Status</CardTitle>
             <CardDescription>
@@ -453,11 +464,11 @@ export default function CandidateDashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
               <div className="flex items-center space-x-3">
                 <FileText className="h-8 w-8 text-blue-600" />
                 <div>
-                  <p className="font-medium">
+                  <p className="font-medium text-gray-900">
                     {profileCvs.length > 0 ? `${profileCvs.length} CV(s) Uploaded` : 'No CVs Uploaded'}
                   </p>
                   <p className="text-sm text-gray-600">
@@ -468,16 +479,54 @@ export default function CandidateDashboard() {
                   </p>
                 </div>
               </div>
-              <SleekButton style={applyBgColor('gold')}>
-                <Link href="/dashboard/candidate/profile" className="flex items-center">
+              <Link href="/dashboard/candidate/profile">
+                <button className="px-6 py-3 text-white rounded-lg font-medium transition-all hover:shadow-lg" style={applyBgColor('gold')}>
                   {profileCvs.length > 0 ? 'Manage CVs' : 'Upload CV'}
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </SleekButton>
+                  <ArrowRight className="ml-2 h-4 w-4 inline" />
+                </button>
+              </Link>
             </div>
           </CardContent>
         </Card>
+
+        {/* Certifications Status */}
+        {profileCertifications.length > 0 && (
+          <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <CardTitle style={applyColor('darkNavy')}>Certifications & Courses</CardTitle>
+              <CardDescription>
+                Your professional certifications and training
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center space-x-3">
+                  <Award className="h-8 w-8 text-purple-600" />
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {profileCertifications.length} Certification(s) Added
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {profileCertifications.length === 1 
+                        ? '1 certification in your profile'
+                        : `${profileCertifications.length} certifications in your profile`
+                      }
+                    </p>
+                  </div>
+                </div>
+                <Link href="/dashboard/candidate/profile">
+                  <button className="px-6 py-3 text-white rounded-lg font-medium transition-all hover:shadow-lg" style={applyBgColor('teal')}>
+                    Manage Certifications
+                    <ArrowRight className="ml-2 h-4 w-4 inline" />
+                  </button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </DashboardLayout>
   )
 }
+
+export default CandidateDashboard

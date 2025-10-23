@@ -1,4 +1,5 @@
-// src/utils/errorHandler.ts
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// src/utils/errorHandler.ts - UPDATED TO USE TOAST SYSTEM
 import { toast } from '@/hooks/use-toast';
 
 export interface ApiError {
@@ -13,6 +14,10 @@ export interface ApiError {
   code?: string;
 }
 
+/**
+ * @deprecated Use handleApiError from '@/utils/apiErrorHandler' instead
+ * Legacy error handler - maintained for backward compatibility
+ */
 export const handleApiError = (error: ApiError, defaultMessage = 'An unexpected error occurred') => {
   console.error('API Error:', error);
   
@@ -21,7 +26,7 @@ export const handleApiError = (error: ApiError, defaultMessage = 'An unexpected 
     toast({
       title: 'Connection Error',
       description: 'Cannot connect to server. Please check your internet connection.',
-      style: { backgroundColor: '#F1BB03', color: '#0A2540', border: '1px solid #0A2540' },
+      variant: 'warning',
     });
     return;
   }
@@ -31,7 +36,7 @@ export const handleApiError = (error: ApiError, defaultMessage = 'An unexpected 
     toast({
       title: 'Timeout',
       description: 'Request took too long. Please try again.',
-      style: { backgroundColor: '#F1BB03', color: '#0A2540', border: '1px solid #0A2540' },
+      variant: 'warning',
     });
     return;
   }
@@ -42,8 +47,8 @@ export const handleApiError = (error: ApiError, defaultMessage = 'An unexpected 
     if (fieldErrors.length > 0) {
       toast({
         title: 'Validation Error',
-        description: fieldErrors[0],
-        style: { backgroundColor: '#F1BB03', color: '#0A2540', border: '1px solid #0A2540' },
+        description: fieldErrors[0] as string,
+        variant: 'warning',
       });
       return;
     }
@@ -54,7 +59,7 @@ export const handleApiError = (error: ApiError, defaultMessage = 'An unexpected 
     toast({
       title: 'Error',
       description: error.response.data.message,
-      style: { backgroundColor: '#F1BB03', color: '#0A2540', border: '1px solid #0A2540' },
+      variant: 'destructive',
     });
     return;
   }
@@ -64,7 +69,7 @@ export const handleApiError = (error: ApiError, defaultMessage = 'An unexpected 
     toast({
       title: 'Error',
       description: error.message,
-      style: { backgroundColor: '#F1BB03', color: '#0A2540', border: '1px solid #0A2540' },
+      variant: 'destructive',
     });
     return;
   }
@@ -73,7 +78,7 @@ export const handleApiError = (error: ApiError, defaultMessage = 'An unexpected 
   toast({
     title: 'Error',
     description: defaultMessage,
-    style: { backgroundColor: '#F1BB03', color: '#0A2540', border: '1px solid #0A2540' },
+    variant: 'destructive',
   });
 };
 
@@ -86,4 +91,32 @@ export const handleAuthError = (error: ApiError, operation: 'login' | 'register'
   };
   
   handleApiError(error, defaultMessages[operation]);
+};
+
+/**
+ * Legacy success handler - maintained for backward compatibility
+ * @deprecated Use handleApiSuccess from '@/utils/apiErrorHandler' instead
+ */
+export const handleSuccess = (message: string, title: string = 'Success') => {
+  toast({
+    title,
+    description: message,
+    variant: 'success',
+  });
+};
+
+/**
+ * Legacy error handler - maintained for backward compatibility
+ * @deprecated Use handleApiError from '@/utils/apiErrorHandler' instead
+ */
+export const handleError = (error: any, context?: string) => {
+  console.error(`[ErrorHandler${context ? ` - ${context}` : ''}]`, error);
+  
+  const apiError: ApiError = {
+    message: error?.message || 'An unexpected error occurred',
+    code: error?.code,
+    response: error?.response,
+  };
+  
+  handleApiError(apiError, context || 'Operation failed');
 };

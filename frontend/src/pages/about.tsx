@@ -15,7 +15,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 /**
  * AboutUsPage
  *
- * Full About page for Banana Jobs including:
+ * Full About page for Banana including:
  * - Detailed company description
  * - Services breakdown for Candidates, Freelancers, Companies, Organizations (and Admin)
  * - Project Design & Specification Outline (roles, phases, data models)
@@ -82,7 +82,7 @@ export default function AboutUsPage(): JSX.Element {
         <div className="absolute inset-0 bg-black/20"></div>
         <div className="container mx-auto px-6 relative z-10">
           <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-5xl font-extrabold mb-4">Banana Jobs</h1>
+            <h1 className="text-5xl font-extrabold mb-4">Banana</h1>
             <p className="text-xl mb-8">
               Democratizing access to meaningful work — connecting candidates, freelancers, companies and organizations
               through intelligent matching, powerful tools, and exceptional service.
@@ -112,9 +112,9 @@ export default function AboutUsPage(): JSX.Element {
               <Star className="w-8 h-8 text-yellow-600" />
             </div>
             <div>
-              <h2 className="text-3xl font-bold mb-2">Who we are — Banana Jobs</h2>
+              <h2 className="text-3xl font-bold mb-2">Who we are — Banana</h2>
               <p className="text-gray-700 mb-4">
-                Banana Jobs is a talent technology platform founded to make hiring fairer, faster, and more transparent.
+                Banana is a talent technology platform founded to make hiring fairer, faster, and more transparent.
                 We serve four primary user groups — Candidates, Freelancers, Companies, and Organizations — while the Admin
                 role enables platform governance. Our platform pairs machine learning matching with human-centered UX and
                 enterprise-grade controls to deliver measurable outcomes: faster hires, higher retention, and stronger
@@ -565,7 +565,7 @@ export default function AboutUsPage(): JSX.Element {
       <footer className="bg-slate-900 text-slate-200 py-6">
         <div className="container mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
-            <div className="text-xl font-bold">Banana Jobs</div>
+            <div className="text-xl font-bold">Banana</div>
             <div className="text-sm text-slate-400">© {new Date().getFullYear()}</div>
           </div>
           <div className="text-sm text-slate-400">

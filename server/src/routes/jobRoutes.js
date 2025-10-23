@@ -1,4 +1,4 @@
-// routes/jobRoutes.js - UPDATED
+// routes/jobRoutes.js - FIXED SAVE/UNSAVE ROUTES
 const express = require('express');
 const router = express.Router();
 const {
@@ -9,17 +9,22 @@ const {
   updateJob,
   deleteJob,
   getCategories,
-  // Add the new organization methods
+  // Organization methods
   getOrganizationJobs,
   createOrganizationJob,
   updateOrganizationJob,
-  deleteOrganizationJob
+  deleteOrganizationJob,
+  // Candidate Methods
+  getJobsForCandidate,
+  saveJob,
+  unsaveJob,
+  getSavedJobs
 } = require('../controllers/jobController');
 const { verifyToken } = require('../middleware/authMiddleware');
 const { restrictTo } = require('../middleware/roleMiddleware');
 const { body } = require('express-validator');
 
-// Validation for CREATE (strict)
+// Enhanced Validation for CREATE
 const createJobValidation = [
   body('title')
     .isLength({ min: 5, max: 100 })
@@ -31,20 +36,32 @@ const createJobValidation = [
     .notEmpty()
     .withMessage('Category is required'),
   body('type')
-    .optional()
     .isIn(['full-time', 'part-time', 'contract', 'internship', 'temporary', 'volunteer', 'remote', 'hybrid'])
     .withMessage('Invalid job type'),
   body('experienceLevel')
-    .optional()
     .isIn(['fresh-graduate', 'entry-level', 'mid-level', 'senior-level', 'managerial', 'director', 'executive'])
     .withMessage('Invalid experience level'),
+  body('educationLevel')
+    .optional()
+    .isIn(['high-school', 'diploma', 'bachelors', 'masters', 'phd', 'none-required'])
+    .withMessage('Invalid education level'),
+  body('location.region')
+    .isIn([
+      'addis-ababa', 'afar', 'amhara', 'benishangul-gumuz', 'dire-dawa',
+      'gambela', 'harari', 'oromia', 'sidama', 'snnpr', 'somali', 
+      'south-west-ethiopia', 'tigray', 'international'
+    ])
+    .withMessage('Invalid region'),
   body('salary.currency')
     .optional()
     .isIn(['ETB', 'USD', 'EUR', 'GBP'])
-    .withMessage('Invalid currency')
+    .withMessage('Invalid currency'),
+  body('applicationDeadline')
+    .isISO8601()
+    .withMessage('Invalid application deadline date')
 ];
 
-// Validation for UPDATE (optional - only validate if field is provided)
+// Enhanced Validation for UPDATE
 const updateJobValidation = [
   body('title')
     .optional()
@@ -66,10 +83,26 @@ const updateJobValidation = [
     .optional()
     .isIn(['fresh-graduate', 'entry-level', 'mid-level', 'senior-level', 'managerial', 'director', 'executive'])
     .withMessage('Invalid experience level'),
+  body('educationLevel')
+    .optional()
+    .isIn(['high-school', 'diploma', 'bachelors', 'masters', 'phd', 'none-required'])
+    .withMessage('Invalid education level'),
+  body('location.region')
+    .optional()
+    .isIn([
+      'addis-ababa', 'afar', 'amhara', 'benishangul-gumuz', 'dire-dawa',
+      'gambela', 'harari', 'oromia', 'sidama', 'snnpr', 'somali', 
+      'south-west-ethiopia', 'tigray', 'international'
+    ])
+    .withMessage('Invalid region'),
   body('salary.currency')
     .optional()
     .isIn(['ETB', 'USD', 'EUR', 'GBP'])
-    .withMessage('Invalid currency')
+    .withMessage('Invalid currency'),
+  body('applicationDeadline')
+    .optional()
+    .isISO8601()
+    .withMessage('Invalid application deadline date')
 ];
 
 // Public routes
@@ -91,5 +124,11 @@ router.get('/organization/my-jobs', restrictTo('organization', 'admin'), getOrga
 router.post('/organization', restrictTo('organization', 'admin'), createJobValidation, createOrganizationJob);
 router.put('/organization/:id', restrictTo('organization', 'admin'), updateJobValidation, updateOrganizationJob);
 router.delete('/organization/:id', restrictTo('organization', 'admin'), deleteOrganizationJob);
+
+// FIXED: Candidate routes - CORRECTED SAVE/UNSAVE PATHS
+router.get('/candidate/jobs', verifyToken, restrictTo('candidate'), getJobsForCandidate);
+router.post('/:jobId/save', verifyToken, restrictTo('candidate'), saveJob); // FIXED: Removed '/job/' prefix
+router.post('/:jobId/unsave', verifyToken, restrictTo('candidate'), unsaveJob); // FIXED: Removed '/job/' prefix
+router.get('/saved/jobs', verifyToken, restrictTo('candidate'), getSavedJobs); // FIXED: Added '/jobs' for consistency
 
 module.exports = router;

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -12,14 +12,14 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/Form';
-import { Badge } from '@/components/ui/Badge';
-import { Loader2, Save, Upload, FileText, Download, X, Plus, Trash2, Briefcase } from 'lucide-react';
+import { Loader2, Save, Plus, Trash2, Briefcase, GraduationCap, Award } from 'lucide-react';
 import { candidateService, CV } from '@/services/candidateService';
 import { useAuth } from '@/contexts/AuthContext';
-import Button from '@/components/forms/Button';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import CVUploadCard from '@/components/candidate/CVUploadCard';
+import SkillsInput from '@/components/candidate/SkillsInput';
 import { applyBgColor, applyColor, applyBorderColor } from '@/utils/color';
-import { toast } from '@/utils/Toast';
+import { useToast } from '@/hooks/use-toast';
 
 interface ProfileFormData {
   skills: string[];
@@ -45,19 +45,49 @@ interface ProfileFormData {
     description?: string;
     skills: string[];
   }>;
+  certifications: Array<{
+    name: string;
+    issuer: string;
+    issueDate: string;
+    expiryDate?: string;
+    credentialId?: string;
+    credentialUrl?: string;
+    description?: string;
+  }>;
 }
 
-export default function CandidateProfilePage() {
-  console.log('[CandidateProfilePage] Render start');
+// Date helper functions
+const formatDateForInput = (dateString: string | undefined): string => {
+  if (!dateString) return '';
+  
+  try {
+    const date = new Date(dateString);
+    return date.toISOString().split('T')[0];
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return '';
+  }
+};
 
+const formatDateForBackend = (dateString: string): string => {
+  if (!dateString) return '';
+  
+  try {
+    const date = new Date(dateString);
+    return date.toISOString();
+  } catch (error) {
+    console.error('Error parsing date:', error);
+    return dateString;
+  }
+};
+
+const CandidateProfilePage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [cvs, setCvs] = useState<CV[]>([]);
-  const [dragOver, setDragOver] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const { user } = useAuth();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   const form = useForm<ProfileFormData>({
     defaultValues: {
@@ -67,17 +97,50 @@ export default function CandidateProfilePage() {
       phone: '',
       website: '',
       education: [],
-      experience: []
+      experience: [],
+      certifications: []
     }
   });
 
+  // Date validation helper
+  const validateDate = (startDate: string, endDate: string | undefined, isCurrent: boolean, fieldName: string = '') => {
+    try {
+      const errors: string[] = [];
+      const now = new Date();
+      
+      const start = startDate ? new Date(startDate) : null;
+      const end = endDate ? new Date(endDate) : null;
+
+      if (!start) {
+        errors.push(`${fieldName} start date is required`);
+        return errors;
+      }
+
+      if (start > now) {
+        errors.push(`${fieldName} start date cannot be in the future`);
+      }
+
+      if (end) {
+        if (end < start) {
+          errors.push(`${fieldName} end date must be after start date`);
+        }
+        if (end > now && !isCurrent) {
+          errors.push(`${fieldName} end date cannot be in the future for completed entries`);
+        }
+      }
+
+      return errors;
+    } catch (error) {
+      console.error('Date validation error:', error);
+      return ['Invalid date format'];
+    }
+  };
+
   useEffect(() => {
-    console.log('[CandidateProfilePage] useEffect (loadProfile), user:', user);
     const loadProfile = async () => {
       try {
         setIsLoading(true);
         const profile = await candidateService.getProfile();
-        console.log('Loaded profile:', profile); // Debug log
         setCvs(profile.cvs || []);
         const formData: ProfileFormData = {
           skills: profile.skills || [],
@@ -85,150 +148,118 @@ export default function CandidateProfilePage() {
           location: profile.location || '',
           phone: profile.phone || '',
           website: profile.website || '',
-          education: profile.education || [],
-          experience: profile.experience || []
+          education: (profile.education || []).map(edu => ({
+            ...edu,
+            startDate: formatDateForInput(edu.startDate),
+            endDate: formatDateForInput(edu.endDate)
+          })),
+          experience: (profile.experience || []).map(exp => ({
+            ...exp,
+            startDate: formatDateForInput(exp.startDate),
+            endDate: formatDateForInput(exp.endDate)
+          })),
+          certifications: (profile.certifications || []).map(cert => ({
+            ...cert,
+            issueDate: formatDateForInput(cert.issueDate),
+            expiryDate: formatDateForInput(cert.expiryDate)
+          }))
         };
         form.reset(formData);
-        console.log('[CandidateProfilePage] Form reset with:', formData);
       } catch (error: any) {
         console.error('Failed to load profile:', error);
-        toast.error(error.message || 'Failed to load profile');
+        // Error is already handled by the service
       } finally {
         setIsLoading(false);
-        console.log('[CandidateProfilePage] Loading finished');
       }
     };
+    
     if (user) {
-      console.log('[CandidateProfilePage] user exists, loading profile...');
       loadProfile();
-    } else {
-      console.log('[CandidateProfilePage] user not available, skipping loadProfile');
     }
   }, [form, user]);
 
   const onSubmit = async (values: ProfileFormData) => {
-    // Frontend validation for required education/experience fields
-    const eduErrors = (values.education || []).map((edu, idx) => {
-      if (!edu.institution || !edu.degree || !edu.startDate) {
-        return `Education #${idx + 1}: Institution, Degree, and Start Date are required.`;
-      }
-      return null;
-    }).filter(Boolean);
-
-    const expErrors = (values.experience || []).map((exp, idx) => {
-      if (!exp.company || !exp.position || !exp.startDate) {
-        return `Experience #${idx + 1}: Company, Position, and Start Date are required.`;
-      }
-      return null;
-    }).filter(Boolean);
-
-    const allErrors = [...eduErrors, ...expErrors].filter((msg): msg is string => Boolean(msg));
-    if (allErrors.length > 0) {
-      allErrors.forEach((msg) => toast.error(msg));
-      return;
-    }
-
     try {
       setIsSaving(true);
-      console.log('Submitting profile data:', values); // Debug log
-      await candidateService.updateProfile(values);
-      toast.success('Profile updated successfully');
+      
+      // Client-side validation for required fields
+      const validationErrors: string[] = [];
+
+      // Validate education required fields
+      values.education.forEach((edu, index) => {
+        if (!edu.institution?.trim() || !edu.degree?.trim() || !edu.startDate) {
+          validationErrors.push(`Education #${index + 1}: Institution, Degree, and Start Date are required`);
+        }
+      });
+
+      // Validate experience required fields
+      values.experience.forEach((exp, index) => {
+        if (!exp.company?.trim() || !exp.position?.trim() || !exp.startDate) {
+          validationErrors.push(`Experience #${index + 1}: Company, Position, and Start Date are required`);
+        }
+      });
+
+      // Validate certification required fields
+      values.certifications.forEach((cert, index) => {
+        if (!cert.name?.trim() || !cert.issuer?.trim() || !cert.issueDate) {
+          validationErrors.push(`Certification #${index + 1}: Name, Issuer, and Issue Date are required`);
+        }
+      });
+
+      if (validationErrors.length > 0) {
+        validationErrors.forEach(error => {
+          toast({
+            title: 'Validation Error',
+            description: error,
+            variant: 'destructive',
+          });
+        });
+        setIsSaving(false);
+        return;
+      }
+      
+      // Format dates for backend
+      const submitData = {
+        ...values,
+        education: values.education.map(edu => ({
+          ...edu,
+          startDate: formatDateForBackend(edu.startDate),
+          endDate: edu.endDate ? formatDateForBackend(edu.endDate) : undefined
+        })),
+        experience: values.experience.map(exp => ({
+          ...exp,
+          startDate: formatDateForBackend(exp.startDate),
+          endDate: exp.endDate ? formatDateForBackend(exp.endDate) : undefined
+        })),
+        certifications: values.certifications.map(cert => ({
+          ...cert,
+          issueDate: formatDateForBackend(cert.issueDate),
+          expiryDate: cert.expiryDate ? formatDateForBackend(cert.expiryDate) : undefined
+        }))
+      };
+      
+      await candidateService.updateProfile(submitData);
+      // Success toast is handled by the service
     } catch (error: any) {
       console.error('Failed to update profile:', error);
-      toast.error(error.message || 'Failed to update profile');
+      // Error is already handled by the service
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleFileSelect = (files: FileList): File[] => {
-    const validFiles: File[] = [];
-    
-    Array.from(files).forEach(file => {
-      const fileExtension = file.name.split('.').pop()?.toLowerCase();
-      if (!['pdf', 'doc', 'docx'].includes(fileExtension || '')) {
-        toast.error('Please upload only PDF, DOC, or DOCX files');
-        return;
-      }
-
-      if (file.size > 10 * 1024 * 1024) {
-        toast.error('File size must be less than 10MB');
-        return;
-      }
-
-      validFiles.push(file);
-    });
-
-    return validFiles;
-  };
-
-  const handleFileUpload = async (files: File[]) => {
+  const handleCVUpload = async (files: File[]) => {
     try {
       setIsUploading(true);
       const uploadedCVs = await candidateService.uploadCVs(files);
       setCvs(prev => [...prev, ...uploadedCVs]);
-      setSelectedFiles([]);
-      toast.success('CVs uploaded successfully');
+      // Success toast is handled by the service
     } catch (error: any) {
       console.error('Failed to upload CVs:', error);
-      toast.error(error.message || 'Failed to upload CVs');
+      // Error is already handled by the service
     } finally {
       setIsUploading(false);
     }
-  };
-
-  const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files && files.length > 0) {
-      const validFiles = handleFileSelect(files);
-      if (validFiles.length > 0) {
-        setSelectedFiles(validFiles);
-      }
-    }
-  };
-
-  const handleSelectFileClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      const validFiles = handleFileSelect(files);
-      if (validFiles.length > 0) {
-        setSelectedFiles(validFiles);
-      }
-    }
-  }, []);
-
-  const handleDownloadCV = (cv: CV) => {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-    let downloadUrl = cv.path;
-    // Always use /uploads/cv/filename path
-    if (!downloadUrl.startsWith('http')) {
-      // Remove any /api/v1/uploads prefix and ensure /uploads/cv/filename
-      downloadUrl = downloadUrl.replace(/^\/api\/v1\/uploads/, '/uploads');
-      downloadUrl = `${backendUrl}${downloadUrl}`;
-    }
-    window.open(downloadUrl, '_blank');
   };
 
   const handleSetPrimaryCV = async (cvId: string) => {
@@ -238,72 +269,155 @@ export default function CandidateProfilePage() {
         ...cv,
         isPrimary: cv._id === cvId
       })));
-      toast.success('Primary CV updated successfully');
+      // Success toast is handled by the service
     } catch (error: any) {
       console.error('Failed to set primary CV:', error);
-      toast.error(error.message || 'Failed to set primary CV');
+      // Error is already handled by the service
     }
   };
 
   const handleDeleteCV = async (cvId: string) => {
-    if (!confirm('Are you sure you want to delete this CV?')) return;
-
     try {
       await candidateService.deleteCV(cvId);
       setCvs(prev => prev.filter(cv => cv._id !== cvId));
-      toast.success('CV deleted successfully');
+      // Success toast is handled by the service
     } catch (error: any) {
       console.error('Failed to delete CV:', error);
-      toast.error(error.message || 'Failed to delete CV');
+      // Error is already handled by the service
     }
   };
 
-  const removeSelectedFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const uploadSelectedFiles = () => {
-    if (selectedFiles.length > 0) {
-      handleFileUpload(selectedFiles);
+  const handleDownloadCV = (cv: CV) => {
+    try {
+      const downloadUrl = candidateService.getCVDownloadUrl(cv);
+      window.open(downloadUrl, '_blank');
+    } catch (error) {
+      console.error('Download CV error:', error);
+      toast({
+        title: 'Download Error',
+        description: 'Failed to download CV',
+        variant: 'destructive',
+      });
     }
   };
 
   const addEducation = () => {
-    const currentEducation = form.getValues('education') || [];
-    form.setValue('education', [
-      ...currentEducation,
-      {
-        institution: '',
-        degree: '',
-        field: '',
-        startDate: '',
-        current: false
-      }
-    ]);
+    try {
+      const currentEducation = form.getValues('education') || [];
+      const today = new Date().toISOString().split('T')[0];
+      
+      form.setValue('education', [
+        ...currentEducation,
+        {
+          institution: '',
+          degree: '',
+          field: '',
+          startDate: today,
+          current: false
+        }
+      ]);
+    } catch (error) {
+      console.error('Add education error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add education entry',
+        variant: 'destructive',
+      });
+    }
   };
 
   const removeEducation = (index: number) => {
-    const currentEducation = form.getValues('education') || [];
-    form.setValue('education', currentEducation.filter((_, i) => i !== index));
+    try {
+      const currentEducation = form.getValues('education') || [];
+      form.setValue('education', currentEducation.filter((_, i) => i !== index));
+    } catch (error) {
+      console.error('Remove education error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to remove education entry',
+        variant: 'destructive',
+      });
+    }
   };
 
   const addExperience = () => {
-    const currentExperience = form.getValues('experience') || [];
-    form.setValue('experience', [
-      ...currentExperience,
-      {
-        company: '',
-        position: '',
-        startDate: '',
-        current: false,
-        skills: []
-      }
-    ]);
+    try {
+      const currentExperience = form.getValues('experience') || [];
+      const today = new Date().toISOString().split('T')[0];
+      
+      form.setValue('experience', [
+        ...currentExperience,
+        {
+          company: '',
+          position: '',
+          startDate: today,
+          current: false,
+          skills: []
+        }
+      ]);
+    } catch (error) {
+      console.error('Add experience error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add experience entry',
+        variant: 'destructive',
+      });
+    }
   };
 
   const removeExperience = (index: number) => {
-    const currentExperience = form.getValues('experience') || [];
-    form.setValue('experience', currentExperience.filter((_, i) => i !== index));
+    try {
+      const currentExperience = form.getValues('experience') || [];
+      form.setValue('experience', currentExperience.filter((_, i) => i !== index));
+    } catch (error) {
+      console.error('Remove experience error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to remove experience entry',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const addCertification = () => {
+    try {
+      const currentCertifications = form.getValues('certifications') || [];
+      const today = new Date().toISOString().split('T')[0];
+      
+      form.setValue('certifications', [
+        ...currentCertifications,
+        {
+          name: '',
+          issuer: '',
+          issueDate: today,
+          expiryDate: '',
+          credentialId: '',
+          credentialUrl: '',
+          description: ''
+        }
+      ]);
+    } catch (error) {
+      console.error('Add certification error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add certification entry',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const removeCertification = (index: number) => {
+    try {
+      const currentCertifications = form.getValues('certifications') || [];
+      form.setValue('certifications', currentCertifications.filter((_, i) => i !== index));
+    } catch (error) {
+      console.error('Remove certification error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to remove certification entry',
+        variant: 'destructive',
+      });
+    }
   };
 
   if (isLoading) {
@@ -317,23 +431,23 @@ export default function CandidateProfilePage() {
     );
   }
 
-  const currentSkills = form.watch('skills') || [];
   const education = form.watch('education') || [];
   const experience = form.watch('experience') || [];
+  const certifications = form.watch('certifications') || [];
 
   return (
     <DashboardLayout requiredRole="candidate">
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold" style={applyColor('darkNavy')}>Profile Management</h1>
-          <p className="text-gray-600">Update your candidate profile and CV</p>
+          <h1 className="pl-7 pt-5 text-3xl font-bold" style={applyColor('darkNavy')}>Profile Management</h1>
+          <p className="text-gray-600 pl-8">Update your candidate profile and CV</p>
         </div>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <div className="grid gap-6 md:grid-cols-2">
               {/* Basic Information */}
-              <Card>
+              <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
                 <CardHeader>
                   <CardTitle style={applyColor('darkNavy')}>Basic Information</CardTitle>
                   <CardDescription>Your personal details</CardDescription>
@@ -347,10 +461,12 @@ export default function CandidateProfilePage() {
                         <FormLabel>Bio</FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder="Tell us about yourself..."
+                            placeholder="Tell us about yourself, your career goals, and what makes you unique..."
                             rows={4}
                             {...field}
                             value={field.value || ''}
+                            className="resize-none"
+                            maxLength={1000}
                           />
                         </FormControl>
                         <FormMessage />
@@ -366,9 +482,10 @@ export default function CandidateProfilePage() {
                         <FormLabel>Location</FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="Your location" 
+                            placeholder="e.g., Addis Ababa, Ethiopia" 
                             {...field} 
                             value={field.value || ''}
+                            maxLength={100}
                           />
                         </FormControl>
                         <FormMessage />
@@ -384,9 +501,10 @@ export default function CandidateProfilePage() {
                         <FormLabel>Phone</FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="Your phone number" 
+                            placeholder="+251 91 234 5678" 
                             {...field} 
                             value={field.value || ''}
+                            maxLength={20}
                           />
                         </FormControl>
                         <FormMessage />
@@ -399,12 +517,13 @@ export default function CandidateProfilePage() {
                     name="website"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Website</FormLabel>
+                        <FormLabel>Website/Portfolio</FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="Your website" 
+                            placeholder="https://yourportfolio.com" 
                             {...field} 
                             value={field.value || ''}
+                            maxLength={200}
                           />
                         </FormControl>
                         <FormMessage />
@@ -415,446 +534,400 @@ export default function CandidateProfilePage() {
               </Card>
 
               {/* CV Upload */}
-              <Card>
-                <CardHeader>
-                  <CardTitle style={applyColor('darkNavy')}>CV/Resume</CardTitle>
-                  <CardDescription>Upload your latest CVs (max 5)</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Drag & Drop Area */}
-                  <div
-                    className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                      dragOver 
-                        ? 'border-blue-400 bg-blue-50' 
-                        : 'border-gray-300 hover:border-gray-400'
-                    }`}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                  >
-                    <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                    
-                    {selectedFiles.length > 0 ? (
-                      <div className="space-y-3">
-                        {selectedFiles.map((file, index) => (
-                          <div key={index} className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2">
-                                <FileText className="h-4 w-4 text-blue-600" />
-                                <span className="text-sm font-medium truncate">
-                                  {file.name}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                                </span>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeSelectedFile(index)}
-                                type="button"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                        <div className="flex space-x-2">
-                          <Button
-                            onClick={uploadSelectedFiles}
-                            disabled={isUploading}
-                            className="flex-1"
-                            style={applyBgColor('gold')}
-                          >
-                            {isUploading ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : null}
-                            {isUploading ? 'Uploading...' : 'Upload All'}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => setSelectedFiles([])}
-                            type="button"
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <p className="text-sm text-gray-600 mb-4">
-                          Drag & drop your CVs here or click to browse
-                        </p>
-                        <Button 
-                          variant="outline" 
-                          disabled={isUploading} 
-                          onClick={handleSelectFileClick}
-                          type="button"
-                          style={applyBorderColor('gold')}
-                        >
-                          <Upload className="mr-2 h-4 w-4" />
-                          Select Files
-                        </Button>
-                        <input
-                          ref={fileInputRef}
-                          id="cv-upload"
-                          type="file"
-                          accept=".pdf,.doc,.docx"
-                          className="hidden"
-                          onChange={handleFileInputChange}
-                          disabled={isUploading}
-                          multiple
-                        />
-                        <p className="text-xs text-gray-500 mt-2">
-                          PDF, DOC, or DOCX files (max 10MB each)
-                        </p>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Current CVs */}
-                  {cvs.length > 0 && (
-                    <div className="space-y-3">
-                      <h3 className="font-medium">Your CVs</h3>
-                      {cvs.map((cv) => (
-                        <div key={cv._id} className={`border rounded-lg p-3 ${cv.isPrimary ? 'border-blue-300 bg-blue-50' : 'border-gray-200'}`}>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-3">
-                              <FileText className="h-5 w-5 text-blue-600" />
-                              <div>
-                                <p className="font-medium">{cv.originalName}</p>
-                                <p className="text-sm text-gray-600">
-                                  Uploaded: {new Date(cv.uploadedAt).toLocaleDateString()}
-                                  {cv.isPrimary && <span className="ml-2 text-blue-600 font-semibold">• Primary</span>}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex space-x-2">
-                              {!cv.isPrimary && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleSetPrimaryCV(cv._id)}
-                                  style={applyBorderColor('gold')}
-                                >
-                                  Set Primary
-                                </Button>
-                              )}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleDownloadCV(cv)}
-                                style={applyBorderColor('teal')}
-                              >
-                                <Download className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleDeleteCV(cv._id)}
-                                style={applyBorderColor('orange')}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {cvs.length === 0 && selectedFiles.length === 0 && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                      <div className="flex items-center space-x-3">
-                        <FileText className="h-6 w-6 text-yellow-600" />
-                        <div>
-                          <p className="font-medium text-yellow-800">No CVs Uploaded</p>
-                          <p className="text-sm text-yellow-600">
-                            Upload your CV to apply for jobs
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <CVUploadCard
+                cvs={cvs}
+                onUpload={handleCVUpload}
+                onSetPrimary={handleSetPrimaryCV}
+                onDelete={handleDeleteCV}
+                onDownload={handleDownloadCV}
+                isUploading={isUploading}
+              />
             </div>
 
             {/* Skills Section */}
-            <Card>
+            <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
               <CardHeader>
                 <CardTitle style={applyColor('darkNavy')}>Skills</CardTitle>
                 <CardDescription>Your technical and professional skills</CardDescription>
               </CardHeader>
               <CardContent>
-                <FormField
+                <SkillsInput
                   control={form.control}
                   name="skills"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Skills (comma-separated)</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="e.g., JavaScript, React, Node.js"
-                          value={field.value.join(', ')}
-                          onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  label="Skills"
+                  placeholder="Add a skill and press Enter or click +"
                 />
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {currentSkills.map((skill, index) => (
-                    <Badge key={index} variant="secondary" style={applyBgColor('gold')}>
-                      {skill}
-                    </Badge>
-                  ))}
-                </div>
               </CardContent>
             </Card>
 
             {/* Education Section */}
-            <Card>
+            <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <div>
                     <CardTitle style={applyColor('darkNavy')}>Education</CardTitle>
                     <CardDescription>Your educational background</CardDescription>
                   </div>
-                  <Button type="button" onClick={addEducation} size="sm" style={applyBgColor('gold')}>
+                  <button 
+                    type="button" 
+                    onClick={addEducation}
+                    className="flex items-center px-4 py-2 text-white rounded-lg font-medium transition-all hover:shadow-lg"
+                    style={applyBgColor('gold')}
+                  >
                     <Plus className="h-4 w-4 mr-2" />
                     Add Education
-                  </Button>
+                  </button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {education.map((edu, index) => (
-                  <div key={index} className="border rounded-lg p-4 space-y-4">
-                    <div className="flex justify-between items-center">
-                      <h4 className="font-medium">Education #{index + 1}</h4>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => removeEducation(index)}
-                        style={applyBorderColor('orange')}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name={`education.${index}.institution`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Institution</FormLabel>
-                            <FormControl>
-                              <Input {...field} value={field.value || ''} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                {education.map((edu, index) => {
+                  const dateErrors = validateDate(edu.startDate, edu.endDate, edu.current, 'Education');
+                  
+                  return (
+                    <div key={`education-${index}-${edu.institution}`} className="border border-gray-200 rounded-lg p-4 space-y-4">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center space-x-2">
+                          <GraduationCap className="h-5 w-5 text-blue-600" />
+                          <h4 className="font-medium text-gray-900">Education #{index + 1}</h4>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeEducation(index)}
+                          className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                       
-                      <FormField
-                        control={form.control}
-                        name={`education.${index}.degree`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Degree</FormLabel>
-                            <FormControl>
-                              <Input {...field} value={field.value || ''} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <FormField
-                        control={form.control}
-                        name={`education.${index}.field`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Field of Study</FormLabel>
-                            <FormControl>
-                              <Input {...field} value={field.value || ''} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <FormField
-                        control={form.control}
-                        name={`education.${index}.startDate`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Start Date</FormLabel>
-                            <FormControl>
-                              <Input type="date" {...field} value={field.value || ''} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <FormField
-                        control={form.control}
-                        name={`education.${index}.endDate`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>End Date</FormLabel>
-                            <FormControl>
-                              <Input 
-                                type="date" 
-                                {...field} 
-                                value={field.value || ''}
-                                disabled={form.watch(`education.${index}.current`)}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <FormField
-                        control={form.control}
-                        name={`education.${index}.current`}
-                        render={({ field }) => (
-                          <FormItem className="flex items-center space-x-2">
-                            <FormControl>
-                              <input
-                                type="checkbox"
-                                checked={field.value || false}
-                                onChange={field.onChange}
-                                className="rounded"
-                              />
-                            </FormControl>
-                            <FormLabel className="!mt-0">Currently studying here</FormLabel>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    
-                    <FormField
-                      control={form.control}
-                      name={`education.${index}.description`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Description</FormLabel>
-                          <FormControl>
-                            <Textarea
-                              placeholder="Describe your studies, achievements, etc."
-                              rows={3}
-                              {...field}
-                              value={field.value || ''}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
+                      {/* Date validation errors */}
+                      {dateErrors.length > 0 && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                          {dateErrors.map((error, errorIndex) => (
+                            <p key={`education-error-${index}-${errorIndex}`} className="text-sm text-red-600 flex items-center">
+                              <span className="w-2 h-2 bg-red-600 rounded-full mr-2"></span>
+                              {error}
+                            </p>
+                          ))}
+                        </div>
                       )}
-                    />
-                  </div>
-                ))}
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name={`education.${index}.institution`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Institution *</FormLabel>
+                              <FormControl>
+                                <Input placeholder="University of Example" {...field} value={field.value || ''} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name={`education.${index}.degree`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Degree *</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Bachelor of Science" {...field} value={field.value || ''} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name={`education.${index}.field`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Field of Study</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Computer Science" {...field} value={field.value || ''} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name={`education.${index}.startDate`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Start Date *</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="date" 
+                                  {...field}
+                                  value={field.value || ''}
+                                  max={new Date().toISOString().split('T')[0]}
+                                  onChange={(e) => {
+                                    field.onChange(e.target.value);
+                                  }}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name={`education.${index}.endDate`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>End Date</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="date" 
+                                  {...field}
+                                  value={field.value || ''}
+                                  disabled={form.watch(`education.${index}.current`)}
+                                  max={new Date().toISOString().split('T')[0]}
+                                  onChange={(e) => {
+                                    field.onChange(e.target.value);
+                                  }}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+  control={form.control}
+  name={`education.${index}.current`}
+  render={({ field }) => (
+    <FormItem className="flex items-center space-x-2">
+      <FormControl>
+        <input
+          type="checkbox"
+          checked={field.value || false}
+          onChange={(e) => {
+            const isChecked = e.target.checked;
+            field.onChange(isChecked);
+            
+            // Clear end date when "current" is checked
+            if (isChecked) {
+              form.setValue(`education.${index}.endDate`, '');
+            }
+          }}
+          className="rounded border-gray-300"
+        />
+      </FormControl>
+      <FormLabel className="!mt-0 cursor-pointer">Currently studying here</FormLabel>
+      <FormMessage />
+    </FormItem>
+  )}
+/>
+                      </div>
+                      
+                      <FormField
+                        control={form.control}
+                        name={`education.${index}.description`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Description</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                placeholder="Describe your studies, achievements, courses, etc."
+                                rows={3}
+                                {...field}
+                                value={field.value || ''}
+                                className="resize-none"
+                                maxLength={500}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  );
+                })}
                 
                 {education.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    <FileText className="mx-auto h-12 w-12 text-gray-400" />
+                  <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
+                    <GraduationCap className="mx-auto h-12 w-12 text-gray-400" />
                     <p className="mt-2">No education entries yet</p>
+                    <p className="text-sm">Add your educational background to complete your profile</p>
                   </div>
                 )}
               </CardContent>
             </Card>
 
             {/* Experience Section */}
-            <Card>
+            <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <div>
                     <CardTitle style={applyColor('darkNavy')}>Experience</CardTitle>
                     <CardDescription>Your work experience</CardDescription>
                   </div>
-                  <Button type="button" onClick={addExperience} size="sm" style={applyBgColor('gold')}>
+                  <button 
+                    type="button" 
+                    onClick={addExperience}
+                    className="flex items-center px-4 py-2 text-white rounded-lg font-medium transition-all hover:shadow-lg"
+                    style={applyBgColor('gold')}
+                  >
                     <Plus className="h-4 w-4 mr-2" />
                     Add Experience
-                  </Button>
+                  </button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {experience.map((exp, index) => (
-                  <div key={index} className="border rounded-lg p-4 space-y-4">
-                    <div className="flex justify-between items-center">
-                      <h4 className="font-medium">Experience #{index + 1}</h4>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => removeExperience(index)}
-                        style={applyBorderColor('orange')}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name={`experience.${index}.company`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Company</FormLabel>
-                            <FormControl>
-                              <Input {...field} value={field.value || ''} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                {experience.map((exp, index) => {
+                  const dateErrors = validateDate(exp.startDate, exp.endDate, exp.current, 'Experience');
+                  
+                  return (
+                    <div key={`experience-${index}-${exp.company}`} className="border border-gray-200 rounded-lg p-4 space-y-4">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center space-x-2">
+                          <Briefcase className="h-5 w-5 text-green-600" />
+                          <h4 className="font-medium text-gray-900">Experience #{index + 1}</h4>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeExperience(index)}
+                          className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      
+                      {/* Date validation errors */}
+                      {dateErrors.length > 0 && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                          {dateErrors.map((error, errorIndex) => (
+                            <p key={`experience-error-${index}-${errorIndex}`} className="text-sm text-red-600 flex items-center">
+                              <span className="w-2 h-2 bg-red-600 rounded-full mr-2"></span>
+                              {error}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name={`experience.${index}.company`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Company *</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Company Name" {...field} value={field.value || ''} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name={`experience.${index}.position`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Position *</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Job Title" {...field} value={field.value || ''} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name={`experience.${index}.startDate`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Start Date *</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="date" 
+                                  {...field}
+                                  value={field.value || ''}
+                                  max={new Date().toISOString().split('T')[0]}
+                                  onChange={(e) => {
+                                    field.onChange(e.target.value);
+                                  }}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name={`experience.${index}.endDate`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>End Date</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="date" 
+                                  {...field}
+                                  value={field.value || ''}
+                                  disabled={form.watch(`experience.${index}.current`)}
+                                  max={new Date().toISOString().split('T')[0]}
+                                  onChange={(e) => {
+                                    field.onChange(e.target.value);
+                                  }}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+  control={form.control}
+  name={`experience.${index}.current`}
+  render={({ field }) => (
+    <FormItem className="flex items-center space-x-2">
+      <FormControl>
+        <input
+          type="checkbox"
+          checked={field.value || false}
+          onChange={(e) => {
+            const isChecked = e.target.checked;
+            field.onChange(isChecked);
+            
+            // Clear end date when "current" is checked
+            if (isChecked) {
+              form.setValue(`experience.${index}.endDate`, '');
+            }
+          }}
+          className="rounded border-gray-300"
+        />
+      </FormControl>
+      <FormLabel className="!mt-0 cursor-pointer">Current position</FormLabel>
+      <FormMessage />
+    </FormItem>
+  )}
+/>
+                      </div>
                       
                       <FormField
                         control={form.control}
-                        name={`experience.${index}.position`}
+                        name={`experience.${index}.description`}
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Position</FormLabel>
+                            <FormLabel>Description</FormLabel>
                             <FormControl>
-                              <Input {...field} value={field.value || ''} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <FormField
-                        control={form.control}
-                        name={`experience.${index}.startDate`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Start Date</FormLabel>
-                            <FormControl>
-                              <Input type="date" {...field} value={field.value || ''} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <FormField
-                        control={form.control}
-                        name={`experience.${index}.endDate`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>End Date</FormLabel>
-                            <FormControl>
-                              <Input 
-                                type="date" 
-                                {...field} 
+                              <Textarea
+                                placeholder="Describe your responsibilities, achievements, and key contributions..."
+                                rows={3}
+                                {...field}
                                 value={field.value || ''}
-                                disabled={form.watch(`experience.${index}.current`)}
+                                className="resize-none"
+                                maxLength={500}
                               />
                             </FormControl>
                             <FormMessage />
@@ -862,84 +935,232 @@ export default function CandidateProfilePage() {
                         )}
                       />
                       
-                      <FormField
+                      <SkillsInput
                         control={form.control}
-                        name={`experience.${index}.current`}
-                        render={({ field }) => (
-                          <FormItem className="flex items-center space-x-2">
-                            <FormControl>
-                              <input
-                                type="checkbox"
-                                checked={field.value || false}
-                                onChange={field.onChange}
-                                className="rounded"
-                              />
-                            </FormControl>
-                            <FormLabel className="!mt-0">Current position</FormLabel>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                        name={`experience.${index}.skills`}
+                        label="Skills used in this role"
+                        placeholder="Add skills used in this position"
                       />
                     </div>
-                    
-                    <FormField
-                      control={form.control}
-                      name={`experience.${index}.description`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Description</FormLabel>
-                          <FormControl>
-                            <Textarea
-                              placeholder="Describe your responsibilities and achievements"
-                              rows={3}
-                              {...field}
-                              value={field.value || ''}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name={`experience.${index}.skills`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Skills used (comma-separated)</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="e.g., JavaScript, React, Node.js"
-                              value={field.value.join(', ')}
-                              onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                ))}
+                  );
+                })}
                 
                 {experience.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
+                  <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
                     <Briefcase className="mx-auto h-12 w-12 text-gray-400" />
                     <p className="mt-2">No experience entries yet</p>
+                    <p className="text-sm">Add your work experience to showcase your professional background</p>
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            <div className="flex justify-end space-x-4">
-              <Button 
+            {/* Certifications & Courses Section */}
+            <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle style={applyColor('darkNavy')}>Certifications & Courses</CardTitle>
+                    <CardDescription>Professional certifications, online courses, and training programs</CardDescription>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={addCertification}
+                    className="flex items-center px-4 py-2 text-white rounded-lg font-medium transition-all hover:shadow-lg"
+                    style={applyBgColor('gold')}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Certification/Course
+                  </button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {certifications.map((cert, index) => {
+                  const dateErrors = validateDate(cert.issueDate, cert.expiryDate, false, 'Certification');
+                  
+                  return (
+                    <div key={`certification-${index}-${cert.name}`} className="border border-gray-200 rounded-lg p-4 space-y-4">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center space-x-2">
+                          <Award className="h-5 w-5 text-purple-600" />
+                          <h4 className="font-medium text-gray-900">Certification #{index + 1}</h4>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeCertification(index)}
+                          className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      
+                      {/* Date validation errors */}
+                      {dateErrors.length > 0 && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                          {dateErrors.map((error, errorIndex) => (
+                            <p key={`certification-error-${index}-${errorIndex}`} className="text-sm text-red-600 flex items-center">
+                              <span className="w-2 h-2 bg-red-600 rounded-full mr-2"></span>
+                              {error}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name={`certifications.${index}.name`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Certification/Course Name *</FormLabel>
+                              <FormControl>
+                                <Input placeholder="e.g., AWS Certified Solutions Architect" {...field} value={field.value || ''} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name={`certifications.${index}.issuer`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Issuing Organization *</FormLabel>
+                              <FormControl>
+                                <Input placeholder="e.g., Amazon Web Services, Coursera" {...field} value={field.value || ''} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name={`certifications.${index}.issueDate`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Issue Date *</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="date" 
+                                  {...field}
+                                  value={field.value || ''}
+                                  max={new Date().toISOString().split('T')[0]}
+                                  onChange={(e) => {
+                                    field.onChange(e.target.value);
+                                  }}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name={`certifications.${index}.expiryDate`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Expiry Date</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="date" 
+                                  {...field}
+                                  value={field.value || ''}
+                                  min={form.watch(`certifications.${index}.issueDate`)}
+                                  onChange={(e) => {
+                                    field.onChange(e.target.value);
+                                  }}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name={`certifications.${index}.credentialId`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Credential ID</FormLabel>
+                              <FormControl>
+                                <Input placeholder="e.g., AWS-12345" {...field} value={field.value || ''} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name={`certifications.${index}.credentialUrl`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Credential URL</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  placeholder="https://example.com/credential" 
+                                  {...field} 
+                                  value={field.value || ''}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      
+                      <FormField
+                        control={form.control}
+                        name={`certifications.${index}.description`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Description</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                placeholder="Describe what you learned, skills gained, or project completed..."
+                                rows={3}
+                                {...field}
+                                value={field.value || ''}
+                                className="resize-none"
+                                maxLength={500}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  );
+                })}
+                
+                {certifications.length === 0 && (
+                  <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
+                    <Award className="mx-auto h-12 w-12 text-gray-400" />
+                    <p className="mt-2">No certifications or courses yet</p>
+                    <p className="text-sm">Add professional certifications, online courses, or training programs</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+              <button 
                 type="button" 
-                variant="outline"
                 onClick={() => window.history.back()}
+                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-all"
                 style={applyBorderColor('gray400')}
               >
                 Cancel
-              </Button>
-              <Button type="submit" disabled={isSaving} style={applyBgColor('gold')}>
+              </button>
+              <button 
+                type="submit" 
+                disabled={isSaving}
+                className="flex items-center px-6 py-3 text-white rounded-xl font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                style={applyBgColor('gold')}
+              >
                 {isSaving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -951,12 +1172,13 @@ export default function CandidateProfilePage() {
                     Save Profile
                   </>
                 )}
-              </Button>
+              </button>
             </div>
           </form>
         </Form>
       </div>
-      {/* {console.log('[CandidateProfilePage] Render end, isLoading:', isLoading, 'user:', user)} */}
     </DashboardLayout>
   );
-}
+};
+
+export default CandidateProfilePage;

@@ -1,6 +1,7 @@
-// controllers/jobController.js
+// controllers/jobController.js - FIXED VERSION
 const Job = require('../models/Job');
 const Company = require('../models/Company');
+const Organization = require('../models/Organization');
 const User = require('../models/User');
 const { validationResult } = require('express-validator');
 
@@ -18,13 +19,12 @@ exports.getJobs = async (req, res, next) => {
       type,
       experienceLevel,
       minSalary,
-      maxSalary
+      maxSalary,
+      jobType
     } = req.query;
 
-    // SIMPLE QUERY: Only show active jobs
     const query = { status: 'active' };
 
-    // Search
     if (search) {
       query.$or = [
         { title: { $regex: search, $options: 'i' } },
@@ -33,13 +33,12 @@ exports.getJobs = async (req, res, next) => {
       ];
     }
 
-    // Filters
     if (region) query['location.region'] = region;
     if (category) query.category = category;
     if (type) query.type = type;
     if (experienceLevel) query.experienceLevel = experienceLevel;
+    if (jobType) query.jobType = jobType;
 
-    // Salary filter
     if (minSalary || maxSalary) {
       query.$and = query.$and || [];
       if (minSalary) {
@@ -62,6 +61,7 @@ exports.getJobs = async (req, res, next) => {
 
     const jobs = await Job.find(query)
       .populate('company', 'name logoUrl verified industry')
+      .populate('organization', 'name logoUrl verified industry organizationType')
       .sort({ featured: -1, createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
@@ -87,7 +87,7 @@ exports.getJobs = async (req, res, next) => {
   }
 };
 
-// @desc    Create job (simple - no approval needed)
+// @desc    Create job
 // @route   POST /api/v1/job
 // @access  Private (Company only)
 exports.createJob = async (req, res, next) => {
@@ -118,10 +118,10 @@ exports.createJob = async (req, res, next) => {
       });
     }
 
-    // SIMPLE: Use the data as provided
     const jobData = {
       ...req.body,
       company: company._id,
+      jobType: 'company',
       createdBy: userId
     };
 
@@ -159,6 +159,7 @@ exports.getJob = async (req, res, next) => {
   try {
     const job = await Job.findById(req.params.id)
       .populate('company', 'name logoUrl verified industry description website')
+      .populate('organization', 'name logoUrl verified industry organizationType description website mission')
       .populate('createdBy', 'name email');
 
     if (!job) {
@@ -168,7 +169,6 @@ exports.getJob = async (req, res, next) => {
       });
     }
 
-    // Increment views
     job.viewCount = (job.viewCount || 0) + 1;
     await job.save();
 
@@ -202,7 +202,10 @@ exports.getCompanyJobs = async (req, res, next) => {
 
     const { page = 1, limit = 12, status } = req.query;
     
-    const query = { company: company._id };
+    const query = { 
+      company: company._id,
+      jobType: 'company'
+    };
     if (status) query.status = status;
 
     const jobs = await Job.find(query)
@@ -231,10 +234,9 @@ exports.getCompanyJobs = async (req, res, next) => {
   }
 };
 
-// @desc    Update job
+// @desc    Update job - FIXED VERSION
 // @route   PUT /api/v1/job/:id
 // @access  Private (Company/Admin only)
-// In your jobController.js - update the updateJob function
 exports.updateJob = async (req, res, next) => {
   try {
     const errors = validationResult(req);
@@ -246,7 +248,8 @@ exports.updateJob = async (req, res, next) => {
       });
     }
 
-    let job = await Job.findById(req.params.id);
+    let job = await Job.findById(req.params.id).lean(); // Use lean() to get plain object
+    
     if (!job) {
       return res.status(404).json({
         success: false,
@@ -264,24 +267,39 @@ exports.updateJob = async (req, res, next) => {
       });
     }
 
-    if (job.company.toString() !== company._id.toString() && req.user.role !== 'admin') {
+    // FIX: Properly compare company IDs
+    const jobCompanyId = job.company?._id ? job.company._id.toString() : job.company?.toString();
+    const userCompanyId = company._id.toString();
+
+    console.log('Job Company ID:', jobCompanyId);
+    console.log('User Company ID:', userCompanyId);
+    console.log('Match:', jobCompanyId === userCompanyId);
+
+    if (job.jobType !== 'company') {
+      return res.status(403).json({
+        success: false,
+        message: 'This is not a company job'
+      });
+    }
+
+    if (jobCompanyId !== userCompanyId && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to update this job'
       });
     }
 
-    // FIX: Use updateOne instead of findByIdAndUpdate to handle nested objects properly
-    await Job.updateOne({ _id: req.params.id }, { $set: req.body });
-    
-    // Get the updated job
-    job = await Job.findById(req.params.id)
-      .populate('company', 'name logoUrl verified industry');
+    // Use findByIdAndUpdate for better handling
+    const updatedJob = await Job.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body },
+      { new: true, runValidators: true }
+    ).populate('company', 'name logoUrl verified industry');
 
     res.status(200).json({
       success: true,
       message: 'Job updated successfully',
-      data: job
+      data: updatedJob
     });
   } catch (error) {
     console.error('Update job error:', error);
@@ -292,12 +310,13 @@ exports.updateJob = async (req, res, next) => {
   }
 };
 
-// @desc    Delete job
+// @desc    Delete job - FIXED VERSION
 // @route   DELETE /api/v1/job/:id
 // @access  Private (Company/Admin only)
 exports.deleteJob = async (req, res, next) => {
   try {
-    const job = await Job.findById(req.params.id);
+    const job = await Job.findById(req.params.id).lean(); // Use lean() to get plain object
+    
     if (!job) {
       return res.status(404).json({
         success: false,
@@ -315,7 +334,18 @@ exports.deleteJob = async (req, res, next) => {
       });
     }
 
-    if (job.company.toString() !== company._id.toString() && req.user.role !== 'admin') {
+    // FIX: Properly compare company IDs
+    const jobCompanyId = job.company?._id ? job.company._id.toString() : job.company?.toString();
+    const userCompanyId = company._id.toString();
+
+    if (job.jobType !== 'company') {
+      return res.status(403).json({
+        success: false,
+        message: 'This is not a company job'
+      });
+    }
+
+    if (jobCompanyId !== userCompanyId && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to delete this job'
@@ -333,6 +363,248 @@ exports.deleteJob = async (req, res, next) => {
     res.status(500).json({
       success: false,
       message: 'Error deleting job'
+    });
+  }
+};
+
+// @desc    Get organization jobs
+// @route   GET /api/v1/job/organization/my-jobs
+// @access  Private (Organization only)
+exports.getOrganizationJobs = async (req, res, next) => {
+  try {
+    const userId = req.user.userId || req.user._id;
+    const organization = await Organization.findOne({ user: userId });
+
+    if (!organization) {
+      return res.status(404).json({
+        success: false,
+        message: 'Organization profile not found. Please create your organization profile first.'
+      });
+    }
+
+    const { page = 1, limit = 12, status } = req.query;
+    
+    const query = { 
+      organization: organization._id,
+      jobType: 'organization'
+    };
+    if (status) query.status = status;
+
+    const jobs = await Job.find(query)
+      .populate('organization', 'name logoUrl verified organizationType')
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await Job.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      data: jobs,
+      pagination: {
+        current: parseInt(page),
+        totalPages: Math.ceil(total / limit),
+        totalResults: total
+      }
+    });
+  } catch (error) {
+    console.error('Get organization jobs error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching organization opportunities'
+    });
+  }
+};
+
+// @desc    Create job for organization
+// @route   POST /api/v1/job/organization
+// @access  Private (Organization only)
+exports.createOrganizationJob = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    if (req.user.role !== 'organization' && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only organizations can create opportunities'
+      });
+    }
+
+    const userId = req.user.userId || req.user._id;
+    const organization = await Organization.findOne({ user: userId });
+
+    if (!organization) {
+      return res.status(404).json({
+        success: false,
+        message: 'Organization profile not found. Please create your organization profile first.'
+      });
+    }
+
+    const jobData = {
+      ...req.body,
+      organization: organization._id,
+      jobType: 'organization',
+      createdBy: userId
+    };
+
+    const job = await Job.create(jobData);
+    await job.populate('organization', 'name logoUrl verified industry organizationType');
+
+    res.status(201).json({
+      success: true,
+      message: 'Opportunity created successfully',
+      data: job
+    });
+  } catch (error) {
+    console.error('Create organization job error:', error);
+    
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(val => val.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: messages
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Error creating opportunity'
+    });
+  }
+};
+
+// @desc    Update organization job - FIXED VERSION
+// @route   PUT /api/v1/job/organization/:id
+// @access  Private (Organization/Admin only)
+exports.updateOrganizationJob = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const job = await Job.findById(req.params.id).lean();
+    
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: 'Opportunity not found'
+      });
+    }
+
+    const userId = req.user.userId || req.user._id;
+    const organization = await Organization.findOne({ user: userId });
+    
+    if (!organization && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Organization profile not found'
+      });
+    }
+
+    // FIX: Properly compare organization IDs
+    const jobOrganizationId = job.organization?._id ? job.organization._id.toString() : job.organization?.toString();
+    const userOrganizationId = organization._id.toString();
+
+    if (job.jobType !== 'organization') {
+      return res.status(403).json({
+        success: false,
+        message: 'This is not an organization opportunity'
+      });
+    }
+
+    if (jobOrganizationId !== userOrganizationId && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to update this opportunity'
+      });
+    }
+
+    const updatedJob = await Job.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body },
+      { new: true, runValidators: true }
+    ).populate('organization', 'name logoUrl verified industry organizationType');
+
+    res.status(200).json({
+      success: true,
+      message: 'Opportunity updated successfully',
+      data: updatedJob
+    });
+  } catch (error) {
+    console.error('Update organization job error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating opportunity'
+    });
+  }
+};
+
+// @desc    Delete organization job - FIXED VERSION
+// @route   DELETE /api/v1/job/organization/:id
+// @access  Private (Organization/Admin only)
+exports.deleteOrganizationJob = async (req, res, next) => {
+  try {
+    const job = await Job.findById(req.params.id).lean();
+    
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: 'Opportunity not found'
+      });
+    }
+
+    const userId = req.user.userId || req.user._id;
+    const organization = await Organization.findOne({ user: userId });
+    
+    if (!organization && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Organization profile not found'
+      });
+    }
+
+    // FIX: Properly compare organization IDs
+    const jobOrganizationId = job.organization?._id ? job.organization._id.toString() : job.organization?.toString();
+    const userOrganizationId = organization._id.toString();
+
+    if (job.jobType !== 'organization') {
+      return res.status(403).json({
+        success: false,
+        message: 'This is not an organization opportunity'
+      });
+    }
+
+    if (jobOrganizationId !== userOrganizationId && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to delete this opportunity'
+      });
+    }
+
+    await Job.findByIdAndDelete(req.params.id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Opportunity deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete organization job error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting opportunity'
     });
   }
 };
@@ -365,41 +637,75 @@ exports.getCategories = async (req, res, next) => {
     });
   }
 };
-// @desc    Get organization jobs
-// @route   GET /api/v1/job/organization/my-jobs
-// @access  Private (Organization only)
-exports.getOrganizationJobs = async (req, res, next) => {
-  try {
-    const userId = req.user.userId || req.user._id;
-    
-    // Find organization by user ID
-    const organization = await Company.findOne({ 
-      user: userId, 
-      $or: [
-        { 'user.role': 'organization' },
-        { 'role': 'organization' }
-      ]
-    });
+// ADD THESE FUNCTIONS TO YOUR EXISTING jobController.js
 
-    if (!organization) {
-      return res.status(404).json({
-        success: false,
-        message: 'Organization profile not found'
-      });
+// @desc    Get jobs for candidates with advanced filtering
+// @route   GET /api/v1/job/candidate
+// @access  Private (Candidate)
+exports.getJobsForCandidate = async (req, res, next) => {
+  try {
+    const {
+      page = 1,
+      limit = 12,
+      search,
+      region,
+      category,
+      type,
+      experienceLevel,
+      minSalary,
+      maxSalary,
+      remote
+    } = req.query;
+
+    const filter = { 
+      status: 'active',
+      applicationDeadline: { $gt: new Date() }
+    };
+
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { skills: { $in: [new RegExp(search, 'i')] } }
+      ];
     }
 
-    const { page = 1, limit = 12, status } = req.query;
-    
-    const query = { company: organization._id };
-    if (status) query.status = status;
+    if (region) filter['location.region'] = region;
+    if (category) filter.category = category;
+    if (type) filter.type = type;
+    if (experienceLevel) filter.experienceLevel = experienceLevel;
+    if (remote) filter.remote = remote;
 
-    const jobs = await Job.find(query)
-      .populate('company', 'name logoUrl verified')
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+    if (minSalary || maxSalary) {
+      filter.$and = filter.$and || [];
+      if (minSalary) {
+        filter.$and.push({
+          $or: [
+            { 'salary.min': { $gte: parseInt(minSalary) } },
+            { 'salary.max': { $gte: parseInt(minSalary) } }
+          ]
+        });
+      }
+      if (maxSalary) {
+        filter.$and.push({
+          $or: [
+            { 'salary.max': { $lte: parseInt(maxSalary) } },
+            { 'salary.min': { $lte: parseInt(maxSalary) } }
+          ]
+        });
+      }
+    }
 
-    const total = await Job.countDocuments(query);
+    const [jobs, total] = await Promise.all([
+      Job.find(filter)
+        .populate('company', 'name logoUrl verified industry')
+        .populate('organization', 'name logoUrl verified industry organizationType')
+        .sort({ featured: -1, urgent: -1, createdAt: -1 })
+        .limit(limit * 1)
+        .skip((page - 1) * limit)
+        .lean(),
+      Job.countDocuments(filter)
+    ]);
 
     res.status(200).json({
       success: true,
@@ -407,207 +713,165 @@ exports.getOrganizationJobs = async (req, res, next) => {
       pagination: {
         current: parseInt(page),
         totalPages: Math.ceil(total / limit),
-        totalResults: total
+        totalResults: total,
+        resultsPerPage: parseInt(limit)
       }
     });
   } catch (error) {
-    console.error('Get organization jobs error:', error);
+    console.error('Get jobs for candidate error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching organization jobs'
+      message: 'Error fetching jobs'
     });
   }
 };
 
-// @desc    Create job for organization
-// @route   POST /api/v1/job/organization
-// @access  Private (Organization only)
-exports.createOrganizationJob = async (req, res, next) => {
+// jobController.js - ADD THESE TWO NEW FUNCTIONS
+
+// @desc    Save job for candidate
+// @route   POST /api/v1/job/:jobId/save
+// @access  Private (Candidate)
+exports.saveJob = async (req, res, next) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
+    const { jobId } = req.params;
+    const userId = req.user.userId;
+
+    if (!jobId) {
       return res.status(400).json({
         success: false,
-        message: 'Validation failed',
-        errors: errors.array()
+        message: 'Job ID is required'
       });
     }
 
-    if (req.user.role !== 'organization' && req.user.role !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Only organizations can create opportunities'
-      });
-    }
-
-    const userId = req.user.userId || req.user._id;
-    const organization = await Company.findOne({ 
-      user: userId,
-      $or: [
-        { 'user.role': 'organization' },
-        { 'role': 'organization' }
-      ]
-    });
-
-    if (!organization) {
-      return res.status(404).json({
-        success: false,
-        message: 'Organization profile not found'
-      });
-    }
-
-    // Add organization-specific fields or modifications
-    const jobData = {
-      ...req.body,
-      company: organization._id,
-      createdBy: userId,
-      // You can add organization-specific fields here if needed
-      // For example: opportunityType, projectDuration, etc.
-    };
-
-    const job = await Job.create(jobData);
-    await job.populate('company', 'name logoUrl verified industry');
-
-    res.status(201).json({
-      success: true,
-      message: 'Opportunity created successfully',
-      data: job
-    });
-  } catch (error) {
-    console.error('Create organization job error:', error);
-    
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map(val => val.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: messages
-      });
-    }
-    
-    res.status(500).json({
-      success: false,
-      message: 'Error creating opportunity'
-    });
-  }
-};
-
-// @desc    Update organization job
-// @route   PUT /api/v1/job/organization/:id
-// @access  Private (Organization/Admin only)
-exports.updateOrganizationJob = async (req, res, next) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
-    }
-
-    let job = await Job.findById(req.params.id);
+    const job = await Job.findById(jobId);
     if (!job) {
       return res.status(404).json({
         success: false,
-        message: 'Opportunity not found'
+        message: 'Job not found'
       });
     }
 
-    const userId = req.user.userId || req.user._id;
-    const organization = await Company.findOne({ 
-      user: userId,
-      $or: [
-        { 'user.role': 'organization' },
-        { 'role': 'organization' }
-      ]
-    });
-    
-    if (!organization && req.user.role !== 'admin') {
-      return res.status(403).json({
+    const user = await User.findById(userId);
+    const isAlreadySaved = user.savedJobs.includes(jobId);
+
+    if (isAlreadySaved) {
+      return res.status(400).json({
         success: false,
-        message: 'Organization profile not found'
+        message: 'Job is already saved'
       });
     }
 
-    if (job.company.toString() !== organization._id.toString() && req.user.role !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to update this opportunity'
-      });
-    }
+    user.savedJobs.push(jobId);
+    job.saveCount = (job.saveCount || 0) + 1;
 
-    await Job.updateOne({ _id: req.params.id }, { $set: req.body });
-    
-    // Get the updated job
-    job = await Job.findById(req.params.id)
-      .populate('company', 'name logoUrl verified industry');
+    await Promise.all([user.save(), job.save()]);
 
     res.status(200).json({
       success: true,
-      message: 'Opportunity updated successfully',
-      data: job
+      message: 'Job saved successfully',
+      data: { saved: true }
     });
+
   } catch (error) {
-    console.error('Update organization job error:', error);
+    console.error('Save job error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error updating opportunity'
+      message: 'Error saving job'
     });
   }
 };
 
-// @desc    Delete organization job
-// @route   DELETE /api/v1/job/organization/:id
-// @access  Private (Organization/Admin only)
-exports.deleteOrganizationJob = async (req, res, next) => {
+// @desc    Unsave job for candidate
+// @route   POST /api/v1/job/:jobId/unsave
+// @access  Private (Candidate)
+exports.unsaveJob = async (req, res, next) => {
   try {
-    const job = await Job.findById(req.params.id);
+    const { jobId } = req.params;
+    const userId = req.user.userId;
+
+    if (!jobId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Job ID is required'
+      });
+    }
+
+    const job = await Job.findById(jobId);
     if (!job) {
       return res.status(404).json({
         success: false,
-        message: 'Opportunity not found'
+        message: 'Job not found'
       });
     }
 
-    const userId = req.user.userId || req.user._id;
-    const organization = await Company.findOne({ 
-      user: userId,
-      $or: [
-        { 'user.role': 'organization' },
-        { 'role': 'organization' }
-      ]
-    });
-    
-    if (!organization && req.user.role !== 'admin') {
-      return res.status(403).json({
+    const user = await User.findById(userId);
+    const isSaved = user.savedJobs.includes(jobId);
+
+    if (!isSaved) {
+      return res.status(400).json({
         success: false,
-        message: 'Organization profile not found'
+        message: 'Job is not saved'
       });
     }
 
-    if (job.company.toString() !== organization._id.toString() && req.user.role !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to delete this opportunity'
-      });
-    }
+    user.savedJobs.pull(jobId);
+    job.saveCount = Math.max(0, (job.saveCount || 1) - 1);
 
-    await Job.findByIdAndDelete(req.params.id);
+    await Promise.all([user.save(), job.save()]);
 
     res.status(200).json({
       success: true,
-      message: 'Opportunity deleted successfully'
+      message: 'Job removed from saved',
+      data: { saved: false }
     });
+
   } catch (error) {
-    console.error('Delete organization job error:', error);
+    console.error('Unsave job error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error deleting opportunity'
+      message: 'Error unsaving job'
     });
   }
 };
 
+// @desc    Get saved jobs for candidate
+// @route   GET /api/v1/job/saved
+// @access  Private (Candidate)
+exports.getSavedJobs = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.userId)
+      .populate({
+        path: 'savedJobs',
+        match: { 
+          status: 'active',
+          applicationDeadline: { $gt: new Date() }
+        },
+        populate: [
+          { path: 'company', select: 'name logoUrl verified industry' },
+          { path: 'organization', select: 'name logoUrl verified industry organizationType' }
+        ]
+      });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: user.savedJobs || []
+    });
+
+  } catch (error) {
+    console.error('Get saved jobs error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching saved jobs'
+    });
+  }
+};
 // SIMPLE HELPER FUNCTIONS
 function getEthiopianRegions() {
   return [

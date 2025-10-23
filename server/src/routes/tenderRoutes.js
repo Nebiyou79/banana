@@ -6,6 +6,8 @@ const {
   updateTender,
   deleteTender,
   getMyTenders,
+  getMyOrganizationTenders, // Add this
+  getMyAllTenders, // Add this
   toggleSaveTender,
   getSavedTenders
 } = require('../controllers/tenderController');
@@ -23,22 +25,36 @@ router.use(verifyToken);
 
 // Company routes - only companies can create/update/delete tenders
 router.post('/', 
-  restrictTo('company', 'admin'),
+  restrictTo('company', 'organization', 'admin'), // Add organization
   createTender
 );
 
+// Company-specific routes
 router.get('/company/my-tenders',
   restrictTo('company', 'admin'),
   getMyTenders
 );
 
+// Organization-specific routes
+router.get('/organization/my-tenders',
+  restrictTo('organization', 'admin'),
+  getMyOrganizationTenders
+);
+
+// Get all tenders for current user (both company and organization)
+router.get('/user/my-tenders',
+  restrictTo('company', 'organization', 'admin'),
+  getMyAllTenders
+);
+
+// Update and delete routes - now work for both company and organization
 router.put('/:id',
-  restrictTo('company', 'admin'),
+  restrictTo('company', 'organization', 'admin'),
   updateTender
 );
 
 router.delete('/:id',
-  restrictTo('company', 'admin'),
+  restrictTo('company', 'organization', 'admin'),
   deleteTender
 );
 

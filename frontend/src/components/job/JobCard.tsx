@@ -18,26 +18,28 @@ import {
   Shield,
   AlertCircle,
   Play,
-  Pause
+  Pause,
+  Heart,
+  Star
 } from 'lucide-react';
 import Image from 'next/image';
 
 interface JobCardProps {
   job: Job;
   showActions?: boolean;
-  onEdit?: (job: Job) => void;
   onDelete?: (jobId: string) => void;
   onViewStats?: (jobId: string) => void;
-onToggleStatus?: (jobId: string, newStatus: "draft" | "active" | "paused" | "closed" | "archived") => void;
+  onToggleStatus?: (jobId: string, newStatus: "draft" | "active" | "paused" | "closed" | "archived") => void;
+  isOrganizationView?: boolean;
 }
 
 const JobCard: React.FC<JobCardProps> = ({ 
   job, 
   showActions = false, 
-  onEdit, 
   onDelete,
   onViewStats,
-  onToggleStatus
+  onToggleStatus,
+  isOrganizationView = false
 }) => {
   const getTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
@@ -75,26 +77,107 @@ const JobCard: React.FC<JobCardProps> = ({
     }
   };
 
+  const getOwnerInfo = () => {
+    if (job.jobType === 'organization' && job.organization) {
+      return {
+        name: job.organization.name,
+        logo: job.organization.logoUrl || job.organization.logoFullUrl,
+        verified: job.organization.verified,
+        type: 'Organization',
+        industry: job.organization.industry,
+        description: job.organization.description
+      };
+    } else if (job.jobType === 'company' && job.company) {
+      return {
+        name: job.company.name,
+        logo: job.company.logoUrl,
+        verified: job.company.verified,
+        type: 'Company',
+        industry: job.company.industry,
+        description: job.company.description
+      };
+    }
+    return {
+      name: 'Unknown',
+      logo: undefined,
+      verified: false,
+      type: 'Unknown',
+      industry: undefined,
+      description: undefined
+    };
+  };
+
+  const getOpportunityTypeBadge = () => {
+    if (job.jobType !== 'organization') return null;
+    
+    const opportunityTypes: Record<string, { label: string, color: string }> = {
+      'volunteer': { label: 'Volunteer', color: 'bg-purple-100 text-purple-800 border-purple-200' },
+      'internship': { label: 'Internship', color: 'bg-blue-100 text-blue-800 border-blue-200' },
+      'fellowship': { label: 'Fellowship', color: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
+      'training': { label: 'Training', color: 'bg-cyan-100 text-cyan-800 border-cyan-200' },
+      'grant': { label: 'Grant', color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+      'other': { label: 'Opportunity', color: 'bg-gray-100 text-gray-800 border-gray-200' },
+      'job': { label: 'Job', color: 'bg-green-100 text-green-800 border-green-200' }
+    };
+    
+    const type = job.opportunityType || 'job';
+    return opportunityTypes[type] || opportunityTypes.other;
+  };
+
+  const getDurationText = () => {
+    if (!job.duration || job.duration.isOngoing) return 'Ongoing';
+    if (job.duration.value && job.duration.unit) {
+      return `${job.duration.value} ${job.duration.unit}`;
+    }
+    return 'Duration not specified';
+  };
+
+  const ownerInfo = getOwnerInfo();
   const statusConfig = getStatusConfig(job.status);
   const isEthiopianJob = job.location.region !== 'international';
+  const opportunityTypeBadge = getOpportunityTypeBadge();
+  const jobTypeLabel = jobService.getJobTypeDisplayLabel(job);
+
+  // Determine the correct edit and view URLs based on job type and view context
+  const getEditUrl = () => {
+    if (isOrganizationView) {
+      return `/dashboard/organization/jobs/edit/${job._id}`;
+    }
+    return job.jobType === 'organization' 
+      ? `/dashboard/organization/jobs/edit/${job._id}`
+      : `/dashboard/company/jobs/edit/${job._id}`;
+  };
+
+  const getViewUrl = () => {
+    if (isOrganizationView) {
+      return `/dashboard/organization/jobs/${job._id}`;
+    }
+    return job.jobType === 'organization' 
+      ? `/dashboard/organization/jobs/${job._id}`
+      : `/dashboard/company/jobs/${job._id}`;
+  };
 
   return (
-    <div className=" rounded-2xl p-6 border border-gray-200 hover:border-blue-300 hover:shadow-xl transition-all duration-300 group backdrop-blur-sm bg-white/95">
+    <div className="rounded-2xl p-6 border border-gray-200 hover:border-blue-300 hover:shadow-xl transition-all duration-300 group backdrop-blur-sm bg-white/95">
       {/* Header */}
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-start space-x-4 flex-1 min-w-0">
-          {job.company.logoUrl ? (
+          {ownerInfo.logo ? (
             <div className="flex-shrink-0">
               <Image 
-                src={job.company.logoUrl} 
-                alt={job.company.name}
+                src={ownerInfo.logo} 
+                alt={ownerInfo.name}
                 className="w-14 h-14 rounded-xl object-cover border-2 border-gray-100 group-hover:border-blue-100 transition-colors shadow-sm"
                 width={56}
                 height={56}
               />
             </div>
           ) : (
-            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+            <div className={`w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${
+              job.jobType === 'organization' 
+                ? 'bg-gradient-to-br from-purple-500 to-purple-600' 
+                : 'bg-gradient-to-br from-blue-500 to-blue-600'
+            }`}>
               <Building2 className="w-6 h-6 text-white" />
             </div>
           )}
@@ -102,10 +185,18 @@ const JobCard: React.FC<JobCardProps> = ({
             <div className="flex items-start justify-between mb-2">
               <div className="flex-1 min-w-0">
                 <h3 className="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2">
-                  <Link href={`/dashboard/company/jobs/${job._id}`} className="hover:underline decoration-2 underline-offset-4">
+                  <Link href={getViewUrl()} className="hover:underline decoration-2 underline-offset-4">
                     {job.title}
                   </Link>
                 </h3>
+                <div className="flex items-center space-x-2 mt-1">
+                  <span className="text-sm font-medium text-gray-700">{jobTypeLabel}</span>
+                  {opportunityTypeBadge && (
+                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${opportunityTypeBadge.color}`}>
+                      {opportunityTypeBadge.label}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex flex-col items-end space-y-2 ml-4">
                 <span className="text-sm text-gray-500 font-medium">{getTimeAgo(job.createdAt)}</span>
@@ -115,16 +206,23 @@ const JobCard: React.FC<JobCardProps> = ({
               </div>
             </div>
             <div className="flex items-center space-x-3 flex-wrap">
-              <p className="text-gray-700 font-medium">{job.company.name}</p>
-              {job.company.verified && (
+              <p className="text-gray-700 font-medium">{ownerInfo.name}</p>
+              {ownerInfo.verified && (
                 <span className="inline-flex items-center text-xs text-green-600 bg-green-50 px-2.5 py-1 rounded-full border border-green-200">
                   <CheckCircle className="w-3 h-3 mr-1" />
                   Verified
                 </span>
               )}
-              {job.company.industry && (
+              <span className={`inline-flex items-center text-xs px-2.5 py-1 rounded-full border ${
+                job.jobType === 'organization'
+                  ? 'bg-purple-50 text-purple-700 border-purple-200'
+                  : 'bg-blue-50 text-blue-700 border-blue-200'
+              }`}>
+                {ownerInfo.type}
+              </span>
+              {ownerInfo.industry && (
                 <span className="text-xs text-gray-600 bg-gray-50 px-2.5 py-1 rounded-full border border-gray-200">
-                  {job.company.industry}
+                  {ownerInfo.industry}
                 </span>
               )}
             </div>
@@ -154,21 +252,28 @@ const JobCard: React.FC<JobCardProps> = ({
             Ethiopian Job
           </span>
         )}
+        {job.jobType === 'organization' && job.duration && (
+          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-cyan-100 text-cyan-800 border border-cyan-200">
+            <Clock className="w-4 h-4 mr-1.5" />
+            {getDurationText()}
+          </span>
+        )}
         {job.featured && (
           <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
-            ⭐ Featured
+            <Star className="w-4 h-4 mr-1.5" />
+            Featured
           </span>
         )}
         {job.urgent && (
           <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-red-100 text-red-800 border border-red-200">
-            <Clock className="w-4 h-4 mr-1.5" />
+            <AlertCircle className="w-4 h-4 mr-1.5" />
             Urgent
           </span>
         )}
       </div>
 
-      {/* Salary */}
-      {job.salary && (
+      {/* Salary/Stipend Information */}
+      {job.salary && job.salary.isPublic && (
         <div className="mb-4">
           <div className="text-lg font-bold text-green-600">
             {jobService.formatSalary(job.salary)}
@@ -176,6 +281,37 @@ const JobCard: React.FC<JobCardProps> = ({
           {job.salary.isNegotiable && (
             <span className="text-sm text-gray-500">(Negotiable)</span>
           )}
+        </div>
+      )}
+
+      {/* Volunteer Information */}
+      {job.jobType === 'organization' && job.volunteerInfo && (
+        <div className="mb-4 p-3 bg-purple-50 rounded-lg border border-purple-200">
+          <div className="flex items-center space-x-4 text-sm">
+            {job.volunteerInfo.hoursPerWeek && (
+              <span className="flex items-center text-purple-700">
+                <Clock className="w-4 h-4 mr-1" />
+                {job.volunteerInfo.hoursPerWeek} hrs/week
+              </span>
+            )}
+            {job.volunteerInfo.commitmentLevel && (
+              <span className="text-purple-700 capitalize">
+                {job.volunteerInfo.commitmentLevel} commitment
+              </span>
+            )}
+            {job.volunteerInfo.providesAccommodation && (
+              <span className="flex items-center text-purple-700">
+                <Building2 className="w-4 h-4 mr-1" />
+                Accommodation
+              </span>
+            )}
+            {job.volunteerInfo.providesStipend && (
+              <span className="flex items-center text-purple-700">
+                <Heart className="w-4 h-4 mr-1" />
+                Stipend provided
+              </span>
+            )}
+          </div>
         </div>
       )}
 
@@ -254,13 +390,13 @@ const JobCard: React.FC<JobCardProps> = ({
                   {job.status === 'active' ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                 </button>
               )}
-              <button
-                onClick={() => onEdit?.(job)}
+              <Link
+                href={getEditUrl()}
                 className="p-2.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-xl transition-all duration-200 border border-transparent hover:border-green-200"
                 title="Edit Job"
               >
                 <Edit3 className="w-5 h-5" />
-              </button>
+              </Link>
               <button
                 onClick={() => onDelete?.(job._id)}
                 className="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 border border-transparent hover:border-red-200"
@@ -271,7 +407,7 @@ const JobCard: React.FC<JobCardProps> = ({
             </>
           ) : (
             <Link
-              href={`/dashboard/company/jobs/${job._id}`}
+              href={getViewUrl()}
               className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-sm hover:shadow-md text-sm flex items-center gap-2"
             >
               View Details

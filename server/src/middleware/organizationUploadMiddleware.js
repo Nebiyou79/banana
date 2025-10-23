@@ -19,54 +19,57 @@ const createUploadDirs = () => {
 
 createUploadDirs();
 
-// Configure storage for organization files
+// Storage configuration
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    let uploadPath = path.join(process.cwd(), 'public', 'uploads', 'organization');
+  destination: (req, file, cb) => {
+    let uploadPath = '';
     
     if (file.fieldname === 'logo') {
-      uploadPath = path.join(uploadPath, 'logos');
+      uploadPath = path.join(process.cwd(), 'public', 'uploads', 'organization', 'logos');
     } else if (file.fieldname === 'banner') {
-      uploadPath = path.join(uploadPath, 'banners');
+      uploadPath = path.join(process.cwd(), 'public', 'uploads', 'organization', 'banners');
     }
     
     cb(null, uploadPath);
   },
-  filename: function (req, file, cb) {
-    const organizationId = req.params.id || req.user?.userId || 'temp';
-    const timestamp = Date.now();
-    const fileExtension = path.extname(file.originalname);
-    const fileName = `${organizationId}-${timestamp}${fileExtension}`;
-    
-    cb(null, fileName);
+  filename: (req, file, cb) => {
+    // Generate unique filename
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
   }
 });
 
-// File filter for images
+// File filter
 const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith('image/')) {
+  const allowedTypes = {
+    logo: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'],
+    banner: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+  };
+  
+  const fieldTypes = allowedTypes[file.fieldname];
+  
+  if (fieldTypes && fieldTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Only image files are allowed!'), false);
+    cb(new Error(`Invalid file type for ${file.fieldname}. Allowed types: ${fieldTypes?.join(', ')}`), false);
   }
 };
 
-const upload = multer({
+// Multer configuration
+const organizationUpload = multer({
   storage: storage,
+  fileFilter: fileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
-    files: 2 // Maximum 2 files (logo and banner)
-  },
-  fileFilter: fileFilter
-});
-
-// Middleware for handling organization file uploads
-const organizationUpload = upload.fields([
+    files: 1 // 1 file per upload
+  }
+}).fields([
   { name: 'logo', maxCount: 1 },
   { name: 'banner', maxCount: 1 }
 ]);
 
-// Error handling middleware for uploads
+// Error handling middleware
 const handleUploadErrors = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
@@ -78,7 +81,7 @@ const handleUploadErrors = (err, req, res, next) => {
     if (err.code === 'LIMIT_FILE_COUNT') {
       return res.status(400).json({
         success: false,
-        message: 'Too many files uploaded.'
+        message: 'Too many files. Only one file allowed per upload.'
       });
     }
   } else if (err) {

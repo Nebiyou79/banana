@@ -1,7 +1,7 @@
 // src/services/authService.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import api from '@/lib/axios';
-import { handleError, handleInfo, handleSuccess } from '@/lib/error-handler'; // ADD THIS IMPORT
+import { handleError, handleSuccess } from '@/lib/error-handler'; // ADD THIS IMPORT
 
 export interface User {
   _id: string;
@@ -403,3 +403,7 @@ resetPasswordWithToken: async (data: ResetPasswordWithTokenData): Promise<{
   }
 },
 };
+
+function handleInfo(arg0: string) {
+  throw new Error('Function not implemented.');
+}

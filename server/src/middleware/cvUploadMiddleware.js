@@ -36,13 +36,13 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Create multer instance for CV uploads
+// Create multer instance for CV uploads with updated limits
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: 2 * 1024 * 1024, // 2MB limit
-    files: 20 // Maximum 20 files
+    fileSize: 5 * 1024 * 1024, // 5MB limit (increased from 2MB)
+    files: 10 // Maximum 10 files (increased from 20, but we'll limit to 10 in controller)
   }
 });
 
@@ -52,13 +52,13 @@ const handleUploadError = (error, req, res, next) => {
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
         success: false,
-        message: 'File too large. Maximum size is 2MB.'
+        message: 'File too large. Maximum size is 5MB.'
       });
     }
     if (error.code === 'LIMIT_FILE_COUNT') {
       return res.status(400).json({
         success: false,
-        message: 'Too many files. Maximum 20 CVs allowed.'
+        message: 'Too many files. Maximum 10 CVs allowed per upload.'
       });
     }
     if (error.code === 'LIMIT_UNEXPECTED_FILE') {

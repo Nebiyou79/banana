@@ -5,6 +5,14 @@ const asyncHandler = require('../middleware/async');
 const fs = require('fs').promises;
 const path = require('path');
 
+// Helper validation functions
+const isValidTIN = tin => /^[0-9]{10}$/.test(tin);
+const isValidPhone = phone => /^\+?[0-9]{7,15}$/.test(phone);
+const isValidWebsite = url => {
+  if (!url) return true;
+  return /^(https?:\/\/)?([\w-]+\.)+[\w-]{2,}(\/\S*)?$/.test(url);
+};
+
 // @desc    Get my company profile
 // @route   GET /api/v1/company
 // @access  Private
@@ -42,79 +50,76 @@ exports.getMyCompany = asyncHandler(async (req, res, next) => {
 // @desc    Create company profile
 // @route   POST /api/v1/company
 // @access  Private (Company role only)
-exports.createCompany = asyncHandler(async (req, res, next) => {
+exports.createCompany = asyncHandler(async (req, res) => {
   try {
-    console.log('👤 User making request:', req.user);
-    console.log('📦 Request body:', req.body);
-
-    // Check if user has company role
     if (req.user.role !== 'company') {
       return res.status(403).json({
         success: false,
-        message: 'Only users with company role can create company profiles'
+        message: 'Only users with company role can create company profiles',
       });
     }
 
-    // Check if user already has a company
     const existingCompany = await Company.findOne({ user: req.user.userId });
     if (existingCompany) {
       return res.status(400).json({
         success: false,
-        message: 'Company profile already exists for this user'
+        message: 'Company profile already exists for this user',
       });
     }
 
-    // Create company data
-    const companyData = {
-      ...req.body,
-      user: req.user.userId
-    };
+    const { tin, phone, website } = req.body;
 
-    console.log('🏢 Creating company with data:', companyData);
+    // ✅ Manual validation
+    const validationErrors = [];
+    if (tin && !isValidTIN(tin)) validationErrors.push('TIN number must be exactly 10 digits');
+    if (phone && !isValidPhone(phone)) validationErrors.push('Phone number must contain only digits (7–15 digits allowed)');
+    if (website && !isValidWebsite(website)) validationErrors.push('Please enter a valid website URL (e.g., https://example.com)');
 
-    // Create company
+    if (validationErrors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: validationErrors,
+      });
+    }
+
+    const companyData = { ...req.body, user: req.user.userId };
     const company = await Company.create(companyData);
 
-    // Update user with company reference
-    await User.findByIdAndUpdate(req.user.userId, { 
+    await User.findByIdAndUpdate(req.user.userId, {
       hasCompanyProfile: true,
       profileCompleted: true,
-      company: company._id
+      company: company._id,
     });
-
-    console.log('✅ Company created successfully:', company._id);
 
     res.status(201).json({
       success: true,
       message: 'Company profile created successfully',
-      data: company
+      data: company,
     });
-
   } catch (error) {
     console.error('❌ Company creation error:', error);
-    
-    // Handle duplicate key errors
+
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
       return res.status(409).json({
         success: false,
-        message: `${field === 'tin' ? 'TIN' : 'Company name'} already exists`
+        message: `${field === 'tin' ? 'TIN' : 'Company name'} already exists`,
       });
     }
-    
-    // Handle validation errors
+
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(val => val.message);
       return res.status(400).json({
         success: false,
         message: 'Validation failed',
-        errors: messages
+        errors: messages,
       });
     }
-    
+
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error',
     });
   }
 });
@@ -122,46 +127,55 @@ exports.createCompany = asyncHandler(async (req, res, next) => {
 // @desc    Update my company profile
 // @route   PUT /api/v1/company/me
 // @access  Private
-exports.updateMyCompany = asyncHandler(async (req, res, next) => {
+exports.updateMyCompany = asyncHandler(async (req, res) => {
   try {
     const company = await Company.findOne({ user: req.user.userId });
-
     if (!company) {
       return res.status(404).json({
         success: false,
-        message: 'Company profile not found'
+        message: 'Company profile not found',
       });
     }
 
-    const updatedCompany = await Company.findByIdAndUpdate(
-      company._id, 
-      req.body, 
-      {
-        new: true,
-        runValidators: true
-      }
-    ).populate('user', 'name email');
+    const { tin, phone, website } = req.body;
+    const validationErrors = [];
+    if (tin && !isValidTIN(tin)) validationErrors.push('TIN number must be exactly 10 digits');
+    if (phone && !isValidPhone(phone)) validationErrors.push('Phone number must contain only digits (7–15 digits allowed)');
+    if (website && !isValidWebsite(website)) validationErrors.push('Please enter a valid website URL (e.g., https://example.com)');
+
+    if (validationErrors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: validationErrors,
+      });
+    }
+
+    const updatedCompany = await Company.findByIdAndUpdate(company._id, req.body, {
+      new: true,
+      runValidators: true,
+    }).populate('user', 'name email');
 
     res.status(200).json({
       success: true,
       message: 'Company profile updated successfully',
-      data: updatedCompany
+      data: updatedCompany,
     });
   } catch (error) {
     console.error('❌ Update company error:', error);
-    
+
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(val => val.message);
       return res.status(400).json({
         success: false,
         message: 'Validation failed',
-        errors: messages
+        errors: messages,
       });
     }
-    
+
     res.status(500).json({
       success: false,
-      message: 'Failed to update company profile'
+      message: 'Failed to update company profile',
     });
   }
 });

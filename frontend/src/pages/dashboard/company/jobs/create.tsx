@@ -26,9 +26,12 @@ const CreateJobPage: React.FC = () => {
   const [showSuccess, setShowSuccess] = useState(false);
   const [createdJob, setCreatedJob] = useState<Job | null>(null);
 
-  // Create job mutation
+  // Create job mutation - automatically uses company endpoint based on user role
   const createMutation = useMutation({
-    mutationFn: (data: Partial<Job>) => jobService.createJob(data),
+    mutationFn: (data: Partial<Job>) => {
+      // The jobService will handle the appropriate endpoint based on data
+      return jobService.createJob(data);
+    },
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
       setCreatedJob(response);
@@ -51,7 +54,12 @@ const CreateJobPage: React.FC = () => {
   });
 
   const handleSubmit = async (data: Partial<Job>) => {
-    await createMutation.mutateAsync(data);
+    // Ensure jobType is set for company with proper type
+    const jobData: Partial<Job> = {
+      ...data,
+      jobType: 'company' as const, // Use type assertion to fix the type issue
+    };
+    await createMutation.mutateAsync(jobData);
   };
 
   const handleViewJob = () => {
@@ -81,6 +89,8 @@ const CreateJobPage: React.FC = () => {
   }
 
   if (showSuccess && createdJob) {
+    const jobTypeLabel = jobService.getJobTypeDisplayLabel(createdJob);
+    
     return (
       <DashboardLayout requiredRole="company">
         <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 py-8">
@@ -91,10 +101,10 @@ const CreateJobPage: React.FC = () => {
                 <CheckCircle className="w-10 h-10 text-green-600" />
               </div>
               <h1 className="text-4xl font-bold text-gray-900 mb-4">
-                Job Created Successfully!
+                {jobTypeLabel} Created Successfully!
               </h1>
               <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-                Your job posting for <strong>`{createdJob.title}`</strong> is now live and visible to qualified candidates.
+                Your {jobTypeLabel.toLowerCase()} for <strong>`{createdJob.title}`</strong> is now {createdJob.status === 'active' ? 'live and visible to candidates' : 'saved as draft'}.
               </p>
             </div>
 
@@ -104,7 +114,9 @@ const CreateJobPage: React.FC = () => {
                 <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-4">
                   <Target className="w-6 h-6 text-blue-600" />
                 </div>
-                <div className="text-2xl font-bold text-gray-900 mb-2">Active</div>
+                <div className="text-2xl font-bold text-gray-900 mb-2 capitalize">
+                  {createdJob.status}
+                </div>
                 <div className="text-gray-600">Job Status</div>
               </div>
               
@@ -120,8 +132,10 @@ const CreateJobPage: React.FC = () => {
                 <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-4">
                   <TrendingUp className="w-6 h-6 text-purple-600" />
                 </div>
-                <div className="text-2xl font-bold text-gray-900 mb-2">Live</div>
-                <div className="text-gray-600">Visible to Candidates</div>
+                <div className="text-2xl font-bold text-gray-900 mb-2 capitalize">
+                  {createdJob.remote}
+                </div>
+                <div className="text-gray-600">Work Type</div>
               </div>
             </div>
 
@@ -133,7 +147,7 @@ const CreateJobPage: React.FC = () => {
                   className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 px-6 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl font-semibold text-lg flex items-center justify-center gap-3"
                 >
                   <Briefcase className="w-5 h-5" />
-                  View Job Posting
+                  View {jobTypeLabel}
                 </button>
                 
                 <button
@@ -141,7 +155,7 @@ const CreateJobPage: React.FC = () => {
                   className="w-full bg-white text-gray-700 border-2 border-gray-300 py-4 px-6 rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 font-semibold text-lg flex items-center justify-center gap-3"
                 >
                   <Rocket className="w-5 h-5" />
-                  Create Another Job
+                  Create Another {jobTypeLabel}
                 </button>
               </div>
               
@@ -227,34 +241,13 @@ const CreateJobPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Verification Notice
-          {!user?.companyVerified && (
-            <div className="mb-8 bg-yellow-50 border border-yellow-200 rounded-2xl p-6 shadow-sm">
-              <div className="flex items-start">
-                <AlertCircle className="w-6 h-6 text-yellow-600 mr-3 mt-0.5 flex-shrink-0" />
-                <div>
-                  <h3 className="text-lg font-semibold text-yellow-800 mb-2">
-                    Company Verification Required
-                  </h3>
-                  <p className="text-yellow-700">
-                    Your company profile is not yet verified. This job will be published immediately but may require 
-                    additional verification for premium features. 
-                    <Link href="/dashboard/company/profile" className="font-semibold underline ml-1">
-                      Complete verification
-                    </Link>
-                  </p>
-                </div>
-              </div>
-            </div>
-          )} */}
-
           {/* Job Form */}
           <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
             <JobForm
               onSubmit={handleSubmit}
               loading={createMutation.isPending}
-            //   companyVerified={user?.companyVerified || false}
               mode="create"
+              jobType="company"
             />
           </div>
 

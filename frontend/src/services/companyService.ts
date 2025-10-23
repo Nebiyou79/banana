@@ -1,8 +1,7 @@
-// src/services/companyService.ts - FIXED RETURN TYPES
+// src/services/companyService.ts - PROPERLY FIXED ERROR HANDLING
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import api from '@/lib/axios';
-import { handleError, handleSuccess } from '@/lib/error-handler';
-// import { Job, JobsResponse } from './jobService';
+import { toast } from '@/hooks/use-toast';
 
 export interface CompanyProfile {
   _id: string;
@@ -23,7 +22,6 @@ export interface CompanyProfile {
   };
   createdAt: string;
   updatedAt: string;
-  // Virtual fields from backend schema
   logoFullUrl?: string;
   bannerFullUrl?: string;
 }
@@ -74,22 +72,66 @@ const isValidUrl = (url: string): boolean => {
   }
 };
 
-const handleApiError = (error: any, defaultMessage: string): never => {
-  if (error.response?.data?.message) {
-    handleError(error.response.data.message);
-    throw new Error(error.response.data.message);
-  } else if (error.message) {
-    handleError(error.message);
-    throw error;
-  } else {
-    handleError(defaultMessage);
-    throw new Error(defaultMessage);
+// FIXED: Simple error handler that just shows toast and returns the error
+const handleServiceError = (error: any, defaultMessage: string, context?: string): Error => {
+  console.error(`[CompanyService${context ? `: ${context}` : ''}] Error:`, error);
+  
+  let errorMessage = defaultMessage;
+  
+  // Network errors
+  if (error.code === 'NETWORK_ERROR' || !error.response) {
+    errorMessage = 'Please check your internet connection and try again.';
+    toast({
+      title: 'Network Error',
+      description: errorMessage,
+      variant: 'destructive',
+    });
   }
+  // Validation errors from backend
+  else if (error.response?.data?.errors) {
+    const fieldErrors = Object.values(error.response.data.errors).flat();
+    if (fieldErrors.length > 0) {
+      errorMessage = fieldErrors[0] as string;
+      toast({
+        title: 'Validation Error',
+        description: errorMessage,
+        variant: 'warning',
+      });
+    }
+  }
+  // Backend error message
+  else if (error.response?.data?.message) {
+    errorMessage = error.response.data.message;
+    toast({
+      title: 'Error',
+      description: errorMessage,
+      variant: 'destructive',
+    });
+  }
+  // Generic error message
+  else if (error.message) {
+    errorMessage = error.message;
+    toast({
+      title: 'Error',
+      description: errorMessage,
+      variant: 'destructive',
+    });
+  }
+  // Fallback
+  else {
+    toast({
+      title: 'Error',
+      description: defaultMessage,
+      variant: 'destructive',
+    });
+  }
+
+  // Return the error instead of throwing
+  return new Error(errorMessage);
 };
 
 export const companyService = {
-  // ✅ PERFECTLY ALIGNED: GET /api/v1/company
-  // Get current user's company
+  // Get current user's company - FIXED: Returns null on error
   getMyCompany: async (): Promise<CompanyProfile | null> => {
     try {
       const response = await api.get<ApiResponse<CompanyProfile | null>>('/company');
@@ -100,37 +142,50 @@ export const companyService = {
       
       return response.data.data || null;
     } catch (error: any) {
-      if (error.response?.status === 404) {
+      if (error.response?.status === 404 || error.response?.status === 400) {
+        // No company found is not an error, return null
         return null;
       }
-      handleApiError(error, 'Failed to fetch company profile');
-      // This line will never be reached because handleApiError always throws
+      // For other errors, show toast and return null
+      handleServiceError(error, 'Failed to fetch company profile', 'getMyCompany');
       return null;
     }
   },
 
-  // ✅ PERFECTLY ALIGNED: GET /api/v1/company/:id
-  // Get company by ID
+  // Get company by ID - FIXED: Shows toast and throws error
   getCompany: async (id: string): Promise<CompanyProfile> => {
     try {
       if (!id) {
-        throw new Error('Company ID is required');
+        const error = new Error('Company ID is required');
+        toast({
+          title: 'Error',
+          description: error.message,
+          variant: 'destructive',
+        });
+        throw error;
       }
       
       const response = await api.get<ApiResponse<CompanyProfile>>(`/company/${id}`);
       
       if (!response.data.success || !response.data.data) {
-        throw new Error(response.data.message || 'Failed to fetch company');
+        const error = new Error(response.data.message || 'Failed to fetch company');
+        toast({
+          title: 'Error',
+          description: error.message,
+          variant: 'destructive',
+        });
+        throw error;
       }
       
       return response.data.data;
     } catch (error: any) {
-      return handleApiError(error, 'Failed to fetch company') as never;
+      // Show toast and re-throw the error
+      const processedError = handleServiceError(error, 'Failed to fetch company', 'getCompany');
+      throw processedError;
     }
   },
 
-  // ✅ PERFECTLY ALIGNED: POST /api/v1/company
-  // Create company
+  // Create company - FIXED: Shows toast and throws error
   createCompany: async (data: Partial<CompanyProfile>): Promise<CompanyProfile> => {
     try {
       validateCompanyData(data);
@@ -138,22 +193,40 @@ export const companyService = {
       const response = await api.post<ApiResponse<CompanyProfile>>('/company', data);
       
       if (!response.data.success || !response.data.data) {
-        throw new Error(response.data.message || 'Failed to create company profile');
+        const error = new Error(response.data.message || 'Failed to create company profile');
+        toast({
+          title: 'Error',
+          description: error.message,
+          variant: 'destructive',
+        });
+        throw error;
       }
       
-      handleSuccess('Company profile created successfully');
+      toast({
+        title: 'Success',
+        description: 'Company profile created successfully!',
+        variant: 'success',
+      });
+      
       return response.data.data;
     } catch (error: any) {
-      return handleApiError(error, 'Failed to create company profile') as never;
+      // Show toast and re-throw the error
+      const processedError = handleServiceError(error, 'Failed to create company profile', 'createCompany');
+      throw processedError;
     }
   },
 
-  // ✅ PERFECTLY ALIGNED: PUT /api/v1/company/:id
-  // Update company by ID
+  // Update company by ID - FIXED: Shows toast and throws error
   updateCompany: async (id: string, data: Partial<CompanyProfile>): Promise<CompanyProfile> => {
     try {
       if (!id) {
-        throw new Error('Company ID is required');
+        const error = new Error('Company ID is required');
+        toast({
+          title: 'Error',
+          description: error.message,
+          variant: 'destructive',
+        });
+        throw error;
       }
       
       validateCompanyData(data);
@@ -161,37 +234,71 @@ export const companyService = {
       const response = await api.put<ApiResponse<CompanyProfile>>(`/company/${id}`, data);
       
       if (!response.data.success || !response.data.data) {
-        throw new Error(response.data.message || 'Failed to update company');
+        const error = new Error(response.data.message || 'Failed to update company');
+        toast({
+          title: 'Error',
+          description: error.message,
+          variant: 'destructive',
+        });
+        throw error;
       }
       
-      handleSuccess('Company updated successfully');
+      toast({
+        title: 'Success',
+        description: 'Company updated successfully!',
+        variant: 'success',
+      });
+      
       return response.data.data;
     } catch (error: any) {
-      return handleApiError(error, 'Failed to update company') as never;
+      // Show toast and re-throw the error
+      const processedError = handleServiceError(error, 'Failed to update company', 'updateCompany');
+      throw processedError;
     }
   },
 
-  // ✅ PERFECTLY ALIGNED: PUT /api/v1/company/me
-  // Update current user's company
+  // Update current user's company - FIXED: Shows toast and throws error
   updateMyCompany: async (data: Partial<CompanyProfile>): Promise<CompanyProfile> => {
     try {
       validateCompanyData(data);
       
+      console.log('[CompanyService] Updating company with data:', data);
+      
       const response = await api.put<ApiResponse<CompanyProfile>>('/company/me', data);
       
       if (!response.data.success || !response.data.data) {
-        throw new Error(response.data.message || 'Failed to update company profile');
+        console.error('[CompanyService] Update failed:', response.data);
+        const error = new Error(response.data.message || 'Failed to update company profile');
+        toast({
+          title: 'Error',
+          description: error.message,
+          variant: 'destructive',
+        });
+        throw error;
       }
       
-      handleSuccess('Company profile updated successfully');
+      console.log('[CompanyService] Update successful:', response.data.data);
+      
+      toast({
+        title: 'Success',
+        description: 'Company profile updated successfully!',
+        variant: 'success',
+      });
+      
       return response.data.data;
     } catch (error: any) {
-      return handleApiError(error, 'Failed to update company profile') as never;
+      console.error('[CompanyService] Update error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      // Show toast and re-throw the error
+      const processedError = handleServiceError(error, 'Failed to update company profile', 'updateMyCompany');
+      throw processedError;
     }
   },
 
-  // ✅ PERFECTLY ALIGNED: POST /api/v1/company/upload/logo
-  // Upload company logo
+  // Upload company logo - FIXED: Shows toast and throws error
   uploadLogo: async (file: File): Promise<UploadResponse> => {
     try {
       const formData = new FormData();
@@ -201,22 +308,34 @@ export const companyService = {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-        timeout: 30000, // 30 seconds for file uploads
+        timeout: 30000,
       });
 
       if (!response.data.success) {
-        throw new Error(response.data.message || 'Failed to upload logo');
+        const error = new Error(response.data.message || 'Failed to upload logo');
+        toast({
+          title: 'Error',
+          description: error.message,
+          variant: 'destructive',
+        });
+        throw error;
       }
 
-      handleSuccess('Logo uploaded successfully');
+      toast({
+        title: 'Success',
+        description: 'Logo uploaded successfully!',
+        variant: 'success',
+      });
+      
       return response.data;
     } catch (error: any) {
-      return handleApiError(error, 'Failed to upload logo') as never;
+      // Show toast and re-throw the error
+      const processedError = handleServiceError(error, 'Failed to upload logo', 'uploadLogo');
+      throw processedError;
     }
   },
 
-  // ✅ PERFECTLY ALIGNED: POST /api/v1/company/upload/banner
-  // Upload company banner
+  // Upload company banner - FIXED: Shows toast and throws error
   uploadBanner: async (file: File): Promise<UploadResponse> => {
     try {
       const formData = new FormData();
@@ -230,68 +349,101 @@ export const companyService = {
       });
 
       if (!response.data.success) {
-        throw new Error(response.data.message || 'Failed to upload banner');
+        const error = new Error(response.data.message || 'Failed to upload banner');
+        toast({
+          title: 'Error',
+          description: error.message,
+          variant: 'destructive',
+        });
+        throw error;
       }
 
-      handleSuccess('Banner uploaded successfully');
+      toast({
+        title: 'Success',
+        description: 'Banner uploaded successfully!',
+        variant: 'success',
+      });
+      
       return response.data;
     } catch (error: any) {
-      return handleApiError(error, 'Failed to upload banner') as never;
+      // Show toast and re-throw the error
+      const processedError = handleServiceError(error, 'Failed to upload banner', 'uploadBanner');
+      throw processedError;
     }
   },
 
-  // ✅ PERFECTLY ALIGNED: DELETE /api/v1/company/upload/logo
-  // Delete company logo
+  // Delete company logo - FIXED: Shows toast and throws error
   deleteLogo: async (): Promise<void> => {
     try {
       const response = await api.delete<ApiResponse<null>>('/company/upload/logo');
 
       if (!response.data.success) {
-        throw new Error(response.data.message || 'Failed to delete logo');
+        const error = new Error(response.data.message || 'Failed to delete logo');
+        toast({
+          title: 'Error',
+          description: error.message,
+          variant: 'destructive',
+        });
+        throw error;
       }
 
-      handleSuccess('Logo deleted successfully');
+      toast({
+        title: 'Success',
+        description: 'Logo deleted successfully!',
+        variant: 'success',
+      });
     } catch (error: any) {
-      return handleApiError(error, 'Failed to delete logo') as never;
+      // Show toast and re-throw the error
+      const processedError = handleServiceError(error, 'Failed to delete logo', 'deleteLogo');
+      throw processedError;
     }
   },
 
-  // ✅ PERFECTLY ALIGNED: DELETE /api/v1/company/upload/banner
-  // Delete company banner
+  // Delete company banner - FIXED: Shows toast and throws error
   deleteBanner: async (): Promise<void> => {
     try {
       const response = await api.delete<ApiResponse<null>>('/company/upload/banner');
 
       if (!response.data.success) {
-        throw new Error(response.data.message || 'Failed to delete banner');
+        const error = new Error(response.data.message || 'Failed to delete banner');
+        toast({
+          title: 'Error',
+          description: error.message,
+          variant: 'destructive',
+        });
+        throw error;
       }
 
-      handleSuccess('Banner deleted successfully');
+      toast({
+        title: 'Success',
+        description: 'Banner deleted successfully!',
+        variant: 'success',
+      });
     } catch (error: any) {
-      return handleApiError(error, 'Failed to delete banner') as never;
+      // Show toast and re-throw the error
+      const processedError = handleServiceError(error, 'Failed to delete banner', 'deleteBanner');
+      throw processedError;
     }
   },
 
-  // Utility function to check if user can create company
+  // Utility functions
   canCreateCompany: (userRole: string, hasCompanyProfile: boolean): boolean => {
     return userRole === 'company' && !hasCompanyProfile;
   },
 
-  // Utility function to get full image URL
-getFullImageUrl: (imageUrl: string | undefined): string | undefined => {
-  if (!imageUrl) return undefined;
-  
-  if (imageUrl.startsWith('http')) {
-    return imageUrl;
+  getFullImageUrl: (imageUrl: string | undefined): string | undefined => {
+    if (!imageUrl) return undefined;
+    
+    if (imageUrl.startsWith('http')) {
+      return imageUrl;
+    }
+    
+    if (imageUrl.startsWith('/uploads')) {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:4000';
+      return `${baseUrl}${imageUrl}`;
+    }
+    
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+    return `${baseUrl}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
   }
-  // Handle relative paths from backend
-  // If imageUrl starts with /uploads, it's already a full path from backend
-  if (imageUrl.startsWith('/uploads')) {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:4000';
-    return `${baseUrl}${imageUrl}`;
-  }
-  // For other relative paths
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-  return `${baseUrl}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
-}
 };

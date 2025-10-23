@@ -9,6 +9,7 @@ interface TenderFormProps {
   onCancel: () => void;
   isLoading?: boolean;
   mode?: 'create' | 'edit';
+  tenderType?: 'company' | 'organization';
 }
 
 // Comprehensive categories based on 2merkato.com
@@ -104,7 +105,8 @@ const TenderForm: React.FC<TenderFormProps> = ({
   onSubmit, 
   onCancel, 
   isLoading = false,
-  mode = 'create'
+  mode = 'create',
+  tenderType = 'company'
 }) => {
   const [formData, setFormData] = useState<CreateTenderData>({
     title: '',
@@ -126,7 +128,8 @@ const TenderForm: React.FC<TenderFormProps> = ({
       location: 'anywhere',
       languageRequirements: []
     },
-    status: 'draft'
+    status: 'draft',
+    tenderType: tenderType
   });
 
   const [skillInput, setSkillInput] = useState('');
@@ -161,13 +164,20 @@ const TenderForm: React.FC<TenderFormProps> = ({
           specificLocation: tender.requirements?.specificLocation || '',
           languageRequirements: tender.requirements?.languageRequirements || []
         },
-        status: (tender.status as 'draft' | 'published') || 'draft'
+        status: (tender.status as 'draft' | 'published') || 'draft',
+        tenderType: tender.tenderType || tenderType
       });
       setSelectedStatus((tender.status as 'draft' | 'published') || 'draft');
       setShowBudget(!!tender.budget && (tender.budget.min > 0 || tender.budget.max > 0));
       setCustomDuration(!!tender.duration && tender.duration !== 30);
+    } else {
+      // Set tender type for new tenders
+      setFormData(prev => ({
+        ...prev,
+        tenderType: tenderType
+      }));
     }
-  }, [tender]);
+  }, [tender, tenderType]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -240,7 +250,7 @@ const TenderForm: React.FC<TenderFormProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+ const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     console.log('Form submitted with status:', selectedStatus);
     
@@ -248,23 +258,27 @@ const TenderForm: React.FC<TenderFormProps> = ({
       return;
     }
     
-    // Prepare the data for submission
+    // Prepare the data for submission - create a new object without using delete
     const submitData: CreateTenderData | UpdateTenderData = {
-      ...formData,
-      status: selectedStatus,
+      title: formData.title,
+      description: formData.description,
+      category: formData.category,
       skillsRequired: formData.skillsRequired.filter(skill => skill.trim() !== ''),
+      deadline: formData.deadline,
+      visibility: formData.visibility,
+      invitedFreelancers: formData.invitedFreelancers,
       requirements: {
         ...formData.requirements,
         specificLocation: getRequirements().location === 'anywhere' 
           ? undefined 
           : getRequirements().specificLocation
-      }
+      },
+      status: selectedStatus,
+      tenderType: formData.tenderType
     };
 
-    // Remove budget if not shown
-    if (!showBudget) {
-      delete submitData.budget;
-    } else {
+    // Conditionally add budget if shown
+    if (showBudget) {
       submitData.budget = {
         min: Number(formData.budget.min) || 0,
         max: Number(formData.budget.max) || 0,
@@ -273,10 +287,8 @@ const TenderForm: React.FC<TenderFormProps> = ({
       };
     }
 
-    // Remove duration if using default
-    if (!customDuration) {
-      delete submitData.duration;
-    } else {
+    // Conditionally add duration if custom duration is enabled
+    if (customDuration) {
       submitData.duration = Number(formData.duration) || 30;
     }
     
@@ -405,6 +417,14 @@ const TenderForm: React.FC<TenderFormProps> = ({
     return getRequirements().languageRequirements || [];
   };
 
+  const getFormTitle = () => {
+    const typeLabel = tenderType === 'organization' ? 'Organization' : 'Company';
+    if (mode === 'edit') {
+      return `Edit ${typeLabel} Tender`;
+    }
+    return `Create New ${typeLabel} Tender`;
+  };
+
   const sections = [
     { id: 'basic', label: 'Basic Info', icon: '📝' },
     { id: 'skills', label: 'Skills & Requirements', icon: '🔧' },
@@ -436,6 +456,17 @@ const TenderForm: React.FC<TenderFormProps> = ({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Tender Type Badge */}
+      <div className="mb-6 flex justify-center">
+        <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium ${
+          tenderType === 'organization' 
+            ? 'bg-purple-100 text-purple-800 border border-purple-200' 
+            : 'bg-blue-100 text-blue-800 border border-blue-200'
+        }`}>
+          {tenderType === 'organization' ? 'Organization Tender' : 'Company Tender'}
+        </span>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -872,10 +903,19 @@ const TenderForm: React.FC<TenderFormProps> = ({
             <h3 className="text-xl font-semibold text-gray-900 mb-6">Final Settings</h3>
             
             <div className="space-y-6">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="text-lg font-medium text-blue-900 mb-2">Review Your Tender</h4>
-                <p className="text-blue-800">
-                  Please review all the information you`ve entered. Once published, your tender will be visible to freelancers and you`ll start receiving proposals.
+              <div className={`p-4 rounded-lg ${
+                tenderType === 'organization' ? 'bg-purple-50 border border-purple-200' : 'bg-blue-50 border border-blue-200'
+              }`}>
+                <h4 className={`text-lg font-medium mb-2 ${
+                  tenderType === 'organization' ? 'text-purple-900' : 'text-blue-900'
+                }`}>
+                  {getFormTitle()}
+                </h4>
+                <p className={tenderType === 'organization' ? 'text-purple-800' : 'text-blue-800'}>
+                  {tenderType === 'organization' 
+                    ? 'This tender will be published under your organization profile and visible to qualified freelancers.'
+                    : 'This tender will be published under your company profile and visible to qualified freelancers.'
+                  }
                 </p>
               </div>
 
@@ -909,6 +949,14 @@ const TenderForm: React.FC<TenderFormProps> = ({
                       <span className="text-gray-600">Duration:</span>
                       <span className="font-medium">
                         {customDuration ? `${formData.duration} days` : '30 days (Default)'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Tender Type:</span>
+                      <span className={`font-medium ${
+                        tenderType === 'organization' ? 'text-purple-600' : 'text-blue-600'
+                      }`}>
+                        {tenderType === 'organization' ? 'Organization' : 'Company'}
                       </span>
                     </div>
                   </div>

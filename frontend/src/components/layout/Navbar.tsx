@@ -1,35 +1,48 @@
-// /src/components/layouts/Navbar.tsx
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from '@/contexts/AuthContext';
 import { 
-  Briefcase, User, Building, LogOut, Menu, X, 
-  Bell, MessageSquare, Search, ChevronDown, ClipboardList,
-  FileText,
-  Award
+  ChevronDown, 
+  LogOut,
+  User,
+  Menu,
+  X,
+  LayoutDashboardIcon,
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { colors } from '@/utils/color';
 import Image from "next/image";
 
-export default function Navbar() {
-  const [role, setRole] = useState<string | null>(null);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+interface NavbarProps {
+  onMenuToggle?: () => void;
+}
+
+export default function Navbar({ onMenuToggle }: NavbarProps) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const router = useRouter();
   const { user, logout } = useAuth();
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setRole(localStorage.getItem("role"));
-    
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 10);
     };
 
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsProfileDropdownOpen(false);
+      }
+    };
+
     window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -50,268 +63,302 @@ export default function Navbar() {
     }
   };
 
-  const getNavLinks = () => {
+  const getQuickLinks = () => {
     if (!user) return [];
     
     switch (user.role) {
       case "candidate":
         return [
-          { href: "/dashboard/candidate/jobs", label: "Find Jobs", icon: <Search className="w-4 h-4" /> },
-          { href: "/dashboard/candidate", label: "Dashboard", icon: <User className="w-4 h-4" /> },
-          { href: "/dashboard/candidate/profile", label: "Profile", icon: <User className="w-4 h-4" /> },
+          { href: "/dashboard/candidate/jobs", label: "Find Jobs" },
+          {href: "/dashboard/candidate/profile", label: "Profile"},
+          {href: "/dashboard/candidate", label: "Dashboard"},
+          // { href: "/dashboard/candidate/applications", label: "Applications" },
         ];
       case "freelancer":
         return [
-          { href: "/tenders", label: "Browse Tenders", icon: <ClipboardList className="w-4 h-4" /> },
-          { href: "/dashboard/freelancer/proposals", label: "My Proposals", icon: <FileText className="w-4 h-4" /> },
-          { href: "/dashboard/freelancer", label: "Dashboard", icon: <User className="w-4 h-4" /> },
-          { href: "/dashboard/freelancer/portfolio", label: "Portfolio", icon: <Briefcase className="w-4 h-4" /> },
+          { href: "/dashboard/freelancer/tenders", label: "Browse Tenders" },
+          {href: "/dashboard/freelancer/profile", label: "Profile"},
+          {href: "/dashboard/freelancer", label: "Dashboard"},
+          // { href: "/dashboard/freelancer/proposals", label: "My Proposals" },
         ];
       case "company":
         return [
-          { href: "/tenders", label: "Browse Tenders", icon: <ClipboardList className="w-4 h-4" /> },
-          { href: "/dashboard/company/tenders/create", label: "Create Tender", icon: <Award className="w-4 h-4" /> },
-          { href: "/talents", label: "Find Talent", icon: <Search className="w-4 h-4" /> },
-          { href: "/dashboard/company", label: "Dashboard", icon: <Building className="w-4 h-4" /> },
+          { href: "/dashboard/company/jobs", label: "Manage Jobs" },
+          { href: "/tenders", label: "Browse Tenders" },
+          {href: "/dashboard/company/profile", label: "Profile"},
+          {href: "/dashboard/company", label: "Dashboard"},
+          // { href: "/dashboard/company/applications", label: "Applications" },
         ];
       case "organization":
         return [
-          { href: "/organization/company/tenders/create", label: "Create Tender", icon: <Award className="w-4 h-4" /> },
-          { href: "/talents", label: "Find Talent", icon: <Search className="w-4 h-4" /> },
-          { href: "/organization/company", label: "Dashboard", icon: <Building className="w-4 h-4" /> },
+          { href: "/dashboard/organization/tenders", label: "My Tenders" },
+          {href: "/dashboard/organization/profile", label: "Profile"},
+          {href: "/dashboard/organization", label: "Dashboard"},
+          // { href: "/dashboard/organization/applications", label: "Applications" },
         ];
       case "admin":
         return [
-          { href: "/dashboard/admin/tenders", label: "Manage Tenders", icon: <ClipboardList className="w-4 h-4" /> },
-          { href: "/dashboard/admin", label: "Dashboard", icon: <Building className="w-4 h-4" /> },
-          { href: "/dashboard/admin/jobs", label: "Manage Jobs", icon: <Briefcase className="w-4 h-4" /> },
-          { href: "/dashboard/admin/users", label: "Users", icon: <User className="w-4 h-4" /> },
+          { href: "/dashboard/admin/users", label: "User Management" },
+          { href: "/dashboard/admin/jobs", label: "Job Management" },
         ];
       default:
         return [];
     }
   };
 
-  const navLinks = getNavLinks();
+  const quickLinks = getQuickLinks();
+
+  // Navigation links for logged-out users
+  const publicNavLinks = [
+    { href: "/signin", label: "Find Jobs" },
+    { href: "/signin", label: "Find Tenders" },
+    { href: "/signin", label: "Find Candidates" },
+    { href: "/signin", label: "Find Talent" }
+  ];
 
   return (
-    <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${
+    <nav className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${
       isScrolled 
-        ? 'bg-white/90 backdrop-blur-md shadow-lg py-2' 
-        : 'bg-white py-4'
+        ? 'bg-white/95 backdrop-blur-lg shadow-lg border-b border-gray-200 py-3' 
+        : 'bg-white py-4 border-b border-gray-100'
     }`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center">
-          {/* Logo */}
-          <Link href="/" className="flex items-center space-x-3">
-            <div 
-              className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ backgroundColor: colors.white }}
+        <div className="flex items-center justify-between h-16">
+          {/* Left Section - Logo */}
+          <div className="flex items-center space-x-4">
+            {/* Mobile Menu Button */}
+            <button
+              onClick={onMenuToggle}
+              className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
             >
-              <Image src="/logo2.png" alt="Banana Jobs" width={370} height={170} />
-            </div>
-            <span className="text-2xl font-bold" style={{ color: colors.darkNavy }}>
-              Banana <span style={{ color: colors.gold }}>Jobs</span>
-            </span>
-          </Link>
+              <Menu className="w-6 h-6 text-gray-600" />
+            </button>
 
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-8">
-            {!user ? (
-              <>
-                <Link href="/jobs" className="transition-colors font-medium" style={{ color: colors.darkNavy }}>
-                  Find Jobs
-                </Link>
-                <Link href="/tenders" className="transition-colors font-medium" style={{ color: colors.darkNavy }}>
-                  Browse Tenders
-                </Link>
-                <Link href="/companies" className="transition-colors font-medium" style={{ color: colors.darkNavy }}>
-                  Find Companies
-                </Link>
-                <Link href="/freelancers" className="transition-colors font-medium" style={{ color: colors.darkNavy }}>
-                  Find Talent
-                </Link>
-              </>
-            ) : (
-              <>
-                {navLinks.map((link) => (
+            {/* Logo - Bigger size */}
+            <Link href="/" className="flex items-center space-x-3 group">
+              <div className="relative">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden">
+                  <Image 
+                    src="/logo.png" 
+                    alt="Banana" 
+                    width={48}
+                    height={48}
+                    className="object-contain"
+                  />
+                </div>
+              </div>
+              <span className="text-2xl font-bold text-gray-900">Banana</span>
+            </Link>
+          </div>
+
+          {/* Center Section - Navigation Links (Desktop) */}
+          <div className="hidden lg:flex items-center space-x-4 flex-1 justify-center">
+            {/* Navigation Links for logged-out users */}
+            {!user && (
+              <div className="flex items-center space-x-2">
+                {publicNavLinks.map((link) => (
+                  <Link
+                    key={link.label}
+                    href={link.href}
+                    className="px-5 py-2.5 text-base font-bold text-gray-900 transition-all duration-200 rounded-lg hover:bg-yellow-500 hover:text-blue-900 border border-transparent hover:border-blue-500 shadow-sm hover:shadow-md"
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+            )}
+
+            {/* Quick Links for logged-in users */}
+            {user && (
+              <div className="flex items-center space-x-2">
+                {quickLinks.map((link) => (
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="flex items-center space-x-1 transition-colors font-medium"
-                    style={{ color: colors.darkNavy }}
+                    className="px-5 py-2.5 text-base font-bold text-gray-900 transition-all duration-200 rounded-lg hover:bg-yellow-500 hover:text-blue-900 border border-transparent hover:border-blue-500 shadow-sm hover:shadow-md"
                   >
-                    {link.icon}
-                    <span>{link.label}</span>
+                    {link.label}
                   </Link>
                 ))}
-              </>
+              </div>
             )}
           </div>
 
-          {/* Right Side Actions */}
+          {/* Right Section - Auth Buttons (when logged out) or User Menu (when logged in) */}
           <div className="flex items-center space-x-4">
-            {user ? (
-              <>
-                <button className="p-2 transition-colors relative" style={{ color: colors.darkNavy }}>
-                  <MessageSquare className="w-5 h-5" />
-                  <span className="absolute -top-1 -right-1 w-4 h-4 text-xs rounded-full flex items-center justify-center" style={{ backgroundColor: colors.orange, color: colors.white }}>
-                    3
-                  </span>
-                </button>
-                <button className="p-2 transition-colors relative" style={{ color: colors.darkNavy }}>
-                  <Bell className="w-5 h-5" />
-                  <span className="absolute -top-1 -right-1 w-4 h-4 text-xs rounded-full flex items-center justify-center" style={{ backgroundColor: colors.blue, color: colors.white }}>
-                    5
-                  </span>
-                </button>
-                
-                <div className="relative">
-                  <button 
-                    onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
-                    className="flex items-center space-x-2"
-                  >
-                    <div 
-                      className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold"
-                      style={{ backgroundColor: colors.goldenMustard }}
-                    >
-                      {user.name?.charAt(0).toUpperCase() || 'U'}
-                    </div>
-                    <ChevronDown className="w-4 h-4" style={{ color: colors.darkNavy }} />
-                  </button>
-                  
-                  {isProfileDropdownOpen && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-2 border" style={{ borderColor: colors.gray100 }}>
-                      <div className="px-4 py-2 border-b" style={{ borderColor: colors.gray100 }}>
-                        <p className="text-sm font-medium" style={{ color: colors.darkNavy }}>{user.name}</p>
-                        <p className="text-xs" style={{ color: colors.gray400 }}>{user.email}</p>
-                      </div>
-                      <Link 
-                        href={`/dashboard/${user.role}/profile`}
-                        className="block px-4 py-2 text-sm transition-colors hover:bg-gray-100"
-                        style={{ color: colors.darkNavy }}
-                      >
-                        Your Profile
-                      </Link>
-                      <Link 
-                        href="/settings"
-                        className="block px-4 py-2 text-sm transition-colors hover:bg-gray-100"
-                        style={{ color: colors.darkNavy }}
-                      >
-                        Settings
-                      </Link>
-                      <button
-                        onClick={handleLogout}
-                        className="block w-full text-left px-4 py-2 text-sm transition-colors hover:bg-gray-100"
-                        style={{ color: colors.orange }}
-                      >
-                        Sign out
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <>
-                <Link 
-                  href="/login" 
-                  className="font-medium transition-colors"
-                  style={{ color: colors.darkNavy }}
+            {/* Auth Buttons - Show when user is NOT logged in - Hidden on mobile */}
+            {!user && (
+              <div className="hidden lg:flex items-center space-x-3">
+                <Link
+                  href="/signin"
+                  className="px-5 py-2.5 text-sm font-medium text-gray-700 hover:text-blue-600 transition-colors rounded-lg hover:bg-gray-50"
                 >
-                  Sign In
+                  Login
                 </Link>
-                <Link 
-                  href="/register" 
-                  className="text-white px-6 py-2 rounded-xl font-semibold transition-all duration-300 shadow-md hover:shadow-lg"
-                  style={{ backgroundColor: colors.goldenMustard }}
+                <Link
+                  href="/signup"
+                  className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm hover:shadow-md"
                 >
                   Sign Up
                 </Link>
-              </>
+              </div>
             )}
-          </div>
 
-          {/* Mobile menu button */}
-          <button
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="md:hidden p-2 rounded-lg transition-colors"
-            style={{ color: colors.darkNavy }}
-          >
-            {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
-        </div>
-
-        {/* Mobile Navigation */}
-        {isMenuOpen && (
-          <div className="md:hidden mt-4 bg-white rounded-lg shadow-lg p-4 border" style={{ borderColor: colors.gray100 }}>
-            <div className="flex flex-col space-y-3">
-              {!user ? (
-                <>
-                  <Link href="/jobs" className="font-medium py-2 transition-colors" style={{ color: colors.darkNavy }}>
-                    Find Jobs
-                  </Link>
-                  <Link href="/tenders" className="font-medium py-2 transition-colors" style={{ color: colors.darkNavy }}>
-                    Browse Tenders
-                  </Link>
-                  <Link href="/companies" className="font-medium py-2 transition-colors" style={{ color: colors.darkNavy }}>
-                    Find Companies
-                  </Link>
-                  <Link href="/freelancers" className="font-medium py-2 transition-colors" style={{ color: colors.darkNavy }}>
-                    Find Talent
-                  </Link>
-                </>
-              ) : (
-                <>
-                  {navLinks.map((link) => (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      className="flex items-center space-x-2 font-medium py-2 transition-colors"
-                      style={{ color: colors.darkNavy }}
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      {link.icon}
-                      <span>{link.label}</span>
-                    </Link>
-                  ))}
-                </>
-              )}
-              
-              <div className="border-t pt-3 mt-3" style={{ borderColor: colors.gray100 }}>
-                {!user ? (
-                  <div className="flex flex-col space-y-3">
-                    <Link 
-                      href="/login" 
-                      className="font-medium text-center py-2 transition-colors"
-                      style={{ color: colors.goldenMustard }}
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      Sign In
-                    </Link>
-                    <Link 
-                      href="/register" 
-                      className="text-white px-6 py-2 rounded-xl font-semibold text-center transition-all duration-300"
-                      style={{ backgroundColor: colors.goldenMustard }}
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      Sign Up
-                    </Link>
+            {/* User Profile Dropdown - Show when user is logged in */}
+            {user && (
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+                  className="flex items-center space-x-3 p-1 rounded-xl hover:bg-gray-100 transition-colors group"
+                >
+                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-sm shadow-md">
+                    {user.name?.charAt(0).toUpperCase() || 'U'}
                   </div>
-                ) : (
-                  <button
-                    onClick={() => {
-                      handleLogout();
-                      setIsMenuOpen(false);
-                    }}
-                    className="flex items-center space-x-2 transition-colors font-medium w-full py-2"
-                    style={{ color: colors.orange }}
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Logout</span>
-                  </button>
+                  <div className="hidden sm:block text-left">
+                    <p className="text-sm font-medium text-gray-900">{user.name}</p>
+                    <p className="text-xs text-gray-500 capitalize">{user.role}</p>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${
+                    isProfileDropdownOpen ? 'rotate-180' : ''
+                  }`} />
+                </button>
+
+                {/* Dropdown Menu */}
+                {isProfileDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-gray-200 py-2 z-50 animate-in fade-in-80">
+                    {/* User Info */}
+                    <div className="px-4 py-3 border-b border-gray-100">
+                      <p className="text-sm font-semibold text-gray-900">{user.name}</p>
+                      <p className="text-sm text-gray-500 mt-1">{user.email}</p>
+                      <div className="flex items-center mt-2">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 capitalize">
+                          {user.role}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Menu Items */}
+                    <div className="py-2">
+                      <Link
+                        href={`/dashboard/${user.role}/profile`}
+                        className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors group"
+                        onClick={() => setIsProfileDropdownOpen(false)}
+                      >
+                        <User className="w-4 h-4 mr-3 text-gray-400 group-hover:text-blue-600" />
+                        Your Profile
+                      </Link>
+                      <Link
+                        href="/dashboard/${user.role}"
+                        className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors group"
+                        onClick={() => setIsProfileDropdownOpen(false)}
+                      >
+                        <LayoutDashboardIcon className="w-4 h-4 mr-3 text-gray-400 group-hover:text-blue-600" />
+                        Dashboard
+                      </Link>
+                    </div>
+
+                    {/* Logout */}
+                    <div className="border-t border-gray-100 pt-2">
+                      <button
+                        onClick={() => {
+                          handleLogout();
+                          setIsProfileDropdownOpen(false);
+                        }}
+                        className="flex items-center w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors group"
+                      >
+                        <LogOut className="w-4 h-4 mr-3" />
+                        Sign out
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
+            )}
+
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              {isMobileMenuOpen ? (
+                <X className="w-6 h-6 text-gray-600" />
+              ) : (
+                <Menu className="w-6 h-6 text-gray-600" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Menu */}
+        {isMobileMenuOpen && (
+          <div className="lg:hidden mt-4 bg-white rounded-2xl shadow-xl border border-gray-200 p-4 animate-in slide-in-from-top-5">
+
+            {/* Mobile Navigation Links */}
+            <div className="space-y-2">
+              {/* Show different links based on auth status */}
+              {(user ? quickLinks : publicNavLinks).map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="block px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  {link.label}
+                </Link>
+              ))}
             </div>
+
+            {/* Mobile Auth Buttons - Show when user is NOT logged in */}
+            {!user && (
+              <div className="border-t border-gray-200 mt-4 pt-4 space-y-2">
+                <Link
+                  href="/login"
+                  className="block px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors font-medium text-center"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/signup"
+                  className="block px-4 py-3 rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-colors font-medium text-center"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Sign Up
+                </Link>
+              </div>
+            )}
+
+            {/* Mobile User Actions - Show when user is logged in */}
+            {user && (
+              <div className="border-t border-gray-200 mt-4 pt-4">
+                <Link
+                  href={`/dashboard/${user.role}/profile`}
+                  className="flex items-center px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <User className="w-5 h-5 mr-3 text-gray-400" />
+                  Your Profile
+                </Link>
+                <Link
+                  href="/dashboard/${user.role}"
+                  className="flex items-center px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <LayoutDashboardIcon className="w-5 h-5 mr-3 text-gray-400" />
+                  Dashboard
+                </Link>
+                <button
+                  onClick={() => {
+                    handleLogout();
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="flex items-center w-full px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <LogOut className="w-5 h-5 mr-3" />
+                  Sign out
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

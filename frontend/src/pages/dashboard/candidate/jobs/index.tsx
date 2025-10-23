@@ -1,6 +1,8 @@
+// pages/dashboard/candidate/jobs/index.tsx
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { jobService, Job, JobFilters } from '@/services/jobService';
+import { Job, JobFilters } from '@/services/jobService';
+import { candidateService } from '@/services/candidateService';
 import { useAuth } from '@/contexts/AuthContext';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import CandidateJobCard from '@/components/job/CandidateJobCard';
@@ -12,7 +14,8 @@ import {
   TrendingUp,
   Building2,
   Eye,
-  Star
+  Star,
+  Bookmark
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -39,22 +42,16 @@ const JobsPage: React.FC = () => {
   const [savedJobs, setSavedJobs] = useState<Set<string>>(new Set());
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // Fetch jobs
+  // Fetch jobs using candidate service
   const { 
     data: jobsData, 
     isLoading, 
     error, 
     refetch 
   } = useQuery({
-    queryKey: ['jobs', filters],
-    queryFn: () => jobService.getJobs(filters),
+    queryKey: ['candidateJobs', filters],
+    queryFn: () => candidateService.getJobs(filters),
     retry: 2,
-  });
-
-  // Fetch job categories for market data
-  const { data: categoriesData } = useQuery({
-    queryKey: ['jobCategories'],
-    queryFn: () => jobService.getCategories(),
   });
 
   // Fetch saved jobs
@@ -62,9 +59,8 @@ const JobsPage: React.FC = () => {
     const fetchSavedJobs = async () => {
       if (isAuthenticated) {
         try {
-          // Note: You'll need to implement getSavedJobs in your jobService
-          // const saved = await jobService.getSavedJobs();
-          // setSavedJobs(new Set(saved.map(job => job._id)));
+          const saved = await candidateService.getSavedJobs();
+          setSavedJobs(new Set(saved.map(job => job._id)));
         } catch (error) {
           console.error('Error fetching saved jobs:', error);
         }
@@ -80,18 +76,20 @@ const JobsPage: React.FC = () => {
 
   const handleSaveJob = async (jobId: string) => {
     try {
-      // Note: You'll need to implement saveJob in your jobService
-      // await jobService.saveJob(jobId);
       setSavedJobs(prev => new Set(prev.add(jobId)));
     } catch (error) {
       console.error('Error saving job:', error);
+      // Revert on error
+      setSavedJobs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(jobId);
+        return newSet;
+      });
     }
   };
 
   const handleUnsaveJob = async (jobId: string) => {
     try {
-      // Note: You'll need to implement unsaveJob in your jobService
-      // await jobService.unsaveJob(jobId);
       setSavedJobs(prev => {
         const newSet = new Set(prev);
         newSet.delete(jobId);
@@ -99,6 +97,8 @@ const JobsPage: React.FC = () => {
       });
     } catch (error) {
       console.error('Error unsaving job:', error);
+      // Revert on error
+      setSavedJobs(prev => new Set(prev.add(jobId)));
     }
   };
 
@@ -133,8 +133,7 @@ const JobsPage: React.FC = () => {
       { _id: 'oromia', count: jobsData?.data?.filter(job => job.location.region === 'oromia').length || 0 },
       { _id: 'amhara', count: jobsData?.data?.filter(job => job.location.region === 'amhara').length || 0 },
     ],
-    regions: jobService.getEthiopianRegions(),
-    popularCategories: categoriesData?.slice(0, 5) || []
+    regions: [], // You can get this from jobService if needed
   };
 
   if (error) {
@@ -184,7 +183,7 @@ const JobsPage: React.FC = () => {
                     <Building2 className="w-5 h-5 text-blue-600" />
                   </div>
                   <div className="text-2xl font-bold text-gray-900">
-                    {jobsData?.pagination?.totalResults || 0}+
+                    {jobsData?.pagination?.total || 0}+
                   </div>
                   <div className="text-sm text-gray-600">Active Jobs</div>
                 </div>
@@ -194,7 +193,7 @@ const JobsPage: React.FC = () => {
                     <MapPin className="w-5 h-5 text-green-600" />
                   </div>
                   <div className="text-2xl font-bold text-gray-900">
-                    {marketData.regions.length}
+                    {marketData.regions.length || 12}+
                   </div>
                   <div className="text-sm text-gray-600">Regions</div>
                 </div>
@@ -204,19 +203,19 @@ const JobsPage: React.FC = () => {
                     <TrendingUp className="w-5 h-5 text-purple-600" />
                   </div>
                   <div className="text-2xl font-bold text-gray-900">
-                    {marketData.popularCategories.length}+
+                    20+
                   </div>
                   <div className="text-sm text-gray-600">Categories</div>
                 </div>
                 
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
                   <div className="flex items-center justify-center w-10 h-10 bg-yellow-100 rounded-lg mb-2 mx-auto">
-                    <Eye className="w-5 h-5 text-yellow-600" />
+                    <Bookmark className="w-5 h-5 text-yellow-600" />
                   </div>
                   <div className="text-2xl font-bold text-gray-900">
-                    {marketData.jobsByRegion.find(r => r._id === 'addis-ababa')?.count || 0}+
+                    {savedJobs.size}
                   </div>
-                  <div className="text-sm text-gray-600">In Addis</div>
+                  <div className="text-sm text-gray-600">Saved Jobs</div>
                 </div>
               </div>
             )}
@@ -239,18 +238,21 @@ const JobsPage: React.FC = () => {
                 </h2>
                 {jobsData && (
                   <p className="text-gray-600 mt-1">
-                    Showing {jobsData.data?.length || 0} of {jobsData.pagination?.totalResults || 0} jobs
+                    Showing {jobsData.data?.length || 0} of {jobsData.pagination?.total || 0} jobs
                     {filters.search && ` for "${filters.search}"`}
                   </p>
                 )}
               </div>
               
               {jobsData && jobsData.data && jobsData.data.length > 0 && (
-                <div className="flex items-center space-x-4 text-sm text-gray-600">
-                  <span className="flex items-center">
-                    <Star className="w-4 h-4 mr-1 text-yellow-500" />
-                    {savedJobs.size} saved
-                  </span>
+                <div className="flex items-center space-x-4">
+                  <Link 
+                    href="/dashboard/candidate/saved-jobs"
+                    className="flex items-center px-4 py-2 bg-white border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+                  >
+                    <Star className="w-4 h-4 mr-2 text-yellow-500" />
+                    View Saved ({savedJobs.size})
+                  </Link>
                 </div>
               )}
             </div>
@@ -300,7 +302,7 @@ const JobsPage: React.FC = () => {
             )}
 
             {/* Pagination */}
-            {jobsData?.pagination && jobsData.pagination.totalPages > 1 && (
+            {jobsData?.pagination && jobsData.pagination.pages > 1 && (
               <div className="flex justify-center mt-12">
                 <div className="flex items-center space-x-2">
                   <button
@@ -311,7 +313,7 @@ const JobsPage: React.FC = () => {
                     Previous
                   </button>
                   
-                  {Array.from({ length: Math.min(5, jobsData.pagination.totalPages) }, (_, i) => {
+                  {Array.from({ length: Math.min(5, jobsData.pagination.pages) }, (_, i) => {
                     const page = i + 1;
                     return (
                       <button
@@ -328,13 +330,13 @@ const JobsPage: React.FC = () => {
                     );
                   })}
                   
-                  {jobsData.pagination.totalPages > 5 && (
+                  {jobsData.pagination.pages > 5 && (
                     <span className="px-2 text-gray-500">...</span>
                   )}
                   
                   <button
                     onClick={() => setFilters(prev => ({ ...prev, page: (prev.page || 1) + 1 }))}
-                    disabled={filters.page === jobsData.pagination.totalPages}
+                    disabled={filters.page === jobsData.pagination.pages}
                     className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Next
@@ -354,11 +356,18 @@ const JobsPage: React.FC = () => {
                 Join thousands of professionals who found their dream jobs through our platform. 
                 Create your profile and let employers find you!
               </p>
-              <Link href="/dashboard/candidate/profile">
-                <button className="px-8 py-3 bg-white text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-colors shadow-lg">
-                  Complete Your Profile
-                </button>
-              </Link>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Link href="/dashboard/candidate/profile">
+                  <button className="px-8 py-3 bg-white text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-colors shadow-lg">
+                    Complete Your Profile
+                  </button>
+                </Link>
+                <Link href="/dashboard/candidate/saved-jobs">
+                  <button className="px-8 py-3 bg-transparent border-2 border-white text-white rounded-lg font-semibold hover:bg-white hover:text-blue-600 transition-colors">
+                    View Saved Jobs
+                  </button>
+                </Link>
+              </div>
             </div>
           )}
         </div>

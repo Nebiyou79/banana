@@ -107,7 +107,7 @@ export default function RegisterPage() {
       // If we get here, it means registration was successful and user is logged in
       toast({
         variant: "success",
-        title: 'Welcome to Banana Jobs!',
+        title: 'Welcome to Banana!',
         description: 'Account created successfully',
       });
 
@@ -175,16 +175,16 @@ export default function RegisterPage() {
           <div className="flex items-center space-x-3">
             <Image
               src="/logo.png"
-              alt="Banana Jobs"
+              alt="Banana"
               width={120}
               height={120}
               className="rounded-lg object-contain"
             />
-            <span className="text-3xl font-bold text-white">Banana Jobs</span>
+            <span className="text-3xl font-bold text-yellow-500">Banana</span>
           </div>
 
           {/* Content */}
-          <div className="flex-1 flex flex-col justify-center items-center text-center">
+          <div className="flex-1 flex pl-12 flex-col justify-center items-center text-center">
             <div className="mb-12">
               <div className="inline-flex items-center bg-white/10 backdrop-blur-sm rounded-full px-4 py-2 mb-6 border border-white/20 shadow-sm">
                 <Zap className="w-4 h-4 mr-2 text-yellow-300" />
@@ -204,7 +204,7 @@ export default function RegisterPage() {
             {/* Benefits */}
             <div className="space-y-6 mb-12 max-w-md">
               {[
-                { icon: CheckCircle, text: 'AI-powered job matching', color: 'text-yellow-300' },
+                { icon: CheckCircle, text: 'Empowering You To Work, Win and Shine', color: 'text-yellow-300' },
                 { icon: CheckCircle, text: 'Global network of companies', color: 'text-yellow-300' },
                 { icon: CheckCircle, text: 'Personalized career coaching', color: 'text-yellow-300' },
                 { icon: CheckCircle, text: 'Skill development resources', color: 'text-yellow-300' }
@@ -225,8 +225,8 @@ export default function RegisterPage() {
 
           {/* Footer */}
           <div className="w-full">
-            <div className="flex justify-between items-center text-sm">
-              <p className="text-blue-300">© 2024 Banana Jobs. All rights reserved.</p>
+            <div className="flex pt-9 justify-between items-center text-sm">
+              <p className="text-blue-300">© 2024 Banana. All rights reserved.</p>
               <div className="flex space-x-4">
                 <span className="text-blue-300 hover:text-white cursor-pointer transition-colors font-medium">Privacy</span>
                 <span className="text-blue-300 hover:text-white cursor-pointer transition-colors font-medium">Terms</span>
@@ -245,18 +245,18 @@ export default function RegisterPage() {
               <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-md">
                 <Image
                   src="/logo.png"
-                  alt="Banana Jobs"
+                  alt="Banana"
                   width={24}
                   height={24}
                   className="rounded-md"
                 />
               </div>
-              <span className="text-xl font-bold text-gray-900">Banana Jobs</span>
+              <span className="text-xl font-bold text-gray-900">Banana</span>
             </div>
           </div>
 
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-3">Join Banana Jobs</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-3">Join Banana</h1>
             <p className="text-gray-600 font-medium">Create your account and unlock new opportunities</p>
           </div>
 
@@ -443,9 +443,9 @@ export default function RegisterPage() {
                           <SelectItem value="company" className="text-base py-3 hover:bg-blue-50 focus:bg-blue-50">
                             Company 
                           </SelectItem>
-                          {/* <SelectItem value="organization" className="text-base py-3 hover:bg-blue-50 focus:bg-blue-50">
+                          <SelectItem value="organization" className="text-base py-3 hover:bg-blue-50 focus:bg-blue-50">
                             Organization
-                          </SelectItem> */}
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage className="text-red-500 text-sm font-medium" />
@@ -510,7 +510,7 @@ export default function RegisterPage() {
           {/* Mobile Footer */}
           <div className="lg:hidden mt-12 text-center">
             <p className="text-sm text-gray-500 font-medium">
-              © 2024 Banana Jobs. All rights reserved.
+              © 2024 Banana. All rights reserved.
             </p>
           </div>
         </div>

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// components/JobForm.tsx
+// components/JobForm.tsx - FIXED WITH jobType PROP
 import React, { useState, useEffect } from 'react';
 import { Job, EthiopianLocation, JobSalary, jobService } from '@/services/jobService';
 import { 
@@ -16,21 +16,19 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
-  Languages,
-  Car,
-  FileCheck,
   Tag,
   Star,
   Clock
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
-// Use the Job interface from jobService instead of redefining
-type JobFormData = Omit<Job, '_id' | 'company' | 'createdBy' | 'applicationCount' | 'viewCount' | 'saveCount' | 'createdAt' | 'updatedAt' | 'isActive' | 'applications' | 'views'> & {
+// Use the Job interface from jobService with proper company job type
+type JobFormData = Omit<Job, '_id' | 'company' | 'organization' | 'createdBy' | 'applicationCount' | 'viewCount' | 'saveCount' | 'createdAt' | 'updatedAt' | 'isActive' | 'applications' | 'views' | 'jobType' | 'opportunityType' | 'duration' | 'volunteerInfo'> & {
   salary?: JobSalary;
-  applicationDeadline: string; // Make it required in the form
-  shortDescription: string; // Make it required in the form
-  status: 'draft' | 'active' | 'paused' | 'closed' | 'archived'; // Make it required with proper type
+  applicationDeadline: string;
+  shortDescription: string;
+  status: 'draft' | 'active' | 'paused' | 'closed' | 'archived';
+  jobType: 'company' | 'organization'; // Allow both types
 };
 
 interface JobFormProps {
@@ -40,6 +38,7 @@ interface JobFormProps {
   onCancel?: () => void;
   companyVerified?: boolean;
   mode?: 'create' | 'edit';
+  jobType?: 'company' | 'organization'; // ADD THIS PROP
 }
 
 const JobForm: React.FC<JobFormProps> = ({ 
@@ -48,7 +47,8 @@ const JobForm: React.FC<JobFormProps> = ({
   loading = false, 
   onCancel,
   companyVerified = false,
-  mode = 'create'
+  mode = 'create',
+  jobType = 'company' // ADD DEFAULT VALUE
 }) => {
   const [formData, setFormData] = useState<JobFormData>({
     title: '',
@@ -82,16 +82,11 @@ const JobForm: React.FC<JobFormProps> = ({
     applicationDeadline: '',
     remote: 'on-site',
     workArrangement: 'office',
-    ethiopianRequirements: {
-      workPermitRequired: false,
-      knowledgeOfLocalLanguages: [],
-      drivingLicense: false,
-      governmentClearance: false
-    },
     tags: [],
     featured: false,
     urgent: false,
-    premium: false
+    premium: false,
+    jobType: jobType // Use the prop value
   });
 
   const [currentTag, setCurrentTag] = useState('');
@@ -101,8 +96,9 @@ const JobForm: React.FC<JobFormProps> = ({
 
   // Get data from service
   const ethiopianRegions = jobService.getEthiopianRegions();
-const jobCategories = jobService.getJobCategories();
+  const jobCategories = jobService.getJobCategories();
 
+  // Ethiopian local languages for optional display
   const localLanguages = ['Amharic', 'Oromo', 'Tigrigna', 'Somali', 'Sidama', 'Wolayta', 'Gurage', 'Afar', 'Other'];
 
   useEffect(() => {
@@ -135,21 +131,26 @@ const jobCategories = jobService.getJobCategories();
           new Date(initialData.applicationDeadline).toISOString().split('T')[0] : '',
         remote: initialData.remote,
         workArrangement: initialData.workArrangement || 'office',
-        ethiopianRequirements: initialData.ethiopianRequirements || {
-          workPermitRequired: false,
-          knowledgeOfLocalLanguages: [],
-          drivingLicense: false,
-          governmentClearance: false
-        },
         tags: initialData.tags || [],
         featured: initialData.featured || false,
         urgent: initialData.urgent || false,
-        premium: initialData.premium || false
+        premium: initialData.premium || false,
+        jobType: initialData.jobType || jobType // Use existing or prop value
       };
       
       setFormData(transformedData);
     }
-  }, [initialData]);
+  }, [initialData, jobType]);
+
+  // Update formData when jobType prop changes
+  useEffect(() => {
+    if (mode === 'create') {
+      setFormData(prev => ({
+        ...prev,
+        jobType: jobType
+      }));
+    }
+  }, [jobType, mode]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -275,33 +276,6 @@ const jobCategories = jobService.getJobCategories();
     }
   };
 
-  const handleEthiopianRequirementChange = (field: keyof JobFormData['ethiopianRequirements'], value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      ethiopianRequirements: {
-        ...prev.ethiopianRequirements,
-        [field]: value
-      }
-    }));
-  };
-
-  const handleLanguageToggle = (language: string) => {
-    setFormData(prev => {
-      const currentLanguages = prev.ethiopianRequirements.knowledgeOfLocalLanguages;
-      const newLanguages = currentLanguages.includes(language)
-        ? currentLanguages.filter(l => l !== language)
-        : [...currentLanguages, language];
-      
-      return {
-        ...prev,
-        ethiopianRequirements: {
-          ...prev.ethiopianRequirements,
-          knowledgeOfLocalLanguages: newLanguages
-        }
-      };
-    });
-  };
-
   const handleTagAdd = () => {
     if (currentTag.trim() && !formData.tags.includes(currentTag.trim())) {
       setFormData(prev => ({
@@ -319,44 +293,40 @@ const jobCategories = jobService.getJobCategories();
     }));
   };
 
-const handleSubmit = async (e: React.FormEvent, status?: 'draft' | 'active' | 'paused' | 'closed' | 'archived') => {
-  e.preventDefault();
-  
-  if (!validateForm()) {
-    toast({
-      title: 'Validation Error',
-      description: 'Please fix the errors in the form before submitting.',
-      variant: 'destructive',
-    });
-    return;
-  }
+  const handleSubmit = async (e: React.FormEvent, status?: 'draft' | 'active' | 'paused' | 'closed' | 'archived') => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please fix the errors in the form before submitting.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-  // Prepare data for submission
-  const submitData: Partial<Job> = {
-    ...formData,
-    status: status || formData.status, // Use provided status or current form status
-    requirements: formData.requirements.filter(req => req.trim() !== ''),
-    responsibilities: formData.responsibilities.filter(resp => resp.trim() !== ''),
-    benefits: formData.benefits.filter(benefit => benefit.trim() !== ''),
-    skills: formData.skills.filter(skill => skill.trim() !== ''),
-    salary: formData.salary?.min || formData.salary?.max ? formData.salary : undefined,
-    // Fix the date conversion with proper null check
-    applicationDeadline: formData.applicationDeadline ? new Date(formData.applicationDeadline).toISOString() : undefined,
-    // Ensure shortDescription is included
-    shortDescription: formData.shortDescription || '',
-    // Ensure educationLevel is properly passed
-    educationLevel: formData.educationLevel,
-    // Ensure subCategory is properly passed
-    subCategory: formData.subCategory
+    // Prepare data for submission
+    const submitData: Partial<Job> = {
+      ...formData,
+      status: status || formData.status,
+      requirements: formData.requirements.filter(req => req.trim() !== ''),
+      responsibilities: formData.responsibilities.filter(resp => resp.trim() !== ''),
+      benefits: formData.benefits.filter(benefit => benefit.trim() !== ''),
+      skills: formData.skills.filter(skill => skill.trim() !== ''),
+      salary: formData.salary?.min || formData.salary?.max ? formData.salary : undefined,
+      applicationDeadline: formData.applicationDeadline ? new Date(formData.applicationDeadline).toISOString() : undefined,
+      shortDescription: formData.shortDescription || '',
+      educationLevel: formData.educationLevel,
+      subCategory: formData.subCategory,
+      jobType: formData.jobType // Include jobType from form data
+    };
+    
+    try {
+      await onSubmit(submitData);
+    } catch (error) {
+      console.error('Error submitting job:', error);
+    }
   };
-  
-  try {
-    await onSubmit(submitData);
-  } catch (error) {
-    console.error('Error submitting job:', error);
-    // Error handling is done in the parent component via the service
-  }
-};
 
   const nextStep = () => {
     if (currentStep === 1 && (!formData.title || !formData.category || !formData.location.region)) {
@@ -506,7 +476,7 @@ const handleSubmit = async (e: React.FormEvent, status?: 'draft' | 'active' | 'p
                     value={formData.title}
                     onChange={handleInputChange}
                     required
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                       errors.title ? 'border-red-300' : 'border-gray-300'
                     }`}
                     placeholder="e.g. Senior Frontend Developer, Marketing Manager..."
@@ -558,30 +528,30 @@ const handleSubmit = async (e: React.FormEvent, status?: 'draft' | 'active' | 'p
                 </div>
 
                 {/* Job Category */}
-<div>
-  <label className="block text-sm font-medium text-gray-700 mb-2">
-    Job Category *
-  </label>
-  <select
-    name="category"
-    value={formData.category}
-    onChange={handleInputChange}
-    required
-    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-      errors.category ? 'border-red-300' : 'border-gray-300'
-    }`}
-  >
-    <option value="">Select a category</option>
-    {jobService.getJobCategories().map(category => (
-      <option key={category.value} value={category.value}>
-        {category.label}
-      </option>
-    ))}
-  </select>
-  {errors.category && (
-    <p className="mt-1 text-sm text-red-600">{errors.category}</p>
-  )}
-</div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Job Category *
+                  </label>
+                  <select
+                    name="category"
+                    value={formData.category}
+                    onChange={handleInputChange}
+                    required
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.category ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                  >
+                    <option value="">Select a category</option>
+                    {jobCategories.map(category => (
+                      <option key={category.value} value={category.value}>
+                        {category.label}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.category && (
+                    <p className="mt-1 text-sm text-red-600">{errors.category}</p>
+                  )}
+                </div>
 
                 {/* Experience and Education */}
                 <div>
@@ -948,82 +918,6 @@ const handleSubmit = async (e: React.FormEvent, status?: 'draft' | 'active' | 'p
                 </div>
               </div>
 
-              {/* Ethiopian Specific Requirements */}
-              {!isInternational && (
-                <div className="bg-gray-50 rounded-xl p-6">
-                  <h3 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-                    <Globe className="w-5 h-5 mr-2 text-blue-600" />
-                    Ethiopian Specific Requirements
-                  </h3>
-                  
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="lg:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-3">
-                        <Languages className="w-4 h-4 inline mr-1" />
-                        Knowledge of Local Languages
-                      </label>
-                      <div className="flex flex-wrap gap-2">
-                        {localLanguages.map(language => (
-                          <button
-                            key={language}
-                            type="button"
-                            onClick={() => handleLanguageToggle(language)}
-                            className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                              formData.ethiopianRequirements.knowledgeOfLocalLanguages.includes(language)
-                                ? 'bg-blue-100 text-blue-700 border-blue-300'
-                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                            }`}
-                          >
-                            {language}
-                            {formData.ethiopianRequirements.knowledgeOfLocalLanguages.includes(language) && (
-                              <CheckCircle className="w-4 h-4 ml-1 inline" />
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={formData.ethiopianRequirements.workPermitRequired}
-                          onChange={(e) => handleEthiopianRequirementChange('workPermitRequired', e.target.checked)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">Work Permit Required</span>
-                      </label>
-
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={formData.ethiopianRequirements.drivingLicense}
-                          onChange={(e) => handleEthiopianRequirementChange('drivingLicense', e.target.checked)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        />
-                        <span className="ml-2 text-sm text-gray-700 flex items-center gap-1">
-                          <Car className="w-4 h-4" />
-                          Driving License Required
-                        </span>
-                      </label>
-
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={formData.ethiopianRequirements.governmentClearance}
-                          onChange={(e) => handleEthiopianRequirementChange('governmentClearance', e.target.checked)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        />
-                        <span className="ml-2 text-sm text-gray-700 flex items-center gap-1">
-                          <FileCheck className="w-4 h-4" />
-                          Government Clearance Required
-                        </span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Additional Settings */}
               <div className="bg-gray-50 rounded-xl p-6">
                 <h3 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
@@ -1166,7 +1060,9 @@ const handleSubmit = async (e: React.FormEvent, status?: 'draft' | 'active' | 'p
                       </div>
                       <div>
                         <dt className="text-sm font-medium text-gray-500">Category</dt>
-                        <dd className="text-sm text-gray-900">{formData.category}</dd>
+                        <dd className="text-sm text-gray-900">
+                          {jobCategories.find(cat => cat.value === formData.category)?.label || formData.category}
+                        </dd>
                       </div>
                       <div>
                         <dt className="text-sm font-medium text-gray-500">Experience Level</dt>

@@ -1,10 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// pages/dashboard/company/tenders/create.tsx - ENHANCED VERSION
+// pages/dashboard/company/tenders/create.tsx - FIXED VERSION
 import React, { useState } from 'react';
 import { NextPage } from 'next';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import Layout from '@/components/layout/Layout';
 import TenderForm from '@/components/tenders/TenderForm';
 import { TenderService, CreateTenderData, UpdateTenderData } from '@/services/tenderService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -101,26 +100,39 @@ const CreateTenderPage: NextPage = () => {
           <div className="mb-8">
             <button
               onClick={handleCancel}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors"
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors font-medium hover:bg-white px-4 py-2 rounded-lg"
             >
               <ArrowLeftIcon className="h-4 w-4" />
               Back to My Tenders
             </button>
             
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Create New Tender</h1>
-              <p className="text-gray-600">
-                Fill out the form below to create a new tender. You can save it as a draft or publish it immediately.
-              </p>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+              <div className="text-center max-w-2xl mx-auto">
+                <h1 className="text-4xl font-bold text-gray-900 mb-4">Create New Tender</h1>
+                <p className="text-xl text-gray-600 mb-6">
+                  Fill out the form below to create a new tender. You can save it as a draft or publish it immediately.
+                </p>
+                <div className="flex items-center justify-center gap-4 text-sm text-gray-500">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    Company Tender
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    Reach Qualified Freelancers
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Tender Form */}
+          {/* Tender Form - REMOVE tenderType prop */}
           <TenderForm
             onSubmit={handleSubmit}
             onCancel={handleCancel}
             isLoading={isLoading}
             mode="create"
+            // tenderType prop removed - it's now handled internally
           />
         </div>
       </div>

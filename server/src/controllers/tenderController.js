@@ -1,11 +1,12 @@
 const Tender = require('../models/Tender');
 const Company = require('../models/Company');
 const User = require('../models/User');
+const Organization = require('../models/Organization');
 const { validationResult } = require('express-validator');
 
-// @desc    Create a new tender
+// @desc    Create a new tender (for both company and organization)
 // @route   POST /api/v1/tender
-// @access  Private (Company)
+// @access  Private (Company, Organization)
 exports.createTender = async (req, res) => {
   console.log('--- [createTender] called ---');
   
@@ -31,7 +32,8 @@ exports.createTender = async (req, res) => {
       visibility = 'public',
       invitedFreelancers = [],
       requirements = {},
-      status = 'draft'
+      status = 'draft',
+      tenderType = 'company' // Default to company for backward compatibility
     } = req.body;
 
     console.log('Creating tender with data:', {
@@ -41,16 +43,32 @@ exports.createTender = async (req, res) => {
       deadline,
       duration,
       status,
+      tenderType,
       user: req.user
     });
 
-    // Check if user has a company
-    const company = await Company.findOne({ user: req.user.userId });
-    if (!company) {
-      return res.status(400).json({
-        success: false,
-        message: 'You need to create a company profile first'
-      });
+    let entity = null;
+    let entityId = null;
+
+    // Check if user has a company or organization
+    if (tenderType === 'company') {
+      entity = await Company.findOne({ user: req.user.userId });
+      if (!entity) {
+        return res.status(400).json({
+          success: false,
+          message: 'You need to create a company profile first'
+        });
+      }
+      entityId = entity._id;
+    } else if (tenderType === 'organization') {
+      entity = await Organization.findOne({ user: req.user.userId });
+      if (!entity) {
+        return res.status(400).json({
+          success: false,
+          message: 'You need to create an organization profile first'
+        });
+      }
+      entityId = entity._id;
     }
 
     // Validate deadline is in future
@@ -62,7 +80,7 @@ exports.createTender = async (req, res) => {
       });
     }
 
-    // Create tender with optional budget and duration
+    // Create tender data
     const tenderData = {
       title: title.trim(),
       description: description.trim(),
@@ -78,9 +96,16 @@ exports.createTender = async (req, res) => {
         specificLocation: requirements.specificLocation || '',
         languageRequirements: requirements.languageRequirements || []
       },
-      company: company._id,
-      createdBy: req.user.userId
+      createdBy: req.user.userId,
+      tenderType
     };
+
+    // Set company or organization reference
+    if (tenderType === 'company') {
+      tenderData.company = entityId;
+    } else if (tenderType === 'organization') {
+      tenderData.organization = entityId;
+    }
 
     // Add budget if provided
     if (budget) {
@@ -100,8 +125,12 @@ exports.createTender = async (req, res) => {
     const tender = new Tender(tenderData);
     await tender.save();
     
-    // Populate company details for response
-    await tender.populate('company', 'name logo industry verified');
+    // Populate appropriate details for response
+    if (tenderType === 'company') {
+      await tender.populate('company', 'name logo industry verified');
+    } else {
+      await tender.populate('organization', 'name logo industry verified');
+    }
 
     console.log('Tender created successfully:', tender._id);
 
@@ -143,6 +172,7 @@ exports.createTender = async (req, res) => {
 // @desc    Get all tenders with filtering and pagination
 // @route   GET /api/v1/tender
 // @access  Public (with role-based filtering)
+// In your getTenders method, update the population part:
 exports.getTenders = async (req, res) => {
   console.log('--- [getTenders] called ---');
   
@@ -157,14 +187,15 @@ exports.getTenders = async (req, res) => {
       search,
       status,
       sortBy = 'createdAt',
-      sortOrder = 'desc'
+      sortOrder = 'desc',
+      tenderType // Add this to filter by tender type
     } = req.query;
 
     // Build filter
     const filter = {};
     
     // Only apply status filter for non-company users
-    if (req.user?.role !== 'company' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'company' && req.user?.role !== 'admin' && req.user?.role !== 'organization') {
       // Show both 'published' AND 'open' tenders to public
       filter.status = { $in: ['published', 'open'] };
       filter.deadline = { $gt: new Date() };
@@ -172,7 +203,11 @@ exports.getTenders = async (req, res) => {
       // Company users can filter by specific status if provided
       filter.status = status;
     }
-    // If company user and no status filter, show all statuses
+
+    // Add tender type filter if provided
+    if (tenderType && tenderType !== 'all') {
+      filter.tenderType = tenderType;
+    }
 
     console.log('🔍 Filter being applied:', filter);
 
@@ -201,9 +236,10 @@ exports.getTenders = async (req, res) => {
       };
     }
 
-    // Execute query with pagination
+    // Execute query with pagination - FIXED POPULATION
     const tenders = await Tender.find(filter)
-      .populate('company', 'name logo industry verified')
+      .populate('company', 'name logo industry verified description')
+      .populate('organization', 'name logo industry verified description') // Add this line
       .populate('createdBy', 'name email')
       .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
       .limit(limit * 1)
@@ -213,6 +249,10 @@ exports.getTenders = async (req, res) => {
     const total = await Tender.countDocuments(filter);
 
     console.log(`✅ Found ${tenders.length} tenders matching filters`);
+    console.log('📊 Tender types breakdown:', {
+      company: tenders.filter(t => t.tenderType === 'company').length,
+      organization: tenders.filter(t => t.tenderType === 'organization').length
+    });
 
     res.json({
       success: true,
@@ -510,6 +550,296 @@ exports.getMyTenders = async (req, res) => {
     });
   }
 };
+// @desc    Get organization's tenders
+// @route   GET /api/v1/tender/organization/my-tenders
+// @access  Private (Organization)
+exports.getMyOrganizationTenders = async (req, res) => {
+  console.log('--- [getMyOrganizationTenders] called ---');
+  
+  try {
+    const organization = await Organization.findOne({ user: req.user.userId });
+    if (!organization) {
+      return res.status(400).json({
+        success: false,
+        message: 'Organization profile not found'
+      });
+    }
+
+    const tenders = await Tender.find({ 
+      organization: organization._id,
+      tenderType: 'organization'
+    })
+      .populate('organization', 'name logo industry verified')
+      .sort({ createdAt: -1 });
+
+    console.log(`Found ${tenders.length} tenders for organization ${organization.name}`);
+
+    res.json({
+      success: true,
+      data: { tenders }
+    });
+
+  } catch (error) {
+    console.error('Get my organization tenders error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while fetching organization tenders'
+    });
+  }
+};
+
+// @desc    Get user's tenders (both company and organization)
+// @route   GET /api/v1/tender/my-tenders
+// @access  Private (Company, Organization)
+exports.getMyAllTenders = async (req, res) => {
+  console.log('--- [getMyAllTenders] called ---');
+  
+  try {
+    let company = null;
+    let organization = null;
+    
+    // Check if user has company
+    company = await Company.findOne({ user: req.user.userId });
+    
+    // Check if user has organization
+    organization = await Organization.findOne({ user: req.user.userId });
+
+    if (!company && !organization) {
+      return res.status(400).json({
+        success: false,
+        message: 'You need to create a company or organization profile first'
+      });
+    }
+
+    // Build query to get tenders from both company and organization
+    const query = {
+      $or: []
+    };
+
+    if (company) {
+      query.$or.push({ 
+        company: company._id,
+        tenderType: 'company'
+      });
+    }
+
+    if (organization) {
+      query.$or.push({ 
+        organization: organization._id,
+        tenderType: 'organization'
+      });
+    }
+
+    const tenders = await Tender.find(query)
+      .populate('company', 'name logo industry verified')
+      .populate('organization', 'name logo industry verified')
+      .sort({ createdAt: -1 });
+
+    console.log(`Found ${tenders.length} tenders for user ${req.user.userId}`);
+
+    res.json({
+      success: true,
+      data: { tenders }
+    });
+
+  } catch (error) {
+    console.error('Get my all tenders error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while fetching user tenders'
+    });
+  }
+};
+
+// Update the existing updateTender method to handle both company and organization
+exports.updateTender = async (req, res) => {
+  console.log('--- [updateTender] called ---', req.params.id);
+  
+  try {
+    // Validate ID format
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid tender ID is required'
+      });
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const tender = await Tender.findById(req.params.id);
+    if (!tender) {
+      return res.status(404).json({
+        success: false,
+        message: 'Tender not found'
+      });
+    }
+
+    // Check if user owns the tender - for both company and organization
+    let hasAccess = false;
+    
+    if (tender.tenderType === 'company') {
+      const company = await Company.findOne({ user: req.user.userId });
+      if (company && tender.company.toString() === company._id.toString()) {
+        hasAccess = true;
+      }
+    } else if (tender.tenderType === 'organization') {
+      const organization = await Organization.findOne({ user: req.user.userId });
+      if (organization && tender.organization.toString() === organization._id.toString()) {
+        hasAccess = true;
+      }
+    }
+
+    if (!hasAccess && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to update this tender'
+      });
+    }
+
+    // Cannot update if there are already proposals and trying to change to draft
+    if (tender.proposals.length > 0 && req.body.status === 'draft') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot change status to draft when proposals exist'
+      });
+    }
+
+    const allowedUpdates = [
+      'title', 'description', 'category', 'skillsRequired', 'budget',
+      'deadline', 'duration', 'visibility', 'invitedFreelancers',
+      'requirements', 'status'
+    ];
+
+    allowedUpdates.forEach(field => {
+      if (req.body[field] !== undefined) {
+        tender[field] = req.body[field];
+      }
+    });
+
+    // Validate deadline if being updated
+    if (req.body.deadline) {
+      const newDeadline = new Date(req.body.deadline);
+      if (newDeadline <= new Date()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Deadline must be in the future'
+        });
+      }
+      tender.deadline = newDeadline;
+    }
+
+    await tender.save();
+    
+    // Populate appropriate details for response
+    if (tender.tenderType === 'company') {
+      await tender.populate('company', 'name logo industry verified');
+    } else {
+      await tender.populate('organization', 'name logo industry verified');
+    }
+
+    console.log('Tender updated successfully:', tender._id);
+
+    res.json({
+      success: true,
+      message: 'Tender updated successfully',
+      data: { tender }
+    });
+
+  } catch (error) {
+    console.error('Update tender error:', error);
+    
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: messages
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while updating tender'
+    });
+  }
+};
+
+// Similarly update deleteTender method to handle both company and organization
+exports.deleteTender = async (req, res) => {
+  console.log('--- [deleteTender] called ---', req.params.id);
+  
+  try {
+    // Validate ID format
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid tender ID is required'
+      });
+    }
+
+    const tender = await Tender.findById(req.params.id);
+    if (!tender) {
+      return res.status(404).json({
+        success: false,
+        message: 'Tender not found'
+      });
+    }
+
+    // Check if user owns the tender - for both company and organization
+    let hasAccess = false;
+    
+    if (tender.tenderType === 'company') {
+      const company = await Company.findOne({ user: req.user.userId });
+      if (company && tender.company.toString() === company._id.toString()) {
+        hasAccess = true;
+      }
+    } else if (tender.tenderType === 'organization') {
+      const organization = await Organization.findOne({ user: req.user.userId });
+      if (organization && tender.organization.toString() === organization._id.toString()) {
+        hasAccess = true;
+      }
+    }
+
+    if (!hasAccess && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to delete this tender'
+      });
+    }
+
+    // Cannot delete if there are proposals
+    if (tender.proposals.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete tender with existing proposals'
+      });
+    }
+
+    await Tender.findByIdAndDelete(req.params.id);
+
+    console.log('Tender deleted successfully:', req.params.id);
+
+    res.json({
+      success: true,
+      message: 'Tender deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Delete tender error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while deleting tender'
+    });
+  }
+};
+
 
 // @desc    Save/unsave tender
 // @route   POST /api/v1/tender/:id/save

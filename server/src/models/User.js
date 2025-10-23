@@ -16,7 +16,53 @@ const educationSchema = new mongoose.Schema({
   current: { type: Boolean, default: false },
   description: { type: String, trim: true, maxlength: 500 }
 });
-
+const certificationSchema = new mongoose.Schema({
+  name: { 
+    type: String, 
+    required: true, 
+    trim: true, 
+    maxlength: 200 
+  },
+  issuer: { 
+    type: String, 
+    required: true, 
+    trim: true, 
+    maxlength: 200 
+  },
+  issueDate: { 
+    type: Date, 
+    required: true 
+  },
+  expiryDate: { 
+    type: Date,
+    validate: {
+      validator: function(value) {
+        return !value || value > this.issueDate;
+      },
+      message: 'Expiry date must be after issue date'
+    }
+  },
+  credentialId: { 
+    type: String, 
+    trim: true, 
+    maxlength: 100 
+  },
+  credentialUrl: { 
+    type: String, 
+    trim: true,
+    validate: {
+      validator: function(value) {
+        return !value || validator.isURL(value, { protocols: ['http', 'https'], require_protocol: true });
+      },
+      message: 'Invalid credential URL'
+    }
+  },
+  description: { 
+    type: String, 
+    trim: true, 
+    maxlength: 500 
+  }
+});
 const experienceSchema = new mongoose.Schema({
   company: { type: String, required: true, trim: true, maxlength: 200 },
   position: { type: String, required: true, trim: true, maxlength: 100 },
@@ -35,18 +81,14 @@ const experienceSchema = new mongoose.Schema({
 const portfolioItemSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true, maxlength: 200 },
   description: { type: String, trim: true, maxlength: 1000 },
-  mediaUrl: { type: String, trim: true, validate: {
-    validator: function(value) {
-      return validator.isURL(value, { protocols: ['http', 'https'], require_protocol: true });
-    },
-    message: 'Invalid media URL'
-  }},
-  projectUrl: { type: String, trim: true, validate: {
-    validator: function(value) {
-      return !value || validator.isURL(value, { protocols: ['http', 'https'], require_protocol: true });
-    },
-    message: 'Invalid project URL'
-  }},
+  mediaUrl: { 
+    type: String, 
+    trim: true,
+  },
+  projectUrl: { 
+    type: String, 
+    trim: true,
+  },
   category: { type: String, trim: true, maxlength: 100 },
   technologies: [{ type: String, trim: true }],
   budget: { type: Number, min: 0 },
@@ -113,6 +155,7 @@ hasOrganizationProfile: {
   }],
   education: [educationSchema],
   experience: [experienceSchema],
+  certifications: [certificationSchema],
   cvUrl: {
     type: String,
     trim: true,
@@ -146,6 +189,15 @@ hasOrganizationProfile: {
     trim: true,
     maxlength: 1000
   },
+avatar: {
+    type: String,
+    validate: {
+      validator: function(v) {
+        return /^(https?:\/\/.*\.(?:png|jpg|jpeg|gif|webp))$/i.test(v);
+      },
+      message: 'Invalid avatar URL'
+    }
+  },
   location: {
     type: String,
     trim: true,
@@ -161,16 +213,17 @@ hasOrganizationProfile: {
       message: 'Invalid phone number'
     }
   },
-  website: {
-    type: String,
-    trim: true,
-    validate: {
-      validator: function(value) {
-        return !value || validator.isURL(value, { protocols: ['http', 'https'], require_protocol: true });
-      },
-      message: 'Invalid website URL'
-    }
-  },
+website: {
+  type: String,
+  validate: {
+    validator: function(v) {
+      if (!v) return true; // Allow empty
+      // Allow both with and without protocol
+      return /^(https?:\/\/)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(\/\S*)?$/.test(v);
+    },
+    message: 'Invalid website URL format'
+  }
+},
   socialLinks: {
     linkedin: {
       type: String,

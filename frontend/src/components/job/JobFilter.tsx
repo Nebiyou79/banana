@@ -6,12 +6,13 @@ import {
   Search, 
   Filter, 
   MapPin, 
-  Briefcase, 
   DollarSign,
   X,
   Star,
   Clock,
-  Globe
+  Globe,
+  Building2,
+  Users
 } from 'lucide-react';
 
 interface JobFilterProps {
@@ -20,6 +21,7 @@ interface JobFilterProps {
   initialFilters?: JobFilters;
   showAdvanced?: boolean;
   onToggleAdvanced?: () => void;
+  showJobTypeFilter?: boolean;
 }
 
 const JobFilter: React.FC<JobFilterProps> = ({ 
@@ -27,7 +29,8 @@ const JobFilter: React.FC<JobFilterProps> = ({
   loading = false,
   initialFilters = {},
   showAdvanced = false,
-  onToggleAdvanced
+  onToggleAdvanced,
+  showJobTypeFilter = true
 }) => {
   const [filters, setFilters] = useState<JobFilters>({
     search: '',
@@ -46,6 +49,8 @@ const JobFilter: React.FC<JobFilterProps> = ({
     urgent: undefined,
     sortBy: 'createdAt',
     sortOrder: 'desc',
+    jobType: undefined,
+    opportunityType: '',
     ...initialFilters
   });
 
@@ -105,6 +110,21 @@ const JobFilter: React.FC<JobFilterProps> = ({
     { value: 'both', label: 'Both' }
   ];
 
+  const jobTypeOptions = [
+    { value: 'company', label: 'Company Jobs' },
+    { value: 'organization', label: 'Organization Opportunities' }
+  ];
+
+  const opportunityTypes = [
+    { value: 'job', label: 'Job Opportunity' },
+    { value: 'volunteer', label: 'Volunteer Position' },
+    { value: 'internship', label: 'Internship' },
+    { value: 'fellowship', label: 'Fellowship' },
+    { value: 'training', label: 'Training Program' },
+    { value: 'grant', label: 'Grant Opportunity' },
+    { value: 'other', label: 'Other Opportunity' }
+  ];
+
   const salaryRanges = [
     { label: 'Under 2,000 ETB', min: 0, max: 2000 },
     { label: '2,000 - 5,000 ETB', min: 2000, max: 5000 },
@@ -152,7 +172,9 @@ const JobFilter: React.FC<JobFilterProps> = ({
       featured: undefined,
       urgent: undefined,
       sortBy: 'createdAt',
-      sortOrder: 'desc'
+      sortOrder: 'desc',
+      jobType: undefined,
+      opportunityType: ''
     });
   };
 
@@ -198,6 +220,21 @@ const JobFilter: React.FC<JobFilterProps> = ({
 
       {/* Quick Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
+        {showJobTypeFilter && (
+          <select
+            value={filters.jobType || ''}
+            onChange={(e) => handleChange('jobType', e.target.value || undefined)}
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+          >
+            <option value="">All Types</option>
+            {jobTypeOptions.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        )}
+
         <select
           value={filters.region || ''}
           onChange={(e) => handleChange('region', e.target.value)}
@@ -274,6 +311,48 @@ const JobFilter: React.FC<JobFilterProps> = ({
       {(showAdvanced || showMobileFilters) && (
         <div className="border-t border-gray-200 pt-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Job Type (Organization vs Company) */}
+            {showJobTypeFilter && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Building2 className="w-4 h-4 inline mr-1" />
+                  Job Type
+                </label>
+                <select
+                  value={filters.jobType || ''}
+                  onChange={(e) => handleChange('jobType', e.target.value || undefined)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                >
+                  <option value="">All Types</option>
+                  {jobTypeOptions.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Opportunity Type (for organizations) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <Users className="w-4 h-4 inline mr-1" />
+                Opportunity Type
+              </label>
+              <select
+                value={filters.opportunityType || ''}
+                onChange={(e) => handleChange('opportunityType', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              >
+                <option value="">All Opportunities</option>
+                {opportunityTypes.map(type => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* City */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -450,6 +529,17 @@ const JobFilter: React.FC<JobFilterProps> = ({
                 </button>
               </span>
             )}
+            {filters.jobType && (
+              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-800">
+                Type: {jobTypeOptions.find(t => t.value === filters.jobType)?.label}
+                <button
+                  onClick={() => handleChange('jobType', undefined)}
+                  className="ml-1 hover:text-purple-600"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
             {filters.region && (
               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
                 Region: {ethiopianRegions.find(r => r.slug === filters.region)?.name}
@@ -472,7 +562,17 @@ const JobFilter: React.FC<JobFilterProps> = ({
                 </button>
               </span>
             )}
-            {/* Add more active filter chips as needed */}
+            {filters.opportunityType && (
+              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-cyan-100 text-cyan-800">
+                Opportunity: {opportunityTypes.find(t => t.value === filters.opportunityType)?.label}
+                <button
+                  onClick={() => handleChange('opportunityType', '')}
+                  className="ml-1 hover:text-cyan-600"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
           </div>
         </div>
       )}

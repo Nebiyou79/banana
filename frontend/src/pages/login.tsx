@@ -116,8 +116,8 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-slate-50 to-blue-50">
       {/* Left Side - Brand Showcase */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-white via-blue-500 to-yellow-500">
-        <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:60px_60px]"></div>
+      <div className="hidden lg:flex pl-10 lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-white via-blue-500 to-yellow-500">
+        <div className="absolute pl-10 inset-0 bg-grid-white/[0.02] bg-[size:60px_60px]"></div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
         
         <div className="relative z-10 flex flex-col justify-between items-center px-16 py-12">
@@ -125,16 +125,16 @@ export default function LoginPage() {
           <div className="flex items-center space-x-3">
             <Image
               src="/logo.png"
-              alt="Banana Jobs"
+              alt="Banana"
               width={120}
               height={120}
               className="rounded-lg object-contain"
             />
-            <span className="text-3xl font-bold text-white">Banana Jobs</span>
+            <span className="text-3xl font-bold text-yellow-500">Banana</span>
           </div>
           {/* Content */}
           <div className="flex-1 flex flex-col justify-center items-center text-center">
-            <div className="mb-12">
+            <div className="mb-12 pt-10">
               <div className="inline-flex items-center bg-white/10 backdrop-blur-sm rounded-full px-4 py-2 mb-6 border border-white/20 shadow-sm">
                 <Sparkles className="w-4 h-4 mr-2 text-yellow-300" />
                 <span className="text-white text-sm font-medium">Trusted by 100K+ professionals</span>
@@ -176,8 +176,8 @@ export default function LoginPage() {
 
           {/* Footer */}
           <div className="w-full">
-            <div className="flex justify-between items-center text-sm">
-              <p className="text-blue-300">© 2024 Banana Jobs. All rights reserved.</p>
+            <div className="flex justify-between pt-7 items-center text-sm">
+              <p className="text-blue-300">© 2024 Banana. All rights reserved.</p>
               <div className="flex space-x-4">
                 <span className="text-blue-300 hover:text-white cursor-pointer transition-colors font-medium">Privacy</span>
                 <span className="text-blue-300 hover:text-white cursor-pointer transition-colors font-medium">Terms</span>
@@ -196,13 +196,13 @@ export default function LoginPage() {
               <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-md">
                 <Image
                   src="/logo.png"
-                  alt="Banana Jobs"
+                  alt="Banana"
                   width={24}
                   height={24}
                   className="rounded-md"
                 />
               </div>
-              <span className="text-xl font-bold text-gray-900">Banana Jobs</span>
+              <span className="text-xl font-bold text-gray-900">Banana</span>
             </div>
           </div>
 
@@ -330,7 +330,7 @@ export default function LoginPage() {
           {/* Mobile Footer */}
           <div className="lg:hidden mt-12 text-center">
             <p className="text-sm text-gray-500 font-medium">
-              © 2024 Banana Jobs. All rights reserved.
+              © 2024 Banana. All rights reserved.
             </p>
           </div>
         </div>

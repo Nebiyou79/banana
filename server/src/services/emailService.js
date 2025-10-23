@@ -28,13 +28,13 @@ const generateOTPTemplate = (otp, name) => {
     <body>
       <div class="container">
         <div class="header">
-          <h1>Banana Jobs</h1>
+          <h1>Banana</h1>
           <p>Your Career Journey Starts Here</p>
         </div>
         <div class="content">
           <h2>Email Verification</h2>
           <p>Hello ${name},</p>
-          <p>Thank you for registering with Banana Jobs. Use the OTP code below to verify your email address:</p>
+          <p>Thank you for registering with Banana. Use the OTP code below to verify your email address:</p>
           
           <div class="otp-code">${otp}</div>
           
@@ -42,7 +42,7 @@ const generateOTPTemplate = (otp, name) => {
           <p>If you didn't request this, please ignore this email.</p>
         </div>
         <div class="footer">
-          <p>© 2024 Banana Jobs. All rights reserved.</p>
+          <p>© 2024 Banana. All rights reserved.</p>
           <p>This is an automated message, please do not reply.</p>
         </div>
       </div>
@@ -70,7 +70,7 @@ const generateResetPasswordOTPTemplate = (otp, name) => {
     <body>
       <div class="container">
         <div class="header">
-          <h1>Banana Jobs</h1>
+          <h1>Banana</h1>
           <p>Password Reset Request</p>
         </div>
         <div class="content">
@@ -84,7 +84,7 @@ const generateResetPasswordOTPTemplate = (otp, name) => {
           <p>If you didn't request this, please ignore this email.</p>
           
           <div class="footer">
-            <p>© 2024 Banana Jobs. All rights reserved.</p>
+            <p>© 2024 Banana. All rights reserved.</p>
           </div>
         </div>
       </div>
@@ -112,7 +112,7 @@ const getPasswordResetTemplate = (name, resetLink) => {
     <body>
       <div class="container">
         <div class="header">
-          <h1>Banana Jobs</h1>
+          <h1>Banana</h1>
           <p>Your Career Journey Starts Here</p>
         </div>
         <div class="content">
@@ -128,7 +128,7 @@ const getPasswordResetTemplate = (name, resetLink) => {
           <p>If you didn't request a password reset, please ignore this email.</p>
         </div>
         <div class="footer">
-          <p>© 2024 Banana Jobs. All rights reserved.</p>
+          <p>© 2024 Banana. All rights reserved.</p>
           <p>This is an automated message, please do not reply.</p>
         </div>
       </div>
@@ -141,15 +141,15 @@ const getPasswordResetTemplate = (name, resetLink) => {
 exports.sendOTPEmail = async (email, name, otp, type = 'register') => {
   try {
     const subject = type === 'reset' 
-      ? 'Reset Your Banana Jobs Password' 
-      : 'Verify Your Banana Jobs Account';
+      ? 'Reset Your Banana Password' 
+      : 'Verify Your Banana Account';
     
     const html = type === 'reset'
       ? generateResetPasswordOTPTemplate(otp, name)
       : generateOTPTemplate(otp, name);
 
     const mailOptions = {
-      from: `Banana Jobs <${process.env.EMAIL_USER}>`,
+      from: `Banana <${process.env.EMAIL_USER}>`,
       to: email,
       subject,
       html,
@@ -167,9 +167,9 @@ exports.sendPasswordResetEmail = async (email, name, resetToken) => {
   try {
     const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
     const mailOptions = {
-      from: `Banana Jobs <${process.env.EMAIL_USER}>`,
+      from: `Banana <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: 'Reset Your Banana Jobs Password',
+      subject: 'Reset Your Banana Password',
       html: getPasswordResetTemplate(name, resetLink),
     };
 

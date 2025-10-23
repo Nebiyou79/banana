@@ -9,8 +9,8 @@ export default function TermsOfService() {
   return (
     <>
       <Head>
-        <title>Terms of Service | Banana Jobs</title>
-        <meta name="description" content="Banana Jobs Terms of Service" />
+        <title>Terms of Service | Banana</title>
+        <meta name="description" content="Banana Terms of Service" />
       </Head>
 
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-8">
@@ -18,7 +18,7 @@ export default function TermsOfService() {
           {/* Header */}
           <header className="flex justify-between items-center py-6 mb-4">
             <Link href="/" className="flex items-center text-2xl font-bold text-blue-700">
-              <FileText className="mr-2" /> Banana Jobs
+              <FileText className="mr-2" /> Banana
             </Link>
             <div className="flex space-x-4">
               <Link href="/login" className="px-4 py-2 text-blue-600 hover:text-blue-800 font-medium">
@@ -44,20 +44,20 @@ export default function TermsOfService() {
             <p className="text-gray-500 mb-8">Last Updated: January 15, 2024</p>
 
             <p className="text-gray-700 mb-6">
-              Welcome to Banana Jobs! These Terms of Service govern your use of our platform and provide 
-              information about the Banana Jobs service, outlined below. When you create a Banana Jobs account 
-              or use Banana Jobs, you agree to these terms.
+              Welcome to Banana! These Terms of Service govern your use of our platform and provide 
+              information about the Banana service, outlined below. When you create a Banana account 
+              or use Banana, you agree to these terms.
             </p>
 
             <div className="mb-8">
               <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
                 <Scale className="mr-2 text-blue-600" size={20} />
-                1. The Banana Jobs Service
+                1. The Banana Service
               </h2>
               <p className="text-gray-700">
-                We agree to provide you with the Banana Jobs Service. The Service includes all of the 
-                Banana Jobs products, features, applications, services, technologies, and software that 
-                we provide to advance Banana Jobs`s mission: To connect professionals with opportunities 
+                We agree to provide you with the Banana Service. The Service includes all of the 
+                Banana products, features, applications, services, technologies, and software that 
+                we provide to advance Banana`s mission: To connect professionals with opportunities 
                 in a professional and secure environment.
               </p>
             </div>
@@ -71,11 +71,11 @@ export default function TermsOfService() {
                 In return for our commitment to provide the Service, we require you to make the below 
                 commitments to us.
               </p>
-              <p className="text-gray-700 mb-2 font-medium">Who Can Use Banana Jobs:</p>
+              <p className="text-gray-700 mb-2 font-medium">Who Can Use Banana:</p>
               <p className="text-gray-700 mb-4">
                 We want our Service to be as open and inclusive as possible, but we also want it to be 
                 safe, secure, and in accordance with the law. So, we need you to commit to a few 
-                restrictions in order to be part of the Banana Jobs community.
+                restrictions in order to be part of the Banana community.
               </p>
               <ul className="list-disc pl-6 text-gray-700 space-y-2">
                 <li>You must be at least 16 years old.</li>
@@ -138,16 +138,16 @@ export default function TermsOfService() {
                 If you have any questions about these Terms of Service, please contact us at:
               </p>
               <p className="text-gray-700">
-                Email: <span className="text-blue-600">terms@Banana Jobs.com</span>
+                Email: <span className="text-blue-600">terms@Banana.com</span>
               </p>
               <p className="text-gray-700">
-                Address: Banana Jobs Inc., 123 Tech Park Drive, San Francisco, CA 94107, USA
+                Address: Banana Inc., 123 Tech Park Drive, San Francisco, CA 94107, USA
               </p>
             </div>
           </div>
 
           <footer className="text-center text-gray-500 text-sm">
-            <p>© 2024 Banana Jobs. All rights reserved.</p>
+            <p>© 2024 Banana. All rights reserved.</p>
           </footer>
         </div>
       </div>

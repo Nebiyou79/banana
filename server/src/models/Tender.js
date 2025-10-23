@@ -105,10 +105,24 @@ const tenderSchema = new mongoose.Schema({
       default: false
     }
   },
+  // Company reference (for company tenders)
   company: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Company',
-    required: true
+    required: false
+  },
+  // Organization reference (for organization tenders)
+  organization: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: false
+  },
+  // Tender type to distinguish between company and organization tenders
+  tenderType: {
+    type: String,
+    enum: ['company', 'organization'],
+    required: true,
+    default: 'company'
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -211,6 +225,8 @@ const tenderSchema = new mongoose.Schema({
 
 // Indexes for better performance
 tenderSchema.index({ company: 1, status: 1 });
+tenderSchema.index({ organization: 1, status: 1 });
+tenderSchema.index({ tenderType: 1, status: 1 });
 tenderSchema.index({ category: 1, status: 1 });
 tenderSchema.index({ deadline: 1 });
 tenderSchema.index({ 'budget.min': 1, 'budget.max': 1 });
@@ -251,13 +267,46 @@ tenderSchema.statics.getActiveTenders = function() {
   return this.find({
     status: 'published',
     deadline: { $gt: new Date() }
-  }).populate('company', 'name logo industry verified');
+  }).populate('company', 'name logo industry verified')
+    .populate('organization', 'name logo industry verified');
 };
 
 tenderSchema.statics.getCompanyTenders = function(companyId) {
-  return this.find({ company: companyId })
+  return this.find({ 
+    company: companyId,
+    tenderType: 'company'
+  })
     .populate('company', 'name logo industry verified')
     .sort({ createdAt: -1 });
 };
+
+tenderSchema.statics.getOrganizationTenders = function(organizationId) {
+  return this.find({ 
+    organization: organizationId,
+    tenderType: 'organization'
+  })
+    .populate('organization', 'name logo industry verified')
+    .sort({ createdAt: -1 });
+};
+
+// Validation to ensure either company or organization is set
+tenderSchema.pre('save', function(next) {
+  if (!this.company && !this.organization) {
+    return next(new Error('Either company or organization must be specified'));
+  }
+  
+  if (this.company && this.organization) {
+    return next(new Error('Tender cannot belong to both company and organization'));
+  }
+  
+  // Set tenderType based on which reference exists
+  if (this.company) {
+    this.tenderType = 'company';
+  } else if (this.organization) {
+    this.tenderType = 'organization';
+  }
+  
+  next();
+});
 
 module.exports = mongoose.model('Tender', tenderSchema);

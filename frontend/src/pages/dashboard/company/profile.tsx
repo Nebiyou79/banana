@@ -1,4 +1,4 @@
-// pages/dashboard/company/profile.tsx - UPDATED WITH FILE UPLOAD
+// pages/dashboard/company/profile.tsx - UPDATED WITH TOAST SYSTEM
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
@@ -20,13 +20,17 @@ export default function CompanyProfilePage() {
   const router = useRouter();
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
     if (isLoading) return;
 
     if (!user || user.role !== 'company') {
+      toast({
+        title: 'Access Denied',
+        description: 'You need to be a company user to access this page.',
+        variant: 'destructive',
+      });
       router.push('/dashboard');
       return;
     }
@@ -37,98 +41,116 @@ export default function CompanyProfilePage() {
   const fetchCompanyProfile = async () => {
     try {
       setLoading(true);
-      setError('');
       const companyData = await companyService.getMyCompany();
       setCompany(companyData);
+      
+      if (!companyData) {
+        toast({
+          title: 'Profile Not Found',
+          description: 'Please create your company profile to get started.',
+          variant: 'info',
+        });
+      }
     } catch (error: any) {
       console.error('Error fetching company profile:', error);
-      if (error.message.includes('not found')) {
-        setCompany(null);
-      } else {
-        setError(error.message);
-      }
+      // Error is already handled by companyService with toast
     } finally {
       setLoading(false);
     }
   };
 
-  const handleProfileUpdate = async (data: Partial<Company> & { logoFile?: File; bannerFile?: File }) => {
-    try {
-      setError('');
+const handleProfileUpdate = async (data: Partial<Company> & { logoFile?: File; bannerFile?: File }) => {
+  try {
+    const { logoFile, bannerFile, ...companyData } = data;
+    
+    console.log('[ProfilePage] Submitting company data:', companyData);
+    console.log('[ProfilePage] Logo file:', logoFile);
+    console.log('[ProfilePage] Banner file:', bannerFile);
+    
+    let updatedCompany: Company;
+    
+    if (company) {
+      // Update company data first
+      updatedCompany = await companyService.updateMyCompany(companyData);
+      console.log('[ProfilePage] Company update response:', updatedCompany);
       
-      // Separate file uploads from company data
-      const { logoFile, bannerFile, ...companyData } = data;
-      
-      let updatedCompany: Company;
-      
-      if (company) {
-        // Update company data first
-        updatedCompany = await companyService.updateMyCompany(companyData);
-        console.log('Company updated:', updatedCompany);
-        
-        // Handle file uploads sequentially
-        if (logoFile) {
-          console.log('Uploading logo file...');
-          await companyService.uploadLogo(logoFile);
-        }
-        
-        if (bannerFile) {
-          console.log('Uploading banner file...');
-          await companyService.uploadBanner(bannerFile);
-        }
-        
-        // Refetch company to get updated image URLs
-        const refreshedCompany = await companyService.getMyCompany();
-        if (refreshedCompany) {
-          setCompany(refreshedCompany);
-        }
-        
-      } else {
-        // Create new company first
-        updatedCompany = await companyService.createCompany(companyData);
-        console.log('Company created:', updatedCompany);
-        
-        // Then upload files
-        if (logoFile) {
-          console.log('Uploading logo file for new company...');
-          await companyService.uploadLogo(logoFile);
-        }
-        
-        if (bannerFile) {
-          console.log('Uploading banner file for new company...');
-          await companyService.uploadBanner(bannerFile);
-        }
-        
-        // Refetch user and company data
-        if (refetchUser) {
-          await refetchUser();
-          console.log('User refetched after company creation');
-        }
-        
-        // Refetch company to get updated data with images
-        const refreshedCompany = await companyService.getMyCompany();
-        if (refreshedCompany) {
-          setCompany(refreshedCompany);
-        }
-        
-        toast({
-          title: 'Success',
-          description: 'Company profile created successfully!',
-        });
+      // Handle file uploads sequentially
+      if (logoFile) {
+        console.log('[ProfilePage] Uploading logo...');
+        await companyService.uploadLogo(logoFile);
       }
       
-      setIsEditing(false);
-      toast({
-        title: 'Success',
-        description: company ? 'Company profile updated successfully!' : 'Company profile created successfully!',
-      });
+      if (bannerFile) {
+        console.log('[ProfilePage] Uploading banner...');
+        await companyService.uploadBanner(bannerFile);
+      }
       
-    } catch (error: any) {
-      console.error('Error updating company profile:', error);
-      setError(error.message);
+      // Refetch company to get updated image URLs
+      const refreshedCompany = await companyService.getMyCompany();
+      if (refreshedCompany) {
+        setCompany(refreshedCompany);
+      }
+      
+    } else {
+      // Create new company first
+      updatedCompany = await companyService.createCompany(companyData);
+      console.log('[ProfilePage] Company creation response:', updatedCompany);
+      
+      // Then upload files
+      if (logoFile) {
+        console.log('[ProfilePage] Uploading logo for new company...');
+        await companyService.uploadLogo(logoFile);
+      }
+      
+      if (bannerFile) {
+        console.log('[ProfilePage] Uploading banner for new company...');
+        await companyService.uploadBanner(bannerFile);
+      }
+      
+      // Refetch user and company data
+      if (refetchUser) {
+        await refetchUser();
+      }
+      
+      // Refetch company to get updated data with images
+      const refreshedCompany = await companyService.getMyCompany();
+      if (refreshedCompany) {
+        setCompany(refreshedCompany);
+      }
+    }
+    
+    setIsEditing(false);
+    
+  } catch (error: any) {
+    console.error('[ProfilePage] Profile update error:', error);
+    // Error is already handled by companyService with toast
+  }
+};
+
+  const handleEditClick = () => {
+    try {
+      setIsEditing(true);
+    } catch (error) {
       toast({
         title: 'Error',
-        description: error.message || 'Failed to update company profile',
+        description: 'Unable to open edit form',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleCancelEdit = () => {
+    try {
+      setIsEditing(false);
+      toast({
+        title: 'Edit Cancelled',
+        description: 'Your changes were not saved',
+        variant: 'info',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Unable to cancel edit',
         variant: 'destructive',
       });
     }
@@ -157,34 +179,18 @@ export default function CompanyProfilePage() {
               <p className="text-xl text-gray-600 mt-2">Manage your company information and branding</p>
             </div>
             {company && !isEditing && (
-              <Button onClick={() => setIsEditing(true)} size="lg">
+              <Button onClick={handleEditClick} size="lg">
                 <Pencil className="w-5 h-5 mr-2" />
                 Edit Profile
               </Button>
             )}
           </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <Building2 className="h-5 w-5 text-red-400" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-800">Error</h3>
-                  <div className="mt-1 text-sm text-red-700">
-                    <p>{error}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           {isEditing ? (
             <CompanyForm
               company={company}
               onSubmit={handleProfileUpdate}
-              onCancel={() => setIsEditing(false)}
+              onCancel={handleCancelEdit}
             />
           ) : !company ? (
             <Card className="border-l-4 border-l-blue-500 shadow-lg">
@@ -213,8 +219,9 @@ export default function CompanyProfilePage() {
                       <span>Post unlimited jobs</span>
                     </div>
                   </div>
-                  <Button onClick={() => setIsEditing(true)} size="lg" className="mt-4">
-                    Get Started
+                  <Button onClick={handleEditClick} size="lg" className="mt-4">
+                    <Plus className="w-5 h-5 mr-2" />
+                    Create Company Profile
                   </Button>
                 </div>
               </CardContent>
@@ -225,7 +232,7 @@ export default function CompanyProfilePage() {
               <CompanyHero 
                 company={company} 
                 isOwner={true}
-                onEdit={() => setIsEditing(true)}
+                onEdit={handleEditClick}
               />
 
               {/* Company Details */}
@@ -334,25 +341,31 @@ export default function CompanyProfilePage() {
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card> 
                     <CardHeader>
                       <CardTitle>Quick Actions</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-3">
+                      <div className="flex flex-col space-y-3">
                         <Button variant="outline" className="w-full justify-start" asChild>
                           <Link href="/dashboard/company/jobs/new">
                             <Plus className="w-4 h-4 mr-2" />
                             Post New Job
                           </Link>
                         </Button>
+
                         <Button variant="outline" className="w-full justify-start" asChild>
                           <Link href="/dashboard/company/jobs">
                             <FileText className="w-4 h-4 mr-2" />
                             View All Jobs
                           </Link>
                         </Button>
-                        <Button variant="outline" className="w-full justify-start" onClick={() => setIsEditing(true)}>
+
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start"
+                          onClick={handleEditClick}
+                        >
                           <Pencil className="w-4 h-4 mr-2" />
                           Edit Profile
                         </Button>

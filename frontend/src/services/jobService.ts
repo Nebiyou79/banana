@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// services/jobService.ts - FIXED ERROR HANDLING
+// services/jobService.ts - COMPLETE FIXED VERSION
 import api from '@/lib/axios';
-import { handleError, handleSuccess, handleInfo } from '@/lib/error-handler';
+import { handleError, handleSuccess } from '@/lib/error-handler';
 
 // Ethiopian Location Interface
 export interface EthiopianLocation {
@@ -28,12 +28,34 @@ export interface JobSalary {
   isNegotiable: boolean;
 }
 
-// Ethiopian Requirements Interface
-export interface EthiopianRequirements {
-  workPermitRequired: boolean;
-  knowledgeOfLocalLanguages: string[];
-  drivingLicense: boolean;
-  governmentClearance: boolean;
+// Duration Interface for Organization Opportunities
+export interface Duration {
+  value?: number;
+  unit?: 'days' | 'weeks' | 'months' | 'years';
+  isOngoing: boolean;
+}
+
+// Volunteer Info Interface for Organization Opportunities
+export interface VolunteerInfo {
+  hoursPerWeek?: number;
+  commitmentLevel?: 'casual' | 'regular' | 'intensive';
+  providesAccommodation: boolean;
+  providesStipend: boolean;
+}
+
+// Organization Interface
+export interface Organization {
+  _id: string;
+  name: string;
+  organizationType?: string;
+  industry?: string;
+  logoUrl?: string;
+  verified: boolean;
+  description?: string;
+  website?: string;
+  mission?: string;
+  logoFullUrl?: string;
+  bannerFullUrl?: string;
 }
 
 // Main Job Interface
@@ -53,11 +75,12 @@ export interface Job {
   subCategory?: string;
   experienceLevel: 'fresh-graduate' | 'entry-level' | 'mid-level' | 'senior-level' | 'managerial' | 'director' | 'executive';
   educationLevel?: 'high-school' | 'diploma' | 'bachelors' | 'masters' | 'phd' | 'none-required';
-  ethiopianRequirements: EthiopianRequirements;
   status: 'draft' | 'active' | 'paused' | 'closed' | 'archived';
   remote: 'remote' | 'hybrid' | 'on-site';
   workArrangement: 'office' | 'field-work' | 'both';
-  company: {
+  
+  // Company fields (for company jobs)
+  company?: {
     _id: string;
     name: string;
     logoUrl?: string;
@@ -68,6 +91,14 @@ export interface Job {
     description?: string;
     country?: string;
   };
+  
+  // Organization fields (for organization opportunities)
+  organization?: Organization;
+  jobType: 'company' | 'organization';
+  opportunityType?: 'job' | 'volunteer' | 'internship' | 'fellowship' | 'training' | 'grant' | 'other';
+  duration?: Duration;
+  volunteerInfo?: VolunteerInfo;
+  
   createdBy: string;
   applicationCount: number;
   viewCount: number;
@@ -127,6 +158,8 @@ export interface JobFilters {
   workArrangement?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  jobType?: 'company' | 'organization';
+  opportunityType?: string;
 }
 
 // Application Data Interface
@@ -145,6 +178,17 @@ export interface JobResponse {
 
 // Company Jobs Response Interface
 export interface CompanyJobsResponse {
+  success: boolean;
+  data: Job[];
+  pagination: {
+    current: number;
+    totalPages: number;
+    totalResults: number;
+  };
+}
+
+// Organization Jobs Response Interface
+export interface OrganizationJobsResponse {
   success: boolean;
   data: Job[];
   pagination: {
@@ -195,6 +239,11 @@ const validateJobData = (data: Partial<Job>): void => {
   if (data.shortDescription && data.shortDescription.length > 200) {
     throw new Error('Short description cannot exceed 200 characters');
   }
+};
+
+// Info handler function
+const handleInfo = (message: string): void => {
+  console.info(message);
 };
 
 export const jobService = {
@@ -299,80 +348,170 @@ export const jobService = {
       return handleApiError(error, 'Failed to delete job') as never;
     }
   },
-  // Add these methods to your existing jobService object
 
-// Get organization's jobs
-getOrganizationJobs: async (params?: { page?: number; limit?: number; status?: string }): Promise<CompanyJobsResponse> => {
-  try {
-    const response = await api.get<CompanyJobsResponse>('/job/organization/my-jobs', { params });
-    return response.data;
-  } catch (error: any) {
-    return handleApiError(error, 'Failed to fetch organization opportunities') as never;
-  }
-},
+  // ORGANIZATION METHODS
 
-// Create job for organization
-createOrganizationJob: async (data: Partial<Job>): Promise<Job> => {
-  try {
-    validateJobData(data);
-    
-    console.log('📤 Sending organization opportunity data to backend:', JSON.stringify(data, null, 2));
-    
-    const response = await api.post<JobResponse>('/job/organization', data);
-    
-    if (!response.data.success || !response.data.data) {
-      throw new Error(response.data.message || 'Failed to create opportunity');
+  // Get organization's opportunities
+  getOrganizationJobs: async (params?: { page?: number; limit?: number; status?: string }): Promise<OrganizationJobsResponse> => {
+    try {
+      const response = await api.get<OrganizationJobsResponse>('/job/organization/my-jobs', { params });
+      return response.data;
+    } catch (error: any) {
+      return handleApiError(error, 'Failed to fetch organization opportunities') as never;
     }
-    
-    handleSuccess('Opportunity created successfully');
-    return response.data.data;
-  } catch (error: any) {
-    console.error('❌ Organization opportunity creation failed:', error);
-    console.log('📋 Response data:', error.response?.data);
-    return handleApiError(error, 'Failed to create opportunity') as never;
-  }
-},
+  },
 
-// Update organization job
-updateOrganizationJob: async (id: string, data: Partial<Job>): Promise<Job> => {
-  try {
-    if (!id) {
-      throw new Error('Opportunity ID is required');
+  // Create opportunity for organization
+  createOrganizationJob: async (data: Partial<Job>): Promise<Job> => {
+    try {
+      validateJobData(data);
+      
+      console.log('📤 Sending organization opportunity data to backend:', JSON.stringify(data, null, 2));
+      
+      const response = await api.post<JobResponse>('/job/organization', data);
+      
+      if (!response.data.success || !response.data.data) {
+        throw new Error(response.data.message || 'Failed to create opportunity');
+      }
+      
+      handleSuccess('Opportunity created successfully');
+      return response.data.data;
+    } catch (error: any) {
+      console.error('❌ Organization opportunity creation failed:', error);
+      console.log('📋 Response data:', error.response?.data);
+      return handleApiError(error, 'Failed to create opportunity') as never;
     }
-    
-    validateJobData(data);
-    
-    const response = await api.put<JobResponse>(`/job/organization/${id}`, data);
-    
-    if (!response.data.success || !response.data.data) {
-      throw new Error(response.data.message || 'Failed to update opportunity');
-    }
-    
-    handleSuccess('Opportunity updated successfully');
-    return response.data.data;
-  } catch (error: any) {
-    return handleApiError(error, 'Failed to update opportunity') as never;
-  }
-},
+  },
 
-// Delete organization job
-deleteOrganizationJob: async (id: string): Promise<void> => {
-  try {
-    if (!id) {
-      throw new Error('Opportunity ID is required');
+  // Update organization opportunity
+  updateOrganizationJob: async (id: string, data: Partial<Job>): Promise<Job> => {
+    try {
+      if (!id) {
+        throw new Error('Opportunity ID is required');
+      }
+      
+      validateJobData(data);
+      
+      const response = await api.put<JobResponse>(`/job/organization/${id}`, data);
+      
+      if (!response.data.success || !response.data.data) {
+        throw new Error(response.data.message || 'Failed to update opportunity');
+      }
+      
+      handleSuccess('Opportunity updated successfully');
+      return response.data.data;
+    } catch (error: any) {
+      return handleApiError(error, 'Failed to update opportunity') as never;
     }
-    
-    const response = await api.delete(`/job/organization/${id}`);
-    
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Failed to delete opportunity');
+  },
+
+  // Delete organization opportunity
+  deleteOrganizationJob: async (id: string): Promise<void> => {
+    try {
+      if (!id) {
+        throw new Error('Opportunity ID is required');
+      }
+      
+      const response = await api.delete(`/job/organization/${id}`);
+      
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to delete opportunity');
+      }
+      
+      handleSuccess('Opportunity deleted successfully');
+    } catch (error: any) {
+      return handleApiError(error, 'Failed to delete opportunity') as never;
     }
-    
-    handleSuccess('Opportunity deleted successfully');
-  } catch (error: any) {
-    return handleApiError(error, 'Failed to delete opportunity') as never;
-  }
-},
+  },
+
+  // Get jobs for candidate
+  getJobsForCandidate: async (params?: JobFilters): Promise<JobsResponse> => {
+    try {
+      const response = await api.get<JobsResponse>('/job/candidate', { params });
+      return response.data;
+    } catch (error: any) {
+      handleError(error, 'Failed to fetch jobs');
+      throw error;
+    }
+  },
+
+  // FIXED: Save job for candidate
+  saveJob: async (jobId: string): Promise<{ saved: boolean }> => {
+    try {
+      console.log('💾 jobService.saveJob called for job:', jobId);
+      
+      const response = await api.post<{
+        message: string; 
+        success: boolean; 
+        data: { saved: boolean } 
+      }>(`/job/${jobId}/save`);
+
+      console.log('📡 Save job response:', response.data);
+
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to save job');
+      }
+      
+      return response.data.data;
+    } catch (error: any) {
+      console.error('❌ jobService.saveJob error:', error);
+      
+      if (error.response) {
+        console.error('Response status:', error.response.status);
+        console.error('Response data:', error.response.data);
+      }
+      
+      handleError(error, 'Failed to save job');
+      throw error;
+    }
+  },
+
+  // FIXED: Unsave job for candidate
+  unsaveJob: async (jobId: string): Promise<{ saved: boolean }> => {
+    try {
+      console.log('🗑️ jobService.unsaveJob called for job:', jobId);
+      
+      const response = await api.post<{
+        message: string; 
+        success: boolean; 
+        data: { saved: boolean } 
+      }>(`/job/${jobId}/unsave`);
+
+      console.log('📡 Unsave job response:', response.data);
+
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to unsave job');
+      }
+      
+      return response.data.data;
+    } catch (error: any) {
+      console.error('❌ jobService.unsaveJob error:', error);
+      
+      if (error.response) {
+        console.error('Response status:', error.response.status);
+        console.error('Response data:', error.response.data);
+      }
+      
+      handleError(error, 'Failed to unsave job');
+      throw error;
+    }
+  },
+
+  // Get saved jobs for candidate
+  getSavedJobs: async (): Promise<any[]> => {
+    try {
+      const response = await api.get<{ success: boolean; data: any[] }>('/job/saved');
+      
+      if (!response.data.success) {
+        throw new Error('Failed to fetch saved jobs');
+      }
+      
+      return response.data.data;
+    } catch (error: any) {
+      handleError(error, 'Failed to fetch saved jobs');
+      throw error;
+    }
+  },
 
   // Get job categories
   getCategories: async (): Promise<Array<{_id: string, count: number}>> => {
@@ -454,6 +593,49 @@ deleteOrganizationJob: async (id: string): Promise<void> => {
     return level ? labels[level] || level : 'Not Specified';
   },
 
+  // Helper to get job type display label (company vs organization)
+  getJobTypeDisplayLabel: (job: Job): string => {
+    if (job.jobType === 'organization') {
+      const opportunityTypes: Record<string, string> = {
+        'job': 'Job Opportunity',
+        'volunteer': 'Volunteer Position',
+        'internship': 'Internship',
+        'fellowship': 'Fellowship',
+        'training': 'Training Program',
+        'grant': 'Grant Opportunity',
+        'other': 'Opportunity'
+      };
+      return opportunityTypes[job.opportunityType || 'job'] || 'Opportunity';
+    }
+    return 'Job';
+  },
+
+  // Helper to get owner name (company or organization)
+  getOwnerName: (job: Job): string => {
+    if (job.jobType === 'organization' && job.organization) {
+      return job.organization.name;
+    }
+    if (job.jobType === 'company' && job.company) {
+      return job.company.name;
+    }
+    return 'Unknown';
+  },
+
+  // Helper to get owner type
+  getOwnerType: (job: Job): string => {
+    return job.jobType === 'organization' ? 'Organization' : 'Company';
+  },
+
+  // Helper to check if job belongs to current organization
+  isOrganizationJobOwner: (job: Job, organizationId?: string): boolean => {
+    return job.jobType === 'organization' && job.organization?._id === organizationId;
+  },
+
+  // Helper to check if job belongs to current company
+  isCompanyJobOwner: (job: Job, companyId?: string): boolean => {
+    return job.jobType === 'company' && job.company?._id === companyId;
+  },
+
   // Get Ethiopian regions
   getEthiopianRegions: (): EthiopianRegion[] => {
     return [
@@ -527,6 +709,38 @@ deleteOrganizationJob: async (id: string): Promise<void> => {
         slug: 'international',
         cities: ['Remote Worldwide', 'Multiple Locations', 'Global']
       }
+    ];
+  },
+
+  // Get opportunity types for organizations
+  getOpportunityTypes: (): Array<{value: string, label: string}> => {
+    return [
+      { value: 'job', label: 'Job Opportunity' },
+      { value: 'volunteer', label: 'Volunteer Position' },
+      { value: 'internship', label: 'Internship' },
+      { value: 'fellowship', label: 'Fellowship' },
+      { value: 'training', label: 'Training Program' },
+      { value: 'grant', label: 'Grant Opportunity' },
+      { value: 'other', label: 'Other Opportunity' }
+    ];
+  },
+
+  // Get commitment levels for volunteer opportunities
+  getCommitmentLevels: (): Array<{value: string, label: string}> => {
+    return [
+      { value: 'casual', label: 'Casual (1-10 hours/week)' },
+      { value: 'regular', label: 'Regular (10-25 hours/week)' },
+      { value: 'intensive', label: 'Intensive (25+ hours/week)' }
+    ];
+  },
+
+  // Get duration units for opportunities
+  getDurationUnits: (): Array<{value: string, label: string}> => {
+    return [
+      { value: 'days', label: 'Days' },
+      { value: 'weeks', label: 'Weeks' },
+      { value: 'months', label: 'Months' },
+      { value: 'years', label: 'Years' }
     ];
   },
 
@@ -611,6 +825,19 @@ deleteOrganizationJob: async (id: string): Promise<void> => {
       { value: 'curriculum-development', label: 'Curriculum Development' },
       { value: 'special-education', label: 'Special Education' },
       
+      // NGO & Development
+      { value: 'ngo-development', label: 'NGO & Development' },
+      { value: 'social-work', label: 'Social Work' },
+      { value: 'community-development', label: 'Community Development' },
+      { value: 'humanitarian-aid', label: 'Humanitarian Aid' },
+      { value: 'international-development', label: 'International Development' },
+      { value: 'public-policy', label: 'Public Policy' },
+      { value: 'advocacy', label: 'Advocacy' },
+      { value: 'grant-writing', label: 'Grant Writing' },
+      { value: 'fundraising', label: 'Fundraising' },
+      { value: 'volunteer-coordination', label: 'Volunteer Coordination' },
+      { value: 'program-management', label: 'Program Management' },
+      
       // Other Professional
       { value: 'human-resources', label: 'Human Resources' },
       { value: 'recruitment', label: 'Recruitment' },
@@ -645,11 +872,11 @@ deleteOrganizationJob: async (id: string): Promise<void> => {
       { value: 'performing-arts', label: 'Performing Arts' },
       { value: 'fashion', label: 'Fashion' },
       
-      // Other
-      { value: 'ngo-development', label: 'NGO & Development' },
-      { value: 'social-work', label: 'Social Work' },
-      { value: 'community-development', label: 'Community Development' },
+      // Religious & Faith-based
       { value: 'religious', label: 'Religious' },
+      { value: 'faith-based', label: 'Faith-based' },
+      
+      // Other
       { value: 'security', label: 'Security' },
       { value: 'driving-delivery', label: 'Driving & Delivery' },
       { value: 'cleaning-maintenance', label: 'Cleaning & Maintenance' },

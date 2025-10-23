@@ -7,7 +7,7 @@ import Head from 'next/head';
 import TenderForm from '@/components/tenders/TenderForm';
 import { TenderService, Tender, UpdateTenderData } from '@/services/tenderService';
 import { useAuth } from '@/contexts/AuthContext';
-import { ArrowLeftIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, ExclamationTriangleIcon, BuildingOfficeIcon } from '@heroicons/react/24/outline';
 import { colorClasses } from '@/utils/color';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 
@@ -154,24 +154,31 @@ const EditTenderPage: NextPage = () => {
           <div className="mb-8">
             <button
               onClick={handleCancel}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors font-medium"
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors font-medium hover:bg-white px-4 py-2 rounded-lg"
             >
               <ArrowLeftIcon className="h-4 w-4" />
-              Back to Tenders
+              Back to Tender Details
             </button>
             
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
               <div className="flex items-start justify-between">
-                <div>
-                  <h1 className="text-3xl font-bold text-gray-900 mb-2">Edit Tender</h1>
-                  <p className="text-gray-600">
-                    Update your tender information. Changes will be reflected immediately after saving.
-                  </p>
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                      <BuildingOfficeIcon className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <h1 className="text-3xl font-bold text-gray-900 mb-2">Edit Tender</h1>
+                      <p className="text-gray-600">
+                        Update your tender information. Changes will be reflected immediately after saving.
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                <div className={`px-4 py-2 rounded-full text-sm font-medium ${
                   tender.status === 'published' 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-gray-100 text-gray-800'
+                    ? 'bg-green-100 text-green-800 border border-green-200' 
+                    : 'bg-gray-100 text-gray-800 border border-gray-200'
                 }`}>
                   {tender.status.charAt(0).toUpperCase() + tender.status.slice(1)}
                 </div>
@@ -181,7 +188,7 @@ const EditTenderPage: NextPage = () => {
 
           {/* Error Alert */}
           {error && (
-            <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 animate-fade-in">
               <div className="flex items-center">
                 <ExclamationTriangleIcon className="h-5 w-5 text-red-400 mr-2" />
                 <p className="text-red-800 text-sm">{error}</p>
@@ -189,16 +196,27 @@ const EditTenderPage: NextPage = () => {
             </div>
           )}
 
-          {/* Tender Form */}
+          {/* Tender Form - REMOVE tenderType prop */}
           <TenderForm
             tender={tender}
             onSubmit={handleSubmit}
             onCancel={handleCancel}
             isLoading={isSubmitting}
             mode="edit"
+            // tenderType prop removed - it's now handled internally
           />
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+          animation: fade-in 0.3s ease-out;
+        }
+      `}</style>
     </DashboardLayout>
   );
 };

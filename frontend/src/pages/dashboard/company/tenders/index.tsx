@@ -449,7 +449,7 @@ const CompanyTendersPage: NextPage = () => {
                 >
                   <TenderCard
                     tender={tender}
-                    showCompany={false}
+                    showOwner={false}
                     showStatus={true}
                   />
                   
