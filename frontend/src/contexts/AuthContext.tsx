@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { authService, LoginData, RegisterData, User } from '@/services/authService';
 import { useToast } from '@/hooks/use-toast';
-import { handleError, handleSuccess, handleInfo } from '@/lib/error-handler'; // ADD THIS IMPORT
+import { handleError, handleSuccess } from '@/lib/error-handler'; // ADD THIS IMPORT
 
 interface AuthContextType {
   user: User | null;
@@ -279,3 +279,7 @@ const registerMutation = useMutation({
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
+
+function handleInfo(arg0: string) {
+  throw new Error('Function not implemented.');
+}
