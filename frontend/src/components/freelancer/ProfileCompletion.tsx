@@ -63,7 +63,7 @@ const ProfileCompletion: React.FC<ProfileCompletionProps> = ({
     if (profile.experience?.length) fields.push('Work Experience');
     if (profile.education?.length) fields.push('Education');
     if (profile.portfolio?.length) fields.push('Portfolio');
-    if (profile.freelancerProfile?.certifications?.length) fields.push('Certifications');
+    if (profile.certifications?.length) fields.push('Certifications'); // FIXED LINE
     
     // Additional
     if (profile.website) fields.push('Website');
@@ -192,7 +192,7 @@ const ProfileCompletion: React.FC<ProfileCompletionProps> = ({
         </div>
       </div>
 
-      {/* Detailed Progress - UPDATED WITH CERTIFICATIONS */}
+      {/* Detailed Progress */}
       <div className="mb-6">
         <h4 className="font-bold text-gray-900 mb-3">Detailed Progress</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
