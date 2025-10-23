@@ -2,8 +2,10 @@
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
-
+let uuidv4;
+import('uuid').then(module => {
+  uuidv4 = module.v4;
+});
 // Ensure upload directories exist with proper permissions
 const createUploadDirs = () => {
   const uploadDirs = {
