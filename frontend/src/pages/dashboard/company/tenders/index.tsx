@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { NextPage } from 'next';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import TenderCard from '@/components/tenders/TenderCard';
 import { TenderService, Tender } from '@/services/tenderService';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -22,6 +21,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { colorClasses } from '@/utils/color';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import CompanyTenderCard from '@/components/tenders/CompanyTenderCard';
 
 const CompanyTendersPage: NextPage = () => {
   const router = useRouter();
@@ -447,9 +447,8 @@ const CompanyTendersPage: NextPage = () => {
                   key={tender._id || `tender-${index}`} 
                   className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden group hover:shadow-lg transition-all duration-300"
                 >
-                  <TenderCard
+                  <CompanyTenderCard
                     tender={tender}
-                    showOwner={false}
                     showStatus={true}
                   />
                   

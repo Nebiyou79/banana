@@ -7,14 +7,13 @@ export interface CompletionResult {
   missingFields: string[];
   suggestions: string[];
 }
-
 export class ProfileCompletionCalculator {
   static calculateCompletion(profile: UserProfile): CompletionResult {
     const completedFields: string[] = [];
     const missingFields: string[] = [];
     const suggestions: string[] = [];
 
-    // Basic Information (25%)
+    // Basic Information (30%)
     if (profile.name?.trim()) completedFields.push('Name');
     else missingFields.push('Name');
     
@@ -38,11 +37,8 @@ export class ProfileCompletionCalculator {
       missingFields.push('Location');
       suggestions.push('Add your location');
     }
-    
-    if (profile.phone?.trim()) completedFields.push('Phone');
-    else missingFields.push('Phone');
 
-    // Professional Details (30%)
+    // Professional Details (40%)
     if (profile.freelancerProfile?.headline?.trim()) completedFields.push('Professional Headline');
     else {
       missingFields.push('Professional Headline');
@@ -66,53 +62,21 @@ export class ProfileCompletionCalculator {
       missingFields.push('Hourly Rate');
       suggestions.push('Set your hourly rate');
     }
-    
-    if (profile.freelancerProfile?.availability) completedFields.push('Availability');
-    else {
-      missingFields.push('Availability');
-      suggestions.push('Set your availability');
-    }
 
-    // Experience & Education (25%)
-    if (profile.experience && profile.experience.length > 0) completedFields.push('Work Experience');
-    else {
-      missingFields.push('Work Experience');
-      suggestions.push('Add your work experience');
-    }
-    
-    if (profile.education && profile.education.length > 0) completedFields.push('Education');
-    else {
-      missingFields.push('Education');
-      suggestions.push('Add your education background');
-    }
-    
+    // Freelancer Specific (30%)
     if (profile.portfolio && profile.portfolio.length >= 2) completedFields.push('Portfolio');
     else {
       missingFields.push('Portfolio');
       suggestions.push('Add at least 2 portfolio items');
     }
 
-    // Certifications (10%)
-    if (profile.freelancerProfile?.certifications && profile.freelancerProfile.certifications.length > 0) completedFields.push('Certifications');
+    if (profile.certifications && profile.certifications.length > 0) completedFields.push('Certifications');
     else {
       missingFields.push('Certifications');
       suggestions.push('Add professional certifications');
     }
 
-    // Additional Information (10%)
-    if (profile.website?.trim()) completedFields.push('Website');
-    else missingFields.push('Website');
-    
-    if (profile.socialLinks && Object.values(profile.socialLinks).some(link => link)) completedFields.push('Social Links');
-    else missingFields.push('Social Links');
-    
-    if (profile.freelancerProfile?.timezone) completedFields.push('Timezone');
-    else missingFields.push('Timezone');
-    
-    if (profile.freelancerProfile?.englishProficiency) completedFields.push('English Proficiency');
-    else missingFields.push('English Proficiency');
-
-    // Calculate score (weighted)
+    // Calculate score
     const totalFields = completedFields.length + missingFields.length;
     const score = Math.round((completedFields.length / totalFields) * 100);
 
@@ -120,41 +84,7 @@ export class ProfileCompletionCalculator {
       score,
       completedFields,
       missingFields,
-      suggestions: suggestions.slice(0, 5) // Limit to top 5 suggestions
+      suggestions: suggestions.slice(0, 5)
     };
-  }
-
-  static getCompletionStatus(score: number): { status: string; description: string; icon: string } {
-    if (score >= 90) {
-      return {
-        status: 'Excellent',
-        description: 'Your profile is fully optimized!',
-        icon: '🏆'
-      };
-    } else if (score >= 80) {
-      return {
-        status: 'Very Good',
-        description: 'Great profile! Almost there.',
-        icon: '⭐'
-      };
-    } else if (score >= 70) {
-      return {
-        status: 'Good',
-        description: 'Good start, keep improving!',
-        icon: '👍'
-      };
-    } else if (score >= 50) {
-      return {
-        status: 'Fair',
-        description: 'Complete more sections to improve visibility',
-        icon: '📈'
-      };
-    } else {
-      return {
-        status: 'Needs Work',
-        description: 'Complete your profile to get more clients',
-        icon: '🚧'
-      };
-    }
   }
 }

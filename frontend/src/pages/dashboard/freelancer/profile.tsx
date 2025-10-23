@@ -5,8 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { FreelancerLayout } from '@/components/layout/FreelancerLayout';
 import { UserProfile, ProfileData, freelancerService } from '@/services/freelancerService';
-import ProfileCompletion from '@/components/freelancer/ProfileCompletion';
-import ProfileCompletionProgress from '@/components/freelancer/ProfileCompletion';
+// import ProfileCompletion from '@/components/freelancer/ProfileCompletion';
 import CertificationsList from '@/components/freelancer/CertificationsList';
 import { colorClasses } from '@/utils/color';
 import { 
@@ -311,23 +310,6 @@ const FreelancerProfile = () => {
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 -mt-8">
-          {/* Profile Completion */}
-          {profile && (
-            <div className="mb-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2">
-                <ProfileCompletion
-                  profile={profile}
-                  showActions={false}
-                />
-              </div>
-              <div className="lg:col-span-1">
-                <ProfileCompletionProgress 
-                  profile={profile}
-                />
-              </div>
-            </div>
-          )}
-
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             {/* Sidebar Navigation */}
             <div className="lg:col-span-1">

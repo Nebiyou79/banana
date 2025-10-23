@@ -7,7 +7,6 @@ import { FreelancerLayout } from '@/components/layout/FreelancerLayout';
 import { freelancerService, UserProfile } from '@/services/freelancerService';
 import DashboardStats from '@/components/freelancer/DashboardStats';
 import ProfileCompletion from '@/components/freelancer/ProfileCompletion';
-import ProfileCompletionProgress from '@/components/freelancer/ProfileCompletion';
 import { colorClasses } from '@/utils/color';
 import {
   BriefcaseIcon,
@@ -351,47 +350,6 @@ const FreelancerDashboard = () => {
                       </div>
                     </button>
                   </Link>
-                </div>
-              </div>
-
-              {/* Earnings Summary */}
-              <div className="bg-gradient-to-br from-green-600 to-emerald-700 rounded-2xl p-6 text-white">
-                <h3 className="text-xl font-bold mb-6 flex items-center">
-                  <CurrencyDollarIcon className="w-6 h-6 mr-3" />
-                  Earnings Summary
-                </h3>
-                
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center pb-3 border-b border-green-500/30">
-                    <span className="text-green-100">Total Earnings</span>
-                    <span className="font-bold text-2xl">
-                      ${professionalStats?.totalEarnings?.toLocaleString() || '0'}
-                    </span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center pb-3 border-b border-green-500/30">
-                    <span className="text-green-100">Active Projects</span>
-                    <span className="font-bold text-lg">{professionalStats?.activeProposals || '0'}</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center pb-3 border-b border-green-500/30">
-                    <span className="text-green-100">Success Rate</span>
-                    <span className="font-bold text-lg">{professionalStats?.jobSuccessScore || 0}%</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center">
-                    <span className="text-green-100">Avg. Rating</span>
-                    <span className="font-bold text-lg flex items-center">
-                      {professionalStats?.averageRating?.toFixed(1) || '0.0'}
-                      <StarIcon className="w-4 h-4 ml-1 text-amber-300" />
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="mt-6 pt-4 border-t border-green-500/30">
-                  <div className="text-center text-green-200 text-sm">
-                    Updated in real-time
-                  </div>
                 </div>
               </div>
 

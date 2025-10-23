@@ -10,6 +10,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { toast } from '@/hooks/use-toast';
 import { Edit3, Share2, Eye, Users, MapPin, Briefcase } from 'lucide-react';
 import SocialShare from '@/components/layout/SocialShare';
+import { Button } from '@/components/ui/Button';
 
 const CompanyJobDetailPage: React.FC = () => {
   const router = useRouter();
@@ -123,12 +124,12 @@ const CompanyJobDetailPage: React.FC = () => {
         );
       case 'active':
         return (
-          <button
+          <Button
             onClick={() => handleStatusChange('paused')}
             className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
           >
             Pause Job
-          </button>
+          </Button>
         );
       case 'paused':
         return (

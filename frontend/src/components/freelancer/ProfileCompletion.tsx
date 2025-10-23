@@ -16,12 +16,8 @@ const ProfileCompletion: React.FC<ProfileCompletionProps> = ({
   showActions = false,
   onImprove 
 }) => {
-  // Calculate completion score based on actual profile data
-  const calculateCompletionScore = (): number => {
-    return profile.freelancerProfile?.profileCompletion || 0;
-  };
-
-  const completionScore = calculateCompletionScore();
+  // Always use the backend-calculated score for consistency
+  const completionScore = profile.freelancerProfile?.profileCompletion || 0;
 
   const getProgressColor = (score: number) => {
     if (score >= 80) return 'from-green-500 to-green-600';
@@ -40,7 +36,7 @@ const ProfileCompletion: React.FC<ProfileCompletionProps> = ({
 
   const statusInfo = getStatusInfo(completionScore);
 
-  // Calculate completed sections based on actual data
+  // Calculate completed sections for UI display only (not for score calculation)
   const getCompletedFields = () => {
     const fields = [];
     
@@ -59,11 +55,9 @@ const ProfileCompletion: React.FC<ProfileCompletionProps> = ({
     if (profile.freelancerProfile?.hourlyRate) fields.push('Hourly Rate');
     if (profile.freelancerProfile?.availability) fields.push('Availability');
     
-    // Experience & Education
-    if (profile.experience?.length) fields.push('Work Experience');
-    if (profile.education?.length) fields.push('Education');
+    // Freelancer Specific Sections
     if (profile.portfolio?.length) fields.push('Portfolio');
-    if (profile.certifications?.length) fields.push('Certifications'); // FIXED LINE
+    if (profile.certifications?.length) fields.push('Certifications');
     
     // Additional
     if (profile.website) fields.push('Website');
@@ -75,10 +69,11 @@ const ProfileCompletion: React.FC<ProfileCompletionProps> = ({
   };
 
   const getMissingFields = () => {
+    // Only include fields relevant to freelancers
     const allFields = [
       'Name', 'Email', 'Profile Photo', 'Bio', 'Location', 'Phone',
       'Professional Headline', 'Skills', 'Experience Level', 'Hourly Rate', 'Availability',
-      'Work Experience', 'Education', 'Portfolio', 'Certifications',
+      'Portfolio', 'Certifications', // Only these two for freelancers
       'Website', 'Social Links', 'Timezone', 'English Proficiency'
     ];
     const completed = getCompletedFields();
@@ -89,15 +84,27 @@ const ProfileCompletion: React.FC<ProfileCompletionProps> = ({
     const missing = getMissingFields();
     const suggestions = [];
     
-    if (missing.includes('Professional Headline')) suggestions.push('Add a professional headline');
-    if (missing.includes('Skills') || profile.skills?.length < 3) suggestions.push('Add at least 3 skills');
-    if (missing.includes('Portfolio')) suggestions.push('Add portfolio items');
-    if (missing.includes('Certifications')) suggestions.push('Add certifications');
-    if (missing.includes('Bio')) suggestions.push('Write a compelling bio');
-    if (missing.includes('Hourly Rate')) suggestions.push('Set your hourly rate');
-    if (missing.includes('Profile Photo')) suggestions.push('Upload a profile photo');
+    // Freelancer-specific suggestions
+    if (missing.includes('Portfolio') && (!profile.portfolio?.length || profile.portfolio.length < 2)) {
+      suggestions.push('Add at least 2 portfolio items to showcase your work');
+    }
+    if (missing.includes('Certifications') && !profile.certifications?.length) {
+      suggestions.push('Add professional certifications to boost credibility');
+    }
+    if (missing.includes('Skills') || profile.skills?.length < 3) {
+      suggestions.push('Add at least 3 skills to improve visibility');
+    }
+    if (missing.includes('Professional Headline')) {
+      suggestions.push('Add a professional headline to stand out');
+    }
+    if (!profile.freelancerProfile?.hourlyRate || profile.freelancerProfile.hourlyRate <= 0) {
+      suggestions.push('Set your hourly rate to attract clients');
+    }
+    if (!profile.bio) {
+      suggestions.push('Write a compelling bio to describe your services');
+    }
     
-    return suggestions.slice(0, 5);
+    return suggestions.slice(0, 3); // Show only top 3 most important suggestions
   };
 
   const completedFields = getCompletedFields();
@@ -192,7 +199,7 @@ const ProfileCompletion: React.FC<ProfileCompletionProps> = ({
         </div>
       </div>
 
-      {/* Detailed Progress */}
+      {/* Detailed Progress - Simplified for Freelancers */}
       <div className="mb-6">
         <h4 className="font-bold text-gray-900 mb-3">Detailed Progress</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
@@ -213,19 +220,19 @@ const ProfileCompletion: React.FC<ProfileCompletionProps> = ({
             </div>
           </div>
           <div className="bg-purple-50 rounded-lg p-3 text-center">
-            <div className="font-bold text-purple-600">Experience</div>
+            <div className="font-bold text-purple-600">Portfolio</div>
             <div className="text-gray-600">
               {completedFields.filter(f => 
-                ['Work Experience', 'Education', 'Portfolio', 'Certifications'].includes(f)
-              ).length}/4
+                ['Portfolio'].includes(f)
+              ).length}/1
             </div>
           </div>
           <div className="bg-orange-50 rounded-lg p-3 text-center">
-            <div className="font-bold text-orange-600">Additional</div>
+            <div className="font-bold text-orange-600">Certifications</div>
             <div className="text-gray-600">
               {completedFields.filter(f => 
-                ['Website', 'Social Links', 'Timezone', 'English Proficiency'].includes(f)
-              ).length}/4
+                ['Certifications'].includes(f)
+              ).length}/1
             </div>
           </div>
         </div>
@@ -240,7 +247,7 @@ const ProfileCompletion: React.FC<ProfileCompletionProps> = ({
                 Complete your profile to increase visibility
               </p>
               <p className="text-xs text-gray-500">
-                {suggestions.length} improvements available • 
+                {Math.max(0, 80 - completionScore)}% away from better visibility • 
                 Profiles with 80%+ completion get 3x more views
               </p>
             </div>

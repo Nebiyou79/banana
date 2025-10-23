@@ -166,6 +166,7 @@ export interface UserProfile {
     current: boolean;
     description: string;
   }>;
+  certifications?: Certification[]; // ADD THIS LINE
   profileCompleted: boolean;
   verificationStatus: string;
   freelancerProfile?: {
