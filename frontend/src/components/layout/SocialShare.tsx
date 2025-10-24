@@ -8,9 +8,12 @@ import {
   MessageCircle,
   Mail,
   Link as LinkIcon,
-  X
+  X,
+  MessageSquare
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useSocialShare } from '@/hooks/useSocialShare';
+import { Job } from '@/services/jobService';
 
 interface SocialShareProps {
   url: string;
@@ -19,6 +22,7 @@ interface SocialShareProps {
   image?: string;
   className?: string;
   trigger?: React.ReactNode;
+  jobData?: Job; // Add job data for image sharing
 }
 
 const SocialShare: React.FC<SocialShareProps> = ({
@@ -27,10 +31,12 @@ const SocialShare: React.FC<SocialShareProps> = ({
   description = '',
   image = '',
   className = '',
-  trigger
+  trigger,
+  jobData
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
+  const { shareToPlatform, copyToClipboard, generateShareableImage } = useSocialShare();
 
   const encodedUrl = encodeURIComponent(url);
   const encodedTitle = encodeURIComponent(title);
@@ -42,10 +48,25 @@ const SocialShare: React.FC<SocialShareProps> = ({
     linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`,
     whatsapp: `https://wa.me/?text=${encodedTitle}%20${encodedUrl}`,
     telegram: `https://t.me/share/url?url=${encodedUrl}&text=${encodedTitle}`,
+    tiktok: `https://www.tiktok.com/share?url=${encodedUrl}`,
     email: `mailto:?subject=${encodedTitle}&body=${encodedDescription}%0A%0A${encodedUrl}`
   };
 
-  const handleShare = (platform: keyof typeof shareConfig) => {
+  const handleShare = async (platform: keyof typeof shareConfig) => {
+    // Handle TikTok separately as it requires different approach
+    if (platform === 'tiktok') {
+      // TikTok doesn't have a direct share URL, so we copy the content
+      const shareText = `${title}\n\n${description}\n\n${url}`;
+      await copyToClipboard(shareText);
+      toast({
+        title: 'Content copied for TikTok!',
+        description: 'Job details copied to clipboard for TikTok sharing',
+        variant: 'success',
+      });
+      setIsOpen(false);
+      return;
+    }
+
     const shareUrl = shareConfig[platform];
     
     if (platform === 'email') {
@@ -66,18 +87,40 @@ const SocialShare: React.FC<SocialShareProps> = ({
   };
 
   const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(url);
+    await copyToClipboard(url);
+    setIsOpen(false);
+  };
+
+  const handleShareAsImage = async () => {
+    if (!jobData) {
       toast({
-        title: 'Link copied!',
-        description: 'Job link has been copied to clipboard',
+        title: 'Cannot generate image',
+        description: 'Job data is required for image sharing',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const imageUrl = await generateShareableImage(jobData);
+      
+      // Create a temporary link to download the image
+      const link = document.createElement('a');
+      link.href = imageUrl;
+      link.download = `job-${jobData.title.replace(/\s+/g, '-').toLowerCase()}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: 'Image generated!',
+        description: 'Job card image has been downloaded',
         variant: 'success',
       });
-      setIsOpen(false);
     } catch (error) {
       toast({
-        title: 'Copy failed',
-        description: 'Please copy the link manually',
+        title: 'Image generation failed',
+        description: 'Could not generate shareable image',
         variant: 'destructive',
       });
     }
@@ -109,6 +152,18 @@ const SocialShare: React.FC<SocialShareProps> = ({
       platform: 'whatsapp' as const
     },
     {
+      name: 'Telegram',
+      icon: MessageSquare,
+      color: 'bg-blue-500 hover:bg-blue-600',
+      platform: 'telegram' as const
+    },
+    {
+      name: 'TikTok',
+      icon: MessageCircle, // Using MessageCircle as placeholder
+      color: 'bg-black hover:bg-gray-800',
+      platform: 'tiktok' as const
+    },
+    {
       name: 'Email',
       icon: Mail,
       color: 'bg-gray-600 hover:bg-gray-700',
@@ -119,7 +174,13 @@ const SocialShare: React.FC<SocialShareProps> = ({
       icon: Copy,
       color: 'bg-purple-600 hover:bg-purple-700',
       action: handleCopyLink
-    }
+    },
+    ...(jobData ? [{
+      name: 'Share as Image',
+      icon: Copy, // You might want to use a different icon like Image
+      color: 'bg-indigo-600 hover:bg-indigo-700',
+      action: handleShareAsImage
+    }] : [])
   ];
 
   return (

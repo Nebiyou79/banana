@@ -166,7 +166,7 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-slate-50 to-blue-50">
       {/* Left Side - Brand Showcase */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-white via-blue-900 to-yellow-900">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-gray-100 via-gray-400 to-gray-800">
         <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:60px_60px]"></div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
         
@@ -176,15 +176,15 @@ export default function RegisterPage() {
             <Image
               src="/logo.png"
               alt="Banana"
-              width={120}
-              height={120}
+              width={150}
+              height={150}
               className="rounded-lg object-contain"
             />
-            <span className="text-3xl font-bold text-yellow-500">Banana</span>
+            {/* <span className="text-3xl font-bold text-yellow-300">Banana</span> */}
           </div>
 
           {/* Content */}
-          <div className="flex-1 flex pl-12 flex-col justify-center items-center text-center">
+          <div className=" flex-1 flex pl-16 flex-col justify-center items-center text-center">
             <div className="mb-12">
               <div className="inline-flex items-center bg-white/10 backdrop-blur-sm rounded-full px-4 py-2 mb-6 border border-white/20 shadow-sm">
                 <Zap className="w-4 h-4 mr-2 text-yellow-300" />

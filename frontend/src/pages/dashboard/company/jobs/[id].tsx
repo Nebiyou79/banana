@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { toast } from '@/hooks/use-toast';
 import { Edit3, Share2, Eye, Users, MapPin, Briefcase } from 'lucide-react';
-import SocialShare from '@/components/layout/SocialShare';
+import SocialShare from '@/components/layout/SocialShare'; // Fixed import path
 import { Button } from '@/components/ui/Button';
 
 const CompanyJobDetailPage: React.FC = () => {
@@ -115,12 +115,12 @@ const CompanyJobDetailPage: React.FC = () => {
     switch (job.status) {
       case 'draft':
         return (
-          <button
+          <Button
             onClick={() => handleStatusChange('active')}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
           >
             Publish Job
-          </button>
+          </Button>
         );
       case 'active':
         return (
@@ -133,21 +133,21 @@ const CompanyJobDetailPage: React.FC = () => {
         );
       case 'paused':
         return (
-          <button
+          <Button
             onClick={() => handleStatusChange('active')}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
           >
             Resume Job
-          </button>
+          </Button>
         );
       case 'closed':
         return (
-          <button
+          <Button
             onClick={() => handleStatusChange('active')}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
           >
             Reopen Job
-          </button>
+          </Button>
         );
       default:
         return null;
@@ -158,7 +158,12 @@ const CompanyJobDetailPage: React.FC = () => {
   const jobTypeLabel = jobService.getJobTypeDisplayLabel(job);
   const ownerName = jobService.getOwnerName(job);
   const ownerType = jobService.getOwnerType(job);
-  const shareUrl = `${window.location.origin}/jobs/${job._id}`;
+  
+  // Get share URL safely for SSR
+  const shareUrl = typeof window !== 'undefined' 
+    ? `${window.location.origin}/jobs/${job._id}`
+    : `https://yourapp.com/jobs/${job._id}`;
+    
   const shareTitle = `${job.title} - ${jobTypeLabel}`;
   const shareDescription = job.shortDescription || job.description.substring(0, 200) + '...';
 
@@ -346,17 +351,18 @@ const CompanyJobDetailPage: React.FC = () => {
                 <div className="space-y-3">
                   <Link
                     href={`/dashboard/company/jobs/${job._id}/applications`}
-                    className=" w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors text-center flex items-center justify-center gap-2"
+                    className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors text-center flex items-center justify-center gap-2"
                   >
                     <Users className="w-4 h-4" />
                     View Applications ({job.applicationCount || 0})
                   </Link>
                   
-                  {/* Social Share Component */}
+                  {/* Enhanced Social Share Component */}
                   <SocialShare
                     url={shareUrl}
                     title={shareTitle}
                     description={shareDescription}
+                    jobData={job} // Pass job data for image sharing
                     trigger={
                       <button className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2">
                         <Share2 className="w-4 h-4" />

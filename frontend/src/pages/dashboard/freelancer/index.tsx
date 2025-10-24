@@ -12,10 +12,8 @@ import {
   BriefcaseIcon,
   UserGroupIcon,
   RocketLaunchIcon,
-  CalendarIcon,
   ArrowTrendingUpIcon,
   StarIcon,
-  CurrencyDollarIcon,
   EyeIcon,
   CheckBadgeIcon,
   ClockIcon,
@@ -38,18 +36,26 @@ const FreelancerDashboard = () => {
     try {
       setIsLoading(true);
       
-      // Load profile data first for accurate completion calculation
+      // Load profile data first
       const profile = await freelancerService.getProfile();
-      setUserProfile(profile);
       
       // Load certifications
+      let certificationsData: React.SetStateAction<any[]> = [];
       try {
-        const certs = await freelancerService.getCertifications();
-        setCertifications(certs);
+        certificationsData = await freelancerService.getCertifications();
+        setCertifications(certificationsData);
       } catch (error) {
         console.warn('Certifications not available yet');
-        setCertifications([]);
+        certificationsData = [];
       }
+      
+      // ✅ FIX: Merge certifications into profile data
+      const profileWithCertifications = {
+        ...profile,
+        certifications: certificationsData
+      };
+      
+      setUserProfile(profileWithCertifications);
       
       // Load dashboard overview
       const dashboard = await freelancerService.getDashboardOverview();
@@ -233,62 +239,6 @@ const FreelancerDashboard = () => {
                     </div>
                     <div className="text-sm text-gray-600 font-medium">Profile Views</div>
                   </div>
-                </div>
-              </div>
-
-              {/* Recent Activity */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className={`text-xl font-bold ${colorClasses.text.darkNavy} flex items-center`}>
-                    <CalendarIcon className="w-6 h-6 mr-3 text-green-500" />
-                    Recent Activity
-                  </h3>
-                  <Link href="/dashboard/freelancer/proposals">
-                    <button className="text-green-600 hover:text-green-700 font-semibold text-sm">
-                      View All
-                    </button>
-                  </Link>
-                </div>
-                
-                <div className="space-y-4">
-                  {dashboardData.recentActivities.slice(0, 5).map((activity: any, index: number) => (
-                    <div key={index} className="flex items-start p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-green-200 transition-colors group">
-                      <div className={`w-3 h-3 rounded-full mt-2 mr-4 ${
-                        activity.status === 'success' ? 'bg-green-500' : 
-                        activity.status === 'pending' ? 'bg-amber-500' : 'bg-blue-500'
-                      }`}></div>
-                      <div className="flex-1">
-                        <div className="font-semibold text-gray-900 group-hover:text-green-700 transition-colors">
-                          {activity.title}
-                        </div>
-                        <div className="text-sm text-gray-600 mt-1">{activity.description}</div>
-                        <div className="flex items-center mt-2 text-xs text-gray-500">
-                          <ClockIcon className="w-3 h-3 mr-1" />
-                          {new Date(activity.timestamp).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </div>
-                      </div>
-                      <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        activity.status === 'success' ? 'bg-green-100 text-green-800' :
-                        activity.status === 'pending' ? 'bg-amber-100 text-amber-800' :
-                        'bg-blue-100 text-blue-800'
-                      }`}>
-                        {activity.status}
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {dashboardData.recentActivities.length === 0 && (
-                    <div className="text-center py-8">
-                      <CalendarIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-600 mb-2">No recent activity</p>
-                      <p className="text-sm text-gray-500">Start applying to projects to see activity here</p>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>

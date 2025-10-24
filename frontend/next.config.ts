@@ -6,7 +6,7 @@ const nextConfig = {
       'images.unsplash.com',
       'via.placeholder.com',
       'localhost',
-      'your-production-domain.com',
+      'getbananalink.com',
       'shutterstock.com'
     ],
     remotePatterns: [
@@ -40,6 +40,11 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'localhost',
         port: '4000',
+        pathname: '/uploads/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'getbananalink.com',
         pathname: '/uploads/**',
       },
     ],

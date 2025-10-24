@@ -4,6 +4,7 @@
 import React, { useState } from 'react';
 import { Certification, freelancerService } from '@/services/freelancerService';
 import CertificationsForm from './CertificationsForm';
+import ConfirmationModal from '@/components/ui/ConfirmationModal';
 import {
   PlusIcon,
   PencilIcon,
@@ -26,6 +27,8 @@ const CertificationsList: React.FC<CertificationsListProps> = ({
   const [showForm, setShowForm] = useState(false);
   const [editingCertification, setEditingCertification] = useState<Certification | null>(null);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [certificationToDelete, setCertificationToDelete] = useState<string | null>(null);
 
   const handleAddCertification = () => {
     setEditingCertification(null);
@@ -37,19 +40,31 @@ const CertificationsList: React.FC<CertificationsListProps> = ({
     setShowForm(true);
   };
 
-  const handleDeleteCertification = async (certificationId: string) => {
-    if (!confirm('Are you sure you want to delete this certification?')) return;
+  const handleDeleteClick = (certificationId: string) => {
+    setCertificationToDelete(certificationId);
+    setShowDeleteModal(true);
+  };
 
-    setIsDeleting(certificationId);
+  const handleDeleteConfirm = async () => {
+    if (!certificationToDelete) return;
+
+    setIsDeleting(certificationToDelete);
     try {
-      const response = await freelancerService.deleteCertification(certificationId);
-      const updatedCertifications = certifications.filter(cert => cert._id !== certificationId);
+      const response = await freelancerService.deleteCertification(certificationToDelete);
+      const updatedCertifications = certifications.filter(cert => cert._id !== certificationToDelete);
       onCertificationsUpdate(updatedCertifications, response.profileCompletion);
+      setShowDeleteModal(false);
+      setCertificationToDelete(null);
     } catch (error) {
       console.error('Failed to delete certification:', error);
     } finally {
       setIsDeleting(null);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteModal(false);
+    setCertificationToDelete(null);
   };
 
   const handleFormSave = (certification: Certification, profileCompletion: number) => {
@@ -242,7 +257,7 @@ const CertificationsList: React.FC<CertificationsListProps> = ({
                       <PencilIcon className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleDeleteCertification(certification._id)}
+                      onClick={() => handleDeleteClick(certification._id)}
                       disabled={isDeleting === certification._id}
                       className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
                       title="Delete certification"
@@ -260,6 +275,19 @@ const CertificationsList: React.FC<CertificationsListProps> = ({
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showDeleteModal}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Certification"
+        message="Are you sure you want to delete this certification? This action cannot be undone."
+        confirmText="Delete Certification"
+        cancelText="Cancel"
+        variant="danger"
+        isLoading={isDeleting !== null}
+      />
 
       {/* Certification Form Modal */}
       {showForm && (

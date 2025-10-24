@@ -36,7 +36,7 @@ const ProfileCompletion: React.FC<ProfileCompletionProps> = ({
 
   const statusInfo = getStatusInfo(completionScore);
 
-  // Calculate completed sections for UI display only (not for score calculation)
+  // Calculate completed sections for UI display only
   const getCompletedFields = () => {
     const fields = [];
     
@@ -69,11 +69,10 @@ const ProfileCompletion: React.FC<ProfileCompletionProps> = ({
   };
 
   const getMissingFields = () => {
-    // Only include fields relevant to freelancers
     const allFields = [
       'Name', 'Email', 'Profile Photo', 'Bio', 'Location', 'Phone',
       'Professional Headline', 'Skills', 'Experience Level', 'Hourly Rate', 'Availability',
-      'Portfolio', 'Certifications', // Only these two for freelancers
+      'Portfolio', 'Certifications',
       'Website', 'Social Links', 'Timezone', 'English Proficiency'
     ];
     const completed = getCompletedFields();
@@ -81,30 +80,30 @@ const ProfileCompletion: React.FC<ProfileCompletionProps> = ({
   };
 
   const getSuggestions = () => {
-    const missing = getMissingFields();
+    const completed = getCompletedFields();
     const suggestions = [];
     
-    // Freelancer-specific suggestions
-    if (missing.includes('Portfolio') && (!profile.portfolio?.length || profile.portfolio.length < 2)) {
-      suggestions.push('Add at least 2 portfolio items to showcase your work');
-    }
-    if (missing.includes('Certifications') && !profile.certifications?.length) {
+    // Check what's actually missing based on completed fields
+    if (!completed.includes('Certifications')) {
       suggestions.push('Add professional certifications to boost credibility');
     }
-    if (missing.includes('Skills') || profile.skills?.length < 3) {
+    if (!completed.includes('Portfolio') || (profile.portfolio && profile.portfolio.length < 2)) {
+      suggestions.push('Add at least 2 portfolio items to showcase your work');
+    }
+    if (!completed.includes('Skills') || (profile.skills && profile.skills.length < 3)) {
       suggestions.push('Add at least 3 skills to improve visibility');
     }
-    if (missing.includes('Professional Headline')) {
+    if (!completed.includes('Professional Headline')) {
       suggestions.push('Add a professional headline to stand out');
     }
-    if (!profile.freelancerProfile?.hourlyRate || profile.freelancerProfile.hourlyRate <= 0) {
+    if (!completed.includes('Hourly Rate')) {
       suggestions.push('Set your hourly rate to attract clients');
     }
-    if (!profile.bio) {
+    if (!completed.includes('Bio')) {
       suggestions.push('Write a compelling bio to describe your services');
     }
     
-    return suggestions.slice(0, 3); // Show only top 3 most important suggestions
+    return suggestions.slice(0, 3);
   };
 
   const completedFields = getCompletedFields();
@@ -199,7 +198,7 @@ const ProfileCompletion: React.FC<ProfileCompletionProps> = ({
         </div>
       </div>
 
-      {/* Detailed Progress - Simplified for Freelancers */}
+      {/* Detailed Progress */}
       <div className="mb-6">
         <h4 className="font-bold text-gray-900 mb-3">Detailed Progress</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
@@ -222,17 +221,13 @@ const ProfileCompletion: React.FC<ProfileCompletionProps> = ({
           <div className="bg-purple-50 rounded-lg p-3 text-center">
             <div className="font-bold text-purple-600">Portfolio</div>
             <div className="text-gray-600">
-              {completedFields.filter(f => 
-                ['Portfolio'].includes(f)
-              ).length}/1
+              {completedFields.includes('Portfolio') ? '1/1' : '0/1'}
             </div>
           </div>
           <div className="bg-orange-50 rounded-lg p-3 text-center">
             <div className="font-bold text-orange-600">Certifications</div>
             <div className="text-gray-600">
-              {completedFields.filter(f => 
-                ['Certifications'].includes(f)
-              ).length}/1
+              {completedFields.includes('Certifications') ? '1/1' : '0/1'}
             </div>
           </div>
         </div>

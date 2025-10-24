@@ -3,7 +3,6 @@ const FreelancerProfile = require('../models/Freelancer');
 const { getFileUrl } = require('../middleware/fileUploadMiddleware');
 const Tender = require('../models/Tender');
 
-// Enhanced profile completeness calculator
 const calculateProfileCompleteness = (user, freelancerProfile) => {
   const completenessWeights = {
     basicInfo: {
@@ -40,8 +39,10 @@ const calculateProfileCompleteness = (user, freelancerProfile) => {
     contactDetails: {
       weight: 10,
       checks: [
-        { condition: user.location && user.location.trim().length > 0, points: 50 },
-        { condition: user.website || (user.socialLinks && Object.values(user.socialLinks).some(link => link)), points: 50 }
+        { condition: user.location && user.location.trim().length > 0, points: 25 },
+        { condition: user.website || (user.socialLinks && Object.values(user.socialLinks).some(link => link)), points: 25 },
+        { condition: user.socialLinks && Object.values(user.socialLinks).filter(link => link).length >= 2, points: 25 },
+        { condition: user.phone && user.phone.trim().length > 0, points: 25 }
       ]
     }
   };
@@ -111,7 +112,7 @@ exports.getDashboardOverview = async (req, res) => {
     }
 
     // Get user with portfolio and skills
-    const user = await User.findById(userId).select('portfolio skills name email avatar experience education');
+    const user = await User.findById(userId).select('portfolio skills name email avatar experience education socialLinks');
     
     if (!user) {
       console.log('❌ User not found:', userId);
@@ -153,6 +154,9 @@ exports.getDashboardOverview = async (req, res) => {
         sent: 0,
         accepted: 0,
         pending: 0
+      },
+      socialLinks: {
+        total: user.socialLinks ? Object.values(user.socialLinks).filter(link => link).length : 0
       }
     };
 
@@ -187,7 +191,7 @@ exports.getFreelancerStats = async (req, res) => {
     const userId = req.user._id;
     
     const freelancerProfile = await FreelancerProfile.findOne({ user: userId })
-      .populate('user', 'name avatar portfolio skills experience education');
+      .populate('user', 'name avatar portfolio skills experience education socialLinks');
     
     if (!freelancerProfile) {
       return res.status(404).json({
@@ -210,7 +214,8 @@ exports.getFreelancerStats = async (req, res) => {
       activeProposals: await getActiveProposals(userId),
       profileViews: freelancerProfile.profileViews || 0,
       clientReviews: freelancerProfile.ratings?.count || 0,
-      averageRating: freelancerProfile.ratings?.average || 0
+      averageRating: freelancerProfile.ratings?.average || 0,
+      socialLinksCount: user.socialLinks ? Object.values(user.socialLinks).filter(link => link).length : 0
     };
 
     res.status(200).json({
@@ -279,7 +284,7 @@ exports.getProfile = async (req, res) => {
   }
 };
 
-// Update freelancer profile - FIXED
+// Update freelancer profile - FIXED with social links handling
 exports.updateProfile = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -293,6 +298,15 @@ exports.updateProfile = async (req, res) => {
       updateData.skills = updateData.skills.map(skill => 
         typeof skill === 'object' ? skill.name : skill
       );
+    }
+
+    // Clean social links - remove empty strings and null values
+    if (updateData.socialLinks) {
+      Object.keys(updateData.socialLinks).forEach(key => {
+        if (!updateData.socialLinks[key] || updateData.socialLinks[key].trim() === '') {
+          updateData.socialLinks[key] = undefined;
+        }
+      });
     }
 
     // Get user and freelancer profile
@@ -393,6 +407,17 @@ exports.updateProfile = async (req, res) => {
 
   } catch (error) {
     console.error('❌ Update profile error:', error);
+    
+    // Handle validation errors for social links
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Server error updating profile',
@@ -1215,7 +1240,7 @@ async function getRecentActivities(userId) {
     }
   ];
 }
-// Certification Management
+// Certification Management - FIXED delete function
 exports.getCertifications = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -1248,6 +1273,7 @@ exports.getCertifications = async (req, res) => {
     });
   }
 };
+
 
 exports.addCertification = async (req, res) => {
   try {
@@ -1374,7 +1400,16 @@ exports.deleteCertification = async (req, res) => {
 
     console.log('🗑️ Deleting certification:', id);
 
-    const freelancerProfile = await FreelancerProfile.findOne({ user: userId });
+    // FIXED: Use findOneAndUpdate with $pull instead of .remove()
+    const freelancerProfile = await FreelancerProfile.findOneAndUpdate(
+      { user: userId },
+      { 
+        $pull: { 
+          certifications: { _id: id } 
+        } 
+      },
+      { new: true }
+    );
 
     if (!freelancerProfile) {
       return res.status(404).json({
@@ -1383,16 +1418,14 @@ exports.deleteCertification = async (req, res) => {
       });
     }
 
-    const certification = freelancerProfile.certifications.id(id);
-    if (!certification) {
+    // Check if certification was actually removed
+    const certificationExists = freelancerProfile.certifications.some(cert => cert._id.toString() === id);
+    if (certificationExists) {
       return res.status(404).json({
         success: false,
         message: 'Certification not found'
       });
     }
-
-    certification.remove();
-    await freelancerProfile.save();
 
     // Recalculate profile completeness
     const user = await User.findById(userId);
@@ -1421,7 +1454,6 @@ exports.deleteCertification = async (req, res) => {
     });
   }
 };
-
 function getProfileStrengths(freelancerProfile, user) {
   const strengths = [];
   if (freelancerProfile.headline) strengths.push('Professional headline');
@@ -1432,6 +1464,9 @@ function getProfileStrengths(freelancerProfile, user) {
   if (user.avatar) strengths.push('Profile photo');
   if (freelancerProfile.specialization?.length > 0) strengths.push('Specializations defined');
   if (freelancerProfile.services?.length > 0) strengths.push('Services defined');
+  if (user.socialLinks && Object.values(user.socialLinks).filter(link => link).length >= 2) {
+    strengths.push('Social profiles added');
+  }
   return strengths;
 }
 
@@ -1445,6 +1480,9 @@ function getProfileSuggestions(freelancerProfile, user) {
   if (!user.avatar) suggestions.push('Upload a professional profile photo');
   if (freelancerProfile.specialization?.length === 0) suggestions.push('Define your specializations');
   if (freelancerProfile.services?.length === 0) suggestions.push('Define your services');
+  if (!user.socialLinks || Object.values(user.socialLinks).filter(link => link).length < 2) {
+    suggestions.push('Add at least 2 social media profiles');
+  }
   return suggestions;
 }
 
@@ -1512,4 +1550,28 @@ async function getActiveProposals(userId) {
   // Implement based on your proposal model
   // For now, return mock data
   return Math.floor(Math.random() * 5);
+}
+
+// Helper functions
+async function getRecentActivities(userId) {
+  // This would fetch from an activities collection
+  // For now, return mock data
+  return [
+    {
+      id: '1',
+      type: 'profile',
+      title: 'Profile Updated',
+      description: 'You updated your professional information',
+      timestamp: new Date().toISOString(),
+      status: 'success'
+    },
+    {
+      id: '2',
+      type: 'portfolio',
+      title: 'Portfolio Item Added',
+      description: 'You added a new project to your portfolio',
+      timestamp: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+      status: 'success'
+    }
+  ];
 }

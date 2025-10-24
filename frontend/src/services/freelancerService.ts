@@ -122,6 +122,13 @@ export interface ProfileData {
     current: boolean;
     description: string;
   }>;
+  socialLinks?: {
+    linkedin?: string;
+    github?: string;
+    tiktok?: string;
+    telegram?: string;
+    twitter?: string;
+  };
   freelancerProfile?: {
     headline?: string;
     hourlyRate?: number;
@@ -166,7 +173,7 @@ export interface UserProfile {
     current: boolean;
     description: string;
   }>;
-  certifications?: Certification[]; // ADD THIS LINE
+  certifications?: Certification[];
   profileCompleted: boolean;
   verificationStatus: string;
   freelancerProfile?: {
@@ -189,9 +196,9 @@ export interface UserProfile {
   socialLinks?: {
     linkedin?: string;
     github?: string;
+    tiktok?: string;
+    telegram?: string;
     twitter?: string;
-    behance?: string;
-    dribbble?: string;
   };
 }
 
@@ -221,6 +228,9 @@ export interface DashboardStats {
     sent: number;
     accepted: number;
     pending: number;
+  };
+  socialLinks?: {
+    total: number;
   };
 }
 
@@ -453,11 +463,19 @@ export const freelancerService = {
     }
   },
 
-  updateProfile: async (data: ProfileData): Promise<{ profile: UserProfile; profileCompletion: number }> => {
+ updateProfile: async (data: ProfileData): Promise<{ profile: UserProfile; profileCompletion: number }> => {
     try {
       const response = await api.put('/freelancer/profile', data);
       
       if (!response.data.success) {
+        // Handle validation errors from backend
+        if (response.data.errors) {
+          response.data.errors.forEach((error: string) => {
+            handleError(error);
+          });
+          return Promise.reject(new Error('Validation failed'));
+        }
+        
         const errorMessage = response.data.message || 'Failed to update profile';
         handleError(errorMessage);
         return Promise.reject(new Error(errorMessage));
@@ -470,7 +488,18 @@ export const freelancerService = {
       };
     } catch (error: any) {
       console.error('Update profile error:', error);
-      handleError(error, 'Failed to update profile');
+      
+      // Handle axios error with validation messages
+      if (error.response?.data?.errors) {
+        error.response.data.errors.forEach((err: string) => {
+          handleError(err);
+        });
+      } else if (error.response?.data?.message) {
+        handleError(error.response.data.message);
+      } else {
+        handleError(error, 'Failed to update profile');
+      }
+      
       return Promise.reject(error);
     }
   },

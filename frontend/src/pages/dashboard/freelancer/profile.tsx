@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { FreelancerLayout } from '@/components/layout/FreelancerLayout';
 import { UserProfile, ProfileData, freelancerService } from '@/services/freelancerService';
-// import ProfileCompletion from '@/components/freelancer/ProfileCompletion';
+import ProfileCompletion from '@/components/freelancer/ProfileCompletion';
 import CertificationsList from '@/components/freelancer/CertificationsList';
 import { colorClasses } from '@/utils/color';
 import { 
@@ -20,7 +20,8 @@ import {
   BriefcaseIcon,
   AcademicCapIcon,
   CurrencyDollarIcon,
-  UserCircleIcon
+  UserCircleIcon,
+  LinkIcon
 } from '@heroicons/react/24/outline';
 
 // Define proper types for the form data
@@ -35,6 +36,13 @@ interface ProfileFormData {
     level: 'beginner' | 'intermediate' | 'expert';
     yearsOfExperience: number;
   }>;
+  socialLinks?: {
+    linkedin?: string;
+    github?: string;
+    tiktok?: string;
+    telegram?: string;
+    twitter?: string;
+  };
   freelancerProfile?: {
     headline?: string;
     hourlyRate?: number;
@@ -60,6 +68,13 @@ const FreelancerProfile = () => {
     phone: '',
     website: '',
     skills: [],
+    socialLinks: {
+      linkedin: '',
+      github: '',
+      tiktok: '',
+      telegram: '',
+      twitter: ''
+    },
     freelancerProfile: {
       headline: '',
       hourlyRate: 0,
@@ -79,16 +94,24 @@ const FreelancerProfile = () => {
     try {
       setIsLoading(true);
       const profileData = await freelancerService.getProfile();
-      setProfile(profileData);
       
       // Load certifications
+      let certificationsData: React.SetStateAction<any[]> = [];
       try {
-        const certs = await freelancerService.getCertifications();
-        setCertifications(certs);
+        certificationsData = await freelancerService.getCertifications();
+        setCertifications(certificationsData);
       } catch (error) {
         console.warn('Certifications not available yet');
-        setCertifications([]);
+        certificationsData = [];
       }
+      
+      // ✅ FIX: Merge certifications into profile data
+      const profileWithCertifications = {
+        ...profileData,
+        certifications: certificationsData
+      };
+      
+      setProfile(profileWithCertifications);
       
       const freelancerProfile = profileData.freelancerProfile;
       
@@ -99,6 +122,13 @@ const FreelancerProfile = () => {
         phone: profileData.phone || '',
         website: profileData.website || '',
         skills: profileData.skills,
+        socialLinks: {
+          linkedin: profileData.socialLinks?.linkedin || '',
+          github: profileData.socialLinks?.github || '',
+          tiktok: profileData.socialLinks?.tiktok || '',
+          telegram: profileData.socialLinks?.telegram || '',
+          twitter: profileData.socialLinks?.twitter || ''
+        },
         freelancerProfile: {
           headline: freelancerProfile?.headline || '',
           hourlyRate: freelancerProfile?.hourlyRate || 0,
@@ -126,6 +156,7 @@ const FreelancerProfile = () => {
         phone: formData.phone,
         website: formData.website,
         skills: formData.skills,
+        socialLinks: formData.socialLinks,
         freelancerProfile: {
           headline: formData.freelancerProfile?.headline,
           hourlyRate: formData.freelancerProfile?.hourlyRate,
@@ -156,7 +187,7 @@ const FreelancerProfile = () => {
     }
   };
 
-  const handleCertificationsUpdate = async (updatedCertifications: any[], profileCompletion: number) => {
+  const handleCertificationsUpdate = async (updatedCertifications: any[]) => {
     setCertifications(updatedCertifications);
     // Reload profile to get updated completion score
     await loadProfile();
@@ -170,6 +201,15 @@ const FreelancerProfile = () => {
         freelancerProfile: {
           ...prev.freelancerProfile!,
           [profileField]: value
+        }
+      }));
+    } else if (field.startsWith('socialLinks.')) {
+      const socialField = field.replace('socialLinks.', '');
+      setFormData(prev => ({
+        ...prev,
+        socialLinks: {
+          ...prev.socialLinks!,
+          [socialField]: value
         }
       }));
     } else {
@@ -209,6 +249,42 @@ const FreelancerProfile = () => {
   const removeSkill = (index: number) => {
     const newSkills = formData.skills.filter((_, i) => i !== index);
     handleInputChange('skills', newSkills);
+  };
+
+  // Helper function to get social platform icon
+  const getSocialIcon = (platform: string) => {
+    switch (platform) {
+      case 'linkedin':
+        return '🔗';
+      case 'github':
+        return '💻';
+      case 'tiktok':
+        return '🎵';
+      case 'telegram':
+        return '📱';
+      case 'twitter':
+        return '🐦';
+      default:
+        return '🔗';
+    }
+  };
+
+  // Helper function to get social platform name
+  const getSocialPlatformName = (platform: string) => {
+    switch (platform) {
+      case 'linkedin':
+        return 'LinkedIn';
+      case 'github':
+        return 'GitHub';
+      case 'tiktok':
+        return 'TikTok';
+      case 'telegram':
+        return 'Telegram';
+      case 'twitter':
+        return 'Twitter/X';
+      default:
+        return platform;
+    }
   };
 
   if (isLoading) {
@@ -308,7 +384,6 @@ const FreelancerProfile = () => {
             </div>
           </div>
         </div>
-
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 -mt-8">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             {/* Sidebar Navigation */}
@@ -320,6 +395,7 @@ const FreelancerProfile = () => {
                     { id: 'professional', name: 'Professional Details', icon: BriefcaseIcon },
                     { id: 'skills', name: 'Skills & Expertise', icon: StarIcon },
                     { id: 'certifications', name: 'Certifications', icon: AcademicCapIcon },
+                    { id: 'social', name: 'Social Links', icon: LinkIcon },
                     { id: 'contact', name: 'Contact Info', icon: EnvelopeIcon }
                   ].map((item) => (
                     <button
@@ -370,6 +446,30 @@ const FreelancerProfile = () => {
                       </div>
                     )}
                   </div>
+
+                  {/* Social Links Preview */}
+                  {profile.socialLinks && Object.values(profile.socialLinks).some(link => link) && (
+                    <div className="mt-6 pt-6 border-t border-gray-200">
+                      <h4 className="font-semibold text-gray-900 mb-4">Social Profiles</h4>
+                      <div className="space-y-2">
+                        {Object.entries(profile.socialLinks).map(([platform, url]) => 
+                          url && (
+                            <div key={platform} className="flex items-center text-gray-600">
+                              <span className="w-4 h-4 mr-3">{getSocialIcon(platform)}</span>
+                              <a 
+                                href={url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-sm text-green-600 hover:text-green-700"
+                              >
+                                {getSocialPlatformName(platform)}
+                              </a>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -555,7 +655,6 @@ const FreelancerProfile = () => {
                               <option value="PST">Pacific Time (PST)</option>
                               <option value="GMT">Greenwich Mean Time (GMT)</option>
                               <option value="CET">Central European Time (CET)</option>
-                              {/* Add more timezones as needed */}
                             </select>
                           </div>
                         </div>
@@ -659,6 +758,116 @@ const FreelancerProfile = () => {
                           certifications={certifications}
                           onCertificationsUpdate={handleCertificationsUpdate}
                         />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Social Links Section */}
+                  {activeSection === 'social' && (
+                    <div className="space-y-8">
+                      <div>
+                        <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
+                          <LinkIcon className="w-6 h-6 mr-3 text-green-500" />
+                          Social Links
+                        </h3>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                              LinkedIn URL
+                            </label>
+                            <input
+                              type="url"
+                              value={formData.socialLinks?.linkedin || ''}
+                              onChange={(e) => handleInputChange('socialLinks.linkedin', e.target.value)}
+                              disabled={!isEditing}
+                              placeholder="https://linkedin.com/in/yourprofile"
+                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              Format: https://linkedin.com/in/username
+                            </p>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                              GitHub URL
+                            </label>
+                            <input
+                              type="url"
+                              value={formData.socialLinks?.github || ''}
+                              onChange={(e) => handleInputChange('socialLinks.github', e.target.value)}
+                              disabled={!isEditing}
+                              placeholder="https://github.com/yourusername"
+                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              Format: https://github.com/username
+                            </p>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                              TikTok URL
+                            </label>
+                            <input
+                              type="url"
+                              value={formData.socialLinks?.tiktok || ''}
+                              onChange={(e) => handleInputChange('socialLinks.tiktok', e.target.value)}
+                              disabled={!isEditing}
+                              placeholder="https://tiktok.com/@yourusername"
+                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              Format: https://tiktok.com/@username
+                            </p>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                              Telegram URL
+                            </label>
+                            <input
+                              type="url"
+                              value={formData.socialLinks?.telegram || ''}
+                              onChange={(e) => handleInputChange('socialLinks.telegram', e.target.value)}
+                              disabled={!isEditing}
+                              placeholder="https://t.me/yourusername"
+                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              Format: https://t.me/username
+                            </p>
+                          </div>
+                          
+                          <div className="md:col-span-2">
+                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                              Twitter/X URL
+                            </label>
+                            <input
+                              type="url"
+                              value={formData.socialLinks?.twitter || ''}
+                              onChange={(e) => handleInputChange('socialLinks.twitter', e.target.value)}
+                              disabled={!isEditing}
+                              placeholder="https://twitter.com/yourusername or https://x.com/yourusername"
+                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              Format: https://twitter.com/username or https://x.com/username
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="mt-6 bg-blue-50 rounded-xl p-6 border border-blue-200">
+                          <h4 className="font-semibold text-blue-900 mb-2 flex items-center">
+                            <LinkIcon className="w-5 h-5 mr-2 text-blue-600" />
+                            Pro Tip
+                          </h4>
+                          <p className="text-blue-700 text-sm">
+                            Add your social profiles to help clients learn more about your work and professional background. 
+                            Make sure your profiles are professional and up-to-date. Adding multiple social links improves your profile completeness.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}

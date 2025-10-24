@@ -224,35 +224,53 @@ website: {
     message: 'Invalid website URL format'
   }
 },
-  socialLinks: {
-    linkedin: {
-      type: String,
-      validate: {
-        validator: function(value) {
-          return !value || validator.isURL(value, { protocols: ['http', 'https'], require_protocol: true });
-        },
-        message: 'Invalid LinkedIn URL'
-      }
-    },
-    github: {
-      type: String,
-      validate: {
-        validator: function(value) {
-          return !value || validator.isURL(value, { protocols: ['http', 'https'], require_protocol: true });
-        },
-        message: 'Invalid GitHub URL'
-      }
-    },
-    twitter: {
-      type: String,
-      validate: {
-        validator: function(value) {
-          return !value || validator.isURL(value, { protocols: ['http', 'https'], require_protocol: true });
-        },
-        message: 'Invalid Twitter URL'
-      }
+socialLinks: {
+  linkedin: {
+    type: String,
+    validate: {
+      validator: function(value) {
+        return !value || /^(https?:\/\/)?(www\.)?linkedin\.com\/(in|company)\/[a-zA-Z0-9-]+(\/)?$/i.test(value);
+      },
+      message: 'Invalid LinkedIn URL format. Use: https://linkedin.com/in/username'
     }
   },
+  github: {
+    type: String,
+    validate: {
+      validator: function(value) {
+        return !value || /^(https?:\/\/)?(www\.)?github\.com\/[a-zA-Z0-9-]+(\/)?$/i.test(value);
+      },
+      message: 'Invalid GitHub URL format. Use: https://github.com/username'
+    }
+  },
+  tiktok: {
+    type: String,
+    validate: {
+      validator: function(value) {
+        return !value || /^(https?:\/\/)?(www\.)?tiktok\.com\/@[a-zA-Z0-9._-]+(\/)?$/i.test(value);
+      },
+      message: 'Invalid TikTok URL format. Use: https://tiktok.com/@username'
+    }
+  },
+  telegram: {
+    type: String,
+    validate: {
+      validator: function(value) {
+        return !value || /^(https?:\/\/)?(www\.)?t\.me\/[a-zA-Z0-9_]+(\/)?$/i.test(value);
+      },
+      message: 'Invalid Telegram URL format. Use: https://t.me/username'
+    }
+  },
+  twitter: {
+    type: String,
+    validate: {
+      validator: function(value) {
+        return !value || /^(https?:\/\/)?(www\.)?(twitter|x)\.com\/[a-zA-Z0-9_]+(\/)?$/i.test(value);
+      },
+      message: 'Invalid Twitter/X URL format. Use: https://twitter.com/username or https://x.com/username'
+    }
+  }
+},
   hasCompanyProfile: {
     type: Boolean,
     default: false

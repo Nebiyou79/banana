@@ -114,9 +114,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="pl-10 min-h-screen flex bg-gradient-to-br from-slate-50 to-blue-50">
       {/* Left Side - Brand Showcase */}
-      <div className="hidden lg:flex pl-10 lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-white via-blue-500 to-yellow-500">
+      <div className="hidden lg:flex pl-10 lg:w-1/2 relative overflow-hidden bg-white">
         <div className="absolute pl-10 inset-0 bg-grid-white/[0.02] bg-[size:60px_60px]"></div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
         

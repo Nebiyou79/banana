@@ -3,14 +3,14 @@
 import React from 'react';
 import { useRouter } from 'next/router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { jobService, } from '@/services/jobService';
+import { jobService } from '@/services/jobService';
 import { useAuth } from '@/contexts/AuthContext';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { toast } from '@/hooks/use-toast';
-import {  Clock, Heart, Calendar, MapPin, Target, Share2 } from 'lucide-react';
-import SocialShare from '@/components/layout/SocialShare';
+import { Clock, Heart, Calendar, MapPin, Target, Share2, Edit3, Eye, Users } from 'lucide-react';
+import SocialShare from '@/components/layout/SocialShare'; // Fixed import path
 import { Button } from '@/components/ui/Button';
 
 const OrganizationJobDetailPage: React.FC = () => {
@@ -115,12 +115,12 @@ const OrganizationJobDetailPage: React.FC = () => {
     switch (job.status) {
       case 'draft':
         return (
-          <button
+          <Button
             onClick={() => handleStatusChange('active')}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
           >
             Publish Opportunity
-          </button>
+          </Button>
         );
       case 'active':
         return (
@@ -133,21 +133,21 @@ const OrganizationJobDetailPage: React.FC = () => {
         );
       case 'paused':
         return (
-          <button
+          <Button
             onClick={() => handleStatusChange('active')}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
           >
             Resume Opportunity
-          </button>
+          </Button>
         );
       case 'closed':
         return (
-          <button
+          <Button
             onClick={() => handleStatusChange('active')}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
           >
             Reopen Opportunity
-          </button>
+          </Button>
         );
       default:
         return null;
@@ -156,7 +156,12 @@ const OrganizationJobDetailPage: React.FC = () => {
 
   const isInternational = job.location.region === 'international';
   const opportunityTypeLabel = jobService.getJobTypeDisplayLabel(job);
-  const shareUrl = `${window.location.origin}/jobs/${job._id}`;
+  
+  // Get share URL safely for SSR
+  const shareUrl = typeof window !== 'undefined' 
+    ? `${window.location.origin}/jobs/${job._id}`
+    : `https://yourapp.com/jobs/${job._id}`;
+    
   const shareTitle = `${job.title} - ${opportunityTypeLabel}`;
   const shareDescription = job.shortDescription || job.description.substring(0, 200) + '...';
 
@@ -188,8 +193,9 @@ const OrganizationJobDetailPage: React.FC = () => {
               {getStatusActions()}
               <Link 
                 href={`/dashboard/organization/jobs/edit/${job._id}`}
-                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
               >
+                <Edit3 className="w-4 h-4" />
                 Edit Opportunity
               </Link>
             </div>
@@ -199,23 +205,31 @@ const OrganizationJobDetailPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div className="bg-white rounded-2xl p-6 shadow-lg border border-purple-200 text-center">
               <div className="text-3xl font-bold text-purple-600 mb-2">{job.viewCount || 0}</div>
-              <div className="text-gray-600">Total Views</div>
+              <div className="text-gray-600 flex items-center justify-center gap-1">
+                <Eye className="w-4 h-4" /> Total Views
+              </div>
             </div>
             <div className="bg-white rounded-2xl p-6 shadow-lg border border-green-200 text-center">
               <div className="text-3xl font-bold text-green-600 mb-2">{job.applicationCount || 0}</div>
-              <div className="text-gray-600">Applications</div>
+              <div className="text-gray-600 flex items-center justify-center gap-1">
+                <Users className="w-4 h-4" /> Applications
+              </div>
             </div>
             <div className="bg-white rounded-2xl p-6 shadow-lg border border-blue-200 text-center">
               <div className="text-3xl font-bold text-blue-600 mb-2">
                 {job.remote === 'remote' ? 'Remote' : job.remote === 'hybrid' ? 'Hybrid' : 'On-site'}
               </div>
-              <div className="text-gray-600">Work Type</div>
+              <div className="text-gray-600 flex items-center justify-center gap-1">
+                <MapPin className="w-4 h-4" /> Work Type
+              </div>
             </div>
             <div className="bg-white rounded-2xl p-6 shadow-lg border border-orange-200 text-center">
               <div className="text-3xl font-bold text-orange-600 mb-2">
                 {job.type.replace('-', ' ')}
               </div>
-              <div className="text-gray-600">Engagement Type</div>
+              <div className="text-gray-600 flex items-center justify-center gap-1">
+                <Target className="w-4 h-4" /> Engagement Type
+              </div>
             </div>
           </div>
 
@@ -367,16 +381,18 @@ const OrganizationJobDetailPage: React.FC = () => {
                 <div className="space-y-3">
                   <Link
                     href={`/dashboard/organization/jobs/${job._id}/applications`}
-                    className="block w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors text-center"
+                    className=" w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors text-center flex items-center justify-center gap-2"
                   >
+                    <Users className="w-4 h-4" />
                     View Applications ({job.applicationCount || 0})
                   </Link>
                   
-                  {/* Social Share Component */}
+                  {/* Enhanced Social Share Component */}
                   <SocialShare
                     url={shareUrl}
                     title={shareTitle}
                     description={shareDescription}
+                    jobData={job} // Pass job data for image sharing
                     trigger={
                       <button className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2">
                         <Share2 className="w-4 h-4" />
