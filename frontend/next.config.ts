@@ -20,10 +20,6 @@ const nextConfig = {
       },
       {
         protocol: 'https',
-        hostname: '**.example.com',
-      },
-      {
-        protocol: 'https',
         hostname: 'via.placeholder.com',
       },
       {
@@ -38,25 +34,24 @@ const nextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'localhost',
-        port: '4000',
-        pathname: '/uploads/**',
-      },
-      {
-        protocol: 'https',
         hostname: 'getbananalink.com',
         pathname: '/uploads/**',
       },
     ],
   },
-  // Enable rewrites for local file serving
+
   async rewrites() {
-    return [
-      {
-        source: '/uploads/:path*',
-        destination: 'http://localhost:4000/uploads/:path*',
-      },
-    ];
+    if (process.env.NODE_ENV === 'development') {
+      return [
+        {
+          source: '/uploads/:path*',
+          destination: 'http://localhost:4000/uploads/:path*',
+        },
+      ];
+    }
+
+    // ⛔ In production, do NOT rewrite uploads
+    return [];
   },
 };
 
