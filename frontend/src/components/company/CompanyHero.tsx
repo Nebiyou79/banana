@@ -3,8 +3,7 @@ import { CompanyProfile } from '@/services/companyService';
 import { Building2, MapPin, Globe, Calendar, Pencil, Info, Star, Award } from 'lucide-react';
 import Button from '../forms/Button';
 import { useState } from 'react';
-import Image from 'next/image';
-import { getSafeImageUrl, handleImageError } from '@/lib/image-utils';
+import { getSafeImageUrl } from '@/lib/image-utils';
 import { toast } from '@/hooks/use-toast';
 
 interface CompanyHeroProps {
@@ -225,12 +224,10 @@ export default function CompanyHero({ company, isOwner, onEdit }: CompanyHeroPro
           <div className="bg-white rounded-2xl p-2 shadow-2xl border border-gray-200/60 backdrop-blur-sm">
             {logoUrl ? (
               <div className="relative">
-                <Image
+                <img
                   src={logoUrl}
                   alt={`${company.name} logo`}
                   className="w-20 h-20 object-cover rounded-xl shadow-lg"
-                  width={80}
-                  height={80}
                   onError={() => handleImageError('logo')}
                 />
                 <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 pointer-events-none" />
