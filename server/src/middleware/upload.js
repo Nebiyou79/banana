@@ -1,25 +1,25 @@
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
-const sharp = require('sharp');
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
+import sharp from 'sharp';
 
 // Configure storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     let uploadPath = 'uploads/';
-    
+
     // Create subdirectories based on file type
     if (file.fieldname === 'avatar') {
       uploadPath = 'uploads/avatars/';
     } else if (file.fieldname === 'coverPhoto') {
       uploadPath = 'uploads/covers/';
     }
-    
+
     if (!fs.existsSync(uploadPath)) {
       fs.mkdirSync(uploadPath, { recursive: true });
     }
-    
+
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
@@ -36,7 +36,7 @@ const fileFilter = (req, file, cb) => {
 
   const ext = path.extname(file.originalname).toLowerCase().replace('.', '');
   const mimeType = file.mimetype;
-  
+
   // Check by MIME type first, then by extension
   if (mimeType.startsWith('image/') && allowedImageTypes.test(ext)) {
     cb(null, true);
@@ -93,7 +93,7 @@ const processImageMetadata = async (file) => {
   try {
     const image = sharp(file.path);
     const metadata = await image.metadata();
-    
+
     return {
       width: metadata.width,
       height: metadata.height,
@@ -121,7 +121,7 @@ const generateThumbnail = async (file, width = 300, height = 300) => {
 
     const fileName = path.basename(file.filename);
     const thumbnailPath = `uploads/thumbnails/${fileName}`;
-    
+
     // Create thumbnails directory if it doesn't exist
     const thumbDir = path.dirname(thumbnailPath);
     if (!fs.existsSync(thumbDir)) {
@@ -155,11 +155,11 @@ const generateThumbnails = async (file, sizes = [
     }
 
     const thumbnails = [];
-    
+
     for (const size of sizes) {
       const fileName = path.basename(file.filename, path.extname(file.filename));
       const thumbnailPath = `uploads/thumbnails/${fileName}_${size.suffix}.jpg`;
-      
+
       // Create thumbnails directory if it doesn't exist
       const thumbDir = path.dirname(thumbnailPath);
       if (!fs.existsSync(thumbDir)) {
@@ -199,7 +199,7 @@ const uploadToCloudinary = async (file, folder = 'general') => {
     // Generate thumbnails for images
     let thumbnails = [];
     let thumbnailUrl = null;
-    
+
     if (file.mimetype.startsWith('image/')) {
       thumbnails = await generateThumbnails(file);
       if (thumbnails.length > 0) {
@@ -209,7 +209,7 @@ const uploadToCloudinary = async (file, folder = 'general') => {
 
     // Determine the base URL
     const baseUrl = process.env.BACKEND_URL || 'http://localhost:4000';
-    
+
     // Determine the file path based on fieldname
     let filePath = '';
     if (file.fieldname === 'avatar') {
@@ -219,7 +219,7 @@ const uploadToCloudinary = async (file, folder = 'general') => {
     } else {
       filePath = `general/${file.filename}`;
     }
-    
+
     // Get image metadata if it's an image
     let metadata = {};
     if (file.mimetype.startsWith('image/')) {
@@ -298,14 +298,14 @@ const fileSizeLimit = (err, req, res, next) => {
       });
     }
   }
-  
+
   if (err.message) {
     return res.status(400).json({
       success: false,
       message: err.message
     });
   }
-  
+
   next(err);
 };
 
@@ -315,7 +315,7 @@ const validateFileType = (allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'
     if (!req.file) {
       return next();
     }
-    
+
     if (!allowedTypes.includes(req.file.mimetype)) {
       return res.status(400).json({
         success: false,
@@ -323,7 +323,7 @@ const validateFileType = (allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'
         code: 'INVALID_FILE_TYPE'
       });
     }
-    
+
     next();
   };
 };
@@ -334,7 +334,7 @@ const validateFileSize = (maxSizeInMB = 5) => {
     if (!req.file) {
       return next();
     }
-    
+
     const maxSize = maxSizeInMB * 1024 * 1024;
     if (req.file.size > maxSize) {
       return res.status(400).json({
@@ -343,7 +343,7 @@ const validateFileSize = (maxSizeInMB = 5) => {
         code: 'FILE_TOO_LARGE'
       });
     }
-    
+
     next();
   };
 };
@@ -356,7 +356,7 @@ const cleanupUploadedFiles = async (req) => {
         fs.unlinkSync(req.file.path);
       }
     }
-    
+
     if (req.files && Array.isArray(req.files)) {
       for (const file of req.files) {
         if (fs.existsSync(file.path)) {
@@ -369,7 +369,7 @@ const cleanupUploadedFiles = async (req) => {
   }
 };
 
-module.exports = {
+export {
   upload,
   uploadAvatar,
   uploadCoverPhoto,
