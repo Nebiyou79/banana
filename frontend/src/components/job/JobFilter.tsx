@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// components/JobFilter.tsx
+// components/JobFilter.tsx - FIXED VERSION
 import React, { useState, useEffect } from 'react';
 import { JobFilters } from '@/services/jobService';
 import { 
@@ -12,7 +12,8 @@ import {
   Clock,
   Globe,
   Building2,
-  Users
+  Users,
+  GraduationCap
 } from 'lucide-react';
 
 interface JobFilterProps {
@@ -96,6 +97,20 @@ const JobFilter: React.FC<JobFilterProps> = ({
   ];
 
   const educationLevels = [
+    // Ethiopian Education System
+    { value: 'primary-education', label: 'Primary Education' },
+    { value: 'secondary-education', label: 'Secondary Education' },
+    { value: 'tvet-level-i', label: 'TVET Level I - Basic Skills' },
+    { value: 'tvet-level-ii', label: 'TVET Level II - Skilled Worker' },
+    { value: 'tvet-level-iii', label: 'TVET Level III - Technician' },
+    { value: 'tvet-level-iv', label: 'TVET Level IV - Senior Technician' },
+    { value: 'tvet-level-v', label: 'TVET Level V - Expert/Trainer' },
+    { value: 'undergraduate-bachelors', label: 'Undergraduate (Bachelor\'s)' },
+    { value: 'postgraduate-masters', label: 'Postgraduate (Master\'s)' },
+    { value: 'doctoral-phd', label: 'Doctoral (Ph.D.)' },
+    { value: 'lecturer', label: 'Lecturer' },
+    { value: 'professor', label: 'Professor' },
+    // Backward compatibility
     { value: 'high-school', label: 'High School' },
     { value: 'diploma', label: 'Diploma' },
     { value: 'bachelors', label: "Bachelor's" },
@@ -183,7 +198,7 @@ const JobFilter: React.FC<JobFilterProps> = ({
   );
 
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 mb-6">
+    <div className="bg-white rounded-xl p-6 border border-gray-200 mb-6">
       {/* Main Search Bar */}
       <div className="flex flex-col lg:flex-row gap-4 mb-6">
         <div className="flex-1 relative">
@@ -193,14 +208,14 @@ const JobFilter: React.FC<JobFilterProps> = ({
             placeholder="Search jobs by title, skills, or company..."
             value={filters.search || ''}
             onChange={(e) => handleChange('search', e.target.value)}
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
           />
         </div>
         
         <div className="flex gap-3">
           <button
             onClick={() => setShowMobileFilters(!showMobileFilters)}
-            className="lg:hidden px-4 py-3 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors flex items-center gap-2"
+            className="lg:hidden px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm font-medium"
           >
             <Filter className="w-4 h-4" />
             Filters
@@ -209,7 +224,7 @@ const JobFilter: React.FC<JobFilterProps> = ({
           {onToggleAdvanced && (
             <button
               onClick={onToggleAdvanced}
-              className="px-4 py-3 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors flex items-center gap-2"
+              className="px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm font-medium"
             >
               <Filter className="w-4 h-4" />
               {showAdvanced ? 'Simple Filters' : 'Advanced Filters'}
@@ -299,7 +314,7 @@ const JobFilter: React.FC<JobFilterProps> = ({
         {hasActiveFilters && (
           <button
             onClick={clearFilters}
-            className="px-3 py-2 text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-2 text-sm"
+            className="px-3 py-2 text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-2 text-sm font-medium"
           >
             <X className="w-4 h-4" />
             Clear All
@@ -311,11 +326,11 @@ const JobFilter: React.FC<JobFilterProps> = ({
       {(showAdvanced || showMobileFilters) && (
         <div className="border-t border-gray-200 pt-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Job Type (Organization vs Company) */}
+            {/* Job Type */}
             {showJobTypeFilter && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <Building2 className="w-4 h-4 inline mr-1" />
+                <label className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
                   Job Type
                 </label>
                 <select
@@ -333,10 +348,10 @@ const JobFilter: React.FC<JobFilterProps> = ({
               </div>
             )}
 
-            {/* Opportunity Type (for organizations) */}
+            {/* Opportunity Type */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Users className="w-4 h-4 inline mr-1" />
+              <label className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                <Users className="w-4 h-4" />
                 Opportunity Type
               </label>
               <select
@@ -355,8 +370,8 @@ const JobFilter: React.FC<JobFilterProps> = ({
 
             {/* City */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <MapPin className="w-4 h-4 inline mr-1" />
+              <label className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
                 City
               </label>
               <select
@@ -375,7 +390,8 @@ const JobFilter: React.FC<JobFilterProps> = ({
 
             {/* Education Level */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                <GraduationCap className="w-4 h-4" />
                 Education Level
               </label>
               <select
@@ -391,48 +407,12 @@ const JobFilter: React.FC<JobFilterProps> = ({
                 ))}
               </select>
             </div>
-
-            {/* Work Arrangement */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Work Arrangement
-              </label>
-              <select
-                value={filters.workArrangement || ''}
-                onChange={(e) => handleChange('workArrangement', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              >
-                <option value="">Any Arrangement</option>
-                {workArrangements.map(arrangement => (
-                  <option key={arrangement.value} value={arrangement.value}>
-                    {arrangement.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Currency */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Currency
-              </label>
-              <select
-                value={filters.currency || 'ETB'}
-                onChange={(e) => handleChange('currency', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              >
-                <option value="ETB">ETB</option>
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-                <option value="GBP">GBP</option>
-              </select>
-            </div>
           </div>
 
           {/* Salary Range */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              <DollarSign className="w-4 h-4 inline mr-1" />
+            <label className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+              <DollarSign className="w-4 h-4" />
               Salary Range ({filters.currency})
             </label>
             <div className="flex flex-wrap gap-2">
@@ -478,7 +458,7 @@ const JobFilter: React.FC<JobFilterProps> = ({
                 onChange={(e) => handleChange('featured', e.target.checked ? true : undefined)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
-              <span className="ml-2 text-sm text-gray-700 flex items-center gap-1">
+              <span className="ml-2 text-sm text-gray-700 flex items-center gap-2">
                 <Star className="w-4 h-4" />
                 Featured Jobs
               </span>
@@ -491,7 +471,7 @@ const JobFilter: React.FC<JobFilterProps> = ({
                 onChange={(e) => handleChange('urgent', e.target.checked ? true : undefined)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
-              <span className="ml-2 text-sm text-gray-700 flex items-center gap-1">
+              <span className="ml-2 text-sm text-gray-700 flex items-center gap-2">
                 <Clock className="w-4 h-4" />
                 Urgent Hiring
               </span>
@@ -504,7 +484,7 @@ const JobFilter: React.FC<JobFilterProps> = ({
                 onChange={(e) => handleChange('remote', e.target.checked ? 'remote' : '')}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
-              <span className="ml-2 text-sm text-gray-700 flex items-center gap-1">
+              <span className="ml-2 text-sm text-gray-700 flex items-center gap-2">
                 <Globe className="w-4 h-4" />
                 Remote Only
               </span>
@@ -517,7 +497,7 @@ const JobFilter: React.FC<JobFilterProps> = ({
       {hasActiveFilters && (
         <div className="mt-4 pt-4 border-t border-gray-200">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-gray-600">Active filters:</span>
+            <span className="text-sm text-gray-600 font-medium">Active filters:</span>
             {filters.search && (
               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
                 Search: {filters.search}
@@ -546,28 +526,6 @@ const JobFilter: React.FC<JobFilterProps> = ({
                 <button
                   onClick={() => handleChange('region', '')}
                   className="ml-1 hover:text-green-600"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-            {filters.type && (
-              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-800">
-                Type: {jobTypes.find(t => t.value === filters.type)?.label}
-                <button
-                  onClick={() => handleChange('type', '')}
-                  className="ml-1 hover:text-purple-600"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-            {filters.opportunityType && (
-              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-cyan-100 text-cyan-800">
-                Opportunity: {opportunityTypes.find(t => t.value === filters.opportunityType)?.label}
-                <button
-                  onClick={() => handleChange('opportunityType', '')}
-                  className="ml-1 hover:text-cyan-600"
                 >
                   <X className="w-3 h-3" />
                 </button>

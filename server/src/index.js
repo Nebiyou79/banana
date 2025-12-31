@@ -1,4 +1,4 @@
-// /server/src/index.js (Fixed)
+// /server/src/index.js (Updated with Countdown Service)
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -23,23 +23,26 @@ if (missingEnvVars.length > 0) {
   process.exit(1);
 }
 
+// Import Countdown Service
+const countdownService = require('./services/countdownService');
+
 const app = express();
 
 // Enhanced CORS configuration - MOVE THIS TO THE TOP
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    
+
     const allowedOrigins = [
       'http://localhost:3000',
-      'http://localhost:3001', 
+      'http://localhost:3001',
       'http://127.0.0.1:3000',
       'http://127.0.0.1:3001',
       'https://getbananalink.com',
       'https://www.getbananalink.com',
       process.env.CORS_ORIGIN
     ].filter(Boolean);
-    
+
     if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
       callback(null, true);
     } else {
@@ -50,7 +53,7 @@ const corsOptions = {
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept','x-view-type','X-View-Type' ]
 };
 
 // Apply CORS middleware FIRST
@@ -78,7 +81,7 @@ const authLimiter = rateLimit({
   message: 'Too many login attempts from this IP, please try again later.'
 });
 
-const adminLimiter = rateLimit({ 
+const adminLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 200, // limit each IP to 200 requests per windowMs
   message: 'Too many admin requests from this IP, please try again later.'
@@ -97,8 +100,25 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-// FIX: Serve static files from the correct path
-// Serve uploaded files directly from /uploads path
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads'), {
+  maxAge: '1d',
+  etag: true,
+  index: false
+}));
+
+// Also serve thumbnails if they exist
+app.use('/thumbnails', express.static(path.join(__dirname, '..', 'uploads', 'thumbnails'), {
+  maxAge: '1d',
+  etag: true,
+  index: false
+}));
+
+// Add this for better error handling
+app.use('/uploads', (req, res, next) => {
+  res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+});
+
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads'), {
   maxAge: '1d',
   etag: true,
@@ -109,9 +129,12 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')
 app.use('/uploads', (req, res, next) => {
   res.set('Cross-Origin-Resource-Policy', 'cross-origin');
   next();
-});console.log('Serving static files from:', path.join(process.cwd(), 'public', 'uploads'));
+});
+console.log('📁 Serving uploads from:', path.join(__dirname, '..', 'uploads'));
+console.log('🖼️ Serving thumbnails from:', path.join(__dirname, '..', 'uploads', 'thumbnails'));
+console.log('Serving static files from:', path.join(process.cwd(), 'public', 'uploads'));
 
-// Import routes
+// Core Routes
 const authRoutes = require('./routes/authRoutes');
 const candidateRoutes = require('./routes/candidateRoutes');
 const freelanceRoutes = require('./routes/freelancerRoutes');
@@ -122,12 +145,29 @@ const applicationRoutes = require('./routes/applicationRoutes');
 const proposalRoutes = require('./routes/proposalRoutes');
 const tenderRoutes = require('./routes/tenderRoutes');
 const organizationRoutes = require('./routes/organizationRoutes');
+const fileRoutes = require('./routes/fileRoutes');
+const productRoutes = require('./routes/productRoutes');
+const verificationRoutes = require('./routes/verificationRoutes');
+const appointmentRoutes = require('./routes/appointmentRoutes');
 
-// Import admin routes
+// Admin Routes
 const adminRoutes = require('./routes/adminRoutes');
 const jobTemplateRoutes = require('./routes/jobTemplateRoutes');
 
-// Routes
+// ========== SOCIAL NETWORKING ROUTES ==========
+// Profile Management Routes
+const profileRoutes = require('./routes/profileRoutes');
+const roleProfileRoutes = require('./routes/roleProfileRoutes');
+
+// Social Features Routes
+const postRoutes = require('./routes/postRoutes');
+const likeRoutes = require('./routes/likeRoutes');
+const commentRoutes = require('./routes/commentRoutes');
+const followRoutes = require('./routes/followRoutes');
+const socialSearchRoutes = require('./routes/socialSearchRoutes');
+
+// ========== REGISTER ALL ROUTES ==========
+// Core API Routes
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/candidate', candidateRoutes);
 app.use('/api/v1/freelancer', freelanceRoutes);
@@ -137,20 +177,34 @@ app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/applications', applicationRoutes);
 app.use('/api/v1/proposals', proposalRoutes);
 app.use('/api/v1/tender', tenderRoutes);
-app.use('/api/v1/tender', tenderRoutes);
 app.use('/api/v1/organization', organizationRoutes);
-
-
-// Admin routes
+app.use('/api/v1', fileRoutes);
+app.use('/api/v1/products', productRoutes);
+app.use('/api/v1/verification', verificationRoutes);
+app.use('/api/v1/appointments', appointmentRoutes);
+// Admin Routes
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/admin', jobTemplateRoutes);
 
+// ========== SOCIAL NETWORKING ROUTES ==========
+// Profile Management
+app.use('/api/v1/profile', profileRoutes);
+app.use('/api/v1/role-profile', roleProfileRoutes);
+
+// Social Features
+app.use('/api/v1/posts', postRoutes);
+app.use('/api/v1/likes', likeRoutes);
+app.use('/api/v1/comments', commentRoutes);
+app.use('/api/v1/follow', followRoutes);
+app.use('/api/v1/social-search', socialSearchRoutes);
+
 // Simple test route
 app.get('/api/test', (req, res) => {
-  res.json({ 
+  res.json({
     success: true,
     message: 'Server is working!',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    countdown_service: 'Active'
   });
 });
 
@@ -160,7 +214,7 @@ app.get('/api/health', async (req, res) => {
     // Try to connect to database to check health
     const mongoose = require('mongoose');
     const dbState = mongoose.connection.readyState;
-    
+
     const dbStatus = {
       0: 'disconnected',
       1: 'connected',
@@ -168,17 +222,18 @@ app.get('/api/health', async (req, res) => {
       3: 'disconnecting'
     }[dbState] || 'unknown';
 
-    res.json({ 
-      status: 'OK', 
+    res.json({
+      status: 'OK',
       message: 'Server is running',
       database: dbStatus,
+      countdown_service: 'Active',
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    res.status(500).json({ 
-      status: 'ERROR', 
+    res.status(500).json({
+      status: 'ERROR',
       message: 'Server error',
-      error: error.message 
+      error: error.message
     });
   }
 });
@@ -208,9 +263,14 @@ async function startServer() {
   try {
     console.log('🔗 Attempting to connect to MongoDB...');
     console.log('📝 MongoDB URI:', process.env.MONGODB_URI ? '✓ Set' : '✗ Missing');
-    
+
     await connectDB();
     
+    // ✅ START THE COUNTDOWN SERVICE
+    console.log('⏰ Starting tender countdown service...');
+    countdownService.start(1); // Check every minute
+    console.log('✅ Countdown service started successfully');
+
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📍 Local: http://localhost:${PORT}`);
@@ -225,12 +285,13 @@ async function startServer() {
         'http://127.0.0.1:3000',
         'http://127.0.0.1:3001'
       ]);
+      console.log('⏰ Countdown service: ACTIVE (checking every minute)');
     });
-    
+
   } catch (error) {
     console.error('❌ Failed to start server:', error.message);
     console.log('💡 Running server without database connection...');
-    
+
     // Start server without database for development
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT} (without database)`);
@@ -243,10 +304,12 @@ async function startServer() {
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down server gracefully...');
+  console.log('⏹️  Stopping countdown service...');
   try {
     const mongoose = require('mongoose');
     await mongoose.connection.close();
     console.log('✅ MongoDB connection closed.');
+    console.log('✅ Countdown service stopped.');
     process.exit(0);
   } catch (error) {
     console.error('Error during shutdown:', error);

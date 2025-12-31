@@ -1,526 +1,767 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useState, useEffect } from 'react';
+// src/pages/dashboard/organization/tenders/index.tsx
+import React, { useState, useEffect, useMemo } from 'react';
 import { NextPage } from 'next';
-import { useRouter } from 'next/router';
 import Head from 'next/head';
-import OrganizationTenderCard from '@/components/tenders/OrganizationTenderCard';
-import { TenderService, Tender } from '@/services/tenderService';
-import { useAuth } from '@/contexts/AuthContext';
-import {
-  PlusIcon,
-  EyeIcon,
-  PencilIcon,
-  TrashIcon,
-  ChartBarIcon,
-  MagnifyingGlassIcon,
-  FunnelIcon,
-  ExclamationTriangleIcon,
-  DocumentTextIcon,
-  CheckCircleIcon,
-  ClockIcon,
-  UserGroupIcon,
-  BuildingLibraryIcon
-} from '@heroicons/react/24/outline';
-import { colorClasses } from '@/utils/color';
+import { useRouter } from 'next/router';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { OrganizationOwnerTenderList } from '@/components/tenders/OrganizationOwnerTenderList';
+import { TenderFilter } from '@/services/tenderService';
+import { useToast } from '@/hooks/use-toast';
+import { useOwnedTenders } from '@/hooks/useTenders';
+import { Button } from '@/components/social/ui/Button';
+import { Card, CardContent } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { 
+  Plus, 
+  BarChart3, 
+  Download, 
+  Filter, 
+  Grid3x3, 
+  List as ListIcon,
+  Building2,
+  ShieldCheck,
+  Users,
+  Clock,
+  TrendingUp,
+  RefreshCw
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const OrganizationTendersPage: NextPage = () => {
   const router = useRouter();
-  const { user } = useAuth();
-  const [tenders, setTenders] = useState<Tender[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [successMessage, setSuccessMessage] = useState('');
+  const { toast } = useToast();
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [activeTab, setActiveTab] = useState<string>('all');
 
-  // Check for success message from query params
+  // Convert URL query params to filters
+  const getInitialFilters = (): TenderFilter => {
+    const query = router.query;
+    return {
+      page: query.page ? parseInt(query.page as string) : 1,
+      limit: query.limit ? parseInt(query.limit as string) : 12,
+      status: query.status as string || undefined,
+      tenderCategory: query.tenderCategory as any,
+      workflowType: query.workflowType as any,
+      procurementMethod: query.procurementMethod as string,
+      search: query.search as string,
+      sortBy: query.sortBy as string || 'createdAt',
+      sortOrder: query.sortOrder as 'asc' | 'desc' || 'desc',
+      cpoRequired: query.cpoRequired === 'true',
+    };
+  };
+
+  const [filters, setFilters] = useState<TenderFilter>(getInitialFilters());
+
+  // Fetch owned tenders using useOwnedTenders hook
+  const { tenders, pagination, isLoading: isLoadingOwnedTenders, error, refetch } = useOwnedTenders({
+    page: filters.page || 1,
+    limit: filters.limit || 12,
+    status: filters.status,
+    tenderCategory: filters.tenderCategory,
+    workflowType: filters.workflowType,
+    //search: filters.search,
+    // sortBy: filters.sortBy,
+    // sortOrder: filters.sortOrder,
+  });
+
+  // Calculate stats from fetched data
+  const stats = useMemo(() => {
+    const published = tenders.filter(t => t.status === 'published').length;
+    const draft = tenders.filter(t => t.status === 'draft').length;
+    const closed = tenders.filter(t => 
+      ['closed', 'cancelled', 'deadline_reached', 'revealed'].includes(t.status)
+    ).length;
+    const freelance = tenders.filter(t => t.tenderCategory === 'freelance').length;
+    const professional = tenders.filter(t => t.tenderCategory === 'professional').length;
+    
+    // Calculate total applications
+    const totalApplications = tenders.reduce((acc, tender) => {
+      return acc + (tender.metadata?.totalApplications || 0);
+    }, 0);
+    
+    // Calculate average budget
+    let totalBudget = 0;
+    let budgetCount = 0;
+    
+    tenders.forEach(tender => {
+      if (tender.tenderCategory === 'freelance' && tender.freelanceSpecific?.budget?.max) {
+        totalBudget += tender.freelanceSpecific.budget.max;
+        budgetCount++;
+      } else if (tender.tenderCategory === 'professional' && tender.professionalSpecific?.financialCapacity?.minAnnualTurnover) {
+        totalBudget += tender.professionalSpecific.financialCapacity.minAnnualTurnover;
+        budgetCount++;
+      }
+    });
+    
+    const avgBudget = budgetCount > 0 ? totalBudget / budgetCount : 0;
+    
+    return {
+      total: tenders.length,
+      published,
+      draft,
+      closed,
+      freelance,
+      professional,
+      totalApplications,
+      avgBudget,
+    };
+  }, [tenders]);
+
+  // Update filters when URL changes
   useEffect(() => {
-    if (router.query.updated === 'true') {
-      setSuccessMessage('Tender updated successfully!');
-      setTimeout(() => setSuccessMessage(''), 5000);
-    }
-    if (router.query.created === 'true') {
-      setSuccessMessage('Tender created successfully!');
-      setTimeout(() => setSuccessMessage(''), 5000);
-    }
-    if (router.query.deleted === 'true') {
-      setSuccessMessage('Tender deleted successfully!');
-      setTimeout(() => setSuccessMessage(''), 5000);
-    }
+    setFilters(getInitialFilters());
   }, [router.query]);
 
-  // Redirect if not an organization
-  useEffect(() => {
-    if (user && user.role !== 'organization') {
-      router.push('/tenders');
-    }
-  }, [user, router]);
+  // Update URL when filters change
+  const updateFilters = (newFilters: Partial<TenderFilter>) => {
+    const updated = { ...filters, ...newFilters, page: 1 };
+    setFilters(updated);
+    
+    // Update URL query params
+    const query: any = {};
+    Object.entries(updated).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        query[key] = value;
+      }
+    });
+    
+    router.push({
+      pathname: router.pathname,
+      query,
+    }, undefined, { shallow: true });
+  };
 
-  useEffect(() => {
-    if (user?.role === 'organization') {
-      loadMyTenders();
-    }
-  }, [user]);
-
-  const loadMyTenders = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      const response = await TenderService.getMyOrganizationTenders();
-      
-      // Ensure all tenders have IDs for React keys
-      const tendersWithSafeIds = (response.data.tenders || []).map((tender, index) => ({
-        ...tender,
-        _id: tender._id || `temp-${index}-${Date.now()}`
-      }));
-      
-      setTenders(tendersWithSafeIds);
-    } catch (err: any) {
-      console.error('Error loading tenders:', err);
-      setError(err.response?.data?.message || 'Failed to load your tenders');
-    } finally {
-      setLoading(false);
+  // Handle tab change
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    if (value === 'all') {
+      updateFilters({ status: undefined });
+    } else if (value === 'closed') {
+      // For closed tab, we'll handle filtering in the component
+      updateFilters({ status: 'closed' });
+    } else {
+      updateFilters({ status: value });
     }
   };
 
+  // Handle create new tender
   const handleCreateTender = () => {
     router.push('/dashboard/organization/tenders/create');
   };
 
-  const handleEditTender = (tenderId: string) => {
-    if (!tenderId || tenderId.startsWith('temp-')) {
-      setError('Cannot edit tender at this time. Please try again later.');
-      return;
-    }
-    router.push(`/dashboard/organization/tenders/${tenderId}/edit`);
+  // Handle export
+  const handleExport = () => {
+    toast({
+      title: 'Export Started',
+      description: 'Your tenders are being exported. You will receive a notification when ready.',
+    });
   };
 
-  const handleViewTender = (tenderId: string) => {
-    if (!tenderId || tenderId.startsWith('temp-')) {
-      setError('Cannot view tender details at this time. Please try again later.');
-      return;
-    }
-    router.push(`/dashboard/organization/tenders/${tenderId}`);
+  // Handle view mode toggle
+  const toggleViewMode = () => {
+    setViewMode(prev => prev === 'grid' ? 'list' : 'grid');
   };
 
-  const handleDeleteTender = async (tenderId: string) => {
-    if (!tenderId || tenderId.startsWith('temp-')) {
-      setError('Cannot delete tender at this time. Please try again later.');
-      return;
-    }
-
-    if (!confirm('Are you sure you want to delete this tender? This action cannot be undone.')) {
-      return;
-    }
-
-    setDeleteLoading(tenderId);
-    try {
-      await TenderService.deleteTender(tenderId);
-      setTenders(prev => prev.filter(tender => tender._id !== tenderId));
-      setSuccessMessage('Tender deleted successfully!');
-      setTimeout(() => setSuccessMessage(''), 5000);
-    } catch (err: any) {
-      console.error('Delete error:', err);
-      const errorMessage = err.response?.data?.message || 'Failed to delete tender';
-      setError(errorMessage);
-    } finally {
-      setDeleteLoading(null);
-    }
+  // Handle refresh
+  const handleRefresh = () => {
+    refetch();
+    toast({
+      title: 'Refreshing',
+      description: 'Tenders data is being refreshed...',
+    });
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'published':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'draft':
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-      case 'completed':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'cancelled':
-        return 'bg-red-100 text-red-800 border-red-200';
-      case 'open':
-        return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'published':
-        return <CheckCircleIcon className="h-4 w-4" />;
-      case 'draft':
-        return <DocumentTextIcon className="h-4 w-4" />;
-      case 'completed':
-        return <ChartBarIcon className="h-4 w-4" />;
-      case 'cancelled':
-        return <ExclamationTriangleIcon className="h-4 w-4" />;
-      case 'open':
-        return <ClockIcon className="h-4 w-4" />;
-      default:
-        return <DocumentTextIcon className="h-4 w-4" />;
-    }
-  };
-
-  const getStats = () => {
-    const total = tenders.length;
-    const published = tenders.filter(t => t.status === 'published').length;
-    const draft = tenders.filter(t => t.status === 'draft').length;
-    const completed = tenders.filter(t => t.status === 'completed').length;
-    const cancelled = tenders.filter(t => t.status === 'cancelled').length;
-    const open = tenders.filter(t => t.status === 'open').length;
-
-    return { total, published, draft, completed, cancelled, open };
-  };
-
-  // Filter tenders based on search and status
-  const filteredTenders = tenders.filter(tender => {
-    const matchesSearch = tender.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         tender.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || tender.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  const stats = getStats();
-
-  if (!user || user.role !== 'organization') {
+  // Handle error
+  if (error) {
     return (
       <DashboardLayout requiredRole="organization">
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
-            <p className="text-gray-600 mb-6">Only organizations can access this page.</p>
-            <button
-              onClick={() => router.push('/tenders')}
-              className={`px-6 py-2 ${colorClasses.bg.goldenMustard} text-darkNavy rounded-lg hover:bg-yellow-500 transition-colors`}
-            >
-              Browse Tenders
-            </button>
+        <div className="min-h-screen bg-gradient-to-b from-gray-50/50 to-white dark:from-gray-900/50 dark:to-gray-900">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <Card className="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">
+              <CardContent className="p-8 text-center">
+                <div className="w-16 h-16 mx-auto rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
+                  <Building2 className="w-8 h-8 text-red-600 dark:text-red-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-red-900 dark:text-red-100 mb-2">
+                  Error Loading Tenders
+                </h3>
+                <p className="text-red-700 dark:text-red-300 mb-4">
+                  {error.message || 'Failed to load your tenders. Please try again.'}
+                </p>
+                <div className="flex gap-3 justify-center">
+                  <Button
+                    onClick={handleRefresh}
+                    variant="outline"
+                    className="border-red-500 text-red-600 hover:bg-red-50 dark:border-red-600 dark:text-red-400 dark:hover:bg-red-900/20"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Retry
+                  </Button>
+                  <Button
+                    onClick={handleCreateTender}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    Create New Tender
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </DashboardLayout>
     );
   }
 
+  // Loading skeleton for stats
+  const StatsSkeleton = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Card key={i} className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-8 w-16" />
+              </div>
+              <Skeleton className="w-12 h-12 rounded-lg" />
+            </div>
+            <div className="mt-4">
+              <Skeleton className="h-4 w-32" />
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+
   return (
-    <DashboardLayout requiredRole="organization">
+    <>
       <Head>
-        <title>My Organization Tenders | Freelance Platform</title>
-        <meta name="description" content="Manage your organization's tenders and projects" />
+        <title>Organization Tenders | Procurement Platform</title>
+        <meta name="description" content="Manage your organization's tenders and procurement processes" />
       </Head>
 
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-purple-700 to-indigo-800 text-white">
+      <DashboardLayout requiredRole="organization">
+        <div className="min-h-screen bg-gradient-to-b from-gray-50/50 to-white dark:from-gray-900/50 dark:to-gray-900">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h1 className="text-3xl font-bold mb-2">Organization Tenders</h1>
-                <p className="text-purple-200">Manage your organization`s projects and tenders</p>
-              </div>
-              
-              <button
-                onClick={handleCreateTender}
-                className={`flex items-center gap-2 px-6 py-3 ${colorClasses.bg.goldenMustard} text-darkNavy rounded-lg hover:bg-yellow-500 transition-colors font-medium mt-4 lg:mt-0`}
-              >
-                <PlusIcon className="h-5 w-5" />
-                Create New Tender
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Success Message */}
-          {successMessage && (
-            <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 animate-fade-in">
-              <div className="flex items-center">
-                <CheckCircleIcon className="h-5 w-5 text-green-400 mr-2" />
-                <p className="text-green-800 text-sm font-medium">{successMessage}</p>
-                <button
-                  onClick={() => setSuccessMessage('')}
-                  className="ml-auto text-green-600 hover:text-green-800 transition-colors"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Error Message */}
-          {error && (
-            <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 animate-fade-in">
-              <div className="flex items-center">
-                <ExclamationTriangleIcon className="h-5 w-5 text-red-400 mr-2" />
-                <p className="text-red-800 text-sm font-medium">{error}</p>
-                <button
-                  onClick={() => setError('')}
-                  className="ml-auto text-red-600 hover:text-red-800 transition-colors"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Stats Dashboard */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
+            {/* Header */}
+            <div className="mb-8">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Total Tenders</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+                  <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+                    Organization Tenders
+                  </h1>
+                  <p className="mt-2 text-gray-600 dark:text-gray-400">
+                    Manage procurement processes and evaluate proposals
+                  </p>
                 </div>
-                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <ChartBarIcon className="h-6 w-6 text-purple-600" />
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Published</p>
-                  <p className="text-2xl font-bold text-green-600">{stats.published}</p>
-                </div>
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                  <CheckCircleIcon className="h-6 w-6 text-green-600" />
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Drafts</p>
-                  <p className="text-2xl font-bold text-gray-600">{stats.draft}</p>
-                </div>
-                <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <DocumentTextIcon className="h-6 w-6 text-gray-600" />
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Open</p>
-                  <p className="text-2xl font-bold text-emerald-600">{stats.open}</p>
-                </div>
-                <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-                  <ClockIcon className="h-6 w-6 text-emerald-600" />
-                </div>
-              </div>
-            </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Completed</p>
-                  <p className="text-2xl font-bold text-blue-600">{stats.completed}</p>
-                </div>
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <ChartBarIcon className="h-6 w-6 text-blue-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Cancelled</p>
-                  <p className="text-2xl font-bold text-red-600">{stats.cancelled}</p>
-                </div>
-                <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                  <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Search and Filter Section */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-            <div className="flex flex-col lg:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search tenders by title or description..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <div className="relative">
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="appearance-none pl-4 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors min-w-[150px] bg-white"
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRefresh}
+                    className="gap-2"
+                    disabled={isLoadingOwnedTenders}
                   >
-                    <option value="all">All Status</option>
-                    <option value="draft">Draft</option>
-                    <option value="published">Published</option>
-                    <option value="open">Open</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                  <FunnelIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                </div>
-                <button 
-                  onClick={() => {
-                    setSearchTerm('');
-                    setStatusFilter('all');
-                  }}
-                  className="flex items-center gap-2 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                >
-                  Clear Filters
-                </button>
-              </div>
-            </div>
-          </div>
+                    <RefreshCw className={cn("w-4 h-4", isLoadingOwnedTenders && "animate-spin")} />
+                    Refresh
+                  </Button>
 
-          {/* Tenders Grid */}
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 animate-pulse">
-                  <div className="h-4 bg-gray-200 rounded mb-3"></div>
-                  <div className="h-3 bg-gray-200 rounded mb-2"></div>
-                  <div className="h-3 bg-gray-200 rounded w-2/3 mb-4"></div>
-                  <div className="flex gap-1 mb-4">
-                    <div className="h-6 bg-gray-200 rounded-full w-16"></div>
-                    <div className="h-6 bg-gray-200 rounded-full w-20"></div>
-                  </div>
-                  <div className="h-10 bg-gray-200 rounded"></div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => updateFilters({ ...filters })}
+                    className="gap-2"
+                  >
+                    <Filter className="w-4 h-4" />
+                    Filter
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExport}
+                    className="gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export
+                  </Button>
+
+                  <Button
+                    onClick={handleCreateTender}
+                    className="gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+                    disabled={isLoadingOwnedTenders}
+                  >
+                    <Plus className="w-4 h-4" />
+                    Create Tender
+                  </Button>
                 </div>
-              ))}
-            </div>
-          ) : error ? (
-            <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-gray-200">
-              <ExclamationTriangleIcon className="mx-auto h-16 w-16 text-red-400 mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Tenders</h3>
-              <p className="text-gray-500 max-w-md mx-auto mb-6">{error}</p>
-              <div className="flex gap-3 justify-center">
-                <button
-                  onClick={loadMyTenders}
-                  className={`px-6 py-2 ${colorClasses.bg.goldenMustard} text-darkNavy rounded-lg hover:bg-yellow-500 transition-colors font-medium`}
-                >
-                  Try Again
-                </button>
-                <button
-                  onClick={handleCreateTender}
-                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                >
-                  Create First Tender
-                </button>
               </div>
             </div>
-          ) : filteredTenders.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-gray-200">
-              <BuildingLibraryIcon className="mx-auto h-16 w-16 text-gray-400 mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                {tenders.length === 0 ? 'No Tenders Created Yet' : 'No Matching Tenders Found'}
-              </h3>
-              <p className="text-gray-500 max-w-md mx-auto mb-6">
-                {tenders.length === 0 
-                  ? 'Create your first tender to start receiving proposals from qualified freelancers.'
-                  : 'Try adjusting your search criteria or filters to find what you\'re looking for.'
-                }
-              </p>
-              {tenders.length === 0 && (
-                <button
-                  onClick={handleCreateTender}
-                  className={`px-6 py-3 ${colorClasses.bg.goldenMustard} text-darkNavy rounded-lg hover:bg-yellow-500 transition-colors font-medium`}
-                >
-                  Create Your First Tender
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {filteredTenders.map((tender, index) => (
-                <div 
-                  key={tender._id || `tender-${index}`} 
-                  className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden group hover:shadow-lg transition-all duration-300"
-                >
-                  <OrganizationTenderCard
-                    tender={tender}
-                    showActions={false}
-                    showStatus={true}
-                  />
-                  
-                  {/* Action Buttons */}
-                  <div className="p-4 border-t border-gray-200 bg-gray-50">
-                    <div className="flex justify-between items-center">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleViewTender(tender._id)}
-                          className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors font-medium group/action"
-                          title="View tender details"
-                        >
-                          <EyeIcon className="h-4 w-4 group-hover/action:scale-110 transition-transform" />
-                          View
-                        </button>
-                        
-                        <button
-                          onClick={() => handleEditTender(tender._id)}
-                          className="flex items-center gap-1 px-3 py-2 text-sm text-purple-600 hover:text-purple-800 transition-colors font-medium group/action"
-                          title="Edit tender"
-                        >
-                          <PencilIcon className="h-4 w-4 group-hover/action:scale-110 transition-transform" />
-                          Edit
-                        </button>
+
+            {/* Stats Cards */}
+            {isLoadingOwnedTenders ? (
+              <StatsSkeleton />
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Tenders</p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                          {stats.total}
+                        </p>
                       </div>
-                      
-                      <button
-                        onClick={() => handleDeleteTender(tender._id)}
-                        disabled={deleteLoading === tender._id || (tender.proposals && tender.proposals.length > 0)}
-                        className="flex items-center gap-1 px-3 py-2 text-sm text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium group/action"
-                        title={tender.proposals && tender.proposals.length > 0 ? "Cannot delete tender with proposals" : "Delete tender"}
-                      >
-                        {deleteLoading === tender._id ? (
-                          <div className="flex items-center gap-1">
-                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600"></div>
-                            Deleting...
-                          </div>
-                        ) : (
-                          <>
-                            <TrashIcon className="h-4 w-4 group-hover/action:scale-110 transition-transform" />
-                            Delete
-                          </>
-                        )}
-                      </button>
+                      <div className="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                        <Building2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                      </div>
                     </div>
-                    
-                    {tender.proposals && tender.proposals.length > 0 && (
-                      <div className="mt-2 text-xs text-gray-500 flex items-center gap-1">
-                        <UserGroupIcon className="h-3 w-3" />
-                        {tender.proposals.length} proposal{tender.proposals.length !== 1 ? 's' : ''} submitted
+                    <div className="mt-4 flex items-center text-sm">
+                      <Badge variant="outline" className="mr-2 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300">
+                        {stats.freelance} Freelance
+                      </Badge>
+                      <Badge variant="outline" className="bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-300">
+                        {stats.professional} Professional
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Tenders</p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                          {stats.published}
+                        </p>
                       </div>
-                    )}
+                      <div className="w-12 h-12 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                        <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400" />
+                      </div>
+                    </div>
+                    <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+                      {stats.draft} in draft • {stats.closed} closed
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Applications</p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                          {stats.totalApplications}
+                        </p>
+                      </div>
+                      <div className="w-12 h-12 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                        <Users className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                      </div>
+                    </div>
+                    <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+                      Across all tenders
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Avg. Budget</p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                          ${(stats.avgBudget / 1000).toFixed(0)}K
+                        </p>
+                      </div>
+                      <div className="w-12 h-12 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                        <BarChart3 className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                      </div>
+                    </div>
+                    <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+                      Average tender value
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Main Content Area with Tabs */}
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
+              {/* Tabs Header */}
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <TabsList className="bg-gray-100 dark:bg-gray-800 p-1 w-full sm:w-auto">
+                    <TabsTrigger 
+                      value="all" 
+                      className="data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-900"
+                      disabled={isLoadingOwnedTenders}
+                    >
+                      All Tenders
+                      <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 text-xs">
+                        {stats.total}
+                      </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="published" 
+                      className="data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-900"
+                      disabled={isLoadingOwnedTenders}
+                    >
+                      Active
+                      <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 text-xs">
+                        {stats.published}
+                      </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="draft" 
+                      className="data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-900"
+                      disabled={isLoadingOwnedTenders}
+                    >
+                      Draft
+                      <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 text-xs">
+                        {stats.draft}
+                      </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="closed" 
+                      className="data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-900"
+                      disabled={isLoadingOwnedTenders}
+                    >
+                      Closed
+                      <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 text-xs">
+                        {stats.closed}
+                      </Badge>
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {/* View Mode Toggle */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600 dark:text-gray-400 hidden sm:block">
+                      View:
+                    </span>
+                    <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+                      <Button
+                        variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                        size="sm"
+                        onClick={() => setViewMode('grid')}
+                        className={cn(
+                          "rounded-md",
+                          viewMode === 'grid' 
+                            ? "bg-white dark:bg-gray-900 shadow-sm" 
+                            : "text-gray-500 dark:text-gray-400"
+                        )}
+                        disabled={isLoadingOwnedTenders}
+                      >
+                        <Grid3x3 className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                        size="sm"
+                        onClick={() => setViewMode('list')}
+                        className={cn(
+                          "rounded-md",
+                          viewMode === 'list' 
+                            ? "bg-white dark:bg-gray-900 shadow-sm" 
+                            : "text-gray-500 dark:text-gray-400"
+                        )}
+                        disabled={isLoadingOwnedTenders}
+                      >
+                        <ListIcon className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
 
-      <style jsx>{`
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in {
-          animation: fade-in 0.3s ease-out;
-        }
-      `}</style>
-    </DashboardLayout>
+                {/* Search and Quick Filters */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      placeholder="Search by title, reference number, or description..."
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                      value={filters.search || ''}
+                      onChange={(e) => updateFilters({ search: e.target.value || undefined })}
+                      disabled={isLoadingOwnedTenders}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => updateFilters({ tenderCategory: 'freelance' })}
+                      className={cn(
+                        filters.tenderCategory === 'freelance' 
+                          ? 'border-blue-500 text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400' 
+                          : '',
+                        isLoadingOwnedTenders && 'opacity-50 cursor-not-allowed'
+                      )}
+                      disabled={isLoadingOwnedTenders}
+                    >
+                      Freelance
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => updateFilters({ tenderCategory: 'professional' })}
+                      className={cn(
+                        filters.tenderCategory === 'professional' 
+                          ? 'border-teal-500 text-teal-600 bg-teal-50 dark:bg-teal-900/20 dark:text-teal-400' 
+                          : '',
+                        isLoadingOwnedTenders && 'opacity-50 cursor-not-allowed'
+                      )}
+                      disabled={isLoadingOwnedTenders}
+                    >
+                      Professional
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => updateFilters({ cpoRequired: true })}
+                      className={cn(
+                        filters.cpoRequired 
+                          ? 'border-amber-500 text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400' 
+                          : '',
+                        isLoadingOwnedTenders && 'opacity-50 cursor-not-allowed'
+                      )}
+                      disabled={isLoadingOwnedTenders}
+                    >
+                      <ShieldCheck className="w-3 h-3 mr-1" />
+                      CPO Required
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tab Content: All Tenders */}
+              <TabsContent value="all" className="space-y-6">
+                {isLoadingOwnedTenders ? (
+                  <div className={viewMode === 'list' ? 'space-y-6' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'}>
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <Card key={i} className="animate-pulse">
+                        <CardContent className="p-6">
+                          <div className="space-y-3">
+                            <div className="flex justify-between">
+                              <Skeleton className="h-6 w-20" />
+                              <Skeleton className="h-6 w-16" />
+                            </div>
+                            <Skeleton className="h-6 w-full" />
+                            <Skeleton className="h-4 w-3/4" />
+                            <div className="space-y-2 pt-4">
+                              <Skeleton className="h-4 w-full" />
+                              <Skeleton className="h-4 w-2/3" />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : stats.total === 0 ? (
+                  <Card className="border-2 border-dashed border-gray-300 dark:border-gray-700 bg-transparent">
+                    <CardContent className="py-12 text-center">
+                      <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+                        <Building2 className="w-8 h-8 text-gray-400 dark:text-gray-500" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                        No Tenders Yet
+                      </h3>
+                      <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-6">
+                        Start by creating your first tender. You can create freelance projects or professional procurement tenders.
+                      </p>
+                      <div className="flex gap-3 justify-center">
+                        <Button
+                          onClick={() => router.push('/dashboard/organization/tenders/create?category=freelance')}
+                          variant="outline"
+                          className="border-blue-500 text-blue-600 hover:bg-blue-50 dark:border-blue-600 dark:text-blue-400 dark:hover:bg-blue-900/20"
+                        >
+                          Create Freelance Tender
+                        </Button>
+                        <Button
+                          onClick={() => router.push('/dashboard/organization/tenders/create?category=professional')}
+                          variant="outline"
+                          className="border-teal-500 text-teal-600 hover:bg-teal-50 dark:border-teal-600 dark:text-teal-400 dark:hover:bg-teal-900/20"
+                        >
+                          Create Professional Tender
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className={viewMode === 'list' ? 'space-y-6' : ''}>
+                    <OrganizationOwnerTenderList
+                      initialFilters={filters}
+                      showFilters={false}
+                      showHeader={false}
+                      viewMode={viewMode}
+                      // useOwnedTenders={true} // Add this prop
+                    />
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* Tab Content: Active Tenders */}
+              <TabsContent value="published" className="space-y-6">
+                {isLoadingOwnedTenders ? (
+                  <div className={viewMode === 'list' ? 'space-y-6' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'}>
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Card key={i} className="animate-pulse">
+                        <CardContent className="p-6">
+                          <div className="space-y-3">
+                            <Skeleton className="h-6 w-20" />
+                            <Skeleton className="h-6 w-full" />
+                            <Skeleton className="h-4 w-3/4" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : stats.published === 0 ? (
+                  <Card className="border-2 border-dashed border-gray-300 dark:border-gray-700 bg-transparent">
+                    <CardContent className="py-12 text-center">
+                      <div className="w-16 h-16 mx-auto rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center mb-4">
+                        <TrendingUp className="w-8 h-8 text-green-600 dark:text-green-400" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                        No Active Tenders
+                      </h3>
+                      <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-6">
+                        You don`t have any published tenders. Publish your draft tenders to make them visible.
+                      </p>
+                      <Button
+                        onClick={() => setActiveTab('draft')}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        View Draft Tenders
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className={viewMode === 'list' ? 'space-y-6' : ''}>
+                    <OrganizationOwnerTenderList
+                      initialFilters={{ ...filters, status: 'published' }}
+                      showFilters={false}
+                      showHeader={false}
+                      viewMode={viewMode}
+                      // useOwnedTenders={true} // Add this prop
+                    />
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* Tab Content: Draft Tenders */}
+              <TabsContent value="draft" className="space-y-6">
+                {isLoadingOwnedTenders ? (
+                  <div className={viewMode === 'list' ? 'space-y-6' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'}>
+                    {Array.from({ length: 2 }).map((_, i) => (
+                      <Card key={i} className="animate-pulse">
+                        <CardContent className="p-6">
+                          <div className="space-y-3">
+                            <Skeleton className="h-6 w-16" />
+                            <Skeleton className="h-6 w-full" />
+                            <Skeleton className="h-4 w-1/2" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : stats.draft === 0 ? (
+                  <Card className="border-2 border-dashed border-gray-300 dark:border-gray-700 bg-transparent">
+                    <CardContent className="py-12 text-center">
+                      <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+                        <Clock className="w-8 h-8 text-gray-400 dark:text-gray-500" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                        No Draft Tenders
+                      </h3>
+                      <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-6">
+                        You don`t have any tenders in draft. Create a new tender or check your published tenders.
+                      </p>
+                      <div className="flex gap-3 justify-center">
+                        <Button
+                          onClick={handleCreateTender}
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          Create New Tender
+                        </Button>
+                        <Button
+                          onClick={() => setActiveTab('published')}
+                          variant="outline"
+                        >
+                          View Active Tenders
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className={viewMode === 'list' ? 'space-y-6' : ''}>
+                    <OrganizationOwnerTenderList
+                      initialFilters={{ ...filters, status: 'draft' }}
+                      showFilters={false}
+                      showHeader={false}
+                      viewMode={viewMode}
+                      // useOwnedTenders={true} // Add this prop
+                    />
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* Tab Content: Closed Tenders */}
+              <TabsContent value="closed" className="space-y-6">
+                {isLoadingOwnedTenders ? (
+                  <div className={viewMode === 'list' ? 'space-y-6' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'}>
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Card key={i} className="animate-pulse">
+                        <CardContent className="p-6">
+                          <div className="space-y-3">
+                            <Skeleton className="h-6 w-20" />
+                            <Skeleton className="h-6 w-full" />
+                            <Skeleton className="h-4 w-3/4" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : stats.closed === 0 ? (
+                  <Card className="border-2 border-dashed border-gray-300 dark:border-gray-700 bg-transparent">
+                    <CardContent className="py-12 text-center">
+                      <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+                        <Clock className="w-8 h-8 text-gray-400 dark:text-gray-500" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                        No Closed Tenders
+                      </h3>
+                      <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-6">
+                        You don`t have any closed tenders. Tenders are automatically closed when they reach their deadline.
+                      </p>
+                      <Button
+                        onClick={() => setActiveTab('published')}
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        View Active Tenders
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className={viewMode === 'list' ? 'space-y-6' : ''}>
+                    <OrganizationOwnerTenderList
+                      initialFilters={{ ...filters, status: 'closed' }}
+                      showFilters={false}
+                      showHeader={false}
+                      viewMode={viewMode}
+                      // useOwnedTenders={true} // Add this prop
+                    />
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
+      </DashboardLayout>
+    </>
   );
 };
 

@@ -1,4 +1,4 @@
-// routes/jobRoutes.js - FIXED SAVE/UNSAVE ROUTES
+// routes/jobRoutes.js - FIXED ROUTE ORDERING
 const express = require('express');
 const router = express.Router();
 const {
@@ -43,7 +43,27 @@ const createJobValidation = [
     .withMessage('Invalid experience level'),
   body('educationLevel')
     .optional()
-    .isIn(['high-school', 'diploma', 'bachelors', 'masters', 'phd', 'none-required'])
+    .isIn([
+      'primary-education',
+      'secondary-education', 
+      'tvet-level-i',
+      'tvet-level-ii',
+      'tvet-level-iii',
+      'tvet-level-iv',
+      'tvet-level-v',
+      'undergraduate-bachelors',
+      'postgraduate-masters',
+      'doctoral-phd',
+      'lecturer',
+      'professor',
+      'none-required',
+      // Backward compatibility
+      'high-school',
+      'diploma',
+      'bachelors',
+      'masters',
+      'phd'
+    ])
     .withMessage('Invalid education level'),
   body('location.region')
     .isIn([
@@ -85,7 +105,27 @@ const updateJobValidation = [
     .withMessage('Invalid experience level'),
   body('educationLevel')
     .optional()
-    .isIn(['high-school', 'diploma', 'bachelors', 'masters', 'phd', 'none-required'])
+    .isIn([
+      'primary-education',
+      'secondary-education', 
+      'tvet-level-i',
+      'tvet-level-ii',
+      'tvet-level-iii',
+      'tvet-level-iv',
+      'tvet-level-v',
+      'undergraduate-bachelors',
+      'postgraduate-masters',
+      'doctoral-phd',
+      'lecturer',
+      'professor',
+      'none-required',
+      // Backward compatibility
+      'high-school',
+      'diploma',
+      'bachelors',
+      'masters',
+      'phd'
+    ])
     .withMessage('Invalid education level'),
   body('location.region')
     .optional()
@@ -105,30 +145,40 @@ const updateJobValidation = [
     .withMessage('Invalid application deadline date')
 ];
 
-// Public routes
+// ========== PUBLIC ROUTES ==========
 router.get('/', getJobs);
 router.get('/categories', getCategories);
-router.get('/:id', getJob);
 
-// Protected routes
+// ========== PROTECTED ROUTES ==========
 router.use(verifyToken);
 
-// Company routes
-router.get('/company/my-jobs', restrictTo('company', 'admin'), getCompanyJobs);
-router.post('/', restrictTo('company', 'admin'), createJobValidation, createJob);
-router.put('/:id', restrictTo('company', 'admin'), updateJobValidation, updateJob);
-router.delete('/:id', restrictTo('company', 'admin'), deleteJob);
+// ========== SPECIFIC ROUTES (MUST COME BEFORE PARAMETERIZED ROUTES) ==========
 
-// Organization routes
+// Company specific routes
+router.get('/company/my-jobs', restrictTo('company', 'admin'), getCompanyJobs);
+
+// Organization specific routes
 router.get('/organization/my-jobs', restrictTo('organization', 'admin'), getOrganizationJobs);
+
+// Candidate specific routes
+router.get('/candidate/jobs', restrictTo('candidate'), getJobsForCandidate);
+router.get('/saved/jobs', restrictTo('candidate'), getSavedJobs);
+
+// ========== CREATE ROUTES ==========
+router.post('/', restrictTo('company', 'admin'), createJobValidation, createJob);
 router.post('/organization', restrictTo('organization', 'admin'), createJobValidation, createOrganizationJob);
+
+// ========== SAVE/UNSAVE ROUTES ==========
+router.post('/:jobId/save', restrictTo('candidate'), saveJob);
+router.post('/:jobId/unsave', restrictTo('candidate'), unsaveJob);
+
+// ========== ORGANIZATION PARAMETERIZED ROUTES ==========
 router.put('/organization/:id', restrictTo('organization', 'admin'), updateJobValidation, updateOrganizationJob);
 router.delete('/organization/:id', restrictTo('organization', 'admin'), deleteOrganizationJob);
 
-// FIXED: Candidate routes - CORRECTED SAVE/UNSAVE PATHS
-router.get('/candidate/jobs', verifyToken, restrictTo('candidate'), getJobsForCandidate);
-router.post('/:jobId/save', verifyToken, restrictTo('candidate'), saveJob); // FIXED: Removed '/job/' prefix
-router.post('/:jobId/unsave', verifyToken, restrictTo('candidate'), unsaveJob); // FIXED: Removed '/job/' prefix
-router.get('/saved/jobs', verifyToken, restrictTo('candidate'), getSavedJobs); // FIXED: Added '/jobs' for consistency
+// ========== GENERAL PARAMETERIZED ROUTES (MUST BE LAST) ==========
+router.get('/:id', getJob);
+router.put('/:id', restrictTo('company', 'admin'), updateJobValidation, updateJob);
+router.delete('/:id', restrictTo('company', 'admin'), deleteJob);
 
 module.exports = router;

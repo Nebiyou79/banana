@@ -42,6 +42,11 @@ export interface SocialLinks {
 }
 
 export interface CV {
+  viewUrl: string;
+  downloadUrl: string;
+  url: string;
+  size: any;
+  mimetype: any;
   _id: string;
   filename: string;
   originalName: string;
@@ -75,6 +80,10 @@ export interface CandidateProfile {
   website?: string;
   socialLinks?: SocialLinks;
   lastLogin?: string;
+  // NEW: Age and Gender fields
+  dateOfBirth?: string;
+  gender?: 'male' | 'female' | 'other' | 'prefer-not-to-say';
+  age?: number; // Virtual field calculated from dateOfBirth
 }
 
 export interface UploadCVResponse {
@@ -287,6 +296,37 @@ const safeApiCall = async <T>(
   }
 };
 
+// NEW: Age validation helper
+const validateAgeAndGender = (data: Partial<CandidateProfile>): string[] => {
+  const errors: string[] = [];
+
+  // Validate date of birth
+  if (data.dateOfBirth) {
+    try {
+      const dob = new Date(data.dateOfBirth);
+      const today = new Date();
+      const minDate = new Date(today.getFullYear() - 100, today.getMonth(), today.getDate());
+      const maxDate = new Date(today.getFullYear() - 16, today.getMonth(), today.getDate());
+      
+      if (dob > maxDate) {
+        errors.push('You must be at least 16 years old');
+      }
+      if (dob < minDate) {
+        errors.push('Please enter a valid date of birth');
+      }
+    } catch (error) {
+      errors.push('Invalid date of birth format');
+    }
+  }
+
+  // Validate gender
+  if (data.gender && !['male', 'female', 'other', 'prefer-not-to-say'].includes(data.gender)) {
+    errors.push('Please select a valid gender option');
+  }
+
+  return errors;
+};
+
 // Optimized payload helper to reduce data size
 const optimizeProfilePayload = (data: Partial<CandidateProfile>): Partial<CandidateProfile> => {
   try {
@@ -473,132 +513,59 @@ const validateFiles = (files: File[]): string[] => {
 
 export const candidateService = {
   // Get candidate profile
+  // Get candidate profile - FIXED
   getProfile: async (): Promise<CandidateProfile> => {
-    return safeApiCall(async () => {
+    try {
       const response = await api.get<{
         message: string; 
         success: boolean; 
         data: { user: CandidateProfile } 
-      }>('/candidate/profile', {
-        timeout: 10000,
-        params: { t: Date.now() }
-      });
+      }>('/candidate/profile');
       
       if (!response.data.success) {
-        throw new ServiceError(
-          response.data.message || 'Failed to fetch profile',
-          'SERVER'
-        );
+        throw new Error(response.data.message || 'Failed to fetch profile');
       }
       
       return response.data.data.user;
-    }, 'Failed to load profile');
+    } catch (error: any) {
+      console.error('Failed to fetch candidate profile:', error);
+      throw new Error(error.response?.data?.message || 'Failed to load profile');
+    }
   },
 
-  // Update candidate profile
+  // Update candidate profile - FIXED
   updateProfile: async (data: Partial<CandidateProfile>): Promise<CandidateProfile> => {
     try {
-      // Client-side validation
-      const validationErrors: string[] = [];
+      const response = await api.put<{
+        message: string; 
+        success: boolean; 
+        data: { user: CandidateProfile } 
+      }>('/candidate/profile', data);
 
-      // Basic validation
-      if (data.bio && data.bio.length > 1000) {
-        validationErrors.push('Bio cannot exceed 1000 characters');
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to update profile');
       }
       
-      if (data.skills && data.skills.length > 50) {
-        validationErrors.push('Maximum 50 skills allowed');
-      }
-
-      if (data.education && data.education.length > 10) {
-        validationErrors.push('Maximum 10 education entries allowed');
-      }
-
-      if (data.experience && data.experience.length > 15) {
-        validationErrors.push('Maximum 15 experience entries allowed');
-      }
-
-      // Date validation
-      const dateErrors = validateDates(data);
-      validationErrors.push(...dateErrors);
-
-      // Required field validation
-      if (data.education) {
-        data.education.forEach((edu, index) => {
-          if (!edu.institution?.trim() || !edu.degree?.trim() || !edu.startDate) {
-            validationErrors.push(`Education #${index + 1}: Institution, Degree, and Start Date are required`);
-          }
-        });
-      }
-
-      if (data.experience) {
-        data.experience.forEach((exp, index) => {
-          if (!exp.company?.trim() || !exp.position?.trim() || !exp.startDate) {
-            validationErrors.push(`Experience #${index + 1}: Company, Position, and Start Date are required`);
-          }
-        });
-      }
-
-      // Show validation errors as toasts
-      if (validationErrors.length > 0) {
-        validationErrors.forEach(error => showToastError(new ServiceError(error, 'VALIDATION', null, true)));
-        throw new ServiceError('Please fix the validation errors above', 'VALIDATION');
-      }
-
-      // Optimize payload before sending
-      const optimizedData = optimizeProfilePayload(data);
-
-      return safeApiCall(async () => {
-        const response = await api.put<{
-          message: string; 
-          success: boolean; 
-          data: { user: CandidateProfile } 
-        }>(
-          '/candidate/profile', 
-          optimizedData, 
-          {
-            timeout: 15000,
-            headers: {
-              'Content-Type': 'application/json',
-            }
-          }
-        );
-
-        if (!response.data.success) {
-          throw new ServiceError(
-            response.data.message || 'Failed to update profile',
-            'SERVER'
-          );
-        }
-        
-        showSuccess('Profile updated successfully');
-        return response.data.data.user;
-      }, 'Failed to update profile');
-
-    } catch (error) {
-      if (error instanceof ServiceError) {
-        throw error;
-      }
-      throw new ServiceError('Failed to update profile', 'CLIENT', error);
+      toast({
+        title: 'Success',
+        description: 'Profile updated successfully',
+        variant: 'default',
+      });
+      return response.data.data.user;
+    } catch (error: any) {
+      console.error('Failed to update candidate profile:', error);
+      throw new Error(error.response?.data?.message || 'Failed to update profile');
     }
   },
 
-// Upload multiple CVs
-uploadCVs: async (files: File[]): Promise<CV[]> => {
-  try {
-    // File validation - updated to 5MB
-    const fileErrors = validateFiles(files);
-    if (fileErrors.length > 0) {
-      fileErrors.forEach(error => showToastError(new ServiceError(error, 'VALIDATION', null, true)));
-      throw new ServiceError('Please fix the file validation errors above', 'VALIDATION');
-    }
-
-    const formData = new FormData();
-    files.forEach(file => {
-      formData.append('cvs', file);
-    });
-    
-    return safeApiCall(async () => {
+  // Upload CVs - FIXED
+  uploadCVs: async (files: File[]): Promise<CV[]> => {
+    try {
+      const formData = new FormData();
+      files.forEach(file => {
+        formData.append('cvs', file); // Note: field name is 'cvs' (plural)
+      });
+      
       const response = await api.post<{
         message: string; 
         success: boolean; 
@@ -606,234 +573,185 @@ uploadCVs: async (files: File[]): Promise<CV[]> => {
       }>('/candidate/cv', formData, {
         headers: { 
           'Content-Type': 'multipart/form-data',
-        },
-        timeout: 60000, // Increased timeout for larger files
-        onUploadProgress: (progressEvent) => {
-          if (progressEvent.total) {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            // Optional: Show progress toast for large files
-            if (percentCompleted % 25 === 0) { // Show at 25%, 50%, 75%, 100%
-              showInfo(`Upload progress: ${percentCompleted}%`);
-            }
-          }
         }
       });
 
       if (!response.data.success) {
-        throw new ServiceError(
-          response.data.message || 'Failed to upload CVs',
-          'SERVER'
-        );
+        throw new Error(response.data.message || 'Failed to upload CVs');
       }
       
-      showSuccess(`Successfully uploaded ${files.length} CV(s)`);
+      toast({
+        title: 'Success',
+        description: `Successfully uploaded ${files.length} CV(s)`,
+        variant: 'default',
+      });
       return response.data.data.cvs;
-    }, 'Failed to upload CVs');
-
-  } catch (error) {
-    if (error instanceof ServiceError) {
-      throw error;
+    } catch (error: any) {
+      console.error('Failed to upload CVs:', error);
+      throw new Error(error.response?.data?.message || 'Failed to upload CVs');
     }
-    throw new ServiceError('Failed to upload CVs', 'CLIENT', error);
-  }
-},
+  },
 
-  // Set primary CV
+  // Set primary CV - FIXED
   setPrimaryCV: async (cvId: string): Promise<void> => {
-    if (!cvId) {
-      const error = new ServiceError('CV ID is required', 'VALIDATION');
-      showToastError(error);
-      throw error;
-    }
-
-    return safeApiCall(async () => {
-      const response = await api.patch(`/candidate/cv/${cvId}/primary`, {}, {
-        timeout: 10000
-      });
+    try {
+      const response = await api.patch(`/candidate/cv/${cvId}/primary`);
 
       if (!response.data.success) {
-        throw new ServiceError(
-          response.data.message || 'Failed to set primary CV',
-          'SERVER'
-        );
+        throw new Error(response.data.message || 'Failed to set primary CV');
       }
       
-      showSuccess('Primary CV updated successfully');
-    }, 'Failed to set primary CV');
+      toast({
+        title: 'Success',
+        description: 'Primary CV updated successfully',
+        variant: 'default',
+      });
+    } catch (error: any) {
+      console.error('Failed to set primary CV:', error);
+      throw new Error(error.response?.data?.message || 'Failed to set primary CV');
+    }
   },
 
-  // Delete CV
+  // Delete CV - FIXED
   deleteCV: async (cvId: string): Promise<void> => {
-    if (!cvId) {
-      const error = new ServiceError('CV ID is required', 'VALIDATION');
-      showToastError(error);
-      throw error;
-    }
-
-    return safeApiCall(async () => {
-      const response = await api.delete(`/candidate/cv/${cvId}`, {
-        timeout: 10000
-      });
+    try {
+      const response = await api.delete(`/candidate/cv/${cvId}`);
 
       if (!response.data.success) {
-        throw new ServiceError(
-          response.data.message || 'Failed to delete CV',
-          'SERVER'
-        );
+        throw new Error(response.data.message || 'Failed to delete CV');
       }
       
-      showSuccess('CV deleted successfully');
-    }, 'Failed to delete CV');
+      toast({
+        title: 'Success',
+        description: 'CV deleted successfully',
+        variant: 'default',
+      });
+    } catch (error: any) {
+      console.error('Failed to delete CV:', error);
+      throw new Error(error.response?.data?.message || 'Failed to delete CV');
+    }
   },
 
-  // Get jobs for candidate
-  getJobs: async (params?: JobFilters): Promise<JobsResponse> => {
-    return safeApiCall(async () => {
-      // Validate pagination parameters
-      const safeParams = {
-        ...params,
-        page: Math.max(1, params?.page || 1),
-        limit: Math.min(50, Math.max(1, params?.limit || 12))
-      };
+  // Get CV file size - FIXED
+  getCVFileSize: (cv: CV): string => {
+    if (!cv.size) return 'Unknown size';
+    
+    const bytes = cv.size;
+    if (bytes === 0) return '0 Bytes';
 
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  },
+
+  // Get CV download URL - FIXED
+  getCVDownloadUrl: (cv: CV): string => {
+    try {
+      if (!cv) return '';
+      
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+      const cleanBackendUrl = backendUrl.replace(/\/+$/, '');
+      
+      // Use filename for download URL
+      if (cv.filename) {
+        return `${cleanBackendUrl}/uploads/cv/${cv.filename}`;
+      }
+      
+      // Fallback to path
+      if (cv.path) {
+        return `${cleanBackendUrl}${cv.path.startsWith('/') ? cv.path : `/${cv.path}`}`;
+      }
+
+      return '';
+    } catch (error) {
+      console.error('Error generating CV download URL:', error);
+      return '';
+    }
+  },
+
+  // Get jobs for candidate - FIXED
+  getJobs: async (params?: JobFilters): Promise<JobsResponse> => {
+    try {
       const response = await api.get<{
         message: string; 
         success: boolean; 
         data: any[]; 
         pagination: any 
-      }>('/candidate/jobs', { 
-        params: safeParams,
-        timeout: 10000
-      });
+      }>('/candidate/jobs', { params });
 
       if (!response.data.success) {
-        throw new ServiceError(
-          response.data.message || 'Failed to fetch jobs',
-          'SERVER'
-        );
+        throw new Error(response.data.message || 'Failed to fetch jobs');
       }
       
       return {
         data: response.data.data,
         pagination: response.data.pagination
       };
-    }, 'Failed to fetch jobs');
+    } catch (error: any) {
+      console.error('Failed to fetch jobs:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch jobs');
+    }
   },
 
-// Save job for candidate
-saveJob: async (jobId: string): Promise<{ saved: boolean }> => {
-  try {
-    console.log('💾 saveJob called for job:', jobId);
-    
-    const response = await api.post<{
-      message: string; 
-      success: boolean; 
-      data: { saved: boolean } 
-    }>(`/job/${jobId}/save`);
+  // Save job - FIXED
+  saveJob: async (jobId: string): Promise<{ saved: boolean }> => {
+    try {
+      const response = await api.post<{
+        message: string; 
+        success: boolean; 
+        data: { saved: boolean } 
+      }>(`/job/${jobId}/save`);
 
-    console.log('📡 Save job response:', response.data);
-
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Failed to save job');
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to save job');
+      }
+      
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Failed to save job:', error);
+      throw new Error(error.response?.data?.message || 'Failed to save job');
     }
-    
-    // Don't show toast here - let component handle it
-    return response.data.data;
-  } catch (error: any) {
-    console.error('❌ saveJob error:', error);
-    handleError(error, 'Failed to save job');
-    throw error;
-  }
-},
+  },
 
-// Unsave job for candidate
-unsaveJob: async (jobId: string): Promise<{ saved: boolean }> => {
-  try {
-    console.log('🗑️ unsaveJob called for job:', jobId);
-    
-    const response = await api.post<{
-      message: string; 
-      success: boolean; 
-      data: { saved: boolean } 
-    }>(`/job/${jobId}/unsave`);
+  // Unsave job - FIXED
+  unsaveJob: async (jobId: string): Promise<{ saved: boolean }> => {
+    try {
+      const response = await api.post<{
+        message: string; 
+        success: boolean; 
+        data: { saved: boolean } 
+      }>(`/job/${jobId}/unsave`);
 
-    console.log('📡 Unsave job response:', response.data);
-
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Failed to unsave job');
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to unsave job');
+      }
+      
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Failed to unsave job:', error);
+      throw new Error(error.response?.data?.message || 'Failed to unsave job');
     }
-    
-    // Don't show toast here - let component handle it
-    return response.data.data;
-  } catch (error: any) {
-    console.error('❌ unsaveJob error:', error);
-    handleError(error, 'Failed to unsave job');
-    throw error;
-  }
-},
+  },
 
-  // Get saved jobs
+  // Get saved jobs - FIXED
   getSavedJobs: async (): Promise<any[]> => {
-    return safeApiCall(async () => {
+    try {
       const response = await api.get<{
         message: string; 
         success: boolean; 
         data: any[] 
-      }>('/candidate/jobs/saved', {
-        timeout: 10000
-      });
+      }>('/candidate/jobs/saved');
 
       if (!response.data.success) {
-        throw new ServiceError(
-          response.data.message || 'Failed to fetch saved jobs',
-          'SERVER'
-        );
+        throw new Error(response.data.message || 'Failed to fetch saved jobs');
       }
       
       return response.data.data;
-    }, 'Failed to fetch saved jobs');
-  },
-
-  // CV download URL - now with proper error handling
-  getCVDownloadUrl: (cv: CV): string => {
-    try {
-      if (!cv) {
-        throw new ServiceError('CV data is required', 'VALIDATION');
-      }
-
-      let backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-      
-      // Remove /api/v1 from backendUrl if it exists
-      if (backendUrl.includes('/api/v1')) {
-        backendUrl = backendUrl.replace('/api/v1', '');
-      }
-
-      // Method 1: Use filename directly (most reliable)
-      if (cv.filename) {
-        return `${backendUrl}/uploads/cv/${cv.filename}`;
-      }
-      
-      // Method 2: If no filename, clean up the path
-      let downloadPath = cv.path || '';
-      
-      // Remove any /api/v1 prefixes from the path
-      if (downloadPath.includes('/api/v1')) {
-        downloadPath = downloadPath.replace('/api/v1', '');
-      }
-      
-      // Ensure the path starts with /uploads
-      if (!downloadPath.startsWith('/uploads/')) {
-        downloadPath = `/uploads/cv/${downloadPath.startsWith('/') ? downloadPath.slice(1) : downloadPath}`;
-      }
-      
-      // Clean any double slashes
-      downloadPath = downloadPath.replace(/([^:]\/)\/+/g, '$1');
-      
-      return `${backendUrl}${downloadPath}`;
-    } catch (error) {
-      console.error('Error generating CV download URL:', error);
-      showToastError(new ServiceError('Failed to generate download URL', 'CLIENT', error));
-      return '';
+    } catch (error: any) {
+      console.error('Failed to fetch saved jobs:', error);
+      return [];
     }
   }
 };

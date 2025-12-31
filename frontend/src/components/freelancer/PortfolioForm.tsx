@@ -473,7 +473,7 @@ const PortfolioForm: React.FC<PortfolioFormProps> = ({ item, onSubmit, onCancel,
               >
                 {uploadingFiles ? (
                   <div className="flex flex-col items-center">
-                    <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                    <div className="w-12 h-12 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
                     <p className="text-lg font-medium text-gray-700">Uploading files...</p>
                   </div>
                 ) : (

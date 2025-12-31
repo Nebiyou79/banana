@@ -13,6 +13,7 @@ export interface IUser {
   verificationStatus?: "none" | "partial" | "full";
   examScore?: number;
   cvUrl?: string;
+  avatar?: string;
 }
 
 export interface IJob {

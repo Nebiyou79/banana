@@ -58,7 +58,7 @@ const validateOrganizationData = (data: Partial<OrganizationProfile>): void => {
     });
     throw error;
   }
-  
+
   if (data.name && data.name.trim().length > 100) {
     const error = new Error('Organization name cannot exceed 100 characters');
     toast({
@@ -68,7 +68,7 @@ const validateOrganizationData = (data: Partial<OrganizationProfile>): void => {
     });
     throw error;
   }
-  
+
   if (data.description && data.description.length > 1000) {
     const error = new Error('Description cannot exceed 1000 characters');
     toast({
@@ -78,7 +78,7 @@ const validateOrganizationData = (data: Partial<OrganizationProfile>): void => {
     });
     throw error;
   }
-  
+
   if (data.mission && data.mission.length > 500) {
     const error = new Error('Mission statement cannot exceed 500 characters');
     toast({
@@ -88,7 +88,7 @@ const validateOrganizationData = (data: Partial<OrganizationProfile>): void => {
     });
     throw error;
   }
-  
+
   // Relaxed website validation
   if (data.website && data.website.trim() !== '' && !isValidUrl(data.website)) {
     const error = new Error('Please enter a valid website URL (including http:// or https://)');
@@ -99,7 +99,7 @@ const validateOrganizationData = (data: Partial<OrganizationProfile>): void => {
     });
     throw error;
   }
-  
+
   // Phone validation
   if (data.phone && data.phone.trim() !== '' && !isValidPhone(data.phone)) {
     const error = new Error('Please enter a valid phone number');
@@ -127,7 +127,7 @@ const isValidUrl = (url: string): boolean => {
   try {
     // Allow empty strings and trim whitespace
     if (!url || url.trim() === '') return true;
-    
+
     const urlObj = new URL(url);
     return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
   } catch {
@@ -138,7 +138,7 @@ const isValidUrl = (url: string): boolean => {
 const isValidPhone = (phone: string): boolean => {
   // Basic phone validation - allow various formats
   if (!phone || phone.trim() === '') return true;
-  
+
   const phoneRegex = /^[\+]?[1-9][\d]{0,15}$|^[\+]?[\(\)\-\s\d]+$/;
   return phoneRegex.test(phone.replace(/[\s\(\)\-]/g, ''));
 };
@@ -146,9 +146,9 @@ const isValidPhone = (phone: string): boolean => {
 // Simple error handler that shows toast and returns the error
 const handleServiceError = (error: any, defaultMessage: string, context?: string): Error => {
   console.error(`[OrganizationService${context ? `: ${context}` : ''}] Error:`, error);
-  
+
   let errorMessage = defaultMessage;
-  
+
   // Network errors
   if (error.code === 'NETWORK_ERROR' || !error.response) {
     errorMessage = 'Please check your internet connection and try again.';
@@ -206,11 +206,11 @@ export const organizationService = {
   getMyOrganization: async (): Promise<OrganizationProfile | null> => {
     try {
       const response = await api.get<ApiResponse<OrganizationProfile | null>>('/organization');
-      
+
       if (!response.data.success) {
         return null;
       }
-      
+
       return response.data.data || null;
     } catch (error: any) {
       if (error.response?.status === 404 || error.response?.status === 400) {
@@ -233,9 +233,9 @@ export const organizationService = {
         });
         throw error;
       }
-      
+
       const response = await api.get<ApiResponse<OrganizationProfile>>(`/organization/${id}`);
-      
+
       if (!response.data.success || !response.data.data) {
         const error = new Error(response.data.message || 'Failed to fetch organization');
         toast({
@@ -245,7 +245,7 @@ export const organizationService = {
         });
         throw error;
       }
-      
+
       return response.data.data;
     } catch (error: any) {
       // Show toast and re-throw the error
@@ -258,9 +258,9 @@ export const organizationService = {
   createOrganization: async (data: Partial<OrganizationProfile>): Promise<OrganizationProfile> => {
     try {
       validateOrganizationData(data);
-      
+
       const response = await api.post<ApiResponse<OrganizationProfile>>('/organization', data);
-      
+
       if (!response.data.success || !response.data.data) {
         const error = new Error(response.data.message || 'Failed to create organization profile');
         toast({
@@ -270,13 +270,13 @@ export const organizationService = {
         });
         throw error;
       }
-      
+
       toast({
         title: 'Success',
         description: 'Organization profile created successfully!',
         variant: 'success',
       });
-      
+
       return response.data.data;
     } catch (error: any) {
       // Show toast and re-throw the error
@@ -297,11 +297,11 @@ export const organizationService = {
         });
         throw error;
       }
-      
+
       validateOrganizationData(data);
-      
+
       const response = await api.put<ApiResponse<OrganizationProfile>>(`/organization/${id}`, data);
-      
+
       if (!response.data.success || !response.data.data) {
         const error = new Error(response.data.message || 'Failed to update organization');
         toast({
@@ -311,13 +311,13 @@ export const organizationService = {
         });
         throw error;
       }
-      
+
       toast({
         title: 'Success',
         description: 'Organization updated successfully!',
         variant: 'success',
       });
-      
+
       return response.data.data;
     } catch (error: any) {
       // Show toast and re-throw the error
@@ -330,13 +330,13 @@ export const organizationService = {
   updateMyOrganization: async (data: Partial<OrganizationProfile>): Promise<OrganizationProfile> => {
     try {
       console.log('Updating organization with data:', data);
-      
+
       validateOrganizationData(data);
-      
+
       const response = await api.put<ApiResponse<OrganizationProfile>>('/organization/me', data);
-      
+
       console.log('Update response:', response.data);
-      
+
       if (!response.data.success || !response.data.data) {
         const error = new Error(response.data.message || 'Failed to update organization profile');
         toast({
@@ -346,13 +346,13 @@ export const organizationService = {
         });
         throw error;
       }
-      
+
       toast({
         title: 'Success',
         description: 'Organization profile updated successfully!',
         variant: 'success',
       });
-      
+
       return response.data.data;
     } catch (error: any) {
       console.error('Update error:', error);
@@ -390,7 +390,7 @@ export const organizationService = {
         description: 'Logo uploaded successfully!',
         variant: 'success',
       });
-      
+
       return response.data;
     } catch (error: any) {
       // Show toast and re-throw the error
@@ -427,7 +427,7 @@ export const organizationService = {
         description: 'Banner uploaded successfully!',
         variant: 'success',
       });
-      
+
       return response.data;
     } catch (error: any) {
       // Show toast and re-throw the error
@@ -497,16 +497,16 @@ export const organizationService = {
 
   getFullImageUrl: (imageUrl: string | undefined): string | undefined => {
     if (!imageUrl) return undefined;
-    
+
     if (imageUrl.startsWith('http')) {
       return imageUrl;
     }
-    
+
     if (imageUrl.startsWith('/uploads')) {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:4000';
       return `${baseUrl}${imageUrl}`;
     }
-    
+
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
     return `${baseUrl}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
   },

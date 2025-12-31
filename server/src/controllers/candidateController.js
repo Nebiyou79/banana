@@ -42,9 +42,29 @@ const handleControllerError = (error, res, customMessage = 'Internal server erro
   });
 };
 
-// Enhanced validation helper
+// Enhanced validation helper with age and gender validation
 const validateProfileData = (updateData) => {
   const errors = [];
+
+  // Validate date of birth
+  if (updateData.dateOfBirth) {
+    const dob = new Date(updateData.dateOfBirth);
+    const today = new Date();
+    const minDate = new Date(today.getFullYear() - 100, today.getMonth(), today.getDate());
+    const maxDate = new Date(today.getFullYear() - 16, today.getMonth(), today.getDate());
+    
+    if (dob > maxDate) {
+      errors.push('You must be at least 16 years old');
+    }
+    if (dob < minDate) {
+      errors.push('Please enter a valid date of birth');
+    }
+  }
+
+  // Validate gender
+  if (updateData.gender && !['male', 'female', 'other', 'prefer-not-to-say'].includes(updateData.gender)) {
+    errors.push('Please select a valid gender option');
+  }
 
   // Validate education dates
   if (updateData.education) {
@@ -158,7 +178,7 @@ exports.updateProfile = async (req, res) => {
         new: true,
         runValidators: true
       }
-    ).select('name email role verificationStatus profileCompleted skills education experience certifications cvs portfolio bio location phone website socialLinks');
+    ).select('name email role verificationStatus profileCompleted skills education experience certifications cvs portfolio bio location phone website socialLinks dateOfBirth gender');
 
     if (!user) {
       return res.status(404).json({
@@ -190,7 +210,7 @@ exports.getProfile = async (req, res) => {
     }
 
     const user = await User.findById(userId)
-      .select('name email role verificationStatus profileCompleted skills education experience certifications cvs portfolio bio location phone website socialLinks lastLogin')
+      .select('name email role verificationStatus profileCompleted skills education experience certifications cvs portfolio bio location phone website socialLinks dateOfBirth gender lastLogin')
       .lean();
 
     if (!user) {
@@ -198,6 +218,18 @@ exports.getProfile = async (req, res) => {
         success: false,
         message: 'User not found'
       });
+    }
+
+    // Calculate age from dateOfBirth
+    if (user.dateOfBirth) {
+      const today = new Date();
+      const birthDate = new Date(user.dateOfBirth);
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      user.age = age;
     }
 
     res.json({
@@ -520,8 +552,6 @@ exports.getJobsForCandidate = async (req, res) => {
     handleControllerError(error, res, 'Error fetching jobs');
   }
 };
-
-// candidateController.js - ADD THESE TWO NEW FUNCTIONS
 
 // @desc    Save job for candidate
 // @route   POST /api/v1/job/:jobId/save

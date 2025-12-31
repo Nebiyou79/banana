@@ -1,9 +1,8 @@
-// components/freelancer/DashboardStats.tsx
 'use client';
 
 import React from 'react';
-import { 
-  EyeIcon, 
+import {
+  EyeIcon,
   StarIcon,
   CheckBadgeIcon,
   AcademicCapIcon,
@@ -11,10 +10,11 @@ import {
   UserGroupIcon
 } from '@heroicons/react/24/outline';
 import { colorClasses } from '@/utils/color';
+import VerificationBadge from '@/components/verifcation/VerificationBadge';
 
 interface StatsCardProps {
   title: string;
-  value: string | number;
+  value: string | number | React.ReactNode;
   subtitle: string;
   icon: React.ReactNode;
   color: 'gold' | 'darkNavy' | 'teal' | 'orange' | 'blue' | 'purple' | 'green';
@@ -66,7 +66,9 @@ const StatsCard: React.FC<StatsCardProps> = ({ title, value, subtitle, icon, col
       <div className="flex items-center justify-between mb-4">
         <div>
           <p className="text-sm font-semibold text-gray-600 uppercase tracking-wide">{title}</p>
-          <p className={`text-3xl font-bold ${colorClasses.text.darkNavy} mt-2`}>{value}</p>
+          <div className={`text-3xl font-bold ${colorClasses.text.darkNavy} mt-2`}>
+            {value}
+          </div>
         </div>
         <div className={`p-3 rounded-xl ${config.bg} text-white group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
           {icon}
@@ -85,6 +87,7 @@ interface DashboardStatsProps {
       completion: number;
       views: number;
       verified: boolean;
+      verificationStatus?: 'none' | 'partial' | 'full';
     };
     portfolio: {
       total: number;
@@ -116,8 +119,13 @@ interface DashboardStatsProps {
 const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
   const certificationsCount = stats.certifications?.total || 0;
 
+  // Determine verification status from props or fallback to boolean
+  const verificationStatus = stats.profile.verificationStatus
+    ? (stats.profile.verified ? 'full' : 'none')
+    : (stats.profile.verified ? 'full' : 'none');
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">      
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {/* Profile Views */}
       <StatsCard
         title="Profile Views"
@@ -126,7 +134,7 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
         icon={<EyeIcon className="w-6 h-6" />}
         color="teal"
       />
-      
+
       {/* Portfolio Items */}
       <StatsCard
         title="Portfolio"
@@ -135,7 +143,7 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
         icon={<StarIcon className="w-6 h-6" />}
         color="blue"
       />
-      
+
       {/* Skills */}
       <StatsCard
         title="Skills"
@@ -144,7 +152,7 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
         icon={<AcademicCapIcon className="w-6 h-6" />}
         color="darkNavy"
       />
-      
+
       {/* Certifications */}
       <StatsCard
         title="Certifications"
@@ -153,7 +161,7 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
         icon={<AcademicCapIcon className="w-6 h-6" />}
         color="teal"
       />
-      
+
       {/* Proposals */}
       <StatsCard
         title="Proposals"
@@ -162,7 +170,7 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
         icon={<BriefcaseIcon className="w-6 h-6" />}
         color="purple"
       />
-      
+
       {/* Pending Proposals */}
       <StatsCard
         title="Active Proposals"
@@ -171,7 +179,7 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
         icon={<UserGroupIcon className="w-6 h-6" />}
         color="orange"
       />
-      
+
       {/* Ratings */}
       <StatsCard
         title="Rating"
@@ -180,11 +188,20 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
         icon={<CheckBadgeIcon className="w-6 h-6" />}
         color="green"
       />
-      
+
       {/* Verification Status */}
       <StatsCard
-        title="Verified"
-        value={stats.profile.verified ? "Yes" : "No"}
+        title="Verification"
+        value={
+          <VerificationBadge
+            status={verificationStatus}
+            size="md"
+            showText={true}
+            showTooltip={true}
+            className="text-sm"
+            autoFetch={false}
+          />
+        }
         subtitle="Profile status"
         icon={<CheckBadgeIcon className="w-6 h-6" />}
         color={stats.profile.verified ? "green" : "orange"}

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// components/OrganizationJobForm.tsx
+// components/OrganizationJobForm.tsx - FIXED VERSION WITH ALL CATEGORIES
 import React, { useState, useEffect } from 'react';
 import { Job, EthiopianLocation, JobSalary, Duration, VolunteerInfo, jobService } from '@/services/jobService';
 import { 
@@ -19,7 +19,8 @@ import {
   Heart,
   Home,
   GraduationCap,
-  Star
+  Star,
+  Filter
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -31,6 +32,14 @@ type OrganizationJobFormData = Omit<Job, '_id' | 'company' | 'organization' | 'c
   shortDescription: string;
   status: 'draft' | 'active' | 'paused' | 'closed' | 'archived';
   jobType: 'organization';
+  demographicRequirements?: {
+    sex: 'male' | 'female' | 'any';
+    age?: {
+      min?: number;
+      max?: number;
+    };
+  };
+  jobNumber?: string;
 };
 
 interface OrganizationJobFormProps {
@@ -75,9 +84,9 @@ const OrganizationJobForm: React.FC<OrganizationJobFormProps> = ({
       isPublic: true,
       isNegotiable: false
     },
-    category: 'ngo-development',
+    category: 'nonprofit-manager',
     experienceLevel: 'mid-level',
-    educationLevel: 'bachelors',
+    educationLevel: 'undergraduate-bachelors',
     status: 'draft',
     applicationDeadline: '',
     remote: 'on-site',
@@ -98,20 +107,51 @@ const OrganizationJobForm: React.FC<OrganizationJobFormProps> = ({
     tags: [],
     featured: false,
     urgent: false,
-    premium: false
+    premium: false,
+    demographicRequirements: {
+      sex: 'any',
+      age: {
+        min: undefined,
+        max: undefined
+      }
+    },
+    jobNumber: ''
   });
 
   const [currentTag, setCurrentTag] = useState('');
   const [currentStep, setCurrentStep] = useState(1);
   const [showPreview, setShowPreview] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [categorySearch, setCategorySearch] = useState('');
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
-  // Get data from service
+  // Get data from service - USE ALL CATEGORIES NOW
   const ethiopianRegions = jobService.getEthiopianRegions();
-  const jobCategories = jobService.getJobCategories();
+  const jobCategories = jobService.getJobCategories(); // This now returns all categories
+  const educationLevels = jobService.getEducationLevels();
   const opportunityTypes = jobService.getOpportunityTypes();
   const commitmentLevels = jobService.getCommitmentLevels();
   const durationUnits = jobService.getDurationUnits();
+
+  // REMOVED: No longer filtering categories for organizations
+  // Organizations can now use any category
+
+  // Filter categories based on search
+  const filteredCategories = jobCategories.filter(category =>
+    category.label.toLowerCase().includes(categorySearch.toLowerCase())
+  );
+
+  // Safe education level normalization function
+  const normalizeEducationLevel = (level: string): Job['educationLevel'] => {
+    const mapping: Record<string, Job['educationLevel']> = {
+      'high-school': 'secondary-education',
+      'diploma': 'tvet-level-iii',
+      'bachelors': 'undergraduate-bachelors',
+      'masters': 'postgraduate-masters',
+      'phd': 'doctoral-phd'
+    };
+    return mapping[level] || (level as Job['educationLevel']);
+  };
 
   useEffect(() => {
     if (initialData) {
@@ -159,10 +199,25 @@ const OrganizationJobForm: React.FC<OrganizationJobFormProps> = ({
         tags: initialData.tags || [],
         featured: initialData.featured || false,
         urgent: initialData.urgent || false,
-        premium: initialData.premium || false
+        premium: initialData.premium || false,
+        demographicRequirements: initialData.demographicRequirements || {
+          sex: 'any',
+          age: {
+            min: undefined,
+            max: undefined
+          }
+        },
+        jobNumber: initialData.jobNumber || ''
       };
       
       setFormData(transformedData);
+      // Set category search to display the current category label
+      if (initialData.category) {
+        const currentCategory = jobCategories.find(cat => cat.value === initialData.category);
+        if (currentCategory) {
+          setCategorySearch(currentCategory.label);
+        }
+      }
     }
   }, [initialData]);
 
@@ -207,6 +262,20 @@ const OrganizationJobForm: React.FC<OrganizationJobFormProps> = ({
     if (formData.opportunityType === 'volunteer' && formData.volunteerInfo) {
       if (formData.volunteerInfo.hoursPerWeek && formData.volunteerInfo.hoursPerWeek > 168) {
         newErrors.hoursPerWeek = 'Hours per week cannot exceed 168';
+      }
+    }
+
+    // Validate age requirements
+    if (formData.demographicRequirements?.age) {
+      const { min, max } = formData.demographicRequirements.age;
+      if (min && max && min > max) {
+        newErrors.age = 'Minimum age cannot be greater than maximum age';
+      }
+      if (min && (min < 18 || min > 100)) {
+        newErrors.age = 'Minimum age must be between 18 and 100';
+      }
+      if (max && (max < 18 || max > 100)) {
+        newErrors.age = 'Maximum age must be between 18 and 100';
       }
     }
 
@@ -290,6 +359,23 @@ const OrganizationJobForm: React.FC<OrganizationJobFormProps> = ({
     }
   };
 
+  const handleDemographicChange = (field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      demographicRequirements: {
+        ...prev.demographicRequirements!,
+        [field]: field === 'sex' ? value : {
+          ...prev.demographicRequirements?.age,
+          ...value
+        }
+      }
+    }));
+
+    if (errors.age) {
+      setErrors(prev => ({ ...prev, age: '' }));
+    }
+  };
+
   const handleArrayChange = (
     field: 'requirements' | 'responsibilities' | 'benefits' | 'skills', 
     index: number, 
@@ -338,6 +424,15 @@ const OrganizationJobForm: React.FC<OrganizationJobFormProps> = ({
     }));
   };
 
+  const handleCategorySelect = (categoryValue: string, categoryLabel: string) => {
+    setFormData(prev => ({
+      ...prev,
+      category: categoryValue
+    }));
+    setCategorySearch(categoryLabel);
+    setShowCategoryDropdown(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent, status?: 'draft' | 'active' | 'paused' | 'closed' | 'archived') => {
     e.preventDefault();
     
@@ -350,23 +445,59 @@ const OrganizationJobForm: React.FC<OrganizationJobFormProps> = ({
       return;
     }
 
-    // Prepare data for submission
+    // Prepare data for submission - ensure all fields are properly formatted
     const submitData: Partial<Job> = {
-      ...formData,
-      status: status || formData.status,
+      title: formData.title.trim(),
+      description: formData.description.trim(),
+      shortDescription: formData.shortDescription?.trim() || '',
       requirements: formData.requirements.filter(req => req.trim() !== ''),
       responsibilities: formData.responsibilities.filter(resp => resp.trim() !== ''),
       benefits: formData.benefits.filter(benefit => benefit.trim() !== ''),
       skills: formData.skills.filter(skill => skill.trim() !== ''),
-      salary: formData.salary?.min || formData.salary?.max ? formData.salary : undefined,
-      duration: formData.duration?.value || formData.duration?.isOngoing ? formData.duration : undefined,
-      volunteerInfo: formData.opportunityType === 'volunteer' ? formData.volunteerInfo : undefined,
-      applicationDeadline: formData.applicationDeadline ? new Date(formData.applicationDeadline).toISOString() : undefined,
-      shortDescription: formData.shortDescription || '',
-      educationLevel: formData.educationLevel,
-      subCategory: formData.subCategory,
-      jobType: 'organization' as const
+      type: formData.type,
+      location: formData.location,
+      category: formData.category,
+      experienceLevel: formData.experienceLevel,
+      educationLevel: formData.educationLevel ? normalizeEducationLevel(formData.educationLevel) : undefined,
+      status: status || formData.status,
+      remote: formData.remote,
+      workArrangement: formData.workArrangement,
+      jobType: 'organization',
+      opportunityType: formData.opportunityType,
+      featured: formData.featured,
+      urgent: formData.urgent,
+      premium: formData.premium,
+      tags: formData.tags,
+      demographicRequirements: formData.demographicRequirements,
+      jobNumber: formData.jobNumber?.trim() || undefined
     };
+
+    // Only include salary if it has values
+    if (formData.salary?.min || formData.salary?.max) {
+      submitData.salary = formData.salary;
+    }
+
+    // Include duration for organization opportunities
+    if (formData.duration?.value || formData.duration?.isOngoing) {
+      submitData.duration = formData.duration;
+    }
+
+    // Include volunteer info for volunteer opportunities
+    if (formData.opportunityType === 'volunteer' && formData.volunteerInfo) {
+      submitData.volunteerInfo = formData.volunteerInfo;
+    }
+
+    // Format application deadline properly
+    if (formData.applicationDeadline) {
+      submitData.applicationDeadline = new Date(formData.applicationDeadline).toISOString();
+    }
+
+    // Include subCategory if it exists
+    if (formData.subCategory) {
+      submitData.subCategory = formData.subCategory;
+    }
+    
+    console.log('📤 Submitting organization opportunity data:', submitData);
     
     try {
       await onSubmit(submitData);
@@ -394,18 +525,6 @@ const OrganizationJobForm: React.FC<OrganizationJobFormProps> = ({
   const selectedRegion = ethiopianRegions.find(region => region.slug === formData.location.region);
   const isInternational = formData.location.region === 'international';
   const isVolunteerOpportunity = formData.opportunityType === 'volunteer';
-
-  // Filter categories to show more relevant ones for organizations
-  const organizationCategories = jobCategories.filter(cat => 
-    cat.value.includes('ngo') || 
-    cat.value.includes('development') || 
-    cat.value.includes('social') || 
-    cat.value.includes('community') ||
-    cat.value.includes('education') ||
-    cat.value.includes('healthcare') ||
-    cat.value.includes('environmental') ||
-    cat.value === 'other'
-  );
 
   return (
     <div className="max-w-6xl mx-auto bg-white rounded-2xl p-8 shadow-lg border border-gray-200">
@@ -530,7 +649,7 @@ const OrganizationJobForm: React.FC<OrganizationJobFormProps> = ({
                     value={formData.title}
                     onChange={handleInputChange}
                     required
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 ${
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
                       errors.title ? 'border-red-300' : 'border-gray-300'
                     }`}
                     placeholder="e.g. Community Development Volunteer, Education Program Intern..."
@@ -538,6 +657,21 @@ const OrganizationJobForm: React.FC<OrganizationJobFormProps> = ({
                   {errors.title && (
                     <p className="mt-1 text-sm text-red-600">{errors.title}</p>
                   )}
+                </div>
+
+                {/* Job Number */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Opportunity Number (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    name="jobNumber"
+                    value={formData.jobNumber}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="e.g. ORG-2024-001"
+                  />
                 </div>
 
                 {/* Short Description */}
@@ -600,27 +734,43 @@ const OrganizationJobForm: React.FC<OrganizationJobFormProps> = ({
                   </select>
                 </div>
 
-                {/* Category */}
-                <div>
+                {/* Category with Search - NOW SHOWS ALL CATEGORIES */}
+                <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Category *
                   </label>
-                  <select
-                    name="category"
-                    value={formData.category}
-                    onChange={handleInputChange}
-                    required
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
-                      errors.category ? 'border-red-300' : 'border-gray-300'
-                    }`}
-                  >
-                    <option value="">Select a category</option>
-                    {organizationCategories.map(category => (
-                      <option key={category.value} value={category.value}>
-                        {category.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={categorySearch}
+                      onChange={(e) => {
+                        setCategorySearch(e.target.value);
+                        setShowCategoryDropdown(true);
+                      }}
+                      onFocus={() => setShowCategoryDropdown(true)}
+                      placeholder="Search or select category..."
+                      className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+                        errors.category ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                    />
+                    <Filter className="absolute right-3 top-3.5 h-4 w-4 text-gray-400" />
+                  </div>
+                  {showCategoryDropdown && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {filteredCategories.map(category => (
+                        <div
+                          key={category.value}
+                          onClick={() => handleCategorySelect(category.value, category.label)}
+                          className="px-4 py-2 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                        >
+                          {category.label}
+                        </div>
+                      ))}
+                      {filteredCategories.length === 0 && (
+                        <div className="px-4 py-2 text-gray-500">No categories found</div>
+                      )}
+                    </div>
+                  )}
                   {errors.category && (
                     <p className="mt-1 text-sm text-red-600">{errors.category}</p>
                   )}
@@ -645,6 +795,84 @@ const OrganizationJobForm: React.FC<OrganizationJobFormProps> = ({
                     <option value="director">Director</option>
                     <option value="executive">Executive</option>
                   </select>
+                </div>
+
+                {/* Education Level */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Education Level
+                  </label>
+                  <select
+                    name="educationLevel"
+                    value={formData.educationLevel}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  >
+                    {educationLevels.map(level => (
+                      <option key={level.value} value={level.value}>
+                        {level.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Demographic Requirements */}
+                <div className="lg:col-span-2 border-t pt-4 mt-4">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <Users className="w-5 h-5 mr-2 text-purple-600" />
+                    Demographic Requirements
+                  </h4>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Gender Preference
+                      </label>
+                      <select
+                        value={formData.demographicRequirements?.sex || 'any'}
+                        onChange={(e) => handleDemographicChange('sex', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      >
+                        <option value="any">Any Gender</option>
+                        <option value="male">Male Only</option>
+                        <option value="female">Female Only</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Minimum Age
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.demographicRequirements?.age?.min || ''}
+                        onChange={(e) => handleDemographicChange('age', { min: e.target.value ? Number(e.target.value) : undefined })}
+                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+                          errors.age ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                        placeholder="18"
+                        min="18"
+                        max="100"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Maximum Age
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.demographicRequirements?.age?.max || ''}
+                        onChange={(e) => handleDemographicChange('age', { max: e.target.value ? Number(e.target.value) : undefined })}
+                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+                          errors.age ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                        placeholder="65"
+                        min="18"
+                        max="100"
+                      />
+                    </div>
+                  </div>
+                  {errors.age && (
+                    <p className="mt-1 text-sm text-red-600">{errors.age}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1081,12 +1309,11 @@ const OrganizationJobForm: React.FC<OrganizationJobFormProps> = ({
                       onChange={handleInputChange}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     >
-                      <option value="high-school">High School</option>
-                      <option value="diploma">Diploma</option>
-                      <option value="bachelors">Bachelor`s Degree</option>
-                      <option value="masters">Master`s Degree</option>
-                      <option value="phd">PhD</option>
-                      <option value="none-required">Not Required</option>
+                      {educationLevels.map(level => (
+                        <option key={level.value} value={level.value}>
+                          {level.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -1204,6 +1431,12 @@ const OrganizationJobForm: React.FC<OrganizationJobFormProps> = ({
                         <dt className="text-sm font-medium text-gray-500">Title</dt>
                         <dd className="text-sm text-gray-900">{formData.title}</dd>
                       </div>
+                      {formData.jobNumber && (
+                        <div>
+                          <dt className="text-sm font-medium text-gray-500">Opportunity Number</dt>
+                          <dd className="text-sm text-gray-900">{formData.jobNumber}</dd>
+                        </div>
+                      )}
                       <div>
                         <dt className="text-sm font-medium text-gray-500">Opportunity Type</dt>
                         <dd className="text-sm text-gray-900">
@@ -1217,7 +1450,7 @@ const OrganizationJobForm: React.FC<OrganizationJobFormProps> = ({
                       <div>
                         <dt className="text-sm font-medium text-gray-500">Category</dt>
                         <dd className="text-sm text-gray-900">
-                          {organizationCategories.find(cat => cat.value === formData.category)?.label}
+                          {jobCategories.find(cat => cat.value === formData.category)?.label}
                         </dd>
                       </div>
                       <div>
@@ -1227,6 +1460,24 @@ const OrganizationJobForm: React.FC<OrganizationJobFormProps> = ({
                             ? 'Ongoing' 
                             : `${formData.duration?.value} ${formData.duration?.unit}`
                           }
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500">Education Level</dt>
+                        <dd className="text-sm text-gray-900">
+                          {educationLevels.find(ed => ed.value === formData.educationLevel)?.label || formData.educationLevel}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500">Gender Preference</dt>
+                        <dd className="text-sm text-gray-900">
+                          {jobService.getSexRequirementLabel(formData.demographicRequirements?.sex || 'any')}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500">Age Requirements</dt>
+                        <dd className="text-sm text-gray-900">
+                          {jobService.formatAgeRequirement(formData.demographicRequirements)}
                         </dd>
                       </div>
                     </dl>

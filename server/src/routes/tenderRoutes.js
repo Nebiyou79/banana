@@ -1,72 +1,187 @@
 const express = require('express');
-const {
-  createTender,
-  getTenders,
-  getTender,
-  updateTender,
-  deleteTender,
-  getMyTenders,
-  getMyOrganizationTenders, // Add this
-  getMyAllTenders, // Add this
-  toggleSaveTender,
-  getSavedTenders
-} = require('../controllers/tenderController');
-const { verifyToken } = require('../middleware/authMiddleware');
-const { restrictTo } = require('../middleware/roleMiddleware');
-
 const router = express.Router();
+const { verifyToken, optionalAuth } = require('../middleware/authMiddleware');
+const { restrictTo } = require('../middleware/roleMiddleware');
+const tenderController = require('../controllers/tenderController');
+const { handleTenderUpload } = require('../middleware/tenderUploadMiddleware');
 
-// Public routes - anyone can view tenders
-router.get('/', getTenders);
-router.get('/:id', getTender);
+// ============ PUBLIC ROUTES ============
 
-// Protected routes
+// Get categories
+router.get('/categories', tenderController.getCategories);
+router.get('/categories/label/:categoryId', tenderController.getCategoryLabel);
+
+// Get tenders (public with optional auth for filtering)
+router.get('/', optionalAuth, tenderController.getTenders);
+
+// Get single tender (with access control)
+router.get('/:id', optionalAuth, tenderController.getTender);
+
+// ============ AUTHENTICATED ROUTES ============
+
+// Apply authentication middleware to all routes below
 router.use(verifyToken);
 
-// Company routes - only companies can create/update/delete tenders
-router.post('/', 
-  restrictTo('company', 'organization', 'admin'), // Add organization
-  createTender
+// ============ TENDER CREATION ROUTES ============
+
+// Create freelance tender (Organizations & Companies only)
+router.post(
+  '/freelance/create',
+  restrictTo('organization', 'company', 'admin'),
+  handleTenderUpload,
+  tenderController.createFreelanceTender
 );
 
-// Company-specific routes
-router.get('/company/my-tenders',
-  restrictTo('company', 'admin'),
-  getMyTenders
+// Create professional tender (Organizations & Companies only)
+router.post(
+  '/professional/create',
+  restrictTo('organization', 'company', 'admin'),
+  handleTenderUpload,
+  tenderController.createProfessionalTender
 );
 
-// Organization-specific routes
-router.get('/organization/my-tenders',
-  restrictTo('organization', 'admin'),
-  getMyOrganizationTenders
+// ============ TENDER MANAGEMENT ROUTES ============
+
+// Update tender (owner only)
+router.put(
+  '/:id',
+  handleTenderUpload,
+  tenderController.updateTender
 );
 
-// Get all tenders for current user (both company and organization)
-router.get('/user/my-tenders',
-  restrictTo('company', 'organization', 'admin'),
-  getMyAllTenders
+// Delete tender (owner only)
+router.delete(
+  '/:id',
+  tenderController.deleteTender
 );
 
-// Update and delete routes - now work for both company and organization
-router.put('/:id',
-  restrictTo('company', 'organization', 'admin'),
-  updateTender
+// Publish tender (owner only)
+router.post(
+  '/:id/publish',
+  tenderController.publishTender
 );
 
-router.delete('/:id',
-  restrictTo('company', 'organization', 'admin'),
-  deleteTender
+// Reveal proposals for closed tender (owner only)
+router.post(
+  '/:id/reveal-proposals',
+  tenderController.revealProposals
 );
 
-// Freelancer routes - only freelancers can save tenders
-router.post('/:id/save',
-  restrictTo('freelancer'),
-  toggleSaveTender
+// ============ USER-SPECIFIC ROUTES ============
+
+// Get user's tenders
+router.get(
+  '/user/my-tenders',
+  tenderController.getMyTenders
 );
 
-router.get('/saved/saved',
-  restrictTo('freelancer'),
-  getSavedTenders
+// Toggle save tender
+router.post(
+  '/:id/toggle-save',
+  tenderController.toggleSaveTender
+);
+
+// Get saved tenders
+router.get(
+  '/user/saved',
+  tenderController.getSavedTenders
+);
+
+// Get tender statistics (owner only)
+router.get(
+  '/:id/stats',
+  tenderController.getTenderStats
+);
+// ============ OWNER-SPECIFIC ROUTES ============
+
+// Get tender for owner (bypasses visibility)
+router.get(
+  '/owner/:id',
+  tenderController.getOwnerTender
+);
+
+// Get tenders owned by user
+router.get(
+  '/user/owned',
+  tenderController.getOwnedTenders
+);
+
+// Get pre-filled tender data for editing
+router.get(
+  '/:id/edit-data',
+  tenderController.getTenderForEditing
+);
+
+// Update tender route (existing)
+router.put(
+  '/:id',
+  handleTenderUpload,
+  tenderController.updateTender
+);
+// ============ INVITATION MANAGEMENT ROUTES ============
+
+// Invite users to tender (owner only, professional invite-only tenders)
+router.post(
+  '/:id/invite',
+  restrictTo('organization', 'company', 'admin'),
+  tenderController.inviteUsersToTender
+);
+
+// Respond to invitation
+router.post(
+  '/:id/invitations/:inviteId/respond',
+  restrictTo('company'), // Only companies can respond to professional tender invitations
+  tenderController.respondToInvitation
+);
+
+// Get user's invitations
+router.get(
+  '/user/invitations',
+  restrictTo('company'), // Only companies get professional tender invitations
+  tenderController.getMyInvitations
+);
+// In TenderRoutes.js, add this route:
+
+// Download attachment
+router.get(
+  '/:id/attachments/:attachmentId/download',
+  verifyToken,
+  tenderController.downloadAttachment
+);
+
+// Preview attachment (if needed)
+router.get(
+  '/:id/attachments/:attachmentId/preview',
+  verifyToken,
+  tenderController.previewAttachment
+);
+// ============ PROPOSAL ROUTES (FOR FUTURE EXTENSION) ============
+
+// Note: Proposal routes will be added in a separate proposalRoutes.js file
+// These are placeholder routes for future implementation
+
+// Apply to tender
+router.post(
+  '/:id/apply',
+  (req, res, next) => {
+    // This will be implemented in proposal controller
+    res.status(501).json({
+      success: false,
+      message: 'Proposal system not yet implemented'
+    });
+  }
+);
+
+// Get tender proposals (owner only)
+router.get(
+  '/:id/proposals',
+  (req, res, next) => {
+    // This will be implemented in proposal controller
+    res.status(501).json({
+      success: false,
+      message: 'Proposal system not yet implemented'
+    });
+  }
 );
 
 module.exports = router;

@@ -1,9 +1,10 @@
-// src/components/organization/OrganizationForm.tsx - UPDATED WITH SECONDARY PHONE
+// src/components/organization/OrganizationForm.tsx - UPDATED WITH PROFILE-SERVICE IMAGE HANDLING
 import { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { OrganizationProfile } from '@/services/organizationService';
+import { profileService } from '@/services/profileService'; // ADDED PROFILE SERVICE
 import {
   Form,
   FormControl,
@@ -19,6 +20,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Building2, Target, X, Upload, Trash2, ImageDown, Phone } from 'lucide-react';
 import Button from '../forms/Button';
 import { organizationService } from '@/services/organizationService';
+import { toast } from '@/hooks/use-toast';
+import { getFullImageUrl } from '@/utils/image-utils';
 
 const organizationFormSchema = z.object({
   name: z.string().min(2, 'Organization name must be at least 2 characters'),
@@ -56,11 +59,11 @@ interface OrganizationFormProps {
   loading?: boolean;
 }
 
-export default function OrganizationForm({ 
-  organization, 
-  onSubmit, 
-  onCancel, 
-  loading = false 
+export default function OrganizationForm({
+  organization,
+  onSubmit,
+  onCancel,
+  loading = false
 }: OrganizationFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -70,17 +73,30 @@ export default function OrganizationForm({
   const logoInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize previews from existing organization
+  // Initialize previews from existing profile (not organization service)
   useEffect(() => {
-    if (organization?.logoUrl) {
-      const url = organizationService.getFullImageUrl(organization.logoUrl);
-      if (url) setLogoPreview(url);
-    }
-    if (organization?.bannerUrl) {
-      const url = organizationService.getFullImageUrl(organization.bannerUrl);
-      if (url) setBannerPreview(url);
-    }
-  }, [organization]);
+    const initializeFromProfile = async () => {
+      try {
+        // Get user profile data to show existing avatar and cover photo
+        const userProfile = await profileService.getProfile();
+
+        if (userProfile?.user?.avatar) {
+          const avatarUrl = getFullImageUrl(userProfile.user.avatar);
+          if (avatarUrl) setLogoPreview(avatarUrl);
+        }
+
+        if (userProfile?.user?.coverPhoto || userProfile?.coverPhoto) {
+          const coverUrl = getFullImageUrl(userProfile.user?.coverPhoto || userProfile.coverPhoto);
+          if (coverUrl) setBannerPreview(coverUrl);
+        }
+      } catch (error) {
+        console.error('Error loading profile for image previews:', error);
+        // Silently fail - users can still upload new images
+      }
+    };
+
+    initializeFromProfile();
+  }, []);
 
   const form = useForm<OrganizationFormValues>({
     resolver: zodResolver(organizationFormSchema),
@@ -98,24 +114,79 @@ export default function OrganizationForm({
     },
   });
 
+  const validateImageFile = (file: File, type: 'avatar' | 'banner'): boolean => {
+    try {
+      const MAX_FILE_SIZE = 5 * 1024 * 1024;
+      const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        toast({
+          title: 'Invalid file type',
+          description: 'Please select an image file (PNG, JPG, JPEG, WebP)',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      if (file.size > MAX_FILE_SIZE) {
+        toast({
+          title: 'File too large',
+          description: `${type === 'avatar' ? 'Logo' : 'Banner'} must be less than 5MB`,
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      toast({
+        title: 'Validation Error',
+        description: 'Failed to validate image file',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
+  const createImagePreview = (file: File): string => {
+    try {
+      return URL.createObjectURL(file);
+    } catch (error) {
+      console.error('Failed to create image preview:', error);
+      toast({
+        title: 'Preview Error',
+        description: 'Failed to create image preview',
+        variant: 'destructive',
+      });
+      return '';
+    }
+  };
+
   const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     try {
-      if (file.size > 5 * 1024 * 1024) {
-        console.error('Logo file too large');
+      if (!validateImageFile(file, 'avatar')) {
         return;
       }
-      if (!file.type.startsWith('image/')) {
-        console.error('Invalid logo file type');
-        return;
-      }
+
       setLogoFile(file);
-      const previewUrl = URL.createObjectURL(file);
-      setLogoPreview(previewUrl);
+      const previewUrl = createImagePreview(file);
+      if (previewUrl) {
+        setLogoPreview(previewUrl);
+        toast({
+          title: 'Logo selected',
+          description: 'Logo ready for upload',
+          variant: 'success',
+        });
+      }
     } catch (error) {
-      console.error('Error processing logo file:', error);
+      toast({
+        title: 'Upload Error',
+        description: 'Failed to process logo file',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -124,19 +195,26 @@ export default function OrganizationForm({
     if (!file) return;
 
     try {
-      if (file.size > 5 * 1024 * 1024) {
-        console.error('Banner file too large');
+      if (!validateImageFile(file, 'banner')) {
         return;
       }
-      if (!file.type.startsWith('image/')) {
-        console.error('Invalid banner file type');
-        return;
-      }
+
       setBannerFile(file);
-      const previewUrl = URL.createObjectURL(file);
-      setBannerPreview(previewUrl);
+      const previewUrl = createImagePreview(file);
+      if (previewUrl) {
+        setBannerPreview(previewUrl);
+        toast({
+          title: 'Banner selected',
+          description: 'Banner ready for upload',
+          variant: 'success',
+        });
+      }
     } catch (error) {
-      console.error('Error processing banner file:', error);
+      toast({
+        title: 'Upload Error',
+        description: 'Failed to process banner file',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -150,8 +228,17 @@ export default function OrganizationForm({
       if (logoInputRef.current) {
         logoInputRef.current.value = '';
       }
+      toast({
+        title: 'Logo removed',
+        description: 'Logo has been cleared',
+        variant: 'warning',
+      });
     } catch (error) {
-      console.error('Error removing logo:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to remove logo',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -165,22 +252,52 @@ export default function OrganizationForm({
       if (bannerInputRef.current) {
         bannerInputRef.current.value = '';
       }
+      toast({
+        title: 'Banner removed',
+        description: 'Banner has been cleared',
+        variant: 'warning',
+      });
     } catch (error) {
-      console.error('Error removing banner:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to remove banner',
+        variant: 'destructive',
+      });
     }
   };
 
   const handleSubmit = async (data: OrganizationFormValues) => {
     setIsSubmitting(true);
     try {
+      // First, handle image uploads through profileService if files exist
+      if (logoFile) {
+        try {
+          console.log('[OrganizationForm] Uploading logo to profile service...');
+          await profileService.uploadAvatar(logoFile);
+        } catch (error) {
+          console.error('[OrganizationForm] Logo upload failed:', error);
+          // Continue with organization data submission even if image upload fails
+        }
+      }
+
+      if (bannerFile) {
+        try {
+          console.log('[OrganizationForm] Uploading banner to profile service...');
+          await profileService.uploadCoverPhoto(bannerFile);
+        } catch (error) {
+          console.error('[OrganizationForm] Banner upload failed:', error);
+          // Continue with organization data submission even if image upload fails
+        }
+      }
+
+      // Then submit organization data (without image files since they're already uploaded)
       await onSubmit({
         ...data,
-        logoFile: logoFile || undefined,
-        bannerFile: bannerFile || undefined
+        logoFile: undefined, // Don't pass file to organization service
+        bannerFile: undefined // Don't pass file to organization service
       });
-      // Success toast is handled by the service layer
+
     } catch (error) {
-      // Errors are now handled by the service layer through toast
       console.error('Form submission error:', error);
     } finally {
       setIsSubmitting(false);
@@ -237,19 +354,19 @@ export default function OrganizationForm({
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
-            {/* Logo and Banner Upload Section */}
+            {/* Logo and Banner Upload Section - UPDATED */}
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Logo Upload */}
                 <div className="space-y-4">
-                  <FormLabel>Organization Logo</FormLabel>
+                  <FormLabel>Organization Logo (Profile Avatar)</FormLabel>
                   <div className="border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center hover:border-gray-400 transition-colors">
                     {logoPreview ? (
                       <div className="relative">
                         <div className="w-32 h-32 rounded-xl overflow-hidden mx-auto">
-                          <img 
-                            src={logoPreview} 
-                            alt="Logo preview" 
+                          <img
+                            src={logoPreview}
+                            alt="Logo preview"
                             className="w-full h-full object-cover"
                           />
                         </div>
@@ -272,6 +389,7 @@ export default function OrganizationForm({
                         <div>
                           <p className="text-sm font-medium text-gray-900">Upload Logo</p>
                           <p className="text-xs text-gray-500">PNG, JPG up to 5MB</p>
+                          <p className="text-xs text-gray-400 mt-1">Stored as profile avatar</p>
                         </div>
                       </div>
                     )}
@@ -300,14 +418,14 @@ export default function OrganizationForm({
 
                 {/* Banner Upload */}
                 <div className="space-y-4">
-                  <FormLabel>Organization Banner</FormLabel>
+                  <FormLabel>Organization Banner (Profile Cover)</FormLabel>
                   <div className="border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center hover:border-gray-400 transition-colors">
                     {bannerPreview ? (
                       <div className="relative">
                         <div className="w-full h-24 rounded-lg overflow-hidden">
-                          <img 
-                            src={bannerPreview} 
-                            alt="Banner preview" 
+                          <img
+                            src={bannerPreview}
+                            alt="Banner preview"
                             className="w-full h-full object-cover"
                           />
                         </div>
@@ -330,6 +448,7 @@ export default function OrganizationForm({
                         <div>
                           <p className="text-sm font-medium text-gray-900">Upload Banner</p>
                           <p className="text-xs text-gray-500">PNG, JPG up to 5MB</p>
+                          <p className="text-xs text-gray-400 mt-1">Stored as profile cover photo</p>
                         </div>
                       </div>
                     )}
@@ -437,8 +556,8 @@ export default function OrganizationForm({
                       Primary Phone
                     </FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="+1 (555) 123-4567" 
+                      <Input
+                        placeholder="+1 (555) 123-4567"
                         {...field}
                         onChange={(e) => {
                           const value = e.target.value;
@@ -463,8 +582,8 @@ export default function OrganizationForm({
                       Secondary Phone
                     </FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="+1 (555) 123-4567" 
+                      <Input
+                        placeholder="+1 (555) 123-4567"
                         {...field}
                         onChange={(e) => {
                           const value = e.target.value;
@@ -486,8 +605,8 @@ export default function OrganizationForm({
                   <FormItem>
                     <FormLabel>Website</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="https://yourorganization.org" 
+                      <Input
+                        placeholder="https://yourorganization.org"
                         {...field}
                         onChange={(e) => {
                           let value = e.target.value;

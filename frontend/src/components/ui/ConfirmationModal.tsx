@@ -1,4 +1,4 @@
-// components/ui/ConfirmationModal.tsx - UPDATED FOR JOB DELETION
+// components/ui/ConfirmationModal.tsx
 import React from 'react';
 import { X, AlertTriangle, Trash2 } from 'lucide-react';
 

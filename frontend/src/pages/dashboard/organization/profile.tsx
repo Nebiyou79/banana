@@ -1,17 +1,18 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// pages/dashboard/organization/profile.tsx - UPDATED WITH TOAST HANDLING & SECONDARY PHONE
+// pages/dashboard/organization/profile.tsx - UPDATED FOR PROFILE-SERVICE HERO
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { organizationService, OrganizationProfile } from '@/services/organizationService';
+import { profileService, Profile, UpdateProfileData } from '@/services/profileService'; // ADDED PROFILE SERVICE
 import { useAuth } from '@/contexts/AuthContext';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import OrganizationForm from '@/components/organization/OrganizationForm';
-import OrganizationHero from '@/components/organization/OrganizationHero';
+import OrganizationHero from '@/components/organization/OrganizationHero'; // This now uses profileService
 import LoadingSpinner from '@/components/LoadingSpinner';
 import Link from 'next/link';
-import { 
-  ArrowLeft, 
-  Building2, 
+import {
+  ArrowLeft,
+  Building2,
   CheckCircle2,
   AlertCircle,
   Edit3,
@@ -28,12 +29,12 @@ const OrganizationProfilePage: React.FC = () => {
   const queryClient = useQueryClient();
   const [editMode, setEditMode] = useState(false);
 
-  // Fetch organization profile
-  const { 
-    data: organization, 
-    isLoading, 
-    error,
-    refetch
+  // Fetch organization profile (for organization-specific data)
+  const {
+    data: organization,
+    isLoading: orgLoading,
+    error: orgError,
+    refetch: refetchOrg
   } = useQuery({
     queryKey: ['organizationProfile'],
     queryFn: () => organizationService.getMyOrganization(),
@@ -42,53 +43,80 @@ const OrganizationProfilePage: React.FC = () => {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Update mutation
-  const updateMutation = useMutation({
+  // Fetch user profile (for avatar and cover photo)
+  const {
+    data: userProfile,
+    isLoading: profileLoading,
+    error: profileError,
+    refetch: refetchProfile
+  } = useQuery({
+    queryKey: ['userProfile'],
+    queryFn: () => profileService.getProfile(),
+    enabled: !!user,
+    retry: 2,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Update mutation for organization data
+  const updateOrgMutation = useMutation({
     mutationFn: (data: Partial<OrganizationProfile>) =>
       organizationService.updateMyOrganization(data),
-    onSuccess: (response) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organizationProfile'] });
       setEditMode(false);
-      // Success toast is handled by the service layer
     },
     onError: (error: any) => {
-      // Error toast is handled by the service layer
       console.error('Update mutation error:', error);
+    },
+  });
+
+  // Update mutation for user profile (for avatar/cover photo)
+  const updateProfileMutation = useMutation({
+    mutationFn: (data: UpdateProfileData) => profileService.updateProfile(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+    },
+    onError: (error: any) => {
+      console.error('Profile update mutation error:', error);
     },
   });
 
   const handleProfileUpdate = async (data: any) => {
     try {
       // Handle file uploads if files are present
-      let logoUrl = organization?.logoUrl;
-      let bannerUrl = organization?.bannerUrl;
+      if (data.logoFile || data.bannerFile) {
+        const updateData: UpdateProfileData = {};
 
-      // Upload logo if new file is provided
-      if (data.logoFile) {
-        try {
-          const logoResponse = await organizationService.uploadLogo(data.logoFile);
-          logoUrl = logoResponse.data.logoUrl || logoResponse.data.logoPath;
-        } catch (error) {
-          // Error is handled by the service layer through toast
-          console.error('Logo upload error:', error);
-          // Continue with the update even if logo upload fails
+        // Upload logo if new file is provided (now goes to profile avatar)
+        if (data.logoFile) {
+          try {
+            const logoResponse = await profileService.uploadAvatar(data.logoFile);
+            updateData.avatar = logoResponse.avatarUrl;
+          } catch (error) {
+            console.error('Logo upload error:', error);
+            // Continue with the update even if logo upload fails
+          }
+        }
+
+        // Upload banner if new file is provided (now goes to profile cover photo)
+        if (data.bannerFile) {
+          try {
+            const bannerResponse = await profileService.uploadCoverPhoto(data.bannerFile);
+            updateData.coverPhoto = bannerResponse.coverPhotoUrl;
+          } catch (error) {
+            console.error('Banner upload error:', error);
+            // Continue with the update even if banner upload fails
+          }
+        }
+
+        // Update user profile with new avatar/cover photo
+        if (Object.keys(updateData).length > 0) {
+          await updateProfileMutation.mutateAsync(updateData);
         }
       }
 
-      // Upload banner if new file is provided
-      if (data.bannerFile) {
-        try {
-          const bannerResponse = await organizationService.uploadBanner(data.bannerFile);
-          bannerUrl = bannerResponse.data.bannerUrl || bannerResponse.data.bannerPath;
-        } catch (error) {
-          // Error is handled by the service layer through toast
-          console.error('Banner upload error:', error);
-          // Continue with the update even if banner upload fails
-        }
-      }
-
-      // Prepare data for update - create a clean object without file properties
-      const updateData: Partial<OrganizationProfile> = {
+      // Prepare organization data for update - create a clean object without file properties
+      const orgUpdateData: Partial<OrganizationProfile> = {
         name: data.name,
         registrationNumber: data.registrationNumber,
         organizationType: data.organizationType,
@@ -97,26 +125,22 @@ const OrganizationProfilePage: React.FC = () => {
         mission: data.mission,
         address: data.address,
         phone: data.phone,
-        secondaryPhone: data.secondaryPhone, // ADDED SECONDARY PHONE
+        secondaryPhone: data.secondaryPhone,
         website: data.website,
-        // Only include logo/banner URLs if they exist
-        ...(logoUrl && { logoUrl }),
-        ...(bannerUrl && { bannerUrl }),
       };
 
       // Clean up empty strings by converting to undefined
-      Object.keys(updateData).forEach(key => {
-        const value = (updateData as any)[key];
+      Object.keys(orgUpdateData).forEach(key => {
+        const value = (orgUpdateData as any)[key];
         if (value === '' || value === null) {
-          (updateData as any)[key] = undefined;
+          (orgUpdateData as any)[key] = undefined;
         }
       });
 
-      console.log('Submitting organization data:', updateData);
-      
-      await updateMutation.mutateAsync(updateData);
+      console.log('Submitting organization data:', orgUpdateData);
+
+      await updateOrgMutation.mutateAsync(orgUpdateData);
     } catch (error: any) {
-      // Error is already handled by the service layer through toast
       console.error('Profile update error:', error);
     }
   };
@@ -152,7 +176,8 @@ const OrganizationProfilePage: React.FC = () => {
 
   const handleRetry = () => {
     try {
-      refetch();
+      refetchOrg();
+      refetchProfile();
     } catch (error) {
       toast({
         title: 'Error',
@@ -162,16 +187,26 @@ const OrganizationProfilePage: React.FC = () => {
     }
   };
 
+  const handleProfileUpdateFromHero = (updatedProfile: Profile) => {
+    // This is called when the Hero component updates the profile (avatar/cover photo)
+    // We can refetch the profile to get the latest data
+    refetchProfile();
+  };
+
   // Handle query errors with toast
   useEffect(() => {
-    if (error) {
+    if (orgError || profileError) {
       toast({
         title: 'Load Error',
         description: 'Failed to load organization profile',
         variant: 'destructive',
       });
     }
-  }, [error]);
+  }, [orgError, profileError]);
+
+  const isLoading = orgLoading || profileLoading;
+  const hasError = orgError || profileError;
+  const hasData = organization && userProfile;
 
   if (isLoading) {
     return (
@@ -184,14 +219,14 @@ const OrganizationProfilePage: React.FC = () => {
   }
 
   // Create organization flow
-  if (error || !organization) {
+  if (hasError || !hasData) {
     return (
       <DashboardLayout requiredRole="organization">
         <div className="min-h-screen bg-gray-50 py-8">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
             {/* Header */}
             <div className="mb-8">
-              <Link 
+              <Link
                 href="/dashboard/organization"
                 className="inline-flex items-center text-gray-600 hover:text-gray-900 font-medium mb-6 transition-colors"
               >
@@ -208,11 +243,11 @@ const OrganizationProfilePage: React.FC = () => {
               </div>
             </div>
 
-            <OrganizationForm 
+            <OrganizationForm
               organization={null}
               onSubmit={handleProfileUpdate}
               onCancel={() => window.history.back()}
-              loading={updateMutation.isPending}
+              loading={updateOrgMutation.isPending || updateProfileMutation.isPending}
             />
           </div>
         </div>
@@ -249,7 +284,7 @@ const OrganizationProfilePage: React.FC = () => {
               organization={organization}
               onSubmit={handleProfileUpdate}
               onCancel={handleCancelEdit}
-              loading={updateMutation.isPending}
+              loading={updateOrgMutation.isPending || updateProfileMutation.isPending}
             />
           </div>
         </div>
@@ -266,7 +301,7 @@ const OrganizationProfilePage: React.FC = () => {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center py-6">
               <div>
-                <Link 
+                <Link
                   href="/dashboard/organization"
                   className="inline-flex items-center text-gray-600 hover:text-gray-900 font-medium mb-2 transition-colors"
                 >
@@ -291,15 +326,21 @@ const OrganizationProfilePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Hero Section */}
+        {/* Hero Section - NOW USING PROFILE-SERVICE BASED HERO */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <OrganizationHero
-            organization={organization}
+            profile={userProfile} // Pass userProfile instead of organization
             isOwner={true}
             onEdit={handleEdit}
+            onProfileUpdate={handleProfileUpdateFromHero}
+            onRefresh={() => {
+              refetchProfile();
+              refetchOrg();
+            }}
+            isLoading={profileLoading}
           />
         </div>
-        
+
         {/* Additional Profile Sections */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -308,7 +349,7 @@ const OrganizationProfilePage: React.FC = () => {
               {/* Organization Details Card */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <h2 className="text-2xl font-bold text-gray-900 mb-6">Organization Details</h2>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div>
                     <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
@@ -319,7 +360,7 @@ const OrganizationProfilePage: React.FC = () => {
                       <div className="flex justify-between items-center py-2 border-b border-gray-100">
                         <dt className="text-sm text-gray-600">Organization Type</dt>
                         <dd className="font-medium text-gray-900">
-                          {organization.organizationType ? 
+                          {organization.organizationType ?
                             organizationService.getOrganizationTypeLabel(organization.organizationType)
                             : 'Not specified'
                           }
@@ -339,7 +380,7 @@ const OrganizationProfilePage: React.FC = () => {
                       </div>
                     </dl>
                   </div>
-                  
+
                   <div>
                     <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
                       <Users className="w-5 h-5 mr-2 text-blue-600" />
@@ -372,9 +413,9 @@ const OrganizationProfilePage: React.FC = () => {
                         <div className="flex justify-between items-center py-2 border-b border-gray-100">
                           <dt className="text-sm text-gray-600">Website</dt>
                           <dd className="font-medium text-blue-600">
-                            <a 
-                              href={organization.website} 
-                              target="_blank" 
+                            <a
+                              href={organization.website}
+                              target="_blank"
                               rel="noopener noreferrer"
                               className="hover:underline"
                             >
@@ -403,7 +444,7 @@ const OrganizationProfilePage: React.FC = () => {
                     <Target className="w-5 h-5 mr-2 text-blue-600" />
                     About Our Organization
                   </h2>
-                  
+
                   {organization.description && (
                     <div className="mb-6">
                       <h3 className="font-semibold text-gray-900 mb-3">Description</h3>
@@ -412,7 +453,7 @@ const OrganizationProfilePage: React.FC = () => {
                       </p>
                     </div>
                   )}
-                  
+
                   {organization.mission && (
                     <div>
                       <h3 className="font-semibold text-gray-900 mb-3">Mission</h3>
@@ -433,15 +474,13 @@ const OrganizationProfilePage: React.FC = () => {
                   <Shield className="w-5 h-5 mr-2 text-blue-600" />
                   Verification Status
                 </h3>
-                <div className={`p-4 rounded-lg border ${
-                  organization.verified 
-                    ? 'bg-green-50 border-green-200' 
-                    : 'bg-yellow-50 border-yellow-200'
-                }`}>
+                <div className={`p-4 rounded-lg border ${organization.verified
+                  ? 'bg-green-50 border-green-200'
+                  : 'bg-yellow-50 border-yellow-200'
+                  }`}>
                   <div className="flex items-center space-x-3">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      organization.verified ? 'bg-green-500' : 'bg-yellow-500'
-                    }`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${organization.verified ? 'bg-green-500' : 'bg-yellow-500'
+                      }`}>
                       {organization.verified ? (
                         <CheckCircle2 className="w-5 h-5 text-white" />
                       ) : (
@@ -449,14 +488,13 @@ const OrganizationProfilePage: React.FC = () => {
                       )}
                     </div>
                     <div>
-                      <p className={`font-semibold ${
-                        organization.verified ? 'text-green-700' : 'text-yellow-700'
-                      }`}>
+                      <p className={`font-semibold ${organization.verified ? 'text-green-700' : 'text-yellow-700'
+                        }`}>
                         {organization.verified ? 'Verified Organization' : 'Pending Verification'}
                       </p>
                       <p className="text-sm text-gray-600 mt-1">
-                        {organization.verified 
-                          ? 'Your organization has been verified' 
+                        {organization.verified
+                          ? 'Your organization has been verified'
                           : 'Your verification is under review'
                         }
                       </p>
@@ -476,7 +514,7 @@ const OrganizationProfilePage: React.FC = () => {
                     <Edit3 className="w-4 h-4" />
                     <span>Edit Profile</span>
                   </button>
-                  
+
                   <button className="w-full py-3 px-4 rounded-lg font-semibold border border-gray-300 text-gray-700 hover:bg-gray-50 transition-all duration-200 flex items-center justify-center space-x-2">
                     <Download className="w-4 h-4" />
                     <span>Export Profile</span>

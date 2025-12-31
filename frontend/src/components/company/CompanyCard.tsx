@@ -78,7 +78,7 @@ export default function CompanyCard({ company, showActions = false, onView }: Co
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2 -mt-12">
               <div className="relative">
-                <div className="w-16 h-16 rounded-xl border-4 border-white bg-white shadow-2xl overflow-hidden flex-shrink-0 group-hover:shadow-blue-500/25 transition-all duration-300">
+                <div className="w-16 h-16 rounded-xl border-2 border-white bg-white shadow-2xl overflow-hidden flex-shrink-0 group-hover:shadow-blue-500/25 transition-all duration-300">
                   {logoUrl ? (
                     <Image 
                       src={logoUrl} 

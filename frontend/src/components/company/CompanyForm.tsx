@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-// components/company/CompanyForm.tsx - FIXED & ENHANCED
+// components/company/CompanyForm.tsx - UPDATED WITH PROFILE-SERVICE IMAGE HANDLING
 import { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { CompanyProfile as Company } from '@/services/companyService';
+import { profileService } from '@/services/profileService'; // ADDED PROFILE SERVICE
 import {
   Form,
   FormControl,
@@ -20,7 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Building2, X, Upload, Trash2, ImageDown, Shield, Globe, Phone, MapPin } from 'lucide-react';
 import Button from '../forms/Button';
 import { toast } from '@/hooks/use-toast';
-import { getSafeImageUrl } from '@/lib/image-utils';
+import { getFullImageUrl } from '@/utils/image-utils'; // UPDATED IMPORT
 
 const companyFormSchema = z.object({
   name: z.string().min(2, 'Company name must be at least 2 characters').max(100, 'Company name is too long'),
@@ -50,17 +51,30 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
   const logoInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize previews from existing company
+  // Initialize previews from existing profile (not company service)
   useEffect(() => {
-    if (company?.logoUrl) {
-      const url = getSafeImageUrl(company.logoUrl);
-      if (url) setLogoPreview(url);
-    }
-    if (company?.bannerUrl) {
-      const url = getSafeImageUrl(company.bannerUrl);
-      if (url) setBannerPreview(url);
-    }
-  }, [company]);
+    const initializeFromProfile = async () => {
+      try {
+        // Get user profile data to show existing avatar and cover photo
+        const userProfile = await profileService.getProfile();
+
+        if (userProfile?.user?.avatar) {
+          const avatarUrl = getFullImageUrl(userProfile.user.avatar);
+          if (avatarUrl) setLogoPreview(avatarUrl);
+        }
+
+        if (userProfile?.user?.coverPhoto || userProfile?.coverPhoto) {
+          const coverUrl = getFullImageUrl(userProfile.user?.coverPhoto || userProfile.coverPhoto);
+          if (coverUrl) setBannerPreview(coverUrl);
+        }
+      } catch (error) {
+        console.error('Error loading profile for image previews:', error);
+        // Silently fail - users can still upload new images
+      }
+    };
+
+    initializeFromProfile();
+  }, []);
 
   const form = useForm<CompanyFormValues>({
     resolver: zodResolver(companyFormSchema),
@@ -75,38 +89,73 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
     },
   });
 
-  const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  const validateImageFile = (file: File, type: 'avatar' | 'banner'): boolean => {
     try {
-      if (file.size > 5 * 1024 * 1024) {
-        toast({
-          title: 'File too large',
-          description: 'Logo must be less than 5MB',
-          variant: 'destructive',
-        });
-        return;
-      }
-      
-      if (!file.type.startsWith('image/')) {
+      const MAX_FILE_SIZE = 5 * 1024 * 1024;
+      const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+
+      if (!ALLOWED_TYPES.includes(file.type)) {
         toast({
           title: 'Invalid file type',
           description: 'Please select an image file (PNG, JPG, JPEG, WebP)',
           variant: 'destructive',
         });
+        return false;
+      }
+
+      if (file.size > MAX_FILE_SIZE) {
+        toast({
+          title: 'File too large',
+          description: `${type === 'avatar' ? 'Logo' : 'Banner'} must be less than 5MB`,
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      toast({
+        title: 'Validation Error',
+        description: 'Failed to validate image file',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
+  const createImagePreview = (file: File): string => {
+    try {
+      return URL.createObjectURL(file);
+    } catch (error) {
+      console.error('Failed to create image preview:', error);
+      toast({
+        title: 'Preview Error',
+        description: 'Failed to create image preview',
+        variant: 'destructive',
+      });
+      return '';
+    }
+  };
+
+  const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      if (!validateImageFile(file, 'avatar')) {
         return;
       }
 
       setLogoFile(file);
-      const previewUrl = URL.createObjectURL(file);
-      setLogoPreview(previewUrl);
-      
-      toast({
-        title: 'Logo selected',
-        description: 'Logo ready for upload',
-        variant: 'success',
-      });
+      const previewUrl = createImagePreview(file);
+      if (previewUrl) {
+        setLogoPreview(previewUrl);
+        toast({
+          title: 'Logo selected',
+          description: 'Logo ready for upload',
+          variant: 'success',
+        });
+      }
     } catch (error) {
       toast({
         title: 'Upload Error',
@@ -121,33 +170,20 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
     if (!file) return;
 
     try {
-      if (file.size > 5 * 1024 * 1024) {
-        toast({
-          title: 'File too large',
-          description: 'Banner must be less than 5MB',
-          variant: 'destructive',
-        });
-        return;
-      }
-      
-      if (!file.type.startsWith('image/')) {
-        toast({
-          title: 'Invalid file type',
-          description: 'Please select an image file (PNG, JPG, JPEG, WebP)',
-          variant: 'destructive',
-        });
+      if (!validateImageFile(file, 'banner')) {
         return;
       }
 
       setBannerFile(file);
-      const previewUrl = URL.createObjectURL(file);
-      setBannerPreview(previewUrl);
-      
-      toast({
-        title: 'Banner selected',
-        description: 'Banner ready for upload',
-        variant: 'success',
-      });
+      const previewUrl = createImagePreview(file);
+      if (previewUrl) {
+        setBannerPreview(previewUrl);
+        toast({
+          title: 'Banner selected',
+          description: 'Banner ready for upload',
+          variant: 'success',
+        });
+      }
     } catch (error) {
       toast({
         title: 'Upload Error',
@@ -208,14 +244,36 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
   const handleSubmit = async (data: CompanyFormValues) => {
     setIsSubmitting(true);
     try {
+      // First, handle image uploads through profileService if files exist
+      if (logoFile) {
+        try {
+          console.log('[CompanyForm] Uploading logo to profile service...');
+          await profileService.uploadAvatar(logoFile);
+        } catch (error) {
+          console.error('[CompanyForm] Logo upload failed:', error);
+          // Continue with company data submission even if image upload fails
+        }
+      }
+
+      if (bannerFile) {
+        try {
+          console.log('[CompanyForm] Uploading banner to profile service...');
+          await profileService.uploadCoverPhoto(bannerFile);
+        } catch (error) {
+          console.error('[CompanyForm] Banner upload failed:', error);
+          // Continue with company data submission even if image upload fails
+        }
+      }
+
+      // Then submit company data (without image files since they're already uploaded)
       await onSubmit({
         ...data,
-        logoFile: logoFile || undefined,
-        bannerFile: bannerFile || undefined
+        logoFile: undefined, // Don't pass file to company service
+        bannerFile: undefined // Don't pass file to company service
       });
+
     } catch (error) {
       console.error('Form submission error:', error);
-      // Error is handled by parent component
     } finally {
       setIsSubmitting(false);
     }
@@ -248,9 +306,9 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
               {company ? 'Update your company information' : 'Fill in your company details to get started'}
             </CardDescription>
           </div>
-          <Button 
-            variant="ghost" 
-            size="md" 
+          <Button
+            variant="ghost"
+            size="md"
             onClick={onCancel}
             className="hover:bg-red-50 hover:text-red-600 transition-colors"
             disabled={isSubmitting}
@@ -259,28 +317,28 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
           </Button>
         </div>
       </CardHeader>
-      
+
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
-            {/* Media Upload Section */}
+            {/* Media Upload Section - UPDATED LABELS */}
             <div className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Logo Upload */}
+                {/* Logo Upload (now uses profile avatar) */}
                 <div className="space-y-4">
                   <FormLabel className="text-lg font-semibold flex items-center gap-2 text-gray-700">
                     <div className="p-1.5 bg-blue-100 rounded-lg">
                       <ImageDown className="w-4 h-4 text-blue-600" />
                     </div>
-                    Company Logo
+                    Company Logo (Profile Avatar)
                   </FormLabel>
                   <div className="border-2 border-dashed border-blue-200 rounded-2xl p-6 text-center hover:border-blue-300 transition-all duration-300 bg-white/50 backdrop-blur-sm group">
                     {logoPreview ? (
                       <div className="relative">
                         <div className="w-32 h-32 rounded-2xl overflow-hidden mx-auto shadow-lg ring-2 ring-blue-200 group-hover:ring-blue-300 transition-all">
-                          <img 
-                            src={logoPreview} 
-                            alt="Logo preview" 
+                          <img
+                            src={logoPreview}
+                            alt="Logo preview"
                             className="w-full h-full object-cover"
                           />
                         </div>
@@ -303,6 +361,7 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
                         <div>
                           <p className="text-base font-semibold text-gray-900">Upload Logo</p>
                           <p className="text-sm text-gray-500 mt-1">PNG, JPG, WebP up to 5MB</p>
+                          <p className="text-xs text-gray-400 mt-1">Stored as profile avatar</p>
                         </div>
                       </div>
                     )}
@@ -329,21 +388,21 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
                   </div>
                 </div>
 
-                {/* Banner Upload */}
+                {/* Banner Upload (now uses profile cover photo) */}
                 <div className="space-y-4">
                   <FormLabel className="text-lg font-semibold flex items-center gap-2 text-gray-700">
                     <div className="p-1.5 bg-purple-100 rounded-lg">
                       <ImageDown className="w-4 h-4 text-purple-600" />
                     </div>
-                    Company Banner
+                    Company Banner (Profile Cover)
                   </FormLabel>
                   <div className="border-2 border-dashed border-purple-200 rounded-2xl p-6 text-center hover:border-purple-300 transition-all duration-300 bg-white/50 backdrop-blur-sm group">
                     {bannerPreview ? (
                       <div className="relative">
                         <div className="w-full h-24 rounded-xl overflow-hidden shadow-lg ring-2 ring-purple-200 group-hover:ring-purple-300 transition-all">
-                          <img 
-                            src={bannerPreview} 
-                            alt="Banner preview" 
+                          <img
+                            src={bannerPreview}
+                            alt="Banner preview"
                             className="w-full h-full object-cover"
                           />
                         </div>
@@ -366,6 +425,7 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
                         <div>
                           <p className="text-base font-semibold text-gray-900">Upload Banner</p>
                           <p className="text-sm text-gray-500 mt-1">PNG, JPG, WebP up to 5MB</p>
+                          <p className="text-xs text-gray-400 mt-1">Stored as profile cover photo</p>
                         </div>
                       </div>
                     )}
@@ -406,9 +466,9 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
                       Company Name *
                     </FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="Enter company name" 
-                        {...field} 
+                      <Input
+                        placeholder="Enter company name"
+                        {...field}
                         className="border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-colors"
                         disabled={isSubmitting}
                       />
@@ -428,9 +488,9 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
                       TIN Number
                     </FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="Enter TIN number" 
-                        {...field} 
+                      <Input
+                        placeholder="Enter TIN number"
+                        {...field}
                         className="border-gray-300 focus:border-green-500 focus:ring-green-500 transition-colors"
                         disabled={isSubmitting}
                       />
@@ -448,9 +508,9 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
                   <FormItem>
                     <FormLabel className="text-gray-700 font-semibold">Industry</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="e.g., Technology, Healthcare, Education" 
-                        {...field} 
+                      <Input
+                        placeholder="e.g., Technology, Healthcare, Education"
+                        {...field}
                         className="border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-colors"
                         disabled={isSubmitting}
                       />
@@ -470,9 +530,9 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
                       Phone
                     </FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="Enter phone number" 
-                        {...field} 
+                      <Input
+                        placeholder="Enter phone number"
+                        {...field}
                         className="border-gray-300 focus:border-green-500 focus:ring-green-500 transition-colors"
                         disabled={isSubmitting}
                       />
@@ -492,9 +552,9 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
                       Website
                     </FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="https://yourcompany.com" 
-                        {...field} 
+                      <Input
+                        placeholder="https://yourcompany.com"
+                        {...field}
                         className="border-gray-300 focus:border-purple-500 focus:ring-purple-500 transition-colors"
                         disabled={isSubmitting}
                       />
@@ -514,9 +574,9 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
                       Address
                     </FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="Enter company address" 
-                        {...field} 
+                      <Input
+                        placeholder="Enter company address"
+                        {...field}
                         className="border-gray-300 focus:border-red-500 focus:ring-red-500 transition-colors"
                         disabled={isSubmitting}
                       />
@@ -551,9 +611,9 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
 
             {/* Action Buttons */}
             <div className="flex gap-4 pt-6 border-t border-gray-200">
-              <Button 
-                type="submit" 
-                disabled={isSubmitting || loading} 
+              <Button
+                type="submit"
+                disabled={isSubmitting || loading}
                 className="min-w-32 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
               >
                 {isSubmitting ? (
@@ -567,10 +627,10 @@ export default function CompanyForm({ company, onSubmit, onCancel, loading = fal
                   'Create Profile'
                 )}
               </Button>
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={onCancel} 
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
                 disabled={isSubmitting}
                 className="border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-colors"
               >

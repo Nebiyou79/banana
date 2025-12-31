@@ -1,17 +1,18 @@
+// components/layout/Sidebar.tsx
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useAuth } from '@/contexts/AuthContext';
-import { 
-  Home, 
-  User, 
-  Briefcase, 
-  FileText, 
-  CheckCircle, 
-  LogOut, 
-  Folder, 
-  Users, 
+import {
+  Home,
+  User,
+  Briefcase,
+  FileText,
+  CheckCircle,
+  LogOut,
+  Folder,
+  Users,
   ClipboardList,
-  List, 
+  List,
   Plus,
   Building2,
   Award,
@@ -20,11 +21,18 @@ import {
   Settings,
   Search,
   Star,
-  X
+  X,
+  Package,
+  MessageCircle,
+  Users2,
+  TrendingUp
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import {  colorClasses } from '@/utils/color';
+import { colorClasses } from '@/utils/color';
 import Image from "next/image";
+import VerificationBadge from '@/components/verifcation/VerificationBadge';
+import React from "react";
+import { Man2Rounded, Save } from "@mui/icons-material";
 
 interface SidebarProps {
   onClose?: () => void;
@@ -38,9 +46,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
 
   const getNavigationItems = () => {
     const baseItems = [
-      { 
-        href: `/dashboard/${user.role}`, 
-        label: "Dashboard", 
+      {
+        href: `/dashboard/${user.role}`,
+        label: "Dashboard",
         icon: Home,
         badge: null
       }
@@ -48,6 +56,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
 
     const roleItems = {
       candidate: [
+        { href: "/dashboard/candidate/social", label: "Social Feed", icon: TrendingUp, badge: "New" },
         { href: "/dashboard/candidate/jobs", label: "Find Jobs", icon: Search, badge: "New" },
         { href: "/dashboard/candidate/applications", label: "My Applications", icon: FileText, badge: "5" },
         { href: "/dashboard/candidate/profile", label: "My Profile", icon: User },
@@ -55,31 +64,40 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         { href: "/dashboard/candidate/verification", label: "Verification", icon: CheckCircle },
       ],
       freelancer: [
-        { href: "/dashboard/freelancer/tenders", label: "Browse Tenders", icon: ClipboardList },
+        { href: "/dashboard/freelancer/social", label: "Social Feed", icon: TrendingUp, badge: "New" },
         { href: "/dashboard/freelancer/proposals", label: "My Proposals", icon: FileText, badge: "3" },
         { href: "/dashboard/freelancer/profile", label: "My Profile", icon: User },
         { href: "/dashboard/freelancer/portfolio", label: "Portfolio", icon: Folder },
+        { href: "/dashboard/freelancer/tenders", label: "Browse Tenders", icon: ClipboardList },
         { href: "/dashboard/freelancer/saved-tenders", label: "Saved Tenders", icon: BarChart3 },
+        { href: "/dashboard/freelancer/verification", label: "Verification", icon: CheckCircle },
       ],
       company: [
+        { href: "/dashboard/company/social", label: "Social Feed", icon: TrendingUp, badge: "New" },
         { href: "/dashboard/company/jobs", label: "Job Postings", icon: Briefcase, badge: "12" },
         { href: "/dashboard/company/jobs/create", label: "Post New Job", icon: Plus },
         { href: "/dashboard/company/applications", label: "Applications", icon: FileText, badge: "24" },
         { href: "/dashboard/company/tenders", label: "My Tenders", icon: List },
         { href: "/dashboard/company/tenders/create", label: "Create Tender", icon: Award },
+        { href: "/dashboard/company/my-tenders", label: "My Tenders", icon: Man2Rounded },
+        { href: "/dashboard/company/my-tenders/saved", label: "Saved Tenders", icon: Save },
         { href: "/dashboard/company/profile", label: "Company Profile", icon: Building2 },
-        { href: "/dashboard/company/analytics", label: "Analytics", icon: BarChart3 },
+        { href: "/dashboard/company/products", label: "Company Products", icon: Package },
+        { href: "/dashboard/company/verification", label: "Verification", icon: CheckCircle },
       ],
       organization: [
+        { href: "/dashboard/organization/social", label: "Social Feed", icon: TrendingUp, badge: "New" },
         { href: "/dashboard/organization/jobs", label: "Job Postings", icon: Briefcase },
         { href: "/dashboard/organization/jobs/create", label: "Create Job", icon: Award },
         { href: "/dashboard/organization/tenders", label: "My Tenders", icon: List },
         { href: "/dashboard/organization/tenders/create", label: "Create Tender", icon: Award },
+        { href: "/dashboard/organization/tenders/saved", label: "Saved Tenders", icon: BarChart3 },
         { href: "/dashboard/organization/applications", label: "Applications", icon: FileText },
         { href: "/dashboard/organization/profile", label: "Organization Profile", icon: Building2 },
         { href: "/dashboard/organization/verification", label: "Verification", icon: Shield },
       ],
       admin: [
+        { href: "/dashboard/admin/social", label: "Platform Feed", icon: TrendingUp },
         { href: "/dashboard/admin/users", label: "User Management", icon: Users, badge: "New" },
         { href: "/dashboard/admin/jobs", label: "Job Management", icon: Briefcase },
         { href: "/dashboard/admin/tenders", label: "Tender Management", icon: ClipboardList },
@@ -115,7 +133,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   const getRoleDisplayName = (role: string) => {
     const roleNames = {
       candidate: "Candidate",
-      freelancer: "Freelancer", 
+      freelancer: "Freelancer",
       company: "Company",
       organization: "Organization",
       admin: "Administrator"
@@ -130,9 +148,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-3">
             <div className="w-16 h-16 rounded-xl flex items-center justify-center overflow-hidden">
-              <Image 
-                src="/logo.png" 
-                alt="Banana" 
+              <Image
+                src="/logo.png"
+                alt="Banana"
                 width={80}
                 height={80}
                 className="object-contain"
@@ -142,7 +160,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
               <h1 className={`text-4xl font-bold ${colorClasses.text.goldenMustard}`}>Banana</h1>
             </div>
           </div>
-          
+
           {/* Close button for mobile */}
           {onClose && (
             <button
@@ -163,10 +181,17 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
             <div className="flex-1 min-w-0">
               <p className={`font-semibold ${colorClasses.text.darkNavy} truncate`}>{user.name}</p>
               <p className={`${colorClasses.text.gray800} text-sm truncate`}>{user.email}</p>
-              <div className="flex items-center mt-1">
+              <div className="flex items-center mt-1 gap-2 flex-wrap">
                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colorClasses.bg.darkNavy} ${colorClasses.text.white} border ${colorClasses.border.darkNavy}`}>
                   {getRoleDisplayName(user.role)}
                 </span>
+                {/* Verification Badge - Auto-fetches from API */}
+                <VerificationBadge
+                  size="sm"
+                  showText={true}
+                  showTooltip={true}
+                  autoFetch={true}
+                />
               </div>
             </div>
           </div>
@@ -178,28 +203,34 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         {navigationItems.map((item) => {
           const isActive = router.pathname === item.href;
           const IconComponent = item.icon;
-          
+
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 group border-2 ${
-                isActive
-                  ? `${colorClasses.bg.goldenMustard} ${colorClasses.text.darkNavy} shadow-lg border-yellow-500`
-                  : `border-transparent ${colorClasses.text.gray800} hover:border-blue-500 hover:bg-yellow-100 hover:${colorClasses.text.darkNavy}`
-              }`}
+              className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 group border-2 ${isActive
+                ? `${colorClasses.bg.goldenMustard} ${colorClasses.text.darkNavy} shadow-lg border-yellow-500`
+                : `border-transparent ${colorClasses.text.gray800} hover:border-blue-500 hover:bg-yellow-100 hover:${colorClasses.text.darkNavy}`
+                }`}
               onClick={onClose}
             >
               <div className="flex items-center space-x-3">
-                <div className={`transition-all duration-200 ${
-                  isActive 
-                    ? `${colorClasses.text.darkNavy} transform scale-110` 
-                    : `${colorClasses.text.gray800} group-hover:${colorClasses.text.darkNavy}`
-                }`}>
+                <div className={`transition-all duration-200 ${isActive
+                  ? `${colorClasses.text.darkNavy} transform scale-110`
+                  : `${colorClasses.text.gray800} group-hover:${colorClasses.text.darkNavy}`
+                  }`}>
                   <IconComponent className="w-5 h-5" />
                 </div>
                 <span className="font-medium text-sm">{item.label}</span>
               </div>
+              {item.badge && (
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isActive
+                  ? `${colorClasses.bg.darkNavy} ${colorClasses.text.white}`
+                  : `${colorClasses.bg.goldenMustard} ${colorClasses.text.darkNavy}`
+                  }`}>
+                  {item.badge}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -217,7 +248,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
           <LogOut className={`w-4 h-4 group-hover:${colorClasses.text.darkNavy}`} />
           <span className="font-medium text-sm">Sign Out</span>
         </button>
-        
+
         <div className="mt-3 text-center">
           <p className={`text-xs ${colorClasses.text.gray800}`}>
             v2.1.0 • {new Date().getFullYear()} Banana

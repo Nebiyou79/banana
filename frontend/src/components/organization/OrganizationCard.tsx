@@ -107,7 +107,7 @@ export const OrganizationCard: React.FC<OrganizationCardProps> = ({
             <img 
               src={organization.logoFullUrl} 
               alt={organization.name}
-              className="w-16 h-16 rounded-xl object-cover border-4 border-white shadow-lg flex-shrink-0"
+              className="w-16 h-16 rounded-xl object-cover border-2 border-white shadow-lg flex-shrink-0"
               onError={(e) => {
                 // Silently handle image errors
                 e.currentTarget.style.display = 'none';
@@ -116,7 +116,7 @@ export const OrganizationCard: React.FC<OrganizationCardProps> = ({
               }}
             />
           ) : (
-            <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-teal-500 to-teal-600 border-4 border-white shadow-lg flex items-center justify-center flex-shrink-0">
+            <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-teal-500 to-teal-600 border-2 border-white shadow-lg flex items-center justify-center flex-shrink-0">
               <Building2 className="w-8 h-8 text-white" />
             </div>
           )}

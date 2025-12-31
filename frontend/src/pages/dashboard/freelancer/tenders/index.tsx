@@ -1,455 +1,513 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// pages/dashboard/freelancer/tender/index.tsx
-import React, { useState, useEffect } from 'react';
-import { NextPage } from 'next';
+// pages/dashboard/freelance/tenders/index.tsx
+import { useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import { FreelancerLayout } from '@/components/layout/FreelancerLayout';
-import FreelancerTenderCard from '@/components/tenders/FreelancerTenderCard';
-import TenderFilters from '@/components/tenders/TenderFilters';
-import { TenderService, Tender, TenderFilters as TenderFiltersType } from '@/services/tenderService';
-import { useAuth } from '@/contexts/AuthContext';
+import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import FreelanceTenderList from '@/components/tenders/FreelanceTenderList';
+import { Button } from '@/components/social/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { Card, CardContent } from '@/components/ui/Card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import { Separator } from '@/components/ui/Separator';
+import {
+  Sparkles,
+  Zap,
+  TrendingUp,
+  Bookmark,
+  RefreshCw,
+  DollarSign,
+  Target,
+  Users,
+  Award,
+  Briefcase,
+  Grid,
+  List,
+} from 'lucide-react';
 import { 
-  MagnifyingGlassIcon,
-  FunnelIcon,
-  Squares2X2Icon,
-  ListBulletIcon,
-  RocketLaunchIcon,
-  BriefcaseIcon,
-  CurrencyDollarIcon,
-  ClockIcon,
-  StarIcon,
-  MapPinIcon
-} from '@heroicons/react/24/outline';
+  useTenders, 
+  useSavedTenders, 
+  useToggleSaveTender, 
+  useTenderViewMode,
+  useTenderSorting 
+} from '@/hooks/useTenders';
+import { TenderFilter, Tender } from '@/services/tenderService';
+import { useAuth } from '@/contexts/AuthContext';
+import { cn } from '@/lib/utils';
+import { sortTenders } from '@/services/tenderService';
 
-const FreelancerTendersPage: NextPage = () => {
+export default function FreelanceTendersPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const [tenders, setTenders] = useState<Tender[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [filters, setFilters] = useState<TenderFiltersType>({
+  
+  // Main filters state
+  const [filters, setFilters] = useState<TenderFilter>({
     page: 1,
     limit: 12,
+    tenderCategory: 'freelance',
+    status: 'published',
     sortBy: 'createdAt',
-    sortOrder: 'desc'
+    sortOrder: 'desc',
+    cpoRequired: false,
   });
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 12,
-    total: 0,
-    pages: 0
-  });
-  const [savedTenders, setSavedTenders] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
 
-  useEffect(() => {
-    loadTenders();
-  }, [filters]);
+  // Use the actual useTenders hook
+  const {
+    tenders,
+    pagination,
+    updateFilters,
+    setPage,
+    refetch,
+  } = useTenders(filters);
 
-  useEffect(() => {
-    if (user) {
-      loadSavedTenders();
-    }
-  }, [user]);
+  const { data: savedTendersData } = useSavedTenders();
+  const { mutate: toggleSave } = useToggleSaveTender();
+  const viewMode = useTenderViewMode('freelance');
 
-  const loadTenders = async () => {
-    try {
-      setLoading(true);
-      const response = await TenderService.getTenders(filters);
-      setTenders(response.data);
-      setPagination(response.pagination);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load tenders');
-    } finally {
-      setLoading(false);
-    }
+  const savedTenders = savedTendersData || [];
+  const savedTenderIds = new Set(savedTenders.map(t => t._id));
+  const [activeTab, setActiveTab] = useState('recommended');
+
+  // User data
+  const userSkills = user?.skills || ['React', 'TypeScript', 'Next.js', 'Node.js', 'UI/UX'];
+  const hourlyRate = user?.hourlyRate || 50;
+
+  // Handle filter updates
+  const handleApplyFilter = (newFilters: Partial<TenderFilter>) => {
+    const updated = { ...filters, ...newFilters, page: 1 };
+    setFilters(updated);
+    updateFilters(updated);
   };
 
-  const loadSavedTenders = async () => {
-    try {
-      const response = await TenderService.getSavedTenders();
-      const savedIds = new Set(response.data.tenders.map((tender: Tender) => tender._id));
-      setSavedTenders(savedIds);
-    } catch (err) {
-      console.error('Error loading saved tenders:', err);
-    }
-  };
-
-  const handleSaveToggle = async (tenderId: string, saved: boolean) => {
-    if (!user) {
-      router.push('/login');
-      return;
-    }
-
-    try {
-      await TenderService.toggleSaveTender(tenderId);
-      
-      const newSaved = new Set(savedTenders);
-      if (saved) {
-        newSaved.delete(tenderId);
-      } else {
-        newSaved.add(tenderId);
-      }
-      setSavedTenders(newSaved);
-
-      // Update local state
-      setTenders(prev => prev.map(tender => 
-        tender._id === tenderId 
-          ? { ...tender, isSaved: !saved }
-          : tender
-      ));
-    } catch (err) {
-      console.error('Error toggling save:', err);
-    }
-  };
-
-  const handleFiltersChange = (newFilters: TenderFiltersType) => {
-    setFilters({ ...newFilters, page: 1 });
-  };
-
-  const handlePageChange = (newPage: number) => {
-    setFilters(prev => ({ ...prev, page: newPage }));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const clearFilters = () => {
-    setFilters({
+  const handleResetFilters = () => {
+    const resetFilters: TenderFilter = {
       page: 1,
       limit: 12,
+      tenderCategory: 'freelance',
+      status: 'published',
       sortBy: 'createdAt',
-      sortOrder: 'desc'
-    });
-    setSearchQuery('');
-    setShowFilters(false);
+      sortOrder: 'desc',
+      cpoRequired: false,
+      search: '',
+      engagementType: undefined,
+      experienceLevel: undefined,
+      projectType: undefined,
+      minBudget: undefined,
+      maxBudget: undefined,
+      skills: undefined,
+      procurementCategory: undefined,
+      workflowType: undefined,
+      urgency: undefined,
+      dateFrom: undefined,
+      dateTo: undefined,
+    };
+    setFilters(resetFilters);
+    updateFilters(resetFilters);
   };
 
-  const QuickStat = ({ icon: Icon, value, label, color }: any) => (
-    <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 hover:bg-white/20 transition-all duration-300">
-      <div className="flex items-center gap-3">
-        <div className={`p-3 rounded-xl ${color} shadow-lg`}>
-          <Icon className="h-6 w-6 text-white" />
-        </div>
-        <div>
-          <div className="text-2xl font-bold text-white">{value}</div>
-          <div className="text-blue-100 text-sm">{label}</div>
-        </div>
-      </div>
-    </div>
-  );
+  // Filter tenders based on active tab
+  const getFilteredTenders = () => {
+    let filtered = tenders;
+    
+    switch (activeTab) {
+      case 'recommended':
+        filtered = tenders.filter(t =>
+          t.skillsRequired?.some(skill =>
+            userSkills.some(userSkill =>
+              userSkill.toLowerCase().includes(skill.toLowerCase()) ||
+              skill.toLowerCase().includes(userSkill.toLowerCase())
+            )
+          )
+        );
+        break;
+      case 'urgent':
+        filtered = tenders.filter(t => t.freelanceSpecific?.urgency === 'urgent');
+        break;
+      case 'highPaying':
+        filtered = tenders.filter(t =>
+          t.freelanceSpecific?.budget?.max &&
+          t.freelanceSpecific.budget.max > hourlyRate * 40
+        );
+        break;
+      case 'saved':
+        filtered = tenders.filter(t => savedTenderIds.has(t._id));
+        break;
+      default:
+        filtered = tenders;
+    }
+    
+    // Apply current filters to the filtered list
+    return sortTenders(filtered, filters.sortBy || 'createdAt', filters.sortOrder || 'desc');
+  };
 
-  const FeaturePill = ({ icon: Icon, text }: any) => (
-    <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20">
-      <Icon className="h-4 w-4 text-yellow-300" />
-      <span className="text-white text-sm font-medium">{text}</span>
-    </div>
-  );
+  const filteredTenders = getFilteredTenders();
+
+  // Format budget for display
+  const formatBudgetRange = (tender: any) => {
+    if (!tender.freelanceSpecific?.budget) return 'Negotiable';
+    const { budget } = tender.freelanceSpecific;
+    return `${budget.currency} ${budget.min.toLocaleString()} - ${budget.max.toLocaleString()}`;
+  };
+
+  // Get deadline text
+  const getDeadlineText = (deadline: Date) => {
+    const now = new Date();
+    const daysRemaining = Math.ceil((new Date(deadline).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (daysRemaining < 0) return 'Expired';
+    if (daysRemaining === 0) return 'Today';
+    if (daysRemaining === 1) return 'Tomorrow';
+    if (daysRemaining < 7) return `${daysRemaining} days`;
+    if (daysRemaining < 30) return `${Math.floor(daysRemaining / 7)} weeks`;
+    return new Date(deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  // Handle view mode change
+  const handleViewModeChange = (mode: 'grid' | 'list') => {
+    viewMode.updateViewMode({ type: mode });
+  };
 
   return (
-    <FreelancerLayout>
+    <>
       <Head>
-        <title>Find Projects | Freelancer Dashboard</title>
-        <meta name="description" content="Discover premium freelance projects that match your skills and expertise" />
+        <title>Find Projects | Freelance Dashboard</title>
+        <meta name="description" content="Browse and apply to freelance projects matching your skills" />
       </Head>
 
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50">
-        {/* Enhanced Header with Different Design */}
-        <div className="relative bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 text-white overflow-hidden">
-          {/* Background Elements */}
-          <div className="absolute inset-0 bg-black/10"></div>
-          <div className="absolute top-0 right-0 w-1/3 h-1/3 bg-white/5 rounded-full blur-3xl"></div>
-          <div className="absolute bottom-0 left-0 w-1/4 h-1/4 bg-purple-400/10 rounded-full blur-3xl"></div>
-          
-          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-            <div className="text-center max-w-4xl mx-auto">
-              {/* Premium Badge */}
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full border border-white/20 mb-6">
-                <RocketLaunchIcon className="h-4 w-4 text-yellow-300" />
-                <span className="text-yellow-300 font-semibold text-sm">FREELANCE OPPORTUNITIES</span>
-              </div>
-              
-              {/* Main Heading */}
-              <h1 className="text-4xl lg:text-5xl font-bold mb-6 leading-tight">
-                Launch Your Next
-                <span className="block bg-gradient-to-r from-yellow-300 to-orange-300 bg-clip-text text-transparent mt-2">
-                  Career Project
-                </span>
-              </h1>
-              
-              <p className="text-xl text-indigo-100 mb-8 leading-relaxed max-w-2xl mx-auto">
-                Discover projects that align with your expertise. From startups to enterprises, 
-                find opportunities that help you grow and earn.
-              </p>
-
-              {/* Feature Pills */}
-              <div className="flex flex-wrap justify-center gap-3 mb-8">
-                <FeaturePill icon={BriefcaseIcon} text="Remote Work" />
-                <FeaturePill icon={CurrencyDollarIcon} text="Competitive Pay" />
-                <FeaturePill icon={StarIcon} text="Verified Clients" />
-                <FeaturePill icon={MapPinIcon} text="Global Opportunities" />
-              </div>
-
-              {/* Quick Stats */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8 max-w-2xl mx-auto">
-                <QuickStat 
-                  icon={BriefcaseIcon}
-                  value="1.2K+"
-                  label="Active Projects"
-                  color="bg-indigo-500"
-                />
-                <QuickStat 
-                  icon={StarIcon}
-                  value="89+"
-                  label="Premium Clients"
-                  color="bg-purple-500"
-                />
-                <QuickStat 
-                  icon={CurrencyDollarIcon}
-                  value="$3K+"
-                  label="Average Budget"
-                  color="bg-pink-500"
-                />
-                <QuickStat 
-                  icon={ClockIcon}
-                  value="24h"
-                  label="Quick Response"
-                  color="bg-orange-500"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 -mt-8">
-          {/* Filters Bar */}
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6 mb-8">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <FunnelIcon className="h-5 w-5 text-indigo-600" />
-                  <span className="font-semibold text-gray-900">Quick Filters</span>
+      <DashboardLayout requiredRole="freelancer">
+        <div className="min-h-screen bg-white dark:bg-slate-950">
+          <div className="container mx-auto px-4 py-8">
+            {/* Header Section */}
+            <div className="mb-8">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                <div>
+                  <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
+                    Browse Freelance Projects
+                  </h1>
+                  <p className="text-slate-600 dark:text-slate-400 mt-2">
+                    Discover opportunities that match your skills and expertise
+                  </p>
                 </div>
-                
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => handleFiltersChange({ ...filters, sortBy: 'createdAt' })}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-                      filters.sortBy === 'createdAt'
-                        ? 'bg-indigo-500 text-white shadow-sm'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+
+                <div className="flex items-center gap-3">
+                  {/* View Mode Toggle */}
+                  <div className="flex items-center rounded-md border border-slate-300 dark:border-slate-700 p-1">
+                    <Button
+                      variant={viewMode.isGridView ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => handleViewModeChange('grid')}
+                      className={cn(
+                        "h-8 px-3",
+                        viewMode.isGridView 
+                          ? "bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white" 
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+                      )}
+                    >
+                      <Grid className="h-4 w-4 mr-2" />
+                      Grid
+                    </Button>
+                    <Separator orientation="vertical" className="h-6 mx-1" />
+                    <Button
+                      variant={viewMode.isListView ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => handleViewModeChange('list')}
+                      className={cn(
+                        "h-8 px-3",
+                        viewMode.isListView 
+                          ? "bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white" 
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+                      )}
+                    >
+                      <List className="h-4 w-4 mr-2" />
+                      List
+                    </Button>
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refetch()}
+                    className="border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
                   >
-                    🆕 Newest
-                  </button>
-                  <button
-                    onClick={() => handleFiltersChange({ ...filters, sortBy: 'deadline' })}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-                      filters.sortBy === 'deadline'
-                        ? 'bg-indigo-500 text-white shadow-sm'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    ⏰ Ending Soon
-                  </button>
-                  <button
-                    onClick={() => handleFiltersChange({ ...filters, sortBy: 'budget.max' })}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-                      filters.sortBy === 'budget.max'
-                        ? 'bg-indigo-500 text-white shadow-sm'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    💰 Highest Budget
-                  </button>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </Button>
+                  <Badge variant="outline" className="border-emerald-200 text-emerald-700 dark:border-emerald-800 dark:text-emerald-300">
+                    <Users className="h-3 w-3 mr-1.5" />
+                    {filteredTenders.length} projects
+                  </Badge>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
-                {/* View Mode Toggle */}
-                <div className="flex items-center bg-gray-100 rounded-lg p-1">
-                  <button
-                    onClick={() => setViewMode('grid')}
-                    className={`p-2 rounded-md transition-all duration-200 ${
-                      viewMode === 'grid' 
-                        ? 'bg-white text-indigo-500 shadow-sm' 
-                        : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    <Squares2X2Icon className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => setViewMode('list')}
-                    className={`p-2 rounded-md transition-all duration-200 ${
-                      viewMode === 'list' 
-                        ? 'bg-white text-indigo-500 shadow-sm' 
-                        : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    <ListBulletIcon className="h-4 w-4" />
-                  </button>
-                </div>
-
-                {/* Results Count */}
-                <div className="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
-                  <span className="font-semibold text-gray-900">{tenders.length}</span> of{' '}
-                  <span className="font-semibold text-gray-900">{pagination.total}</span> projects
-                </div>
-
-                {/* Advanced Filters Toggle */}
-                <button
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300 shadow-sm ${
-                    showFilters
-                      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white'
-                      : 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-600 hover:to-purple-600'
-                  }`}
-                >
-                  <FunnelIcon className="h-4 w-4" />
-                  {showFilters ? 'Hide Filters' : 'Advanced Filters'}
-                </button>
-              </div>
-            </div>
-
-            {/* Advanced Filters Component */}
-            {showFilters && (
-              <div className="mt-6">
-                <TenderFilters
-                  filters={filters}
-                  onFiltersChange={handleFiltersChange}
-                  onReset={clearFilters}
-                  showTenderTypeFilter={true}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Tenders Grid */}
-          {loading ? (
-            <div className={`grid gap-6 ${
-              viewMode === 'grid' 
-                ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' 
-                : 'grid-cols-1'
-            }`}>
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-pulse">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="h-12 w-12 bg-gray-200 rounded-xl"></div>
-                    <div className="flex-1">
-                      <div className="h-4 bg-gray-200 rounded mb-2 w-3/4"></div>
-                      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <Card className="border border-slate-200 dark:border-slate-800">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-2xl font-bold text-slate-900 dark:text-white">
+                          {tenders.length}
+                        </div>
+                        <div className="text-sm text-slate-600 dark:text-slate-400">
+                          Available
+                        </div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+                        <Briefcase className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                      </div>
                     </div>
-                  </div>
-                  <div className="h-5 bg-gray-200 rounded mb-3"></div>
-                  <div className="h-3 bg-gray-200 rounded mb-2"></div>
-                  <div className="h-3 bg-gray-200 rounded w-3/4 mb-4"></div>
-                </div>
-              ))}
+                  </CardContent>
+                </Card>
+
+                <Card className="border border-slate-200 dark:border-slate-800">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-2xl font-bold text-slate-900 dark:text-white">
+                          {tenders.filter(t => t.freelanceSpecific?.urgency === 'urgent').length}
+                        </div>
+                        <div className="text-sm text-slate-600 dark:text-slate-400">
+                          Urgent
+                        </div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                        <Zap className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border border-slate-200 dark:border-slate-800">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-2xl font-bold text-slate-900 dark:text-white">
+                          ${hourlyRate}/hr
+                        </div>
+                        <div className="text-sm text-slate-600 dark:text-slate-400">
+                          Your Rate
+                        </div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                        <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border border-slate-200 dark:border-slate-800">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-2xl font-bold text-slate-900 dark:text-white">
+                          {savedTenders.length}
+                        </div>
+                        <div className="text-sm text-slate-600 dark:text-slate-400">
+                          Saved
+                        </div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                        <Bookmark className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
-          ) : error ? (
-            <div className="text-center py-16">
-              <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 max-w-md mx-auto">
-                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <MagnifyingGlassIcon className="h-8 w-8 text-red-500" />
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Unable to Load Projects</h3>
-                <p className="text-gray-600 mb-6">{error}</p>
-                <button
-                  onClick={loadTenders}
-                  className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 px-6 rounded-xl hover:from-indigo-600 hover:to-purple-600 transition-all duration-300 font-semibold shadow-sm"
+
+            {/* Main Content Tabs */}
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid grid-cols-4 mb-6 bg-slate-100 dark:bg-slate-900 p-1">
+                <TabsTrigger 
+                  value="recommended" 
+                  className="data-[state=active]:bg-white data-[state=active]:dark:bg-slate-800"
                 >
-                  Try Again
-                </button>
-              </div>
-            </div>
-          ) : tenders.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 max-w-md mx-auto">
-                <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <MagnifyingGlassIcon className="h-8 w-8 text-indigo-500" />
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">No Projects Found</h3>
-                <p className="text-gray-600 mb-6">
-                  {filters.search || filters.category
-                    ? "Try adjusting your search criteria or browse all available projects."
-                    : "Currently there are no active projects matching your criteria."
-                  }
-                </p>
-                {(filters.search || filters.category) && (
-                  <button
-                    onClick={clearFilters}
-                    className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 px-6 rounded-xl hover:from-indigo-600 hover:to-purple-600 transition-all duration-300 font-semibold shadow-sm"
-                  >
-                    Browse All Projects
-                  </button>
-                )}
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className={`grid gap-6 ${
-                viewMode === 'grid' 
-                  ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' 
-                  : 'grid-cols-1'
-              }`}>
-                {tenders.map(tender => (
-                  <FreelancerTenderCard
-                    key={tender._id}
-                    tender={tender}
-                    onSaveToggle={user ? handleSaveToggle : undefined}
-                    saved={savedTenders.has(tender._id)}
-                    compact={viewMode === 'list'}
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Recommended
+                  {activeTab === 'recommended' && filteredTenders.length > 0 && (
+                    <Badge className="ml-2 bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-300">
+                      {filteredTenders.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="urgent" 
+                  className="data-[state=active]:bg-white data-[state=active]:dark:bg-slate-800"
+                >
+                  <Zap className="h-4 w-4 mr-2" />
+                  Urgent
+                  {tenders.filter(t => t.freelanceSpecific?.urgency === 'urgent').length > 0 && (
+                    <Badge className="ml-2 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                      {tenders.filter(t => t.freelanceSpecific?.urgency === 'urgent').length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="highPaying" 
+                  className="data-[state=active]:bg-white data-[state=active]:dark:bg-slate-800"
+                >
+                  <TrendingUp className="h-4 w-4 mr-2" />
+                  High Paying
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="saved" 
+                  className="data-[state=active]:bg-white data-[state=active]:dark:bg-slate-800"
+                >
+                  <Bookmark className="h-4 w-4 mr-2" />
+                  Saved
+                  {savedTenders.length > 0 && (
+                    <Badge className="ml-2 bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                      {savedTenders.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="recommended" className="mt-0">
+                {filteredTenders.length > 0 ? (
+                  <FreelanceTenderList 
+                    viewMode={viewMode.viewMode.type}
+                    onViewModeChange={handleViewModeChange}
+                    tenders={filteredTenders}
+                    filters={filters}
+                    onFilterChange={handleApplyFilter}
+                    pagination={pagination}
+                    onPageChange={setPage}
+                    showFilters={true}
                   />
-                ))}
-              </div>
+                ) : (
+                  <Card className="border border-slate-200 dark:border-slate-800">
+                    <CardContent className="text-center py-12">
+                      <Target className="h-12 w-12 text-slate-400 dark:text-slate-600 mx-auto mb-4" />
+                      <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
+                        No Recommended Projects
+                      </h3>
+                      <p className="text-slate-600 dark:text-slate-400 mb-6 max-w-md mx-auto">
+                        We couldn`t find any projects matching your skills and preferences. Try adjusting your filters.
+                      </p>
+                      <Button
+                        variant="outline"
+                        onClick={handleResetFilters}
+                        className="border-slate-300 dark:border-slate-700"
+                      >
+                        Reset Filters
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
 
-              {/* Pagination */}
-              {pagination.pages > 1 && (
-                <div className="flex justify-center items-center gap-3 mt-12">
-                  <button
-                    onClick={() => handlePageChange(pagination.page - 1)}
-                    disabled={pagination.page === 1}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-sm"
-                  >
-                    ← Previous
-                  </button>
-                  
-                  <div className="flex items-center gap-2">
-                    {[...Array(Math.min(5, pagination.pages))].map((_, i) => {
-                      const page = i + 1;
-                      return (
-                        <button
-                          key={page}
-                          onClick={() => handlePageChange(page)}
-                          className={`px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ${
-                            pagination.page === page
-                              ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-sm'
-                              : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  
-                  <button
-                    onClick={() => handlePageChange(pagination.page + 1)}
-                    disabled={pagination.page === pagination.pages}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-sm"
-                  >
-                    Next →
-                  </button>
-                </div>
-              )}
-            </>
-          )}
+              <TabsContent value="urgent" className="mt-0">
+                {filteredTenders.length > 0 ? (
+                  <FreelanceTenderList 
+                    viewMode={viewMode.viewMode.type}
+                    onViewModeChange={handleViewModeChange}
+                    tenders={filteredTenders}
+                    filters={filters}
+                    onFilterChange={handleApplyFilter}
+                    pagination={pagination}
+                    onPageChange={setPage}
+                    showFilters={false}
+                  />
+                ) : (
+                  <Card className="border border-slate-200 dark:border-slate-800">
+                    <CardContent className="text-center py-12">
+                      <Zap className="h-12 w-12 text-slate-400 dark:text-slate-600 mx-auto mb-4" />
+                      <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
+                        No Urgent Projects
+                      </h3>
+                      <p className="text-slate-600 dark:text-slate-400 mb-6 max-w-md mx-auto">
+                        There are currently no urgent projects available. Check back later or browse other categories.
+                      </p>
+                      <Button
+                        variant="outline"
+                        onClick={() => setActiveTab('recommended')}
+                        className="border-slate-300 dark:border-slate-700"
+                      >
+                        Browse All Projects
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+
+              <TabsContent value="highPaying" className="mt-0">
+                {filteredTenders.length > 0 ? (
+                  <FreelanceTenderList 
+                    viewMode={viewMode.viewMode.type}
+                    onViewModeChange={handleViewModeChange}
+                    tenders={filteredTenders}
+                    filters={filters}
+                    onFilterChange={handleApplyFilter}
+                    pagination={pagination}
+                    onPageChange={setPage}
+                    showFilters={false}
+                  />
+                ) : (
+                  <Card className="border border-slate-200 dark:border-slate-800">
+                    <CardContent className="text-center py-12">
+                      <DollarSign className="h-12 w-12 text-slate-400 dark:text-slate-600 mx-auto mb-4" />
+                      <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
+                        No High Paying Projects
+                      </h3>
+                      <p className="text-slate-600 dark:text-slate-400 mb-6 max-w-md mx-auto">
+                        No high budget projects match your current filters. Try adjusting your budget range.
+                      </p>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          handleApplyFilter({ minBudget: 5000 });
+                          setActiveTab('recommended');
+                        }}
+                        className="border-slate-300 dark:border-slate-700"
+                      >
+                        Show All High Budget
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+
+              <TabsContent value="saved" className="mt-0">
+                {filteredTenders.length > 0 ? (
+                  <FreelanceTenderList 
+                    viewMode={viewMode.viewMode.type}
+                    onViewModeChange={handleViewModeChange}
+                    tenders={filteredTenders}
+                    filters={filters}
+                    onFilterChange={handleApplyFilter}
+                    pagination={pagination}
+                    onPageChange={setPage}
+                    showFilters={false}
+                    showSorting={false}
+                  />
+                ) : (
+                  <Card className="border border-slate-200 dark:border-slate-800">
+                    <CardContent className="text-center py-12">
+                      <Bookmark className="h-12 w-12 text-slate-400 dark:text-slate-600 mx-auto mb-4" />
+                      <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
+                        No Saved Projects
+                      </h3>
+                      <p className="text-slate-600 dark:text-slate-400 mb-6 max-w-md mx-auto">
+                        You haven`t saved any projects yet. Browse projects and click the bookmark icon to save them for later.
+                      </p>
+                      <Button
+                        onClick={() => {
+                          setActiveTab('recommended');
+                          handleResetFilters();
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      >
+                        Browse Projects
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
         </div>
-      </div>
-    </FreelancerLayout>
+      </DashboardLayout>
+    </>
   );
-};
-
-export default FreelancerTendersPage;
+}

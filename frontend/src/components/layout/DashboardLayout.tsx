@@ -87,7 +87,7 @@ export function DashboardLayout({ children, requiredRole }: DashboardLayoutProps
       <div className={`min-h-screen ${colorClasses.bg.gray100} flex items-center justify-center`}>
         <div className="text-center">
           <div className="relative">
-            <div className="w-16 h-16 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin mx-auto"></div>
+            <div className="w-16 h-16 border-2 border-gray-200 border-t-blue-600 rounded-full animate-spin mx-auto"></div>
           </div>
           <p className={`mt-4 ${colorClasses.text.gray800} font-medium`}>Loading your dashboard...</p>
         </div>

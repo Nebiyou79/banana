@@ -3,14 +3,17 @@ const FreelancerProfile = require('../models/Freelancer');
 const { getFileUrl } = require('../middleware/fileUploadMiddleware');
 const Tender = require('../models/Tender');
 
+// UPDATED: Profile completeness calculation with age and gender
 const calculateProfileCompleteness = (user, freelancerProfile) => {
   const completenessWeights = {
     basicInfo: {
-      weight: 20,
+      weight: 25, // Increased weight for basic info
       checks: [
-        { condition: user.name && user.name.trim().length > 0, points: 100 },
-        { condition: user.email, points: 100 },
-        { condition: user.avatar, points: 50 }
+        { condition: user.name && user.name.trim().length > 0, points: 20 },
+        { condition: user.email, points: 20 },
+        { condition: user.avatar, points: 20 },
+        { condition: user.dateOfBirth, points: 20 }, // NEW: Date of birth
+        { condition: user.gender && user.gender !== 'prefer-not-to-say', points: 20 } // NEW: Gender
       ]
     },
     professionalInfo: {
@@ -37,7 +40,7 @@ const calculateProfileCompleteness = (user, freelancerProfile) => {
       ]
     },
     contactDetails: {
-      weight: 10,
+      weight: 5, // Reduced weight since basic info now includes age/gender
       checks: [
         { condition: user.location && user.location.trim().length > 0, points: 25 },
         { condition: user.website || (user.socialLinks && Object.values(user.socialLinks).some(link => link)), points: 25 },
@@ -112,7 +115,7 @@ exports.getDashboardOverview = async (req, res) => {
     }
 
     // Get user with portfolio and skills
-    const user = await User.findById(userId).select('portfolio skills name email avatar experience education socialLinks');
+    const user = await User.findById(userId).select('portfolio skills name email avatar experience education socialLinks dateOfBirth gender');
     
     if (!user) {
       console.log('❌ User not found:', userId);
@@ -157,6 +160,11 @@ exports.getDashboardOverview = async (req, res) => {
       },
       socialLinks: {
         total: user.socialLinks ? Object.values(user.socialLinks).filter(link => link).length : 0
+      },
+      // NEW: Age and gender stats
+      demographics: {
+        age: user.dateOfBirth ? calculateAge(user.dateOfBirth) : null,
+        gender: user.gender || 'prefer-not-to-say'
       }
     };
 
@@ -191,7 +199,7 @@ exports.getFreelancerStats = async (req, res) => {
     const userId = req.user._id;
     
     const freelancerProfile = await FreelancerProfile.findOne({ user: userId })
-      .populate('user', 'name avatar portfolio skills experience education socialLinks');
+      .populate('user', 'name avatar portfolio skills experience education socialLinks dateOfBirth gender');
     
     if (!freelancerProfile) {
       return res.status(404).json({
@@ -215,7 +223,10 @@ exports.getFreelancerStats = async (req, res) => {
       profileViews: freelancerProfile.profileViews || 0,
       clientReviews: freelancerProfile.ratings?.count || 0,
       averageRating: freelancerProfile.ratings?.average || 0,
-      socialLinksCount: user.socialLinks ? Object.values(user.socialLinks).filter(link => link).length : 0
+      socialLinksCount: user.socialLinks ? Object.values(user.socialLinks).filter(link => link).length : 0,
+      // NEW: Age and gender
+      age: user.dateOfBirth ? calculateAge(user.dateOfBirth) : null,
+      gender: user.gender || 'prefer-not-to-say'
     };
 
     res.status(200).json({
@@ -284,7 +295,7 @@ exports.getProfile = async (req, res) => {
   }
 };
 
-// Update freelancer profile - FIXED with social links handling
+// Update freelancer profile - FIXED with social links handling and age/gender
 exports.updateProfile = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -292,6 +303,35 @@ exports.updateProfile = async (req, res) => {
 
     console.log('🔄 Updating profile for user:', userId);
     console.log('📝 Update data:', updateData);
+
+    // Validate date of birth if provided
+    if (updateData.dateOfBirth) {
+      const dob = new Date(updateData.dateOfBirth);
+      const today = new Date();
+      const minDate = new Date(today.getFullYear() - 100, today.getMonth(), today.getDate());
+      const maxDate = new Date(today.getFullYear() - 16, today.getMonth(), today.getDate());
+      
+      if (dob > maxDate) {
+        return res.status(400).json({
+          success: false,
+          message: 'You must be at least 16 years old'
+        });
+      }
+      if (dob < minDate) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please enter a valid date of birth'
+        });
+      }
+    }
+
+    // Validate gender if provided
+    if (updateData.gender && !['male', 'female', 'other', 'prefer-not-to-say'].includes(updateData.gender)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please select a valid gender option'
+      });
+    }
 
     // Transform skills if they're in object format
     if (updateData.skills && Array.isArray(updateData.skills)) {
@@ -324,7 +364,8 @@ exports.updateProfile = async (req, res) => {
     const userUpdateData = {};
     const freelancerUpdateData = {};
 
-    const userFields = ['name', 'bio', 'location', 'phone', 'website', 'avatar', 'socialLinks', 'skills', 'experience', 'education'];
+    // UPDATED: Include dateOfBirth and gender in user fields
+    const userFields = ['name', 'bio', 'location', 'phone', 'website', 'avatar', 'socialLinks', 'skills', 'experience', 'education', 'dateOfBirth', 'gender'];
     const freelancerFields = ['headline', 'hourlyRate', 'availability', 'experienceLevel', 'englishProficiency', 'timezone', 'specialization', 'services'];
 
     Object.keys(updateData).forEach(key => {
@@ -778,7 +819,7 @@ exports.getPublicProfile = async (req, res) => {
         { user: usernameOrId }
       ]
     })
-    .populate('user', 'name avatar bio location skills portfolio socialLinks website experience education')
+    .populate('user', 'name avatar bio location skills portfolio socialLinks website experience education dateOfBirth gender')
     .select('-user.passwordHash -user.loginAttempts -user.lockUntil');
 
     if (!freelancerProfile) {
@@ -795,6 +836,11 @@ exports.getPublicProfile = async (req, res) => {
         ...item,
         mediaUrls: item.mediaUrl ? [item.mediaUrl] : []
       }));
+    }
+
+    // Calculate age for public view
+    if (userData.dateOfBirth) {
+      userData.age = calculateAge(userData.dateOfBirth);
     }
 
     // Increment profile views
@@ -1217,29 +1263,6 @@ exports.getSavedTenders = async (req, res) => {
   }
 };
 
-// Helper functions
-async function getRecentActivities(userId) {
-  // This would fetch from an activities collection
-  // For now, return mock data
-  return [
-    {
-      id: '1',
-      type: 'profile',
-      title: 'Profile Updated',
-      description: 'You updated your professional information',
-      timestamp: new Date().toISOString(),
-      status: 'success'
-    },
-    {
-      id: '2',
-      type: 'portfolio',
-      title: 'Portfolio Item Added',
-      description: 'You added a new project to your portfolio',
-      timestamp: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
-      status: 'success'
-    }
-  ];
-}
 // Certification Management - FIXED delete function
 exports.getCertifications = async (req, res) => {
   try {
@@ -1273,7 +1296,6 @@ exports.getCertifications = async (req, res) => {
     });
   }
 };
-
 
 exports.addCertification = async (req, res) => {
   try {
@@ -1454,6 +1476,21 @@ exports.deleteCertification = async (req, res) => {
     });
   }
 };
+
+// NEW: Helper function to calculate age from date of birth
+function calculateAge(dateOfBirth) {
+  if (!dateOfBirth) return null;
+  const today = new Date();
+  const birthDate = new Date(dateOfBirth);
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+}
+
+// UPDATED: Profile strengths with age and gender
 function getProfileStrengths(freelancerProfile, user) {
   const strengths = [];
   if (freelancerProfile.headline) strengths.push('Professional headline');
@@ -1467,9 +1504,13 @@ function getProfileStrengths(freelancerProfile, user) {
   if (user.socialLinks && Object.values(user.socialLinks).filter(link => link).length >= 2) {
     strengths.push('Social profiles added');
   }
+  // NEW: Age and gender strengths
+  if (user.dateOfBirth) strengths.push('Date of birth provided');
+  if (user.gender && user.gender !== 'prefer-not-to-say') strengths.push('Gender specified');
   return strengths;
 }
 
+// UPDATED: Profile suggestions with age and gender
 function getProfileSuggestions(freelancerProfile, user) {
   const suggestions = [];
   if (!freelancerProfile.headline) suggestions.push('Add a professional headline');
@@ -1483,9 +1524,13 @@ function getProfileSuggestions(freelancerProfile, user) {
   if (!user.socialLinks || Object.values(user.socialLinks).filter(link => link).length < 2) {
     suggestions.push('Add at least 2 social media profiles');
   }
+  // NEW: Age and gender suggestions
+  if (!user.dateOfBirth) suggestions.push('Add your date of birth');
+  if (!user.gender || user.gender === 'prefer-not-to-say') suggestions.push('Specify your gender');
   return suggestions;
 }
 
+// UPDATED: Prepare profile data with age and gender
 async function prepareProfileData(user, freelancerProfile) {
   const transformedPortfolio = (user.portfolio || []).map(item => ({
     ...item.toObject(),
@@ -1500,6 +1545,9 @@ async function prepareProfileData(user, freelancerProfile) {
   // Calculate real profile completeness
   const profileCompletion = calculateProfileCompleteness(user, freelancerProfile);
 
+  // Calculate age
+  const age = user.dateOfBirth ? calculateAge(user.dateOfBirth) : null;
+
   // Combine data according to your model structure
   const profileData = {
     _id: user._id,
@@ -1511,6 +1559,9 @@ async function prepareProfileData(user, freelancerProfile) {
     phone: user.phone,
     website: user.website,
     avatar: user.avatar,
+    dateOfBirth: user.dateOfBirth, // NEW
+    gender: user.gender, // NEW
+    age: age, // NEW: Calculated age
     skills: transformedSkills,
     experience: user.experience || [],
     education: user.education || [],

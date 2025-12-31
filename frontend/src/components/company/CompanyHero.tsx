@@ -1,61 +1,128 @@
-// components/company/CompanyHero.tsx - UPDATED WITH TOAST SYSTEM
-import { CompanyProfile } from '@/services/companyService';
-import { Building2, MapPin, Globe, Calendar, Pencil, Info, Star, Award } from 'lucide-react';
-import Button from '../forms/Button';
+// components/company/CompanyHero.tsx
 import { useState } from 'react';
-import { getSafeImageUrl } from '@/lib/image-utils';
+import { Building2, MapPin, Globe, Calendar, Pencil, Info, Star, Award, RefreshCw, Loader2 } from 'lucide-react';
+import Button from '../forms/Button';
+import { getFullImageUrl, getCacheBustUrl, handleImageUpload } from '@/utils/image-utils';
+import { profileService, Profile } from '@/services/profileService';
 import { toast } from '@/hooks/use-toast';
 
 interface CompanyHeroProps {
-  company: CompanyProfile;
+  profile?: Profile | null; // Allow null to match state initialization in parent components
   isOwner: boolean;
   onEdit: () => void;
+  onProfileUpdate?: (updatedProfile: Profile) => void;
+  onRefresh?: () => void;
+  isLoading?: boolean;
 }
 
-export default function CompanyHero({ company, isOwner, onEdit }: CompanyHeroProps) {
-  const bannerUrl = getSafeImageUrl(company.bannerUrl);
-  const logoUrl = getSafeImageUrl(company.logoUrl);
+export default function CompanyHero({
+  profile,
+  isOwner,
+  onEdit,
+  onProfileUpdate,
+  onRefresh,
+  isLoading = false
+}: CompanyHeroProps) {
+  // Handle the case where profile might be null by converting to undefined
+  const safeProfile = profile === null ? undefined : profile;
+
+  // Get the company-specific data from profile's roleSpecific.companyInfo
+  const companyInfo = safeProfile?.roleSpecific?.companyInfo;
+
+  // Get image URLs from profile (like ProfileHeader does)
+  const getCoverPhoto = () => {
+    return safeProfile?.user?.coverPhoto || safeProfile?.coverPhoto;
+  };
+
+  const getAvatar = () => {
+    return safeProfile?.user?.avatar;
+  };
+
+  const coverPhotoUrl = getFullImageUrl(getCoverPhoto());
+  const avatarUrl = getFullImageUrl(getAvatar());
+
   const [showBannerGuide, setShowBannerGuide] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const handleEdit = () => {
+  const getCoverPhotoWithCacheBust = () => {
+    return getCacheBustUrl(coverPhotoUrl, refreshKey);
+  };
+
+  const getAvatarWithCacheBust = () => {
+    return getCacheBustUrl(avatarUrl, refreshKey);
+  };
+
+  const handleRefresh = () => {
+    if (onRefresh) {
+      onRefresh();
+    }
+    setRefreshKey(prev => prev + 1);
+  };
+
+  const handleImageUpdate = async (file: File, type: 'avatar' | 'coverPhoto') => {
+    if (!file || !isOwner || !safeProfile) return;
+
     try {
-      onEdit();
-    } catch (error) {
+      setIsUploading(true);
+
+      const result = await handleImageUpload(file, type);
+
+      // Update profile data
+      const updateData = type === 'avatar'
+        ? { avatar: result.url }
+        : { coverPhoto: result.url };
+
+      // Call profileService to update the profile
+      const updatedProfile = await profileService.updateProfile(updateData);
+
+      // Notify parent component
+      if (onProfileUpdate) {
+        onProfileUpdate(updatedProfile);
+      }
+
       toast({
-        title: 'Edit Error',
-        description: 'Unable to open edit form',
+        title: 'Success!',
+        description: `${type === 'avatar' ? 'Logo' : 'Banner'} updated successfully`,
+      });
+
+      // Refresh images
+      setRefreshKey(prev => prev + 1);
+
+    } catch (error: any) {
+      toast({
+        title: 'Upload Failed',
+        description: error.message || `Failed to upload ${type}`,
         variant: 'destructive',
       });
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  const handleBannerGuideOpen = () => {
-    try {
-      setShowBannerGuide(true);
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Unable to open banner guide',
-        variant: 'destructive',
-      });
-    }
+  const handleBannerUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await handleImageUpdate(file, 'coverPhoto');
+    event.target.value = '';
   };
 
-  const handleBannerGuideClose = () => {
-    try {
-      setShowBannerGuide(false);
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Unable to close banner guide',
-        variant: 'destructive',
-      });
-    }
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await handleImageUpdate(file, 'avatar');
+    event.target.value = '';
   };
 
-  const handleImageError = (imageType: string) => {
-    console.warn(`Failed to load ${imageType} for company: ${company.name}`);
-    // Error is handled by handleImageError utility, no need for toast
+  // Extract company data from profile with fallbacks
+  const companyData = {
+    name: safeProfile?.user?.name || 'Company Name',
+    verified: safeProfile?.verificationStatus === 'verified',
+    industry: companyInfo?.industry || '',
+    address: safeProfile?.location || '',
+    website: safeProfile?.website || '',
+    description: safeProfile?.bio || '',
+    createdAt: safeProfile?.createdAt || new Date().toISOString(),
   };
 
   const BannerGuideModal = () => (
@@ -67,7 +134,7 @@ export default function CompanyHero({ company, isOwner, onEdit }: CompanyHeroPro
               Banner Upload Guide
             </h2>
             <button
-              onClick={handleBannerGuideClose}
+              onClick={() => setShowBannerGuide(false)}
               className="p-2 hover:bg-white rounded-xl transition-all duration-200 hover:scale-110"
             >
               <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -76,7 +143,7 @@ export default function CompanyHero({ company, isOwner, onEdit }: CompanyHeroPro
             </button>
           </div>
         </div>
-        
+
         <div className="p-6 space-y-6">
           {/* Enhanced Banner Template */}
           <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl overflow-hidden border-2 border-dashed border-blue-300 relative shadow-lg">
@@ -89,7 +156,7 @@ export default function CompanyHero({ company, isOwner, onEdit }: CompanyHeroPro
                   </span>
                 </div>
               </div>
-              
+
               {/* Dimension Labels */}
               <div className="absolute top-3 left-3 bg-black/80 text-white px-3 py-1.5 rounded-lg text-sm font-medium shadow-lg">
                 📏 2560px
@@ -142,143 +209,229 @@ export default function CompanyHero({ company, isOwner, onEdit }: CompanyHeroPro
               </ul>
             </div>
           </div>
-
-          {/* Enhanced Device Preview */}
-          <div className="border border-gray-200 rounded-xl p-6 bg-gradient-to-br from-gray-50 to-white">
-            <h3 className="font-bold text-lg text-gray-900 mb-4 flex items-center gap-2">
-              <span className="p-2 bg-purple-100 rounded-lg">📱</span>
-              How it appears on different devices
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {[
-                { device: 'Mobile', width: 'w-20', height: 'h-40', top: '20%', bottom: '20%', left: '10%', right: '10%' },
-                { device: 'Tablet', width: 'w-32', height: 'h-20', top: '25%', bottom: '25%', left: '15%', right: '15%' },
-                { device: 'Desktop', width: 'w-40', height: 'h-24', top: '15%', bottom: '15%', left: '5%', right: '5%' }
-              ].map((item, index) => (
-                <div key={index} className="text-center group">
-                  <div className="bg-gray-800 rounded-2xl p-3 inline-block shadow-lg group-hover:scale-105 transition-transform duration-300">
-                    <div className={`${item.width} ${item.height} bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg relative overflow-hidden`}>
-                      <div className="absolute inset-0 border border-yellow-400/60" style={{
-                        top: item.top,
-                        bottom: item.bottom,
-                        left: item.left,
-                        right: item.right
-                      }}></div>
-                    </div>
-                  </div>
-                  <p className="text-sm font-medium text-gray-700 mt-3 group-hover:text-blue-600 transition-colors">
-                    {item.device}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>
   );
 
+  // Show loading state - check both isLoading and safeProfile (which handles null/undefined)
+  if (isLoading || !safeProfile) {
+    return (
+      <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200/60 overflow-hidden backdrop-blur-sm">
+        <div className="h-48 bg-gradient-to-r from-blue-600 to-purple-600 relative">
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <Loader2 className="w-8 h-8 text-white animate-spin mb-3" />
+            <p className="text-white/80 text-sm">Loading company profile...</p>
+          </div>
+        </div>
+        <div className="pt-10 pb-8 px-8">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200/60 overflow-hidden backdrop-blur-sm">
-      {/* Enhanced Banner with Gradient Overlay */}
+      {/* Banner */}
       <div className="h-48 bg-gradient-to-r from-blue-600 to-purple-600 relative overflow-hidden">
-        {bannerUrl ? (
-              <img
-                src={bannerUrl}
-                alt={`${company.name} banner`}
-                className="absolute inset-0 w-full h-full object-cover object-center"
-                onError={() => handleImageError('banner')}
-                sizes="100vw"
-              />
-        ) : null}
-        
-        {/* Gradient Overlay */}
+        {coverPhotoUrl ? (
+          <>
+            <img
+              src={getCoverPhotoWithCacheBust()}
+              alt={`${companyData.name} banner`}
+              className="absolute inset-0 w-full h-full object-cover object-center"
+              key={`banner-${refreshKey}`}
+              onLoad={() => console.log('✅ Banner loaded successfully')}
+              onError={(e) => {
+                console.error('❌ Banner failed to load:', coverPhotoUrl);
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+          </>
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-purple-600 flex flex-col items-center justify-center">
+            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mb-3">
+              <Building2 className="w-6 h-6 text-white/80" />
+            </div>
+            <p className="text-white/80 text-sm">No banner image</p>
+            {isOwner && (
+              <p className="text-white/60 text-xs mt-2">Click "Change Banner" to upload one</p>
+            )}
+          </div>
+        )}
+
+        {/* Gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-        
-        {/* Enhanced Action Buttons */}
+
+        {/* Refresh button */}
+        <div className="absolute top-4 right-4">
+          <button
+            onClick={handleRefresh}
+            className="p-2 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm hover:bg-white transition-colors"
+            title="Refresh profile"
+            disabled={isUploading}
+          >
+            <RefreshCw className={`w-4 h-4 ${isUploading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {/* Action Buttons */}
         {isOwner && (
-          <div className="absolute top-4 right-4 flex gap-3">
+          <div className="absolute top-4 right-16 flex gap-3 z-10">
             <Button
-              onClick={handleBannerGuideOpen}
+              onClick={() => setShowBannerGuide(true)}
               variant="outline"
               size="sm"
               className="bg-white/90 backdrop-blur-sm hover:bg-white border-blue-200 text-blue-700 hover:text-blue-800 hover:border-blue-300 shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2"
+              disabled={isUploading}
             >
               <Info className="w-4 h-4" />
               Banner Guide
             </Button>
             <Button
-              onClick={handleEdit}
+              onClick={onEdit}
               variant="outline"
               size="sm"
               className="bg-white/90 backdrop-blur-sm hover:bg-white border-purple-200 text-purple-700 hover:text-purple-800 hover:border-purple-300 shadow-lg hover:shadow-xl transition-all duration-300"
+              disabled={isUploading}
             >
               <Pencil className="w-4 h-4 mr-2" />
               Edit Profile
             </Button>
           </div>
         )}
-        
-        {/* Enhanced Logo with Glow Effect */}
+
+        {/* Logo */}
         <div className="absolute -bottom-6 left-8">
-          <div className="bg-white rounded-2xl p-2 shadow-2xl border border-gray-200/60 backdrop-blur-sm">
-            {logoUrl ? (
-              <div className="relative">
+          <div className="bg-white rounded-2xl p-2 shadow-2xl border border-gray-200/60 backdrop-blur-sm relative group">
+            {avatarUrl ? (
+              <>
                 <img
-                  src={logoUrl}
-                  alt={`${company.name} logo`}
+                  src={getAvatarWithCacheBust()}
+                  alt={`${companyData.name} logo`}
                   className="w-20 h-20 object-cover rounded-xl shadow-lg"
-                  onError={() => handleImageError('logo')}
+                  key={`avatar-${refreshKey}`}
+                  onLoad={() => console.log('✅ Logo loaded successfully')}
+                  onError={(e) => {
+                    console.error('❌ Logo failed to load:', avatarUrl);
+                    e.currentTarget.style.display = 'none';
+                  }}
                 />
                 <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 pointer-events-none" />
-              </div>
+
+                {isOwner && (
+                  <>
+                    <label
+                      htmlFor="company-avatar-upload"
+                      className="absolute inset-0 bg-black/0 group-hover:bg-black/50 rounded-xl transition-all duration-300 cursor-pointer flex items-center justify-center opacity-0 group-hover:opacity-100"
+                    >
+                      <div className="text-white text-xs font-medium bg-black/70 px-3 py-1.5 rounded-lg backdrop-blur-sm">
+                        Change Logo
+                      </div>
+                    </label>
+                    <input
+                      id="company-avatar-upload"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarUpload}
+                      className="hidden"
+                      disabled={isUploading}
+                    />
+                  </>
+                )}
+              </>
             ) : (
-              <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex items-center justify-center shadow-inner">
+              <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex items-center justify-center shadow-inner relative">
                 <Building2 className="w-8 h-8 text-gray-400" />
+                {isOwner && (
+                  <>
+                    <label
+                      htmlFor="company-avatar-upload"
+                      className="absolute inset-0 bg-gray-50 hover:bg-gray-100 rounded-xl transition-all duration-300 cursor-pointer flex items-center justify-center"
+                    >
+                      <div className="text-gray-700 text-xs font-medium bg-white/90 px-3 py-1.5 rounded-lg backdrop-blur-sm">
+                        Upload Logo
+                      </div>
+                    </label>
+                    <input
+                      id="company-avatar-upload"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarUpload}
+                      className="hidden"
+                      disabled={isUploading}
+                    />
+                  </>
+                )}
               </div>
             )}
           </div>
         </div>
+
+        {/* Banner Upload Button */}
+        {isOwner && (
+          <>
+            <label
+              htmlFor="company-banner-upload"
+              className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm hover:bg-white text-blue-700 hover:text-blue-800 border border-blue-200 hover:border-blue-300 px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:shadow transition-all duration-300 cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Pencil className="w-4 h-4" />
+              {isUploading ? 'Uploading...' : 'Change Banner'}
+            </label>
+            <input
+              id="company-banner-upload"
+              type="file"
+              accept="image/*"
+              onChange={handleBannerUpload}
+              className="hidden"
+              disabled={isUploading}
+            />
+          </>
+        )}
       </div>
-      
-      {/* Enhanced Company Info */}
+
+      {/* Company Info */}
       <div className="pt-10 pb-8 px-8">
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-3">
               <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-                {company.name}
+                {companyData.name}
               </h1>
-              {company.verified && (
+              {companyData.verified && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-full text-sm font-semibold shadow-lg">
                   <Award className="w-4 h-4" />
                   <span>Verified</span>
                 </div>
               )}
             </div>
-            
-            {/* Enhanced Info Grid */}
+
+            {/* Info Grid */}
             <div className="flex flex-wrap items-center gap-4 text-gray-600 mb-6">
-              {company.industry && (
+              {companyData.industry && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg border border-blue-100">
                   <Building2 className="w-4 h-4 text-blue-600" />
-                  <span className="font-medium text-blue-700">{company.industry}</span>
+                  <span className="font-medium text-blue-700">{companyData.industry}</span>
                 </div>
               )}
-              
-              {company.address && (
+
+              {companyData.address && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-red-50 rounded-lg border border-red-100">
                   <MapPin className="w-4 h-4 text-red-600" />
-                  <span className="font-medium text-red-700">{company.address}</span>
+                  <span className="font-medium text-red-700">{companyData.address}</span>
                 </div>
               )}
-              
-              {company.website && (
+
+              {companyData.website && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 rounded-lg border border-purple-100">
                   <Globe className="w-4 h-4 text-purple-600" />
-                  <a 
-                    href={company.website} 
-                    target="_blank" 
+                  <a
+                    href={companyData.website}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="font-medium text-purple-700 hover:text-purple-800 hover:underline transition-colors"
                   >
@@ -287,33 +440,32 @@ export default function CompanyHero({ company, isOwner, onEdit }: CompanyHeroPro
                 </div>
               )}
             </div>
-            
-            {company.description && (
+
+            {companyData.description && (
               <p className="text-gray-700 leading-relaxed text-lg max-w-4xl border-l-4 border-blue-500 pl-4 bg-blue-50/50 py-3 rounded-r-lg">
-                {company.description}
+                {companyData.description}
               </p>
             )}
           </div>
-          
-          {/* Enhanced Side Info */}
+
+          {/* Side Info */}
           <div className="lg:text-right space-y-3">
             <div className="flex lg:flex-col items-center gap-4 lg:gap-2 text-sm">
               <div className="flex items-center gap-2 text-gray-600 bg-gray-50 px-3 py-2 rounded-lg">
                 <Calendar className="w-4 h-4 text-gray-500" />
-                <span className="font-medium">Joined {new Date(company.createdAt).toLocaleDateString('en-US', {
+                <span className="font-medium">Joined {new Date(companyData.createdAt).toLocaleDateString('en-US', {
                   year: 'numeric',
                   month: 'long',
                   day: 'numeric'
                 })}</span>
               </div>
-              
-              <div className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold border shadow-sm ${
-                company.verified 
-                  ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border-green-200' 
-                  : 'bg-gradient-to-r from-yellow-100 to-amber-100 text-yellow-800 border-yellow-200'
-              }`}>
+
+              <div className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold border shadow-sm ${companyData.verified
+                ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border-green-200'
+                : 'bg-gradient-to-r from-yellow-100 to-amber-100 text-yellow-800 border-yellow-200'
+                }`}>
                 <Star className="w-4 h-4 mr-2" />
-                {company.verified ? 'Verified Company' : 'Verification Pending'}
+                {companyData.verified ? 'Verified Company' : 'Verification Pending'}
               </div>
             </div>
           </div>

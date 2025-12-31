@@ -1,0 +1,139 @@
+{
+    "info": {
+        "name": "BananaLink API Test Suite",
+        "_postman_id": "test-suite-12345",
+        "description": "Complete test suite for Verification and Appointment APIs"
+    },
+    "item": [
+        {
+            "name": "01 - User Registration & Login",
+            "item": [
+                {
+                    "name": "Register Test User",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"User registered successfully\", function() {",
+                                    "    pm.response.to.have.status(201);",
+                                    "    var jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData.success).to.be.true;",
+                                    "    pm.expect(jsonData.user).to.have.property('_id');",
+                                    "    pm.environment.set(\"testUserId\", jsonData.user._id);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "User Login",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"User login successful\", function() {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    var jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData.success).to.be.true;",
+                                    "    pm.expect(jsonData.data).to.have.property('token');",
+                                    "    pm.environment.set(\"userToken\", jsonData.data.token);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "02 - Verification API Tests",
+            "item": [
+                {
+                    "name": "Get My Verification Status"
+                },
+                {
+                    "name": "Request Verification"
+                },
+                {
+                    "name": "Admin Login for Verification Tests"
+                },
+                {
+                    "name": "Get Verification Requests (Admin)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Verification requests retrieved\", function() {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    var jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData.success).to.be.true;",
+                                    "    pm.expect(jsonData).to.have.property('requests');",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Update User Verification (Admin)"
+                },
+                {
+                    "name": "Get Verification Stats (Admin)"
+                }
+            ]
+        },
+        {
+            "name": "03 - Appointment API Tests",
+            "item": [
+                {
+                    "name": "Get Available Slots"
+                },
+                {
+                    "name": "Create Appointment"
+                },
+                {
+                    "name": "Get My Appointments"
+                },
+                {
+                    "name": "Admin Get All Appointments"
+                },
+                {
+                    "name": "Update Appointment Status (Admin)"
+                },
+                {
+                    "name": "Cancel Appointment"
+                }
+            ]
+        },
+        {
+            "name": "04 - Cleanup Tests",
+            "item": [
+                {
+                    "name": "Delete Test Appointment",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Appointment deleted\", function() {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    var jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData.success).to.be.true;",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

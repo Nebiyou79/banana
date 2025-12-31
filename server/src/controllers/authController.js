@@ -253,7 +253,7 @@ exports.resendOTP = async (req, res, next) => {
 };
 
 // Enhanced Login with security features
-exports.loginUser = async (req, res, next) => {
+exports.loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -265,25 +265,21 @@ exports.loginUser = async (req, res, next) => {
     }
 
     const user = await User.findOne({ email }).select('+passwordHash');
-    
-    // Check if user exists and is active
-    if (!user || !user.isActive) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid credentials' 
-      });
-    }
 
-    // Check if account is locked
-    if (user.isLocked) {
-      const lockTimeLeft = Math.ceil((user.lockUntil - Date.now()) / 100000000);
+    if (!user || !user.isActive) {
       return res.status(401).json({
         success: false,
-        message: `Account locked. Try again in ${lockTimeLeft} minutes.`
+        message: 'Invalid credentials'
       });
     }
 
-    // Check if email is verified
+    if (user.isLocked) {
+      return res.status(401).json({
+        success: false,
+        message: 'Account is temporarily locked. Try again later.'
+      });
+    }
+
     if (!user.emailVerified) {
       return res.status(401).json({
         success: false,
@@ -294,35 +290,38 @@ exports.loginUser = async (req, res, next) => {
     }
 
     const isPasswordValid = await user.comparePassword(password);
-    
+
     if (!isPasswordValid) {
-      // Increment login attempts
       await user.incrementLoginAttempts();
-      
+
       const attemptsLeft = MAX_LOGIN_ATTEMPTS - (user.loginAttempts + 1);
-      
-      return res.status(401).json({ 
-        success: false, 
-        message: `Invalid credentials. ${attemptsLeft > 0 ? `${attemptsLeft} attempts left` : 'Account will be locked'}`
+
+      return res.status(401).json({
+        success: false,
+        message: `Invalid credentials. ${
+          attemptsLeft > 0
+            ? `${attemptsLeft} attempts left`
+            : 'Account will be locked'
+        }`
       });
     }
 
-    // Reset login attempts on successful login
-    await User.findByIdAndUpdate(user._id, {
-      loginAttempts: 0,
-      lockUntil: null
-    });
-
-    user.lastLogin = new Date();
-    await user.save();
+    // ✅ SAFE UPDATE (no validation)
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: { lastLogin: new Date(), loginAttempts: 0 },
+        $unset: { lockUntil: 1 }
+      }
+    );
 
     const token = jwt.sign(
-      { userId: user._id, role: user.role }, 
-      JWT_SECRET, 
+      { userId: user._id, role: user.role },
+      JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Login successful',
       data: {
@@ -333,20 +332,20 @@ exports.loginUser = async (req, res, next) => {
           role: user.role,
           emailVerified: user.emailVerified,
           verificationStatus: user.verificationStatus,
-          profileCompleted: user.profileCompleted,
+          profileCompleted: user.profileCompleted
         },
         token
       }
     });
-
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Internal server error' 
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error'
     });
   }
 };
+
 
 // Forgot password - Send OTP instead of token
 exports.forgotPassword = async (req, res, next) => {

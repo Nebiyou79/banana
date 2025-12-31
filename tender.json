@@ -1,0 +1,803 @@
+{
+  "info": {
+    "name": "BananaLink Tender Management API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Comprehensive API collection for testing tender management endpoints"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string",
+      "description": "JWT token from login response"
+    },
+    {
+      "key": "companyToken",
+      "value": "",
+      "type": "string",
+      "description": "Token for company user"
+    },
+    {
+      "key": "freelancerToken",
+      "value": "",
+      "type": "string",
+      "description": "Token for freelancer user"
+    },
+    {
+      "key": "organizationToken",
+      "value": "",
+      "type": "string",
+      "description": "Token for organization user"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string",
+      "description": "Token for admin user"
+    },
+    {
+      "key": "tenderId",
+      "value": "",
+      "type": "string",
+      "description": "Will be set after creating a tender"
+    },
+    {
+      "key": "invitationId",
+      "value": "",
+      "type": "string",
+      "description": "Will be set after inviting users"
+    },
+    {
+      "key": "shareToken",
+      "value": "",
+      "type": "string",
+      "description": "Shareable link token"
+    }
+  ],
+  "item": [
+    {
+      "name": "🔐 Authentication Setup",
+      "description": "First, get authentication tokens for different user types",
+      "item": [
+        {
+          "name": "Login - Company User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"company@example.com\",\n  \"password\": \"company123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "response": [
+            {
+              "name": "Successful Login",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"company@example.com\",\n  \"password\": \"company123\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/login",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "login"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n  \"user\": {\n    \"_id\": \"65a1b2c3d4e5f6a7b8c9d0e1\",\n    \"role\": \"company\",\n    \"name\": \"Company User\"\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Save token as variable",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success && jsonData.token) {",
+                  "    pm.environment.set('companyToken', jsonData.token);",
+                  "    pm.environment.set('authToken', jsonData.token);",
+                  "    console.log('Company token saved');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - Freelancer User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"freelancer@example.com\",\n  \"password\": \"freelancer123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success && jsonData.token) {",
+                  "    pm.environment.set('freelancerToken', jsonData.token);",
+                  "    console.log('Freelancer token saved');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "📋 Public Endpoints",
+      "description": "Endpoints accessible without authentication",
+      "item": [
+        {
+          "name": "Get All Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tender/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "categories"]
+            }
+          }
+        },
+        {
+          "name": "Get All Tenders (Public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tender?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Freelance Tenders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tender/freelance?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "freelance"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Professional Tenders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tender/professional?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "professional"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Tender by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tender/{{tenderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "{{tenderId}}"]
+            }
+          }
+        },
+        {
+          "name": "Access Tender via Share Link",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tender/link/{{shareToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "link", "{{shareToken}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏢 Company Tender Management",
+      "description": "Endpoints requiring company role",
+      "item": [
+        {
+          "name": "Generate Tender ID",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prefix\": \"TDR\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tender/generate-id",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "generate-id"]
+            }
+          }
+        },
+        {
+          "name": "Create Freelance Tender",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Website Development Needed\",\n  \"description\": \"We need a professional website for our company with e-commerce functionality.\",\n  \"procurementCategory\": \"web_development\",\n  \"skillsRequired\": [\"React\", \"Node.js\", \"MongoDB\", \"AWS\"],\n  \"deadline\": \"2024-12-31T23:59:59.999Z\",\n  \"duration\": 30,\n  \"targetAudience\": \"everyone\",\n  \"visibility\": \"public\",\n  \"requirements\": {\n    \"experienceLevel\": \"intermediate\",\n    \"location\": \"anywhere\"\n  },\n  \"status\": \"published\",\n  \"tenderType\": \"company\",\n  \"freelanceSpecific\": {\n    \"rateType\": \"fixed\",\n    \"fixedPrice\": 5000,\n    \"duration\": {\n      \"value\": 30,\n      \"unit\": \"days\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tender/freelance",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "freelance"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success && jsonData.data && jsonData.data.tender) {",
+                  "    pm.environment.set('tenderId', jsonData.data.tender._id);",
+                  "    console.log('Tender created with ID: ' + jsonData.data.tender._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Professional Tender",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Office Construction Project\",\n  \"description\": \"Construction of 5-story office building in downtown area.\",\n  \"procurementCategory\": \"construction_building\",\n  \"skillsRequired\": [\"construction\", \"project management\", \"civil engineering\"],\n  \"budget\": {\n    \"min\": 1000000,\n    \"max\": 1500000,\n    \"currency\": \"USD\",\n    \"isNegotiable\": true\n  },\n  \"deadline\": \"2024-12-15T23:59:59.999Z\",\n  \"duration\": 60,\n  \"targetAudience\": \"companies_only\",\n  \"visibility\": \"public\",\n  \"requirements\": {\n    \"experienceLevel\": \"expert\",\n    \"location\": \"specific_country\",\n    \"specificLocation\": \"United States\"\n  },\n  \"status\": \"published\",\n  \"tenderType\": \"company\",\n  \"tenderSubType\": \"open\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tender/professional",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "professional"]
+            }
+          }
+        },
+        {
+          "name": "Get My Company Tenders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tender/company/my-tenders",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "company", "my-tenders"]
+            }
+          }
+        },
+        {
+          "name": "Upload Tender Documents",
+          "disabled": true,
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "documents",
+                  "type": "file",
+                  "src": "/path/to/document.pdf"
+                },
+                {
+                  "key": "descriptions",
+                  "value": "Technical specifications",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tender/{{tenderId}}/documents",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "{{tenderId}}", "documents"]
+            }
+          }
+        },
+        {
+          "name": "Generate Shareable Link",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"days\": 30,\n  \"emails\": [\"test@example.com\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tender/{{tenderId}}/share",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "{{tenderId}}", "share"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success && jsonData.data && jsonData.data.shareableLink) {",
+                  "    pm.environment.set('shareToken', jsonData.data.shareableLink.token);",
+                  "    console.log('Share token saved: ' + jsonData.data.shareableLink.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invite Users by Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emails\": [\"freelancer@example.com\", \"newuser@example.com\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tender/{{tenderId}}/invite-emails",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "{{tenderId}}", "invite-emails"]
+            }
+          }
+        },
+        {
+          "name": "Update Tender",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Title - Website Development Project\",\n  \"description\": \"Updated description with more details...\",\n  \"deadline\": \"2024-12-31T23:59:59.999Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tender/{{tenderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "{{tenderId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Tender",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tender/{{tenderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "{{tenderId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👨‍💼 Freelancer Tender Actions",
+      "description": "Endpoints for freelancer users",
+      "item": [
+        {
+          "name": "Save/Unsave Tender",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{freelancerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tender/{{tenderId}}/save",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "{{tenderId}}", "save"]
+            }
+          }
+        },
+        {
+          "name": "Get Saved Tenders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{freelancerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tender/saved/saved",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "saved", "saved"]
+            }
+          }
+        },
+        {
+          "name": "Get My Invitations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{freelancerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tender/invitations/my-invitations",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "invitations", "my-invitations"]
+            }
+          }
+        },
+        {
+          "name": "Respond to Invitation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{freelancerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"accepted\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tender/{{tenderId}}/invitation/{{invitationId}}/respond",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "{{tenderId}}", "invitation", "{{invitationId}}", "respond"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏛️ Organization Tender Management",
+      "description": "Endpoints for organization users",
+      "item": [
+        {
+          "name": "Get My Organization Tenders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organizationToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tender/organization/my-tenders",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "organization", "my-tenders"]
+            }
+          }
+        },
+        {
+          "name": "Get All My Tenders (Company + Organization)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organizationToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tender/user/my-tenders",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "user", "my-tenders"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔧 Utility Endpoints",
+      "description": "Miscellaneous utility endpoints",
+      "item": [
+        {
+          "name": "Download Tender Document",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tender/documents/download/filename.pdf",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "documents", "download", "filename.pdf"]
+            }
+          }
+        },
+        {
+          "name": "Get Tenders by Platform",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tender/platform/freelancer?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "platform", "freelancer"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 Advanced Queries",
+      "description": "Advanced filtering and search endpoints",
+      "item": [
+        {
+          "name": "Search Tenders with Filters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tender?search=website&procurementCategory=web_development&minBudget=1000&maxBudget=10000&skills=React,Node.js&page=1&limit=10&sortBy=createdAt&sortOrder=desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "website"
+                },
+                {
+                  "key": "procurementCategory",
+                  "value": "web_development"
+                },
+                {
+                  "key": "minBudget",
+                  "value": "1000"
+                },
+                {
+                  "key": "maxBudget",
+                  "value": "10000"
+                },
+                {
+                  "key": "skills",
+                  "value": "React,Node.js"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Freelance Tenders with Hourly Rate Filter",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tender/freelance?rateType=hourly&minHourlyRate=20&maxHourlyRate=100&procurementCategory=web_development",
+              "host": ["{{baseUrl}}"],
+              "path": ["tender", "freelance"],
+              "query": [
+                {
+                  "key": "rateType",
+                  "value": "hourly"
+                },
+                {
+                  "key": "minHourlyRate",
+                  "value": "20"
+                },
+                {
+                  "key": "maxHourlyRate",
+                  "value": "100"
+                },
+                {
+                  "key": "procurementCategory",
+                  "value": "web_development"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "console.log('Base URL:', pm.variables.get('baseUrl'));",
+          "console.log('Current Auth Token:', pm.variables.get('authToken'));"
+        ]
+      }
+    }
+  ]
+}

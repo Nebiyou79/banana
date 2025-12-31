@@ -235,4 +235,38 @@ export function downloadFile(content: string, filename: string, type: string = '
   link.click()
   document.body.removeChild(link)
   URL.revokeObjectURL(url)
-}
+}// lib/utils.ts (update with dark mode classes)
+
+// Add color utilities for dark mode
+export const statusColors = {
+  draft: { light: 'bg-gray-100 text-gray-800', dark: 'bg-gray-800 text-gray-200' },
+  published: { light: 'bg-green-100 text-green-800', dark: 'bg-green-900 text-green-200' },
+  locked: { light: 'bg-blue-100 text-blue-800', dark: 'bg-blue-900 text-blue-200' },
+  deadline_reached: { light: 'bg-yellow-100 text-yellow-800', dark: 'bg-yellow-900 text-yellow-200' },
+  revealed: { light: 'bg-purple-100 text-purple-800', dark: 'bg-purple-900 text-purple-200' },
+  closed: { light: 'bg-indigo-100 text-indigo-800', dark: 'bg-indigo-900 text-indigo-200' },
+  cancelled: { light: 'bg-red-100 text-red-800', dark: 'bg-red-900 text-red-200' }
+} as const
+
+export const workflowColors = {
+  open: { 
+    light: 'bg-emerald-500/10 text-emerald-700 border-emerald-300',
+    dark: 'bg-emerald-900/20 text-emerald-300 border-emerald-700'
+  },
+  closed: { 
+    light: 'bg-blue-500/10 text-blue-700 border-blue-300',
+    dark: 'bg-blue-900/20 text-blue-300 border-blue-700'
+  }
+} as const;
+// lib/utils.ts (add if not present)
+export const categoryColors = {
+  freelance: { 
+    light: 'bg-emerald-500/20 text-emerald-800 border-emerald-300',
+    dark: 'bg-emerald-900/30 text-emerald-300 border-emerald-700'
+  },
+  professional: { 
+    light: 'bg-blue-500/20 text-blue-800 border-blue-300',
+    dark: 'bg-blue-900/30 text-blue-300 border-blue-700'
+  }
+} as const;
+

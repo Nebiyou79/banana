@@ -96,65 +96,135 @@ const jobSchema = new mongoose.Schema({
       default: false
     }
   },
-  category: {
+  demographicRequirements: {
+    sex: {
+      type: String,
+      enum: ['male', 'female', 'any'],
+      default: 'any'
+    },
+    age: {
+      min: {
+        type: Number,
+        min: 18,
+        max: 70
+      },
+      max: {
+        type: Number,
+        min: 18,
+        max: 70
+      }
+    }
+  },  
+  jobNumber: {
     type: String,
-    required: true,
-    enum: [
-      // Technology & IT
-      'software-development', 'web-development', 'mobile-development', 'frontend-development',
-      'backend-development', 'full-stack-development', 'devops', 'cloud-computing',
-      'data-science', 'machine-learning', 'artificial-intelligence', 'cybersecurity',
-      'it-support', 'network-administration', 'database-administration', 'system-administration',
-      
-      // Business & Management
-      'accounting-finance', 'banking-insurance', 'management', 'project-management',
-      'product-management', 'business-development', 'strategy-consulting', 'operations',
-      
-      // Sales & Marketing
-      'sales', 'marketing', 'digital-marketing', 'social-media-marketing', 'content-marketing',
-      'seo-sem', 'brand-management', 'public-relations', 'market-research',
-      
-      // Creative & Design
-      'graphic-design', 'ui-ux-design', 'web-design', 'motion-graphics', 'video-production',
-      'photography', 'content-writing', 'copywriting', 'translation',
-      
-      // Engineering
-      'civil-engineering', 'electrical-engineering', 'mechanical-engineering', 'chemical-engineering',
-      'industrial-engineering', 'automotive-engineering', 'aerospace-engineering',
-      
-      // Healthcare
-      'medical-doctor', 'nursing', 'pharmacy', 'dentistry', 'medical-laboratory',
-      'public-health', 'healthcare-administration', 'physiotherapy',
-      
-      // Education
-      'teaching', 'lecturing', 'academic-research', 'educational-administration', 'tutoring',
-      'curriculum-development', 'special-education',
-      
-      // Other Professional
-      'human-resources', 'recruitment', 'legal', 'logistics', 'supply-chain',
-      'procurement', 'quality-control', 'hospitality-tourism', 'customer-service',
-      'administrative', 'secretarial', 'receptionist',
-      
-      // Trades & Services
-      'construction', 'architecture', 'interior-design', 'real-estate', 'property-management',
-      'agriculture', 'agribusiness', 'farming', 'veterinary', 'environmental',
-      
-      // Creative Arts & Media
-      'journalism', 'broadcasting', 'publishing', 'music', 'performing-arts', 'fashion',
-      
-      // NGO & Development (Important for organizations)
-      'ngo-development', 'social-work', 'community-development', 'humanitarian-aid', 
-      'international-development', 'public-policy', 'advocacy', 'grant-writing',
-      'fundraising', 'volunteer-coordination', 'program-management',
-      
-      // Religious & Faith-based
-      'religious', 'faith-based', 'pastoral', 'theological',
-      
-      // Other
-      'security', 'driving-delivery', 'cleaning-maintenance', 'beauty-wellness', 'sports-fitness',
-      'other'
-    ]
+    trim: true,
   },
+category: {
+  type: String,
+  required: true,
+  enum: [
+    // Technology & IT (Expanded)
+    'software-developer', 'web-developer', 'mobile-app-developer', 'ai-engineer',
+    'machine-learning-specialist', 'data-analyst', 'data-scientist', 'cybersecurity-analyst',
+    'network-administrator', 'database-administrator', 'cloud-engineer', 'devops-engineer',
+    'ui-ux-designer', 'game-developer', 'it-project-manager', 'blockchain-developer',
+    'ar-vr-specialist', 'computer-hardware-technician', 'it-support-specialist', 'systems-analyst',
+    
+    // Engineering & Construction (Expanded)
+    'civil-engineer', 'mechanical-engineer', 'electrical-engineer', 'chemical-engineer',
+    'industrial-engineer', 'structural-engineer', 'architect', 'construction-manager',
+    'surveyor', 'urban-planner', 'quantity-surveyor', 'environmental-engineer',
+    'mining-engineer', 'geotechnical-engineer', 'water-resource-engineer', 'road-construction-technician',
+    'site-supervisor', 'building-inspector', 'mason', 'carpenter',
+    
+    // Healthcare (Expanded)
+    'medical-doctor', 'nurse', 'midwife', 'pharmacist', 'medical-laboratory-technician',
+    'radiologist', 'physiotherapist', 'dentist', 'public-health-officer', 'nutritionist',
+    'health-extension-worker', 'community-health-nurse', 'emergency-medical-technician',
+    'optometrist', 'biomedical-engineer', 'psychologist', 'clinical-officer', 'hospital-administrator',
+    'veterinarian', 'health-information-technician',
+    
+    // Education (Expanded)
+    'kindergarten-teacher', 'primary-school-teacher', 'secondary-school-teacher', 'university-lecturer',
+    'professor', 'teacher-trainer', 'curriculum-developer', 'educational-researcher',
+    'school-administrator', 'librarian', 'special-needs-educator', 'language-instructor',
+    'online-tutor', 'tvet-trainer', 'education-policy-analyst', 'academic-advisor',
+    'exam-coordinator', 'school-counselor', 'education-technologist', 'instructional-designer',
+    
+    // Business & Finance (Expanded)
+    'accountant', 'auditor', 'financial-analyst', 'bank-teller', 'loan-officer',
+    'insurance-agent', 'tax-consultant', 'investment-advisor', 'business-consultant',
+    'entrepreneur', 'procurement-officer', 'human-resource-manager', 'marketing-specialist',
+    'sales-executive', 'administrative-assistant', 'customer-service-representative',
+    'project-manager', 'management-consultant', 'data-entry-clerk', 'operations-manager',
+    
+    // Agriculture & Environment (Expanded)
+    'agronomist', 'livestock-expert', 'horticulturist', 'forestry-technician',
+    'soil-scientist', 'irrigation-technician', 'agricultural-economist', 'farm-manager',
+    'beekeeper', 'fisheries-officer', 'veterinary-assistant', 'agricultural-extension-worker',
+    'hydrologist', 'environmental-scientist', 'climate-change-specialist', 'wildlife-conservationist',
+    'organic-farmer', 'agricultural-engineer', 'greenhouse-technician', 'agro-processing-specialist',
+    
+    // Creative & Media (Expanded)
+    'graphic-designer', 'photographer', 'videographer', 'film-director', 'sound-engineer',
+    'animator', 'fashion-designer', 'interior-designer', 'journalist', 'news-anchor',
+    'social-media-manager', 'public-relations-officer', 'copywriter', 'content-creator',
+    'digital-marketer', 'editor', 'musician', 'actor', 'painter', 'cultural-heritage-specialist',
+    
+    // Legal & Public Service (Expanded)
+    'lawyer', 'judge', 'legal-assistant', 'prosecutor', 'court-clerk',
+    'police-officer', 'customs-officer', 'immigration-officer', 'public-administrator',
+    'policy-analyst', 'diplomat', 'foreign-service-officer', 'urban-governance-expert',
+    'elected-official', 'civil-registrar', 'social-worker', 'human-rights-advocate',
+    'mediator', 'compliance-officer', 'anti-corruption-officer',
+    
+    // Hospitality & Tourism (Expanded)
+    'hotel-manager', 'tour-guide', 'chef', 'waiter', 'bartender',
+    'housekeeper', 'event-planner', 'travel-agent', 'front-desk-officer',
+    'concierge', 'restaurant-manager', 'baker', 'pastry-chef', 'resort-manager',
+    'catering-manager', 'cruise-staff', 'tourism-development-officer', 'sommelier',
+    'barista', 'food-beverage-supervisor',
+    
+    // Manufacturing & Production (Expanded)
+    'factory-worker', 'production-supervisor', 'quality-control-inspector', 'machinist',
+    'welder', 'textile-worker', 'garment-designer', 'plastic-production-operator',
+    'metal-fabricator', 'packaging-technician', 'maintenance-technician', 'tool-maker',
+    'machine-operator', 'industrial-electrician', 'production-engineer', 'leather-technician',
+    'furniture-maker', 'ceramics-artist', 'printing-technician', 'toy-manufacturer',
+    
+    // Transportation & Logistics (Expanded)
+    'driver', 'truck-operator', 'logistics-coordinator', 'transport-manager',
+    'warehouse-officer', 'forklift-operator', 'ship-captain', 'flight-attendant',
+    'air-traffic-controller', 'pilot', 'aviation-maintenance-technician', 'railway-engineer',
+    'delivery-driver', 'fleet-manager', 'transport-planner', 'maritime-officer',
+    'cargo-handler', 'port-operations-manager', 'customs-broker', 'dispatcher',
+    
+    // Energy & Utilities (Expanded)
+    'renewable-energy-technician', 'solar-panel-installer', 'wind-turbine-technician',
+    'hydropower-engineer', 'energy-auditor', 'electric-power-line-technician',
+    'water-treatment-operator', 'waste-management-officer', 'environmental-engineer',
+    'utility-manager', 'petroleum-engineer', 'gas-plant-operator', 'chemical-plant-technician',
+    'recycling-specialist', 'nuclear-safety-technician', 'meter-reader', 'electricity-distribution-engineer',
+    'boiler-operator', 'maintenance-planner', 'energy-policy-analyst',
+    
+    // Emerging & Specialized Roles
+    'ai-ethics-specialist', 'sustainability-officer', 'e-commerce-manager',
+    'digital-transformation-consultant', 'remote-work-coordinator', 'drone-operator',
+    '3d-printing-technician', 'robotics-engineer', 'climate-data-analyst', 'social-impact-consultant',
+    'health-data-analyst', 'cybercrime-investigator', 'it-policy-advisor', 'open-data-specialist',
+    'data-governance-officer', 'innovation-manager', 'creative-director', 'startup-founder',
+    'community-development-specialist', 'nonprofit-manager',
+    
+    // Keep existing categories for backward compatibility
+    'software-development', 'web-development', 'mobile-development', 'frontend-development',
+    'backend-development', 'full-stack-development', 'devops', 'cloud-computing',
+    'data-science', 'machine-learning', 'artificial-intelligence', 'cybersecurity',
+    'it-support', 'network-administration', 'database-administration', 'system-administration',
+    
+    // Other existing categories...
+    'other'
+  ]
+},
   experienceLevel: {
     type: String,
     enum: ['fresh-graduate', 'entry-level', 'mid-level', 'senior-level', 'managerial', 'director', 'executive'],
@@ -163,8 +233,28 @@ const jobSchema = new mongoose.Schema({
   educationLevel: {
     type: String,
     enum: [
-      'high-school', 'diploma', 'bachelors', 'masters', 'phd', 'none-required'
-    ]
+      'primary-education',
+      'secondary-education', 
+      'tvet-level-i',
+      'tvet-level-ii',
+      'tvet-level-iii',
+      'tvet-level-iv',
+      'tvet-level-v',
+      'undergraduate-bachelors',
+      'postgraduate-masters',
+      'doctoral-phd',
+      'lecturer',
+      'professor',
+      'none-required',
+      
+      // Backward compatibility
+      'high-school',
+      'diploma',
+      'bachelors',
+      'masters',
+      'phd'
+    ],
+    default: 'none-required'
   },
   status: {
     type: String,

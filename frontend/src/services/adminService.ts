@@ -15,7 +15,7 @@ adminApi.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  return config; 
+  return config;
 });
 
 adminApi.interceptors.response.use(
@@ -35,7 +35,7 @@ export interface User {
   _id?: string;
   name: string;
   email: string;
-  role: 'candidate' | 'freelancer' | 'company' | 'admin';
+  role: 'candidate' | 'freelancer' | 'company' | 'organization' | 'admin';
   password?: string;
   verificationStatus?: 'none' | 'partial' | 'full';
   status?: 'active' | 'inactive' | 'pending' | 'suspended';
@@ -140,7 +140,7 @@ export interface Pagination {
 // Enhanced admin service with error handling
 const handleAdminApiError = (error: any, operation: string) => {
   console.error(`Admin API Error for ${operation}:`, error);
-  
+
   if (error.response?.data?.message) {
     handleError(error.response.data.message);
   } else if (error.message) {
@@ -148,7 +148,7 @@ const handleAdminApiError = (error: any, operation: string) => {
   } else {
     handleError(`Failed to ${operation}`);
   }
-  
+
   return Promise.reject(error);
 };
 
@@ -156,7 +156,7 @@ export const adminService = {
   // Dashboard
   getDashboardStats: () => adminApi.get('/admin/stats').catch(error => handleAdminApiError(error, 'fetch dashboard stats')),
   getPlatformAnalytics: () => adminApi.get('/admin/analytics').catch(error => handleAdminApiError(error, 'fetch platform analytics')),
-  
+
   // Users
   getUsers: (params?: any) => adminApi.get('/admin/users', { params }).catch(error => handleAdminApiError(error, 'fetch users')),
   getUserById: (id: string) => adminApi.get(`/admin/users/${id}`).catch(error => handleAdminApiError(error, 'fetch user')),
@@ -180,7 +180,7 @@ export const adminService = {
     handleSuccess('Bulk action completed successfully');
     return response;
   }).catch(error => handleAdminApiError(error, 'perform bulk user actions')),
-  
+
   // Jobs
   getJobs: (params?: any) => adminApi.get('/admin/jobs', { params }).catch(error => handleAdminApiError(error, 'fetch jobs')),
   updateJob: (id: string, data: any) => adminApi.put(`/admin/jobs/${id}`, data).then(response => {
@@ -191,7 +191,7 @@ export const adminService = {
     handleSuccess('Job deleted successfully');
     return response;
   }).catch(error => handleAdminApiError(error, 'delete job')),
-  
+
   // Tender Management
   getTenderStats: () => adminApi.get('/admin/tenders/stats').catch(error => handleAdminApiError(error, 'fetch tender stats')),
   getTenderAnalytics: () => adminApi.get('/admin/tenders/analytics').catch(error => handleAdminApiError(error, 'fetch tender analytics')),
@@ -210,10 +210,10 @@ export const adminService = {
     handleSuccess('Bulk tender actions completed successfully');
     return response;
   }).catch(error => handleAdminApiError(error, 'perform bulk tender actions')),
-  
+
   // Proposals
   getProposals: (params?: any) => adminApi.get('/admin/proposals', { params }).catch(error => handleAdminApiError(error, 'fetch proposals')),
-  
+
   // Templates
   getTemplates: (params?: any) => adminApi.get('/admin/templates', { params }).catch(error => handleAdminApiError(error, 'fetch templates')),
   createTemplate: (data: any) => adminApi.post('/admin/templates', data).then(response => {
@@ -228,14 +228,14 @@ export const adminService = {
     handleSuccess('Template deleted successfully');
     return response;
   }).catch(error => handleAdminApiError(error, 'delete template')),
-  
+
   // Settings
   getSettings: () => adminApi.get('/admin/settings').catch(error => handleAdminApiError(error, 'fetch settings')),
   updateSettings: (data: any) => adminApi.put('/admin/settings', data).then(response => {
     handleSuccess('Settings updated successfully');
     return response;
   }).catch(error => handleAdminApiError(error, 'update settings')),
-  
+
   // Reports
   generateReport: (data: any) => adminApi.post('/admin/reports/generate', data).then(response => {
     handleSuccess('Report generated successfully');

@@ -1,345 +1,703 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// components/tenders/TenderFilters.tsx - MOBILE RESPONSIVE VERSION
-import React, { useState } from 'react';
-import { TenderFilters as TenderFiltersType } from '@/services/tenderService';
-import { BuildingOfficeIcon, BuildingLibraryIcon, PlusIcon } from '@heroicons/react/24/outline';
+// components/tender/TenderFilters.tsx
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Search,
+  Filter,
+  X,
+  DollarSign,
+  Calendar,
+  Briefcase,
+  Building,
+  Globe,
+  Lock,
+  ChevronDown,
+  SlidersHorizontal,
+  Tag,
+  Star,
+  Clock,
+  AlertCircle,
+  Check,
+  Sparkles
+} from 'lucide-react';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/social/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator
+} from '@/components/ui/Command';
+import { Slider } from '@/components/ui/Slider';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { Label } from '@/components/ui/Label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/RadioGroup';
+import {
+  TenderFilter,
+  TenderCategoryType,
+  WorkflowType,
+  ProcurementMethod,
+  EvaluationMethod,
+  ExperienceLevel,
+  ProjectType,
+  EngagementType
+} from '@/services/tenderService';
+import { useCategories } from '@/hooks/useTenders';
+import { cn } from '@/lib/utils';
+import { ScrollArea } from '../ui/scroll-area';
 
 interface TenderFiltersProps {
-  filters: TenderFiltersType;
-  onFiltersChange: (filters: TenderFiltersType) => void;
-  onReset: () => void;
-  showTenderTypeFilter?: boolean;
+  filters: TenderFilter;
+  onFiltersChange: (filters: TenderFilter) => void;
+  showSticky?: boolean;
+  className?: string;
 }
 
-// Categories remain the same...
-const categories = [
-  { value: 'all', label: 'All Categories' },
-  // Construction & Engineering
-  { value: 'construction', label: 'Construction' },
-  { value: 'civil_engineering', label: 'Civil Engineering' },
-  { value: 'architecture', label: 'Architecture' },
-  { value: 'electrical_works', label: 'Electrical Works' },
-  { value: 'mechanical_works', label: 'Mechanical Works' },
-  { value: 'plumbing', label: 'Plumbing' },
-  { value: 'road_construction', label: 'Road Construction' },
-  { value: 'building_construction', label: 'Building Construction' },
-  { value: 'renovation', label: 'Renovation' },
-  
-  // IT & Technology
-  { value: 'software_development', label: 'Software Development' },
-  { value: 'web_development', label: 'Web Development' },
-  { value: 'mobile_development', label: 'Mobile Development' },
-  { value: 'it_consulting', label: 'IT Consulting' },
-  { value: 'network_security', label: 'Network & Security' },
-  { value: 'data_science', label: 'Data Science' },
-  { value: 'ai_ml', label: 'AI & Machine Learning' },
-  { value: 'cloud_computing', label: 'Cloud Computing' },
-  { value: 'cybersecurity', label: 'Cybersecurity' },
-  
-  // Goods & Supplies
-  { value: 'office_supplies', label: 'Office Supplies' },
-  { value: 'medical_supplies', label: 'Medical Supplies' },
-  { value: 'educational_materials', label: 'Educational Materials' },
-  { value: 'agricultural_supplies', label: 'Agricultural Supplies' },
-  { value: 'construction_materials', label: 'Construction Materials' },
-  { value: 'electrical_equipment', label: 'Electrical Equipment' },
-  { value: 'furniture', label: 'Furniture' },
-  { value: 'vehicles', label: 'Vehicles' },
-  
-  // Services
-  { value: 'consulting', label: 'Consulting' },
-  { value: 'cleaning_services', label: 'Cleaning Services' },
-  { value: 'security_services', label: 'Security Services' },
-  { value: 'transport_services', label: 'Transport Services' },
-  { value: 'catering_services', label: 'Catering Services' },
-  { value: 'maintenance_services', label: 'Maintenance Services' },
-  { value: 'training_services', label: 'Training Services' },
-  { value: 'marketing_services', label: 'Marketing Services' },
-  
-  // Other Categories
-  { value: 'healthcare', label: 'Healthcare' },
-  { value: 'education', label: 'Education' },
-  { value: 'agriculture', label: 'Agriculture' },
-  { value: 'manufacturing', label: 'Manufacturing' },
-  { value: 'mining', label: 'Mining' },
-  { value: 'telecommunications', label: 'Telecommunications' },
-  { value: 'energy', label: 'Energy' },
-  { value: 'water_sanitation', label: 'Water & Sanitation' },
-  { value: 'environmental_services', label: 'Environmental Services' },
-  { value: 'research_development', label: 'Research & Development' },
-  { value: 'other', label: 'Other' }
-];
-
-const tenderTypes = [
-  { value: 'all', label: 'All Tender Types', icon: null },
-  { value: 'company', label: 'Company Tenders', icon: BuildingOfficeIcon },
-  { value: 'organization', label: 'Organization Tenders', icon: BuildingLibraryIcon }
-];
-
-const sortOptions = [
-  { value: 'createdAt', label: 'Newest First' },
-  { value: 'deadline', label: 'Deadline' },
-  { value: 'budget.max', label: 'Highest Budget' },
-  { value: 'title', label: 'Title A-Z' }
-];
-
-const TenderFilters: React.FC<TenderFiltersProps> = ({ 
-  filters, 
-  onFiltersChange, 
-  onReset,
-  showTenderTypeFilter = true
+export const TenderFilters: React.FC<TenderFiltersProps> = ({
+  filters,
+  onFiltersChange,
+  showSticky = false,
+  className = ''
 }) => {
-  const [localFilters, setLocalFilters] = useState<TenderFiltersType>(filters);
-  const [skillsInput, setSkillsInput] = useState('');
+  const [localFilters, setLocalFilters] = useState<TenderFilter>(filters);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [selectedCategoryGroup, setSelectedCategoryGroup] = useState<string>('');
+  const { data: categoriesData, isLoading: isLoadingCategories } = useCategories();
 
-  const handleFilterChange = (key: keyof TenderFiltersType, value: any) => {
-    const newFilters = { ...localFilters, [key]: value };
+  // Sync local filters with props
+  useEffect(() => {
+    setLocalFilters(filters);
+  }, [filters]);
+
+  const updateFilter = useCallback((key: keyof TenderFilter, value: any) => {
+    const newFilters = { ...localFilters, [key]: value, page: 1 }; // Reset to page 1 on filter change
     setLocalFilters(newFilters);
-  };
+    onFiltersChange(newFilters);
+  }, [localFilters, onFiltersChange]);
 
-  const handleApplyFilters = () => {
-    onFiltersChange(localFilters);
-  };
-
-  const handleReset = () => {
-    const resetFilters: TenderFiltersType = {
+  const clearFilters = useCallback(() => {
+    const clearedFilters: TenderFilter = {
       page: 1,
-      limit: 12,
+      limit: filters.limit || 12,
+      status: 'published',
       sortBy: 'createdAt',
       sortOrder: 'desc'
     };
-    setLocalFilters(resetFilters);
-    onFiltersChange(resetFilters);
-    setSkillsInput('');
-    onReset();
-  };
+    setLocalFilters(clearedFilters);
+    onFiltersChange(clearedFilters);
+    setIsExpanded(false);
+  }, [filters.limit, onFiltersChange]);
 
-  const addSkill = () => {
-    if (skillsInput.trim()) {
-      const currentSkills = Array.isArray(localFilters.skills) 
-        ? localFilters.skills 
-        : localFilters.skills ? [localFilters.skills] : [];
-      
-      const newSkills = [...currentSkills, skillsInput.trim()];
-      setLocalFilters(prev => ({ ...prev, skills: newSkills }));
-      setSkillsInput('');
+  const getActiveFilterCount = useCallback(() => {
+    let count = 0;
+    const ignoreKeys = ['page', 'limit', 'status', 'sortBy', 'sortOrder'];
+
+    Object.entries(filters).forEach(([key, value]) => {
+      if (!ignoreKeys.includes(key) && value !== undefined && value !== '' && value !== null) {
+        if (Array.isArray(value)) {
+          if (value.length > 0) count++;
+        } else if (typeof value === 'object') {
+          if (Object.keys(value).length > 0) count++;
+        } else {
+          count++;
+        }
+      }
+    });
+
+    return count;
+  }, [filters]);
+
+  const activeFilterCount = getActiveFilterCount();
+
+  // Extract category options
+  const categoryOptions = React.useMemo(() => {
+    const options: Array<{ value: string; label: string; group: string }> = [];
+
+    if (categoriesData?.groups) {
+      Object.entries(categoriesData.groups).forEach(([groupKey, group]) => {
+        group.subcategories.forEach(subcat => {
+          options.push({
+            value: subcat.id,
+            label: subcat.name,
+            group: group.name
+          });
+        });
+      });
     }
-  };
 
-  const removeSkill = (skillToRemove: string) => {
-    const currentSkills = Array.isArray(localFilters.skills) 
-      ? localFilters.skills 
-      : localFilters.skills ? [localFilters.skills] : [];
-    
-    const newSkills = currentSkills.filter(skill => skill !== skillToRemove);
-    setLocalFilters(prev => ({ 
-      ...prev, 
-      skills: newSkills.length > 0 ? newSkills : undefined 
-    }));
-  };
+    return options;
+  }, [categoriesData]);
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      addSkill();
-    }
-  };
+  // Get grouped categories
+  const categoryGroups = React.useMemo(() => {
+    const groups: Record<string, Array<{ value: string; label: string }>> = {};
+
+    categoryOptions.forEach(option => {
+      if (!groups[option.group]) {
+        groups[option.group] = [];
+      }
+      groups[option.group].push({
+        value: option.value,
+        label: option.label
+      });
+    });
+
+    return groups;
+  }, [categoryOptions]);
+
+  const renderFilterBadge = (label: string, value: string, onRemove: () => void) => (
+    <Badge
+      variant="secondary"
+      className="pl-3 pr-1 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+    >
+      <span className="text-sm font-medium">{label}:</span>
+      <span className="ml-1 font-normal">{value}</span>
+      <button
+        onClick={onRemove}
+        className="ml-2 rounded-full hover:bg-slate-300 dark:hover:bg-slate-600 p-0.5 transition-colors"
+        aria-label={`Remove ${label} filter`}
+      >
+        <X className="w-3 h-3" />
+      </button>
+    </Badge>
+  );
+
+  // Quick filter presets
+  const quickFilters = [
+    { label: 'Ending Soon', key: 'dateFrom', value: 'today', icon: <Clock className="w-3.5 h-3.5" /> },
+    { label: 'New', key: 'sortBy', value: 'createdAt', icon: <Sparkles className="w-3.5 h-3.5" /> },
+    { label: 'Popular', key: 'sortBy', value: 'views', icon: <Star className="w-3.5 h-3.5" /> },
+    { label: 'High Budget', key: 'minBudget', value: 5000, icon: <DollarSign className="w-3.5 h-3.5" /> },
+  ] as const;
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900">Filter Projects</h3>
-        <button
-          onClick={handleReset}
-          className="text-sm text-blue-600 hover:text-blue-700 font-medium self-start sm:self-auto"
-        >
-          Reset All
-        </button>
-      </div>
-
-      {/* Main Filters Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {/* Search */}
-        <div className="md:col-span-2 lg:col-span-1">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Search Projects
-          </label>
-          <input
-            type="text"
-            value={localFilters.search || ''}
-            onChange={(e) => handleFilterChange('search', e.target.value)}
-            placeholder="Search by title or description..."
-            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-          />
-        </div>
-
-        {/* Category */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Category
-          </label>
-          <select
-            value={localFilters.category || 'all'}
-            onChange={(e) => handleFilterChange('category', e.target.value === 'all' ? undefined : e.target.value)}
-            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
-          >
-            {categories.map(category => (
-              <option key={category.value} value={category.value}>
-                {category.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Tender Type */}
-        {showTenderTypeFilter && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Project Type
-            </label>
-            <select
-              value={localFilters.tenderType || 'all'}
-              onChange={(e) => handleFilterChange('tenderType', e.target.value === 'all' ? undefined : e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
-            >
-              {tenderTypes.map(type => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Sort By */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Sort By
-          </label>
-          <select
-            value={localFilters.sortBy || 'createdAt'}
-            onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
-          >
-            {sortOptions.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Secondary Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        {/* Budget Range */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">
-            Budget Range
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <input
-                type="number"
-                value={localFilters.minBudget || ''}
-                onChange={(e) => handleFilterChange('minBudget', e.target.value ? Number(e.target.value) : undefined)}
-                placeholder="Min"
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-              />
-            </div>
-            
-            <div>
-              <input
-                type="number"
-                value={localFilters.maxBudget || ''}
-                onChange={(e) => handleFilterChange('maxBudget', e.target.value ? Number(e.target.value) : undefined)}
-                placeholder="Max"
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Skills & Sort Order */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Sort Order
-            </label>
-            <select
-              value={localFilters.sortOrder || 'desc'}
-              onChange={(e) => handleFilterChange('sortOrder', e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
-            >
-              <option value="desc">Descending</option>
-              <option value="asc">Ascending</option>
-            </select>
-          </div>
-
-          {/* Skills - Improved Mobile Layout */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Skills
-            </label>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="flex-1">
-                <input
-                  type="text"
-                  value={skillsInput}
-                  onChange={(e) => setSkillsInput(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Add skills..."
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+    <div className={cn(
+      "bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800",
+      showSticky && "sticky top-0 z-50 shadow-sm",
+      className
+    )}>
+      <div className="container mx-auto px-4 md:px-6">
+        {/* Main Filter Bar */}
+        <div className="py-4">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+            {/* Search Input */}
+            <div className="flex-1">
+              <div className="relative group">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 group-focus-within:text-blue-500 transition-colors" />
+                <Input
+                  placeholder="Search tenders by title, description, or keywords..."
+                  className="pl-9 pr-9 h-11 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-500/30"
+                  value={localFilters.search || ''}
+                  onChange={(e) => updateFilter('search', e.target.value)}
                 />
+                {localFilters.search && (
+                  <button
+                    onClick={() => updateFilter('search', '')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-              <button
-                onClick={addSkill}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium whitespace-nowrap min-w-[80px]"
+            </div>
+
+            {/* Quick Actions */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Quick Filter Presets */}
+              <div className="flex items-center gap-1 mr-2">
+                {quickFilters.map((filter) => {
+                  const isActive = filters[filter.key as keyof TenderFilter] === filter.value;
+                  return (
+                    <Button
+                      key={filter.label}
+                      variant={isActive ? "default" : "outline"}
+                      size="sm"
+                      className={cn(
+                        "h-9 px-3",
+                        isActive && "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50 border-blue-200 dark:border-blue-800"
+                      )}
+                      onClick={() => {
+                        if (isActive) {
+                          updateFilter(filter.key as keyof TenderFilter, undefined);
+                        } else {
+                          updateFilter(filter.key as keyof TenderFilter, filter.value);
+                        }
+                      }}
+                    >
+                      {filter.icon}
+                      <span className="ml-1.5 hidden sm:inline">{filter.label}</span>
+                    </Button>
+                  );
+                })}
+              </div>
+
+              {/* Advanced Filters Toggle */}
+              <Button
+                variant={isExpanded ? "default" : "outline"}
+                size="sm"
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="h-11 px-4 gap-2"
               >
-                <PlusIcon className="h-4 w-4" />
-                <span className="hidden sm:inline">Add</span>
-              </button>
+                <SlidersHorizontal className="w-4 h-4" />
+                <span className="hidden sm:inline">Filters</span>
+                {activeFilterCount > 0 && (
+                  <Badge
+                    variant="default"
+                    className="ml-1 h-5 min-w-5 p-0 flex items-center justify-center bg-blue-500 hover:bg-blue-600"
+                  >
+                    {activeFilterCount}
+                  </Badge>
+                )}
+              </Button>
+
+              {/* Clear Filters Button */}
+              {activeFilterCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearFilters}
+                  className="h-11 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
+                >
+                  Clear all
+                  <X className="w-4 h-4 ml-1.5" />
+                </Button>
+              )}
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Selected Skills */}
-      {Array.isArray(localFilters.skills) && localFilters.skills.length > 0 && (
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Selected Skills
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {localFilters.skills.map((skill, index) => (
-              <span
-                key={index}
-                className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"
-              >
-                {skill}
-                <button
-                  onClick={() => removeSkill(skill)}
-                  className="ml-1.5 text-blue-600 hover:text-blue-800 font-bold text-sm leading-none"
-                >
-                  ×
-                </button>
+          {/* Active Filters Display */}
+          {activeFilterCount > 0 && (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                Active filters:
               </span>
-            ))}
-          </div>
-        </div>
-      )}
+              <div className="flex flex-wrap gap-2">
+                {filters.tenderCategory && filters.tenderCategory !== 'all' && (
+                  renderFilterBadge(
+                    'Type',
+                    filters.tenderCategory === 'freelance' ? 'Freelance' : 'Professional',
+                    () => updateFilter('tenderCategory', undefined)
+                  )
+                )}
 
-      {/* Apply Filters Button */}
-      <div className="flex justify-end">
-        <button
-          onClick={handleApplyFilters}
-          className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm hover:shadow-md"
-        >
-          Apply Filters
-        </button>
+                {filters.workflowType && filters.workflowType !== 'all' && (
+                  renderFilterBadge(
+                    'Workflow',
+                    filters.workflowType === 'open' ? 'Open' : 'Sealed',
+                    () => updateFilter('workflowType', undefined)
+                  )
+                )}
+
+                {filters.procurementCategory && (
+                  renderFilterBadge(
+                    'Category',
+                    categoryOptions.find(c => c.value === filters.procurementCategory)?.label || filters.procurementCategory,
+                    () => updateFilter('procurementCategory', undefined)
+                  )
+                )}
+
+                {filters.search && (
+                  renderFilterBadge(
+                    'Search',
+                    filters.search.length > 20 ? filters.search.substring(0, 20) + '...' : filters.search,
+                    () => updateFilter('search', undefined)
+                  )
+                )}
+
+                {filters.procurementMethod && (
+                  renderFilterBadge(
+                    'Method',
+                    filters.procurementMethod.replace('_', ' '),
+                    () => updateFilter('procurementMethod', undefined)
+                  )
+                )}
+
+                {filters.cpoRequired !== undefined && (
+                  renderFilterBadge(
+                    'CPO',
+                    filters.cpoRequired ? 'Required' : 'Not Required',
+                    () => updateFilter('cpoRequired', undefined)
+                  )
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Expanded Advanced Filters */}
+          {isExpanded && (
+            <div className="mt-6 p-6 border rounded-xl bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Left Column - Basic Filters */}
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                      <Tag className="w-5 h-5" />
+                      Basic Filters
+                    </h3>
+
+                    {/* Tender Type */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">Tender Type</Label>
+                      <RadioGroup
+                        value={localFilters.tenderCategory || 'all'}
+                        onValueChange={(value) => updateFilter('tenderCategory', value === 'all' ? undefined : value as TenderCategoryType)}
+                        className="flex flex-col space-y-2"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="all" id="type-all" />
+                          <Label htmlFor="type-all" className="cursor-pointer">All Types</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="freelance" id="type-freelance" />
+                          <Label htmlFor="type-freelance" className="cursor-pointer flex items-center gap-2">
+                            <Briefcase className="w-4 h-4" />
+                            Freelance
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="professional" id="type-professional" />
+                          <Label htmlFor="type-professional" className="cursor-pointer flex items-center gap-2">
+                            <Building className="w-4 h-4" />
+                            Professional
+                          </Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+
+                    {/* Workflow Type */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">Workflow Type</Label>
+                      <RadioGroup
+                        value={localFilters.workflowType || 'all'}
+                        onValueChange={(value) => updateFilter('workflowType', value === 'all' ? undefined : value as WorkflowType)}
+                        className="flex flex-col space-y-2"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="all" id="workflow-all" />
+                          <Label htmlFor="workflow-all" className="cursor-pointer">All Workflows</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="open" id="workflow-open" />
+                          <Label htmlFor="workflow-open" className="cursor-pointer flex items-center gap-2">
+                            <Globe className="w-4 h-4" />
+                            Open Tender
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="closed" id="workflow-closed" />
+                          <Label htmlFor="workflow-closed" className="cursor-pointer flex items-center gap-2">
+                            <Lock className="w-4 h-4" />
+                            Sealed Bid
+                          </Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+
+                    {/* Budget Range */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">
+                        Budget Range
+                        {localFilters.minBudget !== undefined && localFilters.maxBudget !== undefined && (
+                          <span className="ml-2 text-slate-500 dark:text-slate-400">
+                            (${localFilters.minBudget} - ${localFilters.maxBudget})
+                          </span>
+                        )}
+                      </Label>
+                      <div className="space-y-4">
+                        <Slider
+                          value={[
+                            localFilters.minBudget || 0,
+                            localFilters.maxBudget || 100000
+                          ]}
+                          min={0}
+                          max={100000}
+                          step={1000}
+                          onValueChange={(value) => {
+                            updateFilter('minBudget', value[0]);
+                            updateFilter('maxBudget', value[1]);
+                          }}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400">
+                          <span>$0</span>
+                          <span>$50k</span>
+                          <span>$100k+</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Middle Column - Category Filters */}
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                      <Briefcase className="w-5 h-5" />
+                      Category & Skills
+                    </h3>
+
+                    {/* Category Selection */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">Category</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between h-11 bg-white dark:bg-slate-900"
+                          >
+                            {localFilters.procurementCategory
+                              ? categoryOptions.find(c => c.value === localFilters.procurementCategory)?.label
+                              : "Select category..."}
+                            <ChevronDown className="w-4 h-4 ml-2 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[300px] p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Search categories..." />
+                            <CommandList>
+                              <CommandEmpty>No category found.</CommandEmpty>
+                              <ScrollArea className="h-64">
+                                {Object.entries(categoryGroups).map(([groupName, categories]) => (
+                                  <CommandGroup key={groupName} heading={groupName}>
+                                    {categories.map((category) => (
+                                      <CommandItem
+                                        key={category.value}
+                                        value={category.value}
+                                        onSelect={(currentValue) => {
+                                          updateFilter('procurementCategory',
+                                            currentValue === localFilters.procurementCategory ? undefined : currentValue
+                                          );
+                                        }}
+                                      >
+                                        <Check
+                                          className={cn(
+                                            "mr-2 h-4 w-4",
+                                            localFilters.procurementCategory === category.value
+                                              ? "opacity-100"
+                                              : "opacity-0"
+                                          )}
+                                        />
+                                        {category.label}
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                ))}
+                              </ScrollArea>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+
+                    {/* Skills Input */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">Skills</Label>
+                      <Input
+                        placeholder="Enter skills (comma separated)"
+                        value={typeof localFilters.skills === 'string' ? localFilters.skills : ''}
+                        onChange={(e) => updateFilter('skills', e.target.value)}
+                        className="h-11 bg-white dark:bg-slate-900"
+                      />
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Example: React, Node.js, UI/UX Design
+                      </p>
+                    </div>
+
+                    {/* CPO Filter (Professional only) */}
+                    {(localFilters.tenderCategory === 'professional' || !localFilters.tenderCategory) && (
+                      <div className="space-y-3 pt-2">
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="cpo-required"
+                            checked={localFilters.cpoRequired === true}
+                            onCheckedChange={(checked) =>
+                              updateFilter('cpoRequired', checked ? true : undefined)
+                            }
+                          />
+                          <Label
+                            htmlFor="cpo-required"
+                            className="text-sm font-medium leading-none cursor-pointer flex items-center gap-2"
+                          >
+                            <AlertCircle className="w-4 h-4" />
+                            Requires CPO Only
+                          </Label>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Show only tenders that require Certified Payment Order
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Column - Advanced Filters */}
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                      <Filter className="w-5 h-5" />
+                      Advanced Filters
+                    </h3>
+
+                    {/* Date Range */}
+                    <div className="space-y-4">
+                      <Label className="text-sm font-medium">Deadline</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant={localFilters.dateFrom === 'today' ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => updateFilter('dateFrom',
+                            localFilters.dateFrom === 'today' ? undefined : 'today'
+                          )}
+                          className="justify-start h-9"
+                        >
+                          <Clock className="w-4 h-4 mr-2" />
+                          Ending Soon
+                        </Button>
+                        <Button
+                          variant={localFilters.dateTo === 'week' ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => updateFilter('dateTo',
+                            localFilters.dateTo === 'week' ? undefined : 'week'
+                          )}
+                          className="justify-start h-9"
+                        >
+                          <Calendar className="w-4 h-4 mr-2" />
+                          Next 7 Days
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Experience Level (Freelance) */}
+                    {(localFilters.tenderCategory === 'freelance' || !localFilters.tenderCategory) && (
+                      <div className="space-y-3">
+                        <Label className="text-sm font-medium">Experience Level</Label>
+                        <RadioGroup
+                          value={localFilters.experienceLevel || 'all'}
+                          onValueChange={(value) => updateFilter('experienceLevel', value === 'all' ? undefined : value as ExperienceLevel)}
+                          className="space-y-2"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="all" id="exp-all" />
+                            <Label htmlFor="exp-all" className="cursor-pointer text-sm">All Levels</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="entry" id="exp-entry" />
+                            <Label htmlFor="exp-entry" className="cursor-pointer text-sm">Entry Level</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="intermediate" id="exp-intermediate" />
+                            <Label htmlFor="exp-intermediate" className="cursor-pointer text-sm">Intermediate</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="expert" id="exp-expert" />
+                            <Label htmlFor="exp-expert" className="cursor-pointer text-sm">Expert</Label>
+                          </div>
+                        </RadioGroup>
+                      </div>
+                    )}
+
+                    {/* Procurement Method (Professional) */}
+                    {(localFilters.tenderCategory === 'professional' || !localFilters.tenderCategory) && (
+                      <div className="space-y-3">
+                        <Label className="text-sm font-medium">Procurement Method</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className="w-full justify-between h-11 bg-white dark:bg-slate-900"
+                            >
+                              {localFilters.procurementMethod
+                                ? localFilters.procurementMethod.replace('_', ' ')
+                                : "Any method..."}
+                              <ChevronDown className="w-4 h-4 ml-2 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[250px] p-0" align="start">
+                            <Command>
+                              <CommandList>
+                                <CommandGroup>
+                                  <CommandItem
+                                    value="all"
+                                    onSelect={() => updateFilter('procurementMethod', undefined)}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        !localFilters.procurementMethod
+                                          ? "opacity-100"
+                                          : "opacity-0"
+                                      )}
+                                    />
+                                    Any method
+                                  </CommandItem>
+                                  {['open_tender', 'restricted', 'direct', 'framework'].map((method) => (
+                                    <CommandItem
+                                      key={method}
+                                      value={method}
+                                      onSelect={(currentValue: string | undefined) => {
+                                        updateFilter('procurementMethod',
+                                          currentValue === localFilters.procurementMethod ? undefined : currentValue as ProcurementMethod
+                                        );
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          localFilters.procurementMethod === method
+                                            ? "opacity-100"
+                                            : "opacity-0"
+                                        )}
+                                      />
+                                      {method.replace('_', ' ')}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-between items-center pt-6 mt-6 border-t border-slate-200 dark:border-slate-800">
+                <div className="text-sm text-slate-500 dark:text-slate-400">
+                  {activeFilterCount > 0 ? (
+                    <span>{activeFilterCount} active filter{activeFilterCount !== 1 ? 's' : ''} applied</span>
+                  ) : (
+                    <span>No filters applied</span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={clearFilters}
+                    disabled={activeFilterCount === 0}
+                  >
+                    Clear All
+                  </Button>
+                  <Button
+                    variant="default"
+                    onClick={() => setIsExpanded(false)}
+                  >
+                    Apply Filters
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 };
-
-export default TenderFilters;

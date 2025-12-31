@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// pages/dashboard/company/jobs/index.tsx - UPDATED WITH MODAL
+// pages/dashboard/company/jobs/index.tsx - UPDATED WITH PAGE REDIRECT
 import React, { useState } from 'react';
+import { useRouter } from 'next/router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { jobService, Job } from '@/services/jobService';
 import { useAuth } from '@/contexts/AuthContext';
-import JobForm from '@/components/job/JobForm';
 import JobCard from '@/components/job/JobCard';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import ConfirmationModal from '@/components/ui/ConfirmationModal';
@@ -13,9 +13,8 @@ import { toast } from '@/hooks/use-toast';
 
 const CompanyJobsPage: React.FC = () => {
   const { user } = useAuth();
+  const router = useRouter();
   const queryClient = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [editingJob, setEditingJob] = useState<Job | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [jobToDelete, setJobToDelete] = useState<string | null>(null);
 
@@ -28,49 +27,6 @@ const CompanyJobsPage: React.FC = () => {
     queryKey: ['companyJobs'],
     queryFn: () => jobService.getCompanyJobs(),
     enabled: !!user && user.role === 'company',
-  });
-
-  // Create job mutation
-  const createMutation = useMutation({
-    mutationFn: (data: Partial<Job>) => jobService.createJob(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
-      setShowForm(false);
-      toast({
-        title: 'Job created successfully',
-        description: 'Your job is now live and visible to candidates',
-        variant: 'success',
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to create job',
-        description: error.message || 'Please try again',
-        variant: 'destructive',
-      });
-    },
-  });
-
-  // Update job mutation
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<Job> }) =>
-      jobService.updateJob(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
-      setEditingJob(null);
-      toast({
-        title: 'Job updated successfully',
-        description: 'Your job changes have been saved',
-        variant: 'success',
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to update job',
-        description: error.message || 'Please try again',
-        variant: 'destructive',
-      });
-    },
   });
 
   // Delete job mutation
@@ -121,19 +77,12 @@ const CompanyJobsPage: React.FC = () => {
     },
   });
 
-  const handleCreateJob = async (data: Partial<Job>) => {
-    // Ensure jobType is set for company with proper type
-    const jobData: Partial<Job> = {
-      ...data,
-      jobType: 'company',
-    };
-    await createMutation.mutateAsync(jobData);
+  const handleCreateJob = () => {
+    router.push('/dashboard/company/jobs/create');
   };
 
-  const handleUpdateJob = async (data: Partial<Job>) => {
-    if (editingJob) {
-      await updateMutation.mutateAsync({ id: editingJob._id, data });
-    }
+  const handleEditJob = (jobId: string) => {
+    router.push(`/dashboard/company/jobs/edit/${jobId}`);
   };
 
   const handleDeleteClick = (jobId: string) => {
@@ -160,8 +109,12 @@ const CompanyJobsPage: React.FC = () => {
   };
 
   const handleViewStats = (jobId: string) => {
-    // Navigate to job stats page or open stats modal
-    console.log('View stats for job:', jobId);
+    // Navigate to job stats page
+    router.push(`/dashboard/company/jobs/${jobId}`);
+  };
+
+  const handleViewApplications = (jobId: string) => {
+    router.push(`/dashboard/company/jobs/${jobId}/applications`);
   };
 
   if (isLoading) {
@@ -199,9 +152,12 @@ const CompanyJobsPage: React.FC = () => {
               <p className="text-gray-600 mt-2">Create and manage your job postings</p>
             </div>
             <button
-              onClick={() => setShowForm(true)}
-              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-md hover:shadow-lg"
+              onClick={handleCreateJob}
+              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-md hover:shadow-lg flex items-center gap-2"
             >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
               Create New Job
             </button>
           </div>
@@ -236,35 +192,6 @@ const CompanyJobsPage: React.FC = () => {
             </div>
           )}
 
-          {/* Job Form Modals */}
-          {showForm && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-2xl w-full max-w-4xl max-h-screen overflow-y-auto">
-                <JobForm
-                  onSubmit={handleCreateJob}
-                  loading={createMutation.isPending}
-                  onCancel={() => setShowForm(false)}
-                  jobType="company"
-                />
-              </div>
-            </div>
-          )}
-
-          {editingJob && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-2xl w-full max-w-4xl max-h-screen overflow-y-auto">
-                <JobForm
-                  initialData={editingJob}
-                  onSubmit={handleUpdateJob}
-                  loading={updateMutation.isPending}
-                  onCancel={() => setEditingJob(null)}
-                  mode="edit"
-                  jobType="company"
-                />
-              </div>
-            </div>
-          )}
-
           {/* Jobs Grid */}
           <div className="grid gap-6">
             {jobs && jobs.length > 0 ? (
@@ -273,8 +200,10 @@ const CompanyJobsPage: React.FC = () => {
                   key={job._id}
                   job={job}
                   showActions={true}
+                  onEdit={handleEditJob}
                   onDelete={handleDeleteClick}
                   onViewStats={handleViewStats}
+                  onViewApplications={handleViewApplications}
                   onToggleStatus={handleToggleStatus}
                   isOrganizationView={false}
                 />
@@ -290,9 +219,12 @@ const CompanyJobsPage: React.FC = () => {
                     Create your first job posting to get started
                   </p>
                   <button
-                    onClick={() => setShowForm(true)}
-                    className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-2 rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 transition-all duration-200"
+                    onClick={handleCreateJob}
+                    className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-2 rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 transition-all duration-200 flex items-center gap-2 mx-auto"
                   >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
                     Create First Job
                   </button>
                 </div>
@@ -339,7 +271,7 @@ const CompanyJobsPage: React.FC = () => {
           />
 
           {/* Loading States */}
-          {(createMutation.isPending || updateMutation.isPending || statusMutation.isPending) && (
+          {(deleteMutation.isPending || statusMutation.isPending) && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white rounded-xl p-6 flex items-center space-x-3">
                 <LoadingSpinner />

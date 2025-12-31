@@ -97,93 +97,93 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     staleTime: 5 * 60 * 1000,
   });
 
-// In AuthContext.tsx - Update the loginMutation
-const loginMutation = useMutation({
-  mutationFn: authService.login,
-  onSuccess: (data: AuthResponse) => {
-    // Check if login was actually successful
-    if (data.success && data.data?.user) {
-      // Successful login with user data
-      setHasToken(true);
-      
-      if (data.data.user) {
-        queryClient.setQueryData(['currentUser'], data.data.user);
-      }
-
-      handleSuccess("Login Successful");
-      
-      return data;
-    } else if (data.success === false) {
-      // This is a failed login that returned a structured response
-      // The error toast was already shown in authService
-      // Don't proceed with login flow
-      console.log('Login failed in mutation:', data.message);
-      return Promise.reject({ message: data.message, isHandled: true });
-    } else {
-      // This should not happen, but handle gracefully
-      handleError("Login response format invalid");
-      return Promise.reject(new Error("Invalid login response"));
-    }
-  },
-  onError: (error: any) => {
-    console.error('Login mutation error:', error);
-    authService.logout();
-    setHasToken(false);
-    
-    // Only show toast if it wasn't already shown in authService
-    if (!error._toastShown && !error.isHandled) {
-      handleError(error.message || "An error occurred during login");
-    }
-    throw error;
-  },
-});
-
-// In AuthContext.tsx - Update the registerMutation
-// In AuthContext.tsx - Fix the registerMutation
-const registerMutation = useMutation({
-  mutationFn: authService.register,
-  onSuccess: (data: AuthResponse) => {
-    // Check if registration was actually successful
-    if (data.success) {
-      // Handle OTP verification required case
-      if (data.data?.requiresVerification) {
-        handleInfo("Please check your email to verify your account.");
-        return data;
-      }
-      
-      // Handle immediate login case (if user and token are present)
-      if (data.data?.user && data.data?.token) {
+  // In AuthContext.tsx - Update the loginMutation
+  const loginMutation = useMutation({
+    mutationFn: authService.login,
+    onSuccess: (data: AuthResponse) => {
+      // Check if login was actually successful
+      if (data.success && data.data?.user) {
+        // Successful login with user data
         setHasToken(true);
-        queryClient.setQueryData(['currentUser'], data.data.user);
-        handleSuccess("Registration Successful");
+
+        if (data.data.user) {
+          queryClient.setQueryData(['currentUser'], data.data.user);
+        }
+
+        handleSuccess("Login Successful");
+
+        return data;
+      } else if (data.success === false) {
+        // This is a failed login that returned a structured response
+        // The error toast was already shown in authService
+        // Don't proceed with login flow
+        console.log('Login failed in mutation:', data.message);
+        return Promise.reject({ message: data.message, isHandled: true });
       } else {
-        // This is the OTP verification flow - don't set token or user yet
-        handleInfo("Please check your email to verify your account.");
+        // This should not happen, but handle gracefully
+        handleError("Login response format invalid");
+        return Promise.reject(new Error("Invalid login response"));
       }
-    } else if (data.success === false) {
-      // Failed registration that returned structured response
-      console.log('Registration failed in mutation:', data.message);
-      return Promise.reject({ message: data.message, isHandled: true });
-    } else {
-      handleError("Registration response format invalid");
-      return Promise.reject(new Error("Invalid registration response"));
-    }
-  },
-  onError: (error: any) => {
-    console.error('Registration error:', error);
-    
-    // Don't clear token for OTP flow errors
-    if (!error.message?.includes('verification') && !error.isHandled) {
+    },
+    onError: (error: any) => {
+      console.error('Login mutation error:', error);
       authService.logout();
       setHasToken(false);
-    }
-    
-    if (!error._toastShown && !error.isHandled) {
-      handleError(error.message || "An error occurred during registration");
-    }
-    throw error;
-  },
-});
+
+      // Only show toast if it wasn't already shown in authService
+      if (!error._toastShown && !error.isHandled) {
+        handleError(error.message || "An error occurred during login");
+      }
+      throw error;
+    },
+  });
+
+  // In AuthContext.tsx - Update the registerMutation
+  // In AuthContext.tsx - Fix the registerMutation
+  const registerMutation = useMutation({
+    mutationFn: authService.register,
+    onSuccess: (data: AuthResponse) => {
+      // Check if registration was actually successful
+      if (data.success) {
+        // Handle OTP verification required case
+        if (data.data?.requiresVerification) {
+          handleInfo("Please check your email to verify your account.");
+          return data;
+        }
+
+        // Handle immediate login case (if user and token are present)
+        if (data.data?.user && data.data?.token) {
+          setHasToken(true);
+          queryClient.setQueryData(['currentUser'], data.data.user);
+          handleSuccess("Registration Successful");
+        } else {
+          // This is the OTP verification flow - don't set token or user yet
+          handleInfo("Please check your email to verify your account.");
+        }
+      } else if (data.success === false) {
+        // Failed registration that returned structured response
+        console.log('Registration failed in mutation:', data.message);
+        return Promise.reject({ message: data.message, isHandled: true });
+      } else {
+        handleError("Registration response format invalid");
+        return Promise.reject(new Error("Invalid registration response"));
+      }
+    },
+    onError: (error: any) => {
+      console.error('Registration error:', error);
+
+      // Don't clear token for OTP flow errors
+      if (!error.message?.includes('verification') && !error.isHandled) {
+        authService.logout();
+        setHasToken(false);
+      }
+
+      if (!error._toastShown && !error.isHandled) {
+        handleError(error.message || "An error occurred during registration");
+      }
+      throw error;
+    },
+  });
 
   const logoutMutation = useMutation({
     mutationFn: authService.logout,
@@ -191,7 +191,7 @@ const registerMutation = useMutation({
       setHasToken(false);
       queryClient.setQueryData(['currentUser'], null);
       queryClient.removeQueries({ queryKey: ['currentUser'] });
-      
+
       // Success toast is now handled in authService.logout
     },
     onError: (error) => {
@@ -199,7 +199,7 @@ const registerMutation = useMutation({
       // Still clear client-side state even if API fails
       setHasToken(false);
       queryClient.setQueryData(['currentUser'], null);
-      
+
       handleInfo('You have been logged out.');
     },
   });
@@ -241,7 +241,7 @@ const registerMutation = useMutation({
     if (!isInitialized) return;
 
     const currentPath = router.pathname;
-    const isPublic = PUBLIC_ROUTES.some(route => 
+    const isPublic = PUBLIC_ROUTES.some(route =>
       currentPath === route || currentPath.startsWith(`${route}/`)
     );
 
@@ -256,8 +256,8 @@ const registerMutation = useMutation({
     }
 
     // If authenticated and on auth pages, redirect to dashboard
-    if (hasToken && isAuthenticated && 
-        (currentPath === '/login' || currentPath === '/register')) {
+    if (hasToken && isAuthenticated &&
+      (currentPath === '/login' || currentPath === '/register')) {
       const userRole = user?.role || authService.getUserRole();
       if (userRole) {
         router.push(`/dashboard/${userRole}`);
@@ -283,3 +283,5 @@ const registerMutation = useMutation({
 function handleInfo(arg0: string) {
   throw new Error('Function not implemented.');
 }
+
+export type { User };

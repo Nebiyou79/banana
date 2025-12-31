@@ -1,4 +1,4 @@
-// src/utils/colors.ts
+// src/utils/color.ts
 export const colors = {
   // Primary Colors
   gold: '#FFD700',
@@ -39,6 +39,8 @@ export const colorClasses = {
     white: 'text-[#FFFFFF]',
     gray100: 'text-[#F5F5F5]',
     gray400: 'text-[#A0A0A0]',
+    gray600: 'text-[#A0A0A0]',
+    gray700: 'text-[#333333]',
     gray800: 'text-[#333333]',
     teal: 'text-[#2AA198]',
     orange: 'text-[#FF8C42]',
@@ -51,6 +53,7 @@ export const colorClasses = {
     white: 'bg-[#FFFFFF]',
     gray100: 'bg-[#F5F5F5]',
     gray400: 'bg-[#A0A0A0]',
+    gray600:  'bg-[#333333]',
     gray800: 'bg-[#333333]',
     teal: 'bg-[#2AA198]',
     orange: 'bg-[#FF8C42]',

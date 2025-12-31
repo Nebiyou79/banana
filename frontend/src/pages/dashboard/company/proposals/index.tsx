@@ -1,9 +1,9 @@
 // pages/dashboard/candidate/proposals/index.tsx
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card"
-import { 
-  FileText, 
-  Clock, 
+import {
+  FileText,
+  Clock,
 
   Building2,
   Bell,
@@ -54,7 +54,7 @@ const ProposalsComingSoon: React.FC = () => {
               Coming Soon
             </span>
           </div>
-          
+
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight" style={applyColor('darkNavy')}>
             Proposal Management
           </h1>
@@ -101,11 +101,10 @@ const ProposalsComingSoon: React.FC = () => {
                     { label: "Success Rate", value: "25%", color: "pink" }
                   ].map((stat, index) => (
                     <div key={index} className="bg-white rounded-xl p-4 text-center shadow-sm border">
-                      <div className={`text-2xl font-bold mb-1 ${
-                        stat.color === 'purple' ? 'text-purple-600' :
-                        stat.color === 'blue' ? 'text-blue-600' :
-                        stat.color === 'green' ? 'text-green-600' : 'text-pink-600'
-                      }`}>
+                      <div className={`text-2xl font-bold mb-1 ${stat.color === 'purple' ? 'text-purple-600' :
+                          stat.color === 'blue' ? 'text-blue-600' :
+                            stat.color === 'green' ? 'text-green-600' : 'text-pink-600'
+                        }`}>
                         {stat.value}
                       </div>
                       <div className="text-sm text-gray-600">{stat.label}</div>
@@ -123,7 +122,7 @@ const ProposalsComingSoon: React.FC = () => {
                     <div className="col-span-2">Budget</div>
                     <div className="col-span-2">Actions</div>
                   </div>
-                  
+
                   {/* Table Rows */}
                   {[
                     { project: "E-commerce Website", client: "Retail Solutions", date: "Jan 18, 2024", status: "Viewed", budget: "45,000 ETB", color: "blue" },
@@ -137,11 +136,10 @@ const ProposalsComingSoon: React.FC = () => {
                       </div>
                       <div className="col-span-2 text-gray-600">{proposal.date}</div>
                       <div className="col-span-2">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                          proposal.color === 'blue' ? 'bg-blue-100 text-blue-800' :
-                          proposal.color === 'purple' ? 'bg-purple-100 text-purple-800' :
-                          'bg-green-100 text-green-800'
-                        }`}>
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${proposal.color === 'blue' ? 'bg-blue-100 text-blue-800' :
+                            proposal.color === 'purple' ? 'bg-purple-100 text-purple-800' :
+                              'bg-green-100 text-green-800'
+                          }`}>
                           <Eye className="h-3 w-3 mr-1" />
                           {proposal.status}
                         </span>
@@ -205,7 +203,7 @@ const ProposalsComingSoon: React.FC = () => {
                 <p className="text-blue-100 mb-6 leading-relaxed">
                   Get notified when our proposal management system launches and start winning more projects.
                 </p>
-                <button 
+                <button
                   className="w-full px-6 py-4 bg-white text-purple-600 rounded-xl font-semibold hover:bg-purple-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled
                 >
@@ -233,7 +231,7 @@ const ProposalsComingSoon: React.FC = () => {
                       Find Project Opportunities
                     </button>
                   </Link>
-                  
+
                   <Link href="/dashboard/candidate/profile">
                     <button className="w-full flex items-center justify-center px-6 py-3 border border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-all">
                       <User className="mr-3 h-5 w-5" />
@@ -252,7 +250,7 @@ const ProposalsComingSoon: React.FC = () => {
             <div className="text-center">
               <h3 className="text-xl font-semibold mb-4" style={applyColor('darkNavy')}>Development Progress</h3>
               <div className="w-full bg-gray-200 rounded-full h-3 max-w-2xl mx-auto mb-4">
-                <div 
+                <div
                   className="bg-gradient-to-r from-purple-500 to-pink-500 h-3 rounded-full transition-all duration-1000 ease-out"
                   style={{ width: '45%' }}
                 ></div>

@@ -5,10 +5,8 @@
 import React, { useState, useEffect } from 'react';
 import { FreelancerLayout } from '@/components/layout/FreelancerLayout';
 import { UserProfile, ProfileData, freelancerService } from '@/services/freelancerService';
-import ProfileCompletion from '@/components/freelancer/ProfileCompletion';
 import CertificationsList from '@/components/freelancer/CertificationsList';
-import { colorClasses } from '@/utils/color';
-import { 
+import {
   CameraIcon,
   PencilIcon,
   MapPinIcon,
@@ -21,7 +19,9 @@ import {
   AcademicCapIcon,
   CurrencyDollarIcon,
   UserCircleIcon,
-  LinkIcon
+  LinkIcon,
+  CalendarIcon,
+  UserIcon
 } from '@heroicons/react/24/outline';
 
 // Define proper types for the form data
@@ -31,6 +31,8 @@ interface ProfileFormData {
   location?: string;
   phone?: string;
   website?: string;
+  dateOfBirth?: string;
+  gender?: 'male' | 'female' | 'other' | 'prefer-not-to-say';
   skills: Array<{
     name: string;
     level: 'beginner' | 'intermediate' | 'expert';
@@ -54,6 +56,40 @@ interface ProfileFormData {
   };
 }
 
+// Helper function to calculate age from date of birth
+const calculateAge = (dateOfBirth: string): number => {
+  if (!dateOfBirth) return 0;
+
+  try {
+    const today = new Date();
+    const birthDate = new Date(dateOfBirth);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+
+    return age;
+  } catch (error) {
+    console.error('Error calculating age:', error);
+    return 0;
+  }
+};
+
+// Helper function to format date for input
+const formatDateForInput = (dateString: string | undefined): string => {
+  if (!dateString) return '';
+
+  try {
+    const date = new Date(dateString);
+    return date.toISOString().split('T')[0];
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return '';
+  }
+};
+
 const FreelancerProfile = () => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [certifications, setCertifications] = useState<any[]>([]);
@@ -67,6 +103,8 @@ const FreelancerProfile = () => {
     location: '',
     phone: '',
     website: '',
+    dateOfBirth: '',
+    gender: 'prefer-not-to-say',
     skills: [],
     socialLinks: {
       linkedin: '',
@@ -94,7 +132,7 @@ const FreelancerProfile = () => {
     try {
       setIsLoading(true);
       const profileData = await freelancerService.getProfile();
-      
+
       // Load certifications
       let certificationsData: React.SetStateAction<any[]> = [];
       try {
@@ -104,23 +142,31 @@ const FreelancerProfile = () => {
         console.warn('Certifications not available yet');
         certificationsData = [];
       }
-      
+
       // ✅ FIX: Merge certifications into profile data
       const profileWithCertifications = {
         ...profileData,
         certifications: certificationsData
       };
-      
+
       setProfile(profileWithCertifications);
-      
+
       const freelancerProfile = profileData.freelancerProfile;
-      
+
+      // FIX: Clean bio field if it contains interface code
+      let cleanBio = profileData.bio || '';
+      if (cleanBio.includes('interface ProfileData') || cleanBio.includes('export interface')) {
+        cleanBio = ''; // Reset bio if it contains code
+      }
+
       setFormData({
         name: profileData.name,
-        bio: profileData.bio || '',
+        bio: cleanBio, // Use cleaned bio
         location: profileData.location || '',
         phone: profileData.phone || '',
         website: profileData.website || '',
+        dateOfBirth: profileData.dateOfBirth ? formatDateForInput(profileData.dateOfBirth) : '',
+        gender: profileData.gender || 'prefer-not-to-say',
         skills: profileData.skills,
         socialLinks: {
           linkedin: profileData.socialLinks?.linkedin || '',
@@ -146,15 +192,24 @@ const FreelancerProfile = () => {
     }
   };
 
+  // FreelancerProfile.tsx - UPDATED handleSave function
   const handleSave = async () => {
     try {
       setIsSaving(true);
+
+      // Format date for backend
+      const formattedDateOfBirth = formData.dateOfBirth
+        ? new Date(formData.dateOfBirth).toISOString()
+        : undefined;
+
       const saveData: ProfileData = {
         name: formData.name,
         bio: formData.bio,
         location: formData.location,
         phone: formData.phone,
         website: formData.website,
+        dateOfBirth: formattedDateOfBirth,
+        gender: formData.gender,
         skills: formData.skills,
         socialLinks: formData.socialLinks,
         freelancerProfile: {
@@ -167,12 +222,17 @@ const FreelancerProfile = () => {
           specialization: formData.freelancerProfile?.specialization
         }
       };
-      
+
+      console.log('💾 Saving profile data:', saveData);
+
       const response = await freelancerService.updateProfile(saveData);
+
+      console.log('✅ Profile saved successfully:', response);
+
       setProfile(response.profile);
       setIsEditing(false);
-    } catch (error) {
-      console.error('Failed to update profile:', error);
+    } catch (error: any) {
+      console.error('❌ Failed to update profile:', error);
     } finally {
       setIsSaving(false);
     }
@@ -291,7 +351,7 @@ const FreelancerProfile = () => {
     return (
       <FreelancerLayout>
         <div className="flex items-center justify-center min-h-96">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         </div>
       </FreelancerLayout>
     );
@@ -302,39 +362,41 @@ const FreelancerProfile = () => {
       <FreelancerLayout>
         <div className="flex items-center justify-center min-h-96">
           <div className="text-center">
-            <div className="text-green-500 text-6xl mb-4">⚠️</div>
-            <h2 className={`text-2xl font-bold ${colorClasses.text.darkNavy} mb-2`}>
+            <div className="text-primary text-6xl mb-4">⚠️</div>
+            <h2 className="text-2xl font-bold text-foreground mb-2">
               Profile Not Found
             </h2>
-            <p className="text-gray-600">Unable to load your profile. Please try again.</p>
+            <p className="text-muted-foreground">Unable to load your profile. Please try again.</p>
           </div>
         </div>
       </FreelancerLayout>
     );
   }
 
+  const age = formData.dateOfBirth ? calculateAge(formData.dateOfBirth) : null;
+
   return (
     <FreelancerLayout>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-background">
         {/* Header */}
-        <div className="bg-gradient-to-r from-green-600 to-emerald-700 text-white py-8">
+        <div className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground py-8">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center space-x-6">
                 <div className="relative">
-                  <div className="w-24 h-24 rounded-full bg-white/20 flex items-center justify-center overflow-hidden border-4 border-white shadow-xl">
+                  <div className="w-24 h-24 rounded-full bg-primary-foreground/20 flex items-center justify-center overflow-hidden border-2 border-primary-foreground shadow-xl">
                     {profile.avatar ? (
-                      <img 
-                        src={profile.avatar} 
+                      <img
+                        src={profile.avatar}
                         alt={profile.name}
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <UserCircleIcon className="w-12 h-12 text-white" />
+                      <UserCircleIcon className="w-12 h-12 text-primary-foreground" />
                     )}
                   </div>
                   {isEditing && (
-                    <label className="absolute bottom-0 right-0 bg-white text-green-600 p-2 rounded-full shadow-lg cursor-pointer hover:bg-green-50 transition-colors">
+                    <label className="absolute bottom-0 right-0 bg-primary-foreground text-primary p-2 rounded-full shadow-lg cursor-pointer hover:bg-primary-foreground/90 transition-colors">
                       <CameraIcon className="w-4 h-4" />
                       <input
                         type="file"
@@ -345,18 +407,18 @@ const FreelancerProfile = () => {
                     </label>
                   )}
                 </div>
-                
+
                 <div>
                   <h1 className="text-3xl font-bold">{profile.name}</h1>
                   {profile.freelancerProfile?.headline && (
-                    <p className="text-green-100 text-lg mt-1">
+                    <p className="text-primary-foreground/80 text-lg mt-1">
                       {profile.freelancerProfile.headline}
                     </p>
                   )}
-                  
+
                   <div className="flex items-center space-x-4 mt-3">
                     {profile.verificationStatus === 'full' && (
-                      <div className="flex items-center bg-white/20 px-3 py-1 rounded-full text-sm font-medium">
+                      <div className="flex items-center bg-primary-foreground/20 px-3 py-1 rounded-full text-sm font-medium">
                         <CheckBadgeIcon className="w-4 h-4 mr-1" />
                         Verified
                       </div>
@@ -364,18 +426,25 @@ const FreelancerProfile = () => {
                     <div className="flex items-center">
                       <StarIcon className="w-4 h-4 mr-1 text-amber-300" />
                       {profile.freelancerProfile?.ratings?.average.toFixed(1) || '0.0'}
-                      <span className="text-green-200 ml-1">
+                      <span className="text-primary-foreground/80 ml-1">
                         ({profile.freelancerProfile?.ratings?.count || 0} reviews)
                       </span>
                     </div>
+                    {/* Age display */}
+                    {age && (
+                      <div className="flex items-center bg-primary-foreground/20 px-3 py-1 rounded-full text-sm font-medium">
+                        <CalendarIcon className="w-4 h-4 mr-1" />
+                        {age} years old
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
-              
+
               <div className="mt-6 lg:mt-0">
                 <button
                   onClick={() => isEditing ? setIsEditing(false) : setIsEditing(true)}
-                  className="flex items-center px-6 py-3 bg-white text-green-700 rounded-xl font-semibold hover:bg-green-50 transition-all duration-200 shadow-lg"
+                  className="flex items-center px-6 py-3 bg-primary-foreground text-primary rounded-xl font-semibold hover:bg-primary-foreground/90 transition-all duration-200 shadow-lg"
                 >
                   <PencilIcon className="w-5 h-5 mr-2" />
                   {isEditing ? 'Cancel Editing' : 'Edit Profile'}
@@ -384,11 +453,12 @@ const FreelancerProfile = () => {
             </div>
           </div>
         </div>
+
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 -mt-8">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             {/* Sidebar Navigation */}
             <div className="lg:col-span-1">
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sticky top-8">
+              <div className="bg-card rounded-2xl shadow-sm border border-border p-6 sticky top-8">
                 <nav className="space-y-2">
                   {[
                     { id: 'basic', name: 'Basic Information', icon: UserCircleIcon },
@@ -401,66 +471,85 @@ const FreelancerProfile = () => {
                     <button
                       key={item.id}
                       onClick={() => setActiveSection(item.id)}
-                      className={`w-full flex items-center px-4 py-3 rounded-xl text-left transition-all duration-200 ${
-                        activeSection === item.id
-                          ? 'bg-green-50 text-green-700 border border-green-200'
-                          : 'text-gray-600 hover:bg-gray-50'
-                      }`}
+                      className={`w-full flex items-center px-4 py-3 rounded-xl text-left transition-all duration-200 ${activeSection === item.id
+                          ? 'bg-primary/10 text-primary border border-primary/20'
+                          : 'text-muted-foreground hover:bg-accent'
+                        }`}
                     >
-                      <item.icon className={`w-5 h-5 mr-3 ${
-                        activeSection === item.id ? 'text-green-600' : 'text-gray-400'
-                      }`} />
+                      <item.icon className={`w-5 h-5 mr-3 ${activeSection === item.id ? 'text-primary' : 'text-muted-foreground'
+                        }`} />
                       <span className="font-medium">{item.name}</span>
                     </button>
                   ))}
                 </nav>
 
                 {/* Contact Info Preview */}
-                <div className="mt-8 pt-6 border-t border-gray-200">
-                  <h4 className="font-semibold text-gray-900 mb-4">Contact Information</h4>
+                <div className="mt-8 pt-6 border-t border-border">
+                  <h4 className="font-semibold text-foreground mb-4">Contact Information</h4>
                   <div className="space-y-3">
                     {profile.email && (
-                      <div className="flex items-center text-gray-600">
-                        <EnvelopeIcon className="w-4 h-4 mr-3 text-green-500" />
+                      <div className="flex items-center text-muted-foreground">
+                        <EnvelopeIcon className="w-4 h-4 mr-3 text-primary" />
                         <span className="text-sm">{profile.email}</span>
                       </div>
                     )}
                     {profile.location && (
-                      <div className="flex items-center text-gray-600">
-                        <MapPinIcon className="w-4 h-4 mr-3 text-green-500" />
+                      <div className="flex items-center text-muted-foreground">
+                        <MapPinIcon className="w-4 h-4 mr-3 text-primary" />
                         <span className="text-sm">{profile.location}</span>
                       </div>
                     )}
                     {profile.phone && (
-                      <div className="flex items-center text-gray-600">
-                        <PhoneIcon className="w-4 h-4 mr-3 text-green-500" />
+                      <div className="flex items-center text-muted-foreground">
+                        <PhoneIcon className="w-4 h-4 mr-3 text-primary" />
                         <span className="text-sm">{profile.phone}</span>
                       </div>
                     )}
                     {profile.website && (
-                      <div className="flex items-center text-gray-600">
-                        <GlobeAltIcon className="w-4 h-4 mr-3 text-green-500" />
-                        <a href={profile.website} className="text-sm text-green-600 hover:text-green-700">
+                      <div className="flex items-center text-muted-foreground">
+                        <GlobeAltIcon className="w-4 h-4 mr-3 text-primary" />
+                        <a href={profile.website} className="text-sm text-primary hover:text-primary/80">
                           Visit Website
                         </a>
                       </div>
                     )}
                   </div>
 
+                  {/* Age and Gender Preview */}
+                  {(age || profile.gender) && (
+                    <div className="mt-6 pt-6 border-t border-border">
+                      <h4 className="font-semibold text-foreground mb-4">Personal Details</h4>
+                      <div className="space-y-2">
+                        {age && (
+                          <div className="flex items-center text-muted-foreground">
+                            <CalendarIcon className="w-4 h-4 mr-3 text-primary" />
+                            <span className="text-sm">{age} years old</span>
+                          </div>
+                        )}
+                        {profile.gender && profile.gender !== 'prefer-not-to-say' && (
+                          <div className="flex items-center text-muted-foreground">
+                            <UserIcon className="w-4 h-4 mr-3 text-primary" />
+                            <span className="text-sm capitalize">{profile.gender}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Social Links Preview */}
                   {profile.socialLinks && Object.values(profile.socialLinks).some(link => link) && (
-                    <div className="mt-6 pt-6 border-t border-gray-200">
-                      <h4 className="font-semibold text-gray-900 mb-4">Social Profiles</h4>
+                    <div className="mt-6 pt-6 border-t border-border">
+                      <h4 className="font-semibold text-foreground mb-4">Social Profiles</h4>
                       <div className="space-y-2">
-                        {Object.entries(profile.socialLinks).map(([platform, url]) => 
+                        {Object.entries(profile.socialLinks).map(([platform, url]) =>
                           url && (
-                            <div key={platform} className="flex items-center text-gray-600">
+                            <div key={platform} className="flex items-center text-muted-foreground">
                               <span className="w-4 h-4 mr-3">{getSocialIcon(platform)}</span>
-                              <a 
-                                href={url} 
-                                target="_blank" 
+                              <a
+                                href={url}
+                                target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-sm text-green-600 hover:text-green-700"
+                                className="text-sm text-primary hover:text-primary/80"
                               >
                                 {getSocialPlatformName(platform)}
                               </a>
@@ -476,21 +565,21 @@ const FreelancerProfile = () => {
 
             {/* Main Content */}
             <div className="lg:col-span-3">
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
                 {/* Form Content */}
                 <div className="p-8">
                   {/* Basic Information */}
                   {activeSection === 'basic' && (
                     <div className="space-y-8">
                       <div>
-                        <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-                          <UserCircleIcon className="w-6 h-6 mr-3 text-green-500" />
+                        <h3 className="text-2xl font-bold text-foreground mb-6 flex items-center">
+                          <UserCircleIcon className="w-6 h-6 mr-3 text-primary" />
                           Basic Information
                         </h3>
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               Full Name *
                             </label>
                             <input
@@ -498,12 +587,12 @@ const FreelancerProfile = () => {
                               value={formData.name}
                               onChange={(e) => handleInputChange('name', e.target.value)}
                               disabled={!isEditing}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
                             />
                           </div>
-                          
+
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               Professional Headline
                             </label>
                             <input
@@ -512,12 +601,53 @@ const FreelancerProfile = () => {
                               onChange={(e) => handleInputChange('freelancerProfile.headline', e.target.value)}
                               disabled={!isEditing}
                               placeholder="e.g., Senior UI/UX Designer & Frontend Developer"
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
                             />
                           </div>
-                          
+
+                          {/* Date of Birth Field */}
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
+                              Date of Birth
+                            </label>
+                            <div className="space-y-2">
+                              <input
+                                type="date"
+                                value={formData.dateOfBirth}
+                                onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
+                                disabled={!isEditing}
+                                max={new Date().toISOString().split('T')[0]}
+                                className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
+                              />
+                              {age && (
+                                <div className="text-sm text-muted-foreground flex items-center">
+                                  <CalendarIcon className="w-4 h-4 mr-2" />
+                                  Age: {age} years old
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Gender Field */}
+                          <div>
+                            <label className="block text-sm font-semibold text-foreground mb-3">
+                              Gender
+                            </label>
+                            <select
+                              value={formData.gender}
+                              onChange={(e) => handleInputChange('gender', e.target.value)}
+                              disabled={!isEditing}
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
+                            >
+                              <option value="male">Male</option>
+                              <option value="female">Female</option>
+                              <option value="other">Other</option>
+                              <option value="prefer-not-to-say">Prefer not to say</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               Location
                             </label>
                             <input
@@ -526,12 +656,12 @@ const FreelancerProfile = () => {
                               onChange={(e) => handleInputChange('location', e.target.value)}
                               disabled={!isEditing}
                               placeholder="City, Country"
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
                             />
                           </div>
-                          
+
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               Phone Number
                             </label>
                             <input
@@ -539,12 +669,12 @@ const FreelancerProfile = () => {
                               value={formData.phone}
                               onChange={(e) => handleInputChange('phone', e.target.value)}
                               disabled={!isEditing}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
                             />
                           </div>
-                          
+
                           <div className="md:col-span-2">
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               Professional Bio
                             </label>
                             <textarea
@@ -553,9 +683,9 @@ const FreelancerProfile = () => {
                               disabled={!isEditing}
                               rows={6}
                               placeholder="Tell clients about yourself, your experience, and what you specialize in. A great bio helps you stand out and attract the right projects..."
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
                             />
-                            <div className="text-sm text-gray-500 mt-2">
+                            <div className="text-sm text-muted-foreground mt-2">
                               {formData.bio?.length || 0}/2000 characters
                             </div>
                           </div>
@@ -568,69 +698,69 @@ const FreelancerProfile = () => {
                   {activeSection === 'professional' && (
                     <div className="space-y-8">
                       <div>
-                        <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-                          <BriefcaseIcon className="w-6 h-6 mr-3 text-green-500" />
+                        <h3 className="text-2xl font-bold text-foreground mb-6 flex items-center">
+                          <BriefcaseIcon className="w-6 h-6 mr-3 text-primary" />
                           Professional Details
                         </h3>
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               Hourly Rate ($)
                             </label>
                             <div className="relative">
-                              <CurrencyDollarIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                              <CurrencyDollarIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                               <input
                                 type="number"
                                 value={formData.freelancerProfile?.hourlyRate}
                                 onChange={(e) => handleInputChange('freelancerProfile.hourlyRate', Number(e.target.value))}
                                 disabled={!isEditing}
-                                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                                className="w-full pl-10 pr-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
                               />
                             </div>
                           </div>
-                          
+
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               Experience Level
                             </label>
                             <select
                               value={formData.freelancerProfile?.experienceLevel}
                               onChange={(e) => handleExperienceLevelChange(e.target.value)}
                               disabled={!isEditing}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
                             >
                               <option value="entry">Entry Level (0-2 years)</option>
                               <option value="intermediate">Intermediate (2-5 years)</option>
                               <option value="expert">Expert (5+ years)</option>
                             </select>
                           </div>
-                          
+
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               Availability
                             </label>
                             <select
                               value={formData.freelancerProfile?.availability}
                               onChange={(e) => handleAvailabilityChange(e.target.value)}
                               disabled={!isEditing}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
                             >
                               <option value="available">Available (Full-time)</option>
                               <option value="part-time">Part Time</option>
                               <option value="not-available">Not Available</option>
                             </select>
                           </div>
-                          
+
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               English Proficiency
                             </label>
                             <select
                               value={formData.freelancerProfile?.englishProficiency}
                               onChange={(e) => handleEnglishProficiencyChange(e.target.value)}
                               disabled={!isEditing}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
                             >
                               <option value="basic">Basic</option>
                               <option value="conversational">Conversational</option>
@@ -638,16 +768,16 @@ const FreelancerProfile = () => {
                               <option value="native">Native/Bilingual</option>
                             </select>
                           </div>
-                          
+
                           <div className="md:col-span-2">
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               Timezone
                             </label>
                             <select
                               value={formData.freelancerProfile?.timezone}
                               onChange={(e) => handleInputChange('freelancerProfile.timezone', e.target.value)}
                               disabled={!isEditing}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
                             >
                               <option value="">Select your timezone</option>
                               <option value="EST">Eastern Time (EST)</option>
@@ -666,47 +796,47 @@ const FreelancerProfile = () => {
                   {activeSection === 'skills' && (
                     <div className="space-y-8">
                       <div>
-                        <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-                          <StarIcon className="w-6 h-6 mr-3 text-green-500" />
+                        <h3 className="text-2xl font-bold text-foreground mb-6 flex items-center">
+                          <StarIcon className="w-6 h-6 mr-3 text-primary" />
                           Skills & Expertise
                         </h3>
-                        
+
                         <div className="mb-6">
-                          <label className="block text-sm font-semibold text-gray-700 mb-3">
+                          <label className="block text-sm font-semibold text-foreground mb-3">
                             Your Skills ({formData.skills.length} added)
                           </label>
-                          
+
                           <div className="flex flex-wrap gap-3 mb-4">
                             {formData.skills.map((skill, index) => (
-                              <div 
+                              <div
                                 key={index}
-                                className="bg-gradient-to-r from-green-50 to-emerald-50 text-green-700 px-4 py-2 rounded-xl text-sm font-semibold border border-green-200 flex items-center group"
+                                className="bg-primary/10 text-primary px-4 py-2 rounded-xl text-sm font-semibold border border-primary/20 flex items-center group"
                               >
                                 {skill.name}
                                 {isEditing && (
                                   <button
                                     onClick={() => removeSkill(index)}
-                                    className="ml-2 text-green-500 hover:text-green-700 transition-colors"
+                                    className="ml-2 text-primary hover:text-primary/80 transition-colors"
                                   >
                                     ×
                                   </button>
                                 )}
                               </div>
                             ))}
-                            
+
                             {formData.skills.length === 0 && (
-                              <div className="text-gray-500 italic">
+                              <div className="text-muted-foreground italic">
                                 No skills added yet. Add your first skill to get started.
                               </div>
                             )}
                           </div>
-                          
+
                           {isEditing && (
                             <div className="flex gap-3">
                               <input
                                 type="text"
                                 placeholder="Add a skill (e.g., React, UI/UX Design, Python)"
-                                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                className="flex-1 px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-foreground placeholder:text-muted-foreground"
                                 onKeyPress={(e) => {
                                   if (e.key === 'Enter') {
                                     const target = e.target as HTMLInputElement;
@@ -723,21 +853,21 @@ const FreelancerProfile = () => {
                                     input.value = '';
                                   }
                                 }}
-                                className="px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors font-semibold"
+                                className="px-6 py-3 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors font-semibold"
                               >
                                 Add Skill
                               </button>
                             </div>
                           )}
                         </div>
-                        
-                        <div className="bg-blue-50 rounded-xl p-6 border border-blue-200">
-                          <h4 className="font-semibold text-blue-900 mb-2 flex items-center">
-                            <StarIcon className="w-5 h-5 mr-2 text-blue-600" />
+
+                        <div className="bg-primary/10 rounded-xl p-6 border border-primary/20">
+                          <h4 className="font-semibold text-foreground mb-2 flex items-center">
+                            <StarIcon className="w-5 h-5 mr-2 text-primary" />
                             Pro Tip
                           </h4>
-                          <p className="text-blue-700 text-sm">
-                            Add relevant skills that match your expertise. Clients often search for freelancers with specific skills. 
+                          <p className="text-foreground/80 text-sm">
+                            Add relevant skills that match your expertise. Clients often search for freelancers with specific skills.
                             Include both technical and soft skills for better visibility.
                           </p>
                         </div>
@@ -749,11 +879,11 @@ const FreelancerProfile = () => {
                   {activeSection === 'certifications' && (
                     <div className="space-y-8">
                       <div>
-                        <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-                          <AcademicCapIcon className="w-6 h-6 mr-3 text-green-500" />
+                        <h3 className="text-2xl font-bold text-foreground mb-6 flex items-center">
+                          <AcademicCapIcon className="w-6 h-6 mr-3 text-primary" />
                           Professional Certifications
                         </h3>
-                        
+
                         <CertificationsList
                           certifications={certifications}
                           onCertificationsUpdate={handleCertificationsUpdate}
@@ -766,14 +896,14 @@ const FreelancerProfile = () => {
                   {activeSection === 'social' && (
                     <div className="space-y-8">
                       <div>
-                        <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-                          <LinkIcon className="w-6 h-6 mr-3 text-green-500" />
+                        <h3 className="text-2xl font-bold text-foreground mb-6 flex items-center">
+                          <LinkIcon className="w-6 h-6 mr-3 text-primary" />
                           Social Links
                         </h3>
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               LinkedIn URL
                             </label>
                             <input
@@ -782,15 +912,15 @@ const FreelancerProfile = () => {
                               onChange={(e) => handleInputChange('socialLinks.linkedin', e.target.value)}
                               disabled={!isEditing}
                               placeholder="https://linkedin.com/in/yourprofile"
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
                             />
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="text-xs text-muted-foreground mt-1">
                               Format: https://linkedin.com/in/username
                             </p>
                           </div>
-                          
+
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               GitHub URL
                             </label>
                             <input
@@ -799,15 +929,15 @@ const FreelancerProfile = () => {
                               onChange={(e) => handleInputChange('socialLinks.github', e.target.value)}
                               disabled={!isEditing}
                               placeholder="https://github.com/yourusername"
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
                             />
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="text-xs text-muted-foreground mt-1">
                               Format: https://github.com/username
                             </p>
                           </div>
-                          
+
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               TikTok URL
                             </label>
                             <input
@@ -816,15 +946,15 @@ const FreelancerProfile = () => {
                               onChange={(e) => handleInputChange('socialLinks.tiktok', e.target.value)}
                               disabled={!isEditing}
                               placeholder="https://tiktok.com/@yourusername"
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
                             />
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="text-xs text-muted-foreground mt-1">
                               Format: https://tiktok.com/@username
                             </p>
                           </div>
-                          
+
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               Telegram URL
                             </label>
                             <input
@@ -833,15 +963,15 @@ const FreelancerProfile = () => {
                               onChange={(e) => handleInputChange('socialLinks.telegram', e.target.value)}
                               disabled={!isEditing}
                               placeholder="https://t.me/yourusername"
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
                             />
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="text-xs text-muted-foreground mt-1">
                               Format: https://t.me/username
                             </p>
                           </div>
-                          
+
                           <div className="md:col-span-2">
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               Twitter/X URL
                             </label>
                             <input
@@ -850,21 +980,21 @@ const FreelancerProfile = () => {
                               onChange={(e) => handleInputChange('socialLinks.twitter', e.target.value)}
                               disabled={!isEditing}
                               placeholder="https://twitter.com/yourusername or https://x.com/yourusername"
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
                             />
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="text-xs text-muted-foreground mt-1">
                               Format: https://twitter.com/username or https://x.com/username
                             </p>
                           </div>
                         </div>
-                        
-                        <div className="mt-6 bg-blue-50 rounded-xl p-6 border border-blue-200">
-                          <h4 className="font-semibold text-blue-900 mb-2 flex items-center">
-                            <LinkIcon className="w-5 h-5 mr-2 text-blue-600" />
+
+                        <div className="mt-6 bg-primary/10 rounded-xl p-6 border border-primary/20">
+                          <h4 className="font-semibold text-foreground mb-2 flex items-center">
+                            <LinkIcon className="w-5 h-5 mr-2 text-primary" />
                             Pro Tip
                           </h4>
-                          <p className="text-blue-700 text-sm">
-                            Add your social profiles to help clients learn more about your work and professional background. 
+                          <p className="text-foreground/80 text-sm">
+                            Add your social profiles to help clients learn more about your work and professional background.
                             Make sure your profiles are professional and up-to-date. Adding multiple social links improves your profile completeness.
                           </p>
                         </div>
@@ -876,30 +1006,30 @@ const FreelancerProfile = () => {
                   {activeSection === 'contact' && (
                     <div className="space-y-8">
                       <div>
-                        <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-                          <EnvelopeIcon className="w-6 h-6 mr-3 text-green-500" />
+                        <h3 className="text-2xl font-bold text-foreground mb-6 flex items-center">
+                          <EnvelopeIcon className="w-6 h-6 mr-3 text-primary" />
                           Contact Information
                         </h3>
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div className="md:col-span-2">
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               Email Address
                             </label>
-                            <div className="flex items-center px-4 py-3 bg-gray-50 rounded-xl border border-gray-300">
-                              <EnvelopeIcon className="w-5 h-5 text-gray-400 mr-3" />
-                              <span className="text-gray-600">{profile.email}</span>
-                              <div className="ml-auto bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-medium">
+                            <div className="flex items-center px-4 py-3 bg-muted rounded-xl border border-input">
+                              <EnvelopeIcon className="w-5 h-5 text-muted-foreground mr-3" />
+                              <span className="text-muted-foreground">{profile.email}</span>
+                              <div className="ml-auto bg-primary/10 text-primary px-2 py-1 rounded text-xs font-medium">
                                 Primary
                               </div>
                             </div>
-                            <p className="text-sm text-gray-500 mt-2">
+                            <p className="text-sm text-muted-foreground mt-2">
                               Your email address is used for account notifications and cannot be changed here.
                             </p>
                           </div>
-                          
+
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               Phone Number
                             </label>
                             <input
@@ -907,12 +1037,12 @@ const FreelancerProfile = () => {
                               value={formData.phone}
                               onChange={(e) => handleInputChange('phone', e.target.value)}
                               disabled={!isEditing}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
                             />
                           </div>
-                          
+
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               Website
                             </label>
                             <input
@@ -921,12 +1051,12 @@ const FreelancerProfile = () => {
                               onChange={(e) => handleInputChange('website', e.target.value)}
                               disabled={!isEditing}
                               placeholder="https://yourportfolio.com"
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
                             />
                           </div>
-                          
+
                           <div className="md:col-span-2">
-                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            <label className="block text-sm font-semibold text-foreground mb-3">
                               Location
                             </label>
                             <input
@@ -935,7 +1065,7 @@ const FreelancerProfile = () => {
                               onChange={(e) => handleInputChange('location', e.target.value)}
                               disabled={!isEditing}
                               placeholder="City, Country"
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-50 transition-colors"
+                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
                             />
                           </div>
                         </div>
@@ -946,28 +1076,28 @@ const FreelancerProfile = () => {
 
                 {/* Save Button */}
                 {isEditing && (
-                  <div className="px-8 py-6 border-t border-gray-200 bg-gray-50">
+                  <div className="px-8 py-6 border-t border-border bg-muted/30">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-muted-foreground">
                           Make sure to save your changes before leaving this page.
                         </p>
                       </div>
                       <div className="flex space-x-4">
                         <button
                           onClick={() => setIsEditing(false)}
-                          className="px-6 py-3 bg-gray-500 text-white rounded-xl hover:bg-gray-600 transition-all duration-200 font-semibold"
+                          className="px-6 py-3 bg-muted text-muted-foreground rounded-xl hover:bg-muted/80 transition-all duration-200 font-semibold"
                         >
                           Cancel
                         </button>
                         <button
                           onClick={handleSave}
                           disabled={isSaving}
-                          className="px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all duration-200 font-semibold disabled:opacity-50 shadow-lg hover:shadow-xl"
+                          className="px-8 py-3 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-all duration-200 font-semibold disabled:opacity-50 shadow-lg hover:shadow-xl"
                         >
                           {isSaving ? (
                             <div className="flex items-center">
-                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                              <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2"></div>
                               Saving Changes...
                             </div>
                           ) : (

@@ -2,11 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
-import { 
-  Briefcase, 
-  User, 
-  FileText, 
-  Bookmark, 
+import {
+  Briefcase,
+  User,
+  FileText,
+  Bookmark,
   ArrowRight,
   CheckCircle,
   Loader2,
@@ -16,6 +16,7 @@ import {
   Globe,
   Mail,
   Award,
+  Shield,
 } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
@@ -23,8 +24,10 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout"
 import ProfileCompletionCard from "@/components/candidate/ProfileCompletionCard"
 import QuickStatsCard from "@/components/candidate/QuickStatsCard"
 import { candidateService, CandidateProfile } from "@/services/candidateService"
-import { applyBgColor, applyColor, applyBorderColor } from "@/utils/color"
 import { useToast } from "@/hooks/use-toast"
+import VerificationBadge from '@/components/verifcation/VerificationBadge'
+import { useVerification } from '@/hooks/useVerification'
+import { cn } from '@/lib/utils'
 
 interface DashboardStats {
   totalApplications: number;
@@ -54,6 +57,7 @@ const CandidateDashboard: React.FC = () => {
   })
   const [loading, setLoading] = useState(true)
   const { toast } = useToast()
+  const { verificationData, loading: verificationLoading } = useVerification()
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -61,7 +65,7 @@ const CandidateDashboard: React.FC = () => {
         setLoading(true)
         const profileData = await candidateService.getProfile()
         setProfile(profileData)
-        
+
         // Calculate real statistics from profile data
         const realStats: DashboardStats = {
           totalApplications: profileData.experience?.length || 0,
@@ -74,11 +78,10 @@ const CandidateDashboard: React.FC = () => {
           cvCount: profileData.cvs?.length || 0,
           certificationsCount: (profileData as any)?.certifications?.length || 0
         }
-        
+
         setStats(realStats)
       } catch (error: any) {
         console.error('Failed to load dashboard data:', error)
-        // Error is already handled by the service, just show generic message
         toast({
           title: 'Error',
           description: 'Failed to load dashboard data',
@@ -88,7 +91,7 @@ const CandidateDashboard: React.FC = () => {
         setLoading(false)
       }
     }
-    
+
     if (user) {
       loadDashboardData()
     }
@@ -101,7 +104,7 @@ const CandidateDashboard: React.FC = () => {
       change: `+${stats.skillsCount}`,
       icon: CheckCircle,
       description: "Total skills",
-      color: '#3B82F6' // blue
+      color: 'text-blue-500 dark:text-blue-400'
     },
     {
       title: "Experience",
@@ -109,7 +112,7 @@ const CandidateDashboard: React.FC = () => {
       change: `+${stats.experienceCount}`,
       icon: Briefcase,
       description: "Work experiences",
-      color: '#14B8A6' // teal
+      color: 'text-emerald-500 dark:text-emerald-400'
     },
     {
       title: "Education",
@@ -117,7 +120,7 @@ const CandidateDashboard: React.FC = () => {
       change: `+${stats.educationCount}`,
       icon: GraduationCap,
       description: "Education entries",
-      color: '#F97316' // orange
+      color: 'text-orange-500 dark:text-orange-400'
     },
     {
       title: "Certifications",
@@ -125,7 +128,7 @@ const CandidateDashboard: React.FC = () => {
       change: `+${stats.certificationsCount}`,
       icon: Award,
       description: "Certifications & courses",
-      color: '#8B5CF6' // purple
+      color: 'text-purple-500 dark:text-purple-400'
     },
     {
       title: "CVs",
@@ -133,39 +136,14 @@ const CandidateDashboard: React.FC = () => {
       change: `+${stats.cvCount}`,
       icon: FileText,
       description: "Uploaded resumes",
-      color: '#EAB308' // gold
+      color: 'text-amber-500 dark:text-amber-400'
     }
   ]
-
-  const getStatusBadge = (status: string) => {
-    try {
-      const statusConfig = {
-        none: { label: "Not Verified", variant: "destructive", color: "orange" },
-        partial: { label: "Partially Verified", variant: "default", color: "gold" },
-        full: { label: "Fully Verified", variant: "success", color: "teal" },
-      } as const;
-
-      const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.none;
-
-      return (
-        <Badge variant={config.variant} style={applyBgColor(config.color)}>
-          {config.label}
-        </Badge>
-      );
-    } catch (error) {
-      console.error('Status badge error:', error);
-      return (
-        <Badge variant="destructive" style={applyBgColor('orange')}>
-          Unknown
-        </Badge>
-      );
-    }
-  };
 
   const calculateProfileCompletion = (profile: CandidateProfile | null) => {
     try {
       if (!profile) return 0
-      
+
       const totalPoints = 100
       let completedPoints = 0
 
@@ -209,8 +187,8 @@ const CandidateDashboard: React.FC = () => {
     return (
       <DashboardLayout requiredRole="candidate">
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin" style={applyColor('gold')} />
-          <span className="ml-2 text-gray-600">Loading dashboard...</span>
+          <Loader2 className="h-8 w-8 animate-spin text-amber-500" />
+          <span className="ml-2 text-gray-600 dark:text-gray-300">Loading dashboard...</span>
         </div>
       </DashboardLayout>
     )
@@ -227,45 +205,68 @@ const CandidateDashboard: React.FC = () => {
     <DashboardLayout requiredRole="candidate">
       <div className="space-y-8">
         {/* Welcome Header with Real Profile Data */}
-        <div className="bg-white rounded-lg p-6 shadow-md border border-gray-200">
+        <div className={cn(
+          "rounded-lg p-6 shadow-md border",
+          "bg-white dark:bg-gray-800",
+          "border-gray-200 dark:border-gray-700",
+          "transition-colors duration-200"
+        )}>
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 className="text-3xl font-bold" style={applyColor('darkNavy')}>
-                Welcome back, {user?.name || 'Candidate'}!
-              </h1>
-              <p className="text-gray-600 mt-2 max-w-2xl">
+              <div className="flex items-center gap-4 mb-4">
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                  Welcome back, {user?.name || 'Candidate'}!
+                </h1>
+                {/* Verification Badge */}
+                {!verificationLoading && (
+                  <VerificationBadge
+                    autoFetch={true}
+                    size="md"
+                    showText={true}
+                    showTooltip={true}
+                    className="shadow-sm"
+                  />
+                )}
+              </div>
+              <p className="text-gray-600 dark:text-gray-300 mt-2 max-w-2xl">
                 {profile?.bio || "Complete your profile to get better job matches and increase your chances of getting hired."}
               </p>
-              
+
               {/* Profile Quick Info */}
               <div className="flex flex-wrap gap-4 mt-4">
                 {profile?.location && (
-                  <div className="flex items-center text-sm text-gray-600 bg-gray-50 px-3 py-1.5 rounded-lg">
+                  <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 px-3 py-1.5 rounded-lg">
                     <MapPin className="h-4 w-4 mr-1" />
                     {profile.location}
                   </div>
                 )}
                 {profile?.phone && (
-                  <div className="flex items-center text-sm text-gray-600 bg-gray-50 px-3 py-1.5 rounded-lg">
+                  <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 px-3 py-1.5 rounded-lg">
                     <Phone className="h-4 w-4 mr-1" />
                     {profile.phone}
                   </div>
                 )}
                 {profile?.website && (
-                  <div className="flex items-center text-sm text-gray-600 bg-gray-50 px-3 py-1.5 rounded-lg">
+                  <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 px-3 py-1.5 rounded-lg">
                     <Globe className="h-4 w-4 mr-1" />
                     {profile.website}
                   </div>
                 )}
-                <div className="flex items-center text-sm text-gray-600 bg-gray-50 px-3 py-1.5 rounded-lg">
+                <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 px-3 py-1.5 rounded-lg">
                   <Mail className="h-4 w-4 mr-1" />
                   {user?.email}
                 </div>
               </div>
             </div>
-            
+
             <div className="mt-4 md:mt-0">
-              {getStatusBadge(profile?.verificationStatus || "none")}
+              {/* Verification Status Link */}
+              <Link href="/dashboard/candidate/verification">
+                <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:from-blue-600 hover:to-blue-700 transition-all shadow-sm hover:shadow-md">
+                  <CheckCircle className="h-4 w-4" />
+                  View Verification Status
+                </button>
+              </Link>
             </div>
           </div>
         </div>
@@ -276,69 +277,242 @@ const CandidateDashboard: React.FC = () => {
         {/* Profile Overview and Quick Actions */}
         <div className="grid gap-6 md:grid-cols-2">
           {/* Quick Actions */}
-          <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
+          <Card className={cn(
+            "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
+            "bg-white dark:bg-gray-800",
+            "border-gray-200 dark:border-gray-700"
+          )}>
             <CardHeader>
-              <CardTitle style={applyColor('darkNavy')}>Quick Actions</CardTitle>
-              <CardDescription>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-gray-900 dark:text-white">Quick Actions</CardTitle>
+                {/* Small verification status indicator */}
+                <div className="hidden md:block">
+                  <VerificationBadge
+                    autoFetch={true}
+                    size="sm"
+                    showText={false}
+                    showTooltip={true}
+                  />
+                </div>
+              </div>
+              <CardDescription className="text-gray-600 dark:text-gray-400">
                 Manage your profile and job search
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <Link href="/dashboard/candidate/profile" className="block">
-                <button className="w-full flex items-center justify-start px-4 py-3 text-white rounded-xl font-medium transition-all hover:shadow-lg" style={applyBgColor('gold')}>
+                <button className="w-full flex items-center justify-start px-4 py-3 text-white rounded-xl font-medium transition-all hover:shadow-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700">
                   <User className="mr-3 h-5 w-5" />
                   Edit Profile
                 </button>
               </Link>
-              
+
               <Link href="/dashboard/candidate/jobs" className="block">
-                <button className="w-full flex items-center justify-start px-4 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-all" style={applyBorderColor('gold')}>
+                <button className={cn(
+                  "w-full flex items-center justify-start px-4 py-3 rounded-xl font-medium",
+                  "border border-gray-300 dark:border-gray-600",
+                  "text-gray-700 dark:text-gray-300",
+                  "bg-white dark:bg-gray-800",
+                  "hover:bg-gray-50 dark:hover:bg-gray-700",
+                  "transition-all duration-200"
+                )}>
                   <Briefcase className="mr-3 h-5 w-5" />
                   Browse Jobs
                 </button>
               </Link>
-              
+
               <Link href="/dashboard/candidate/applications" className="block">
-                <button className="w-full flex items-center justify-start px-4 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-all" style={applyBorderColor('gold')}>
+                <button className={cn(
+                  "w-full flex items-center justify-start px-4 py-3 rounded-xl font-medium",
+                  "border border-gray-300 dark:border-gray-600",
+                  "text-gray-700 dark:text-gray-300",
+                  "bg-white dark:bg-gray-800",
+                  "hover:bg-gray-50 dark:hover:bg-gray-700",
+                  "transition-all duration-200"
+                )}>
                   <FileText className="mr-3 h-5 w-5" />
                   View Applications
                 </button>
               </Link>
-              
+
               <Link href="/dashboard/candidate/saved-jobs" className="block">
-                <button className="w-full flex items-center justify-start px-4 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-all" style={applyBorderColor('gold')}>
+                <button className={cn(
+                  "w-full flex items-center justify-start px-4 py-3 rounded-xl font-medium",
+                  "border border-gray-300 dark:border-gray-600",
+                  "text-gray-700 dark:text-gray-300",
+                  "bg-white dark:bg-gray-800",
+                  "hover:bg-gray-50 dark:hover:bg-gray-700",
+                  "transition-all duration-200"
+                )}>
                   <Bookmark className="mr-3 h-5 w-5" />
                   Saved Jobs
+                </button>
+              </Link>
+
+              {/* Verification Action Button */}
+              <Link href="/dashboard/candidate/verification" className="block">
+                <button className={cn(
+                  "w-full flex items-center justify-start px-4 py-3 rounded-xl font-medium",
+                  "border-2 border-blue-300 dark:border-blue-500",
+                  "text-blue-700 dark:text-blue-300",
+                  "bg-white dark:bg-gray-800",
+                  "hover:bg-blue-50 dark:hover:bg-blue-900/20",
+                  "transition-all duration-200"
+                )}>
+                  <CheckCircle className="mr-3 h-5 w-5" />
+                  Complete Verification
+                  {verificationData?.verificationStatus === 'partial' && (
+                    <Badge variant="default" className="ml-2 bg-yellow-500 text-yellow-900">
+                      In Progress
+                    </Badge>
+                  )}
                 </button>
               </Link>
             </CardContent>
           </Card>
 
-          {/* Profile Completion */}
-          <ProfileCompletionCard 
-            completion={profileCompletion}
-            items={completionItems}
-          />
+          {/* Profile Completion with Verification Status */}
+          <Card className={cn(
+            "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
+            "bg-white dark:bg-gray-800",
+            "border-gray-200 dark:border-gray-700"
+          )}>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-gray-900 dark:text-white">Profile & Verification</CardTitle>
+                <div className="flex items-center gap-2">
+                  {verificationData && (
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      <span className="font-medium">Verification Score: </span>
+                      <span className={cn(
+                        "font-bold",
+                        verificationData.verificationStatus === 'full' ? 'text-emerald-600 dark:text-emerald-400' :
+                          verificationData.verificationStatus === 'partial' ? 'text-amber-600 dark:text-amber-400' :
+                            'text-orange-600 dark:text-orange-400'
+                      )}>
+                        {verificationData.verificationStatus === 'full' ? '100%' :
+                          verificationData.verificationStatus === 'partial' ? '50%' : '0%'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <CardDescription className="text-gray-600 dark:text-gray-400">
+                Complete your profile and get verified for better opportunities
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Profile Completion Section */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Profile Completion</span>
+                  <span className="text-sm font-bold text-amber-600 dark:text-amber-400">
+                    {profileCompletion}%
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div
+                    className="rounded-full h-2 transition-all duration-500"
+                    style={{
+                      width: `${profileCompletion}%`,
+                      backgroundColor: profileCompletion >= 80 ? '#10b981' :
+                        profileCompletion >= 50 ? '#f59e0b' : '#ef4444'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Verification Status Details */}
+              {verificationData && (
+                <div className={cn(
+                  "rounded-lg p-4 border",
+                  "bg-gray-50 dark:bg-gray-900",
+                  "border-gray-200 dark:border-gray-700"
+                )}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Verification Status</span>
+                    </div>
+                    <VerificationBadge
+                      status={verificationData.verificationStatus}
+                      size="sm"
+                      showText={true}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+                    {verificationData.verificationMessage ||
+                      'Complete your verification to increase trust and get more opportunities.'}
+                  </p>
+                  {verificationData.verificationStatus !== 'full' && (
+                    <Link href="/dashboard/candidate/verification">
+                      <button className="w-full mt-3 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg text-sm font-medium hover:from-blue-600 hover:to-blue-700 transition-all">
+                        Complete Verification Steps
+                      </button>
+                    </Link>
+                  )}
+                </div>
+              )}
+
+              {/* Completion Items */}
+              <div className="space-y-3">
+                {completionItems.map((item, index) => (
+                  <div key={index} className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <div className={cn(
+                        "w-3 h-3 rounded-full mr-3",
+                        item.completed ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                      )} />
+                      <span className={cn(
+                        "text-sm",
+                        item.completed ? 'text-gray-800 dark:text-gray-200' : 'text-gray-500 dark:text-gray-400'
+                      )}>
+                        {item.label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{item.weight} points</span>
+                      {!item.completed && (
+                        <Link href={item.route}>
+                          <button className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium">
+                            Complete
+                          </button>
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Skills Overview */}
         {profileSkills.length > 0 && (
-          <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
+          <Card className={cn(
+            "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
+            "bg-white dark:bg-gray-800",
+            "border-gray-200 dark:border-gray-700"
+          )}>
             <CardHeader>
-              <CardTitle style={applyColor('darkNavy')}>Your Skills</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-gray-900 dark:text-white">Your Skills</CardTitle>
+              <CardDescription className="text-gray-600 dark:text-gray-400">
                 {profileSkills.length} skills added to your profile
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
                 {profileSkills.slice(0, 15).map((skill, index) => (
-                  <Badge key={`skill-${index}-${skill}`} variant="secondary" style={applyBgColor('gold')}>
+                  <Badge
+                    key={`skill-${index}-${skill}`}
+                    variant="secondary"
+                    className="bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-800"
+                  >
                     {skill}
                   </Badge>
                 ))}
                 {profileSkills.length > 15 && (
-                  <Badge variant="outline">
+                  <Badge variant="outline" className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300">
                     +{profileSkills.length - 15} more
                   </Badge>
                 )}
@@ -351,28 +525,39 @@ const CandidateDashboard: React.FC = () => {
         <div className="grid gap-6 md:grid-cols-3">
           {/* Recent Experience */}
           {profileExperience.length > 0 && (
-            <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
+            <Card className={cn(
+              "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
+              "bg-white dark:bg-gray-800",
+              "border-gray-200 dark:border-gray-700"
+            )}>
               <CardHeader>
-                <CardTitle style={applyColor('darkNavy')}>Recent Experience</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-gray-900 dark:text-white">Recent Experience</CardTitle>
+                <CardDescription className="text-gray-600 dark:text-gray-400">
                   Your most recent work experience
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {profileExperience.slice(0, 2).map((exp, index) => (
-                    <div key={`experience-${index}-${exp.company}`} className="border-l-4 border-gold pl-4 py-1">
-                      <p className="font-semibold text-gray-900">{exp.position}</p>
-                      <p className="text-sm text-gray-600">{exp.company}</p>
-                      <p className="text-xs text-gray-500">
-                        {new Date(exp.startDate).toLocaleDateString()} - 
+                    <div key={`experience-${index}-${exp.company}`} className="border-l-4 border-amber-500 pl-4 py-1">
+                      <p className="font-semibold text-gray-900 dark:text-white">{exp.position}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{exp.company}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {new Date(exp.startDate).toLocaleDateString()} -
                         {exp.current ? ' Present' : exp.endDate ? ` ${new Date(exp.endDate).toLocaleDateString()}` : ' Not specified'}
                       </p>
                     </div>
                   ))}
                   {profileExperience.length > 2 && (
                     <Link href="/dashboard/candidate/profile">
-                      <button className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all" style={applyBorderColor('gold')}>
+                      <button className={cn(
+                        "w-full flex items-center justify-center px-4 py-2 rounded-lg font-medium",
+                        "border border-gray-300 dark:border-gray-600",
+                        "text-gray-700 dark:text-gray-300",
+                        "bg-white dark:bg-gray-800",
+                        "hover:bg-gray-50 dark:hover:bg-gray-700",
+                        "transition-all duration-200"
+                      )}>
                         View All {profileExperience.length} Experiences
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </button>
@@ -385,28 +570,39 @@ const CandidateDashboard: React.FC = () => {
 
           {/* Education Summary */}
           {profileEducation.length > 0 && (
-            <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
+            <Card className={cn(
+              "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
+              "bg-white dark:bg-gray-800",
+              "border-gray-200 dark:border-gray-700"
+            )}>
               <CardHeader>
-                <CardTitle style={applyColor('darkNavy')}>Education</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-gray-900 dark:text-white">Education</CardTitle>
+                <CardDescription className="text-gray-600 dark:text-gray-400">
                   Your educational background
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {profileEducation.slice(0, 2).map((edu, index) => (
-                    <div key={`education-${index}-${edu.institution}`} className="border-l-4 border-teal pl-4 py-1">
-                      <p className="font-semibold text-gray-900">{edu.degree}</p>
-                      <p className="text-sm text-gray-600">{edu.institution}</p>
-                      <p className="text-xs text-gray-500">
-                        {new Date(edu.startDate).toLocaleDateString()} - 
+                    <div key={`education-${index}-${edu.institution}`} className="border-l-4 border-emerald-500 pl-4 py-1">
+                      <p className="font-semibold text-gray-900 dark:text-white">{edu.degree}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{edu.institution}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {new Date(edu.startDate).toLocaleDateString()} -
                         {edu.current ? ' Present' : edu.endDate ? ` ${new Date(edu.endDate).toLocaleDateString()}` : ' Not specified'}
                       </p>
                     </div>
                   ))}
                   {profileEducation.length > 2 && (
                     <Link href="/dashboard/candidate/profile">
-                      <button className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all" style={applyBorderColor('teal')}>
+                      <button className={cn(
+                        "w-full flex items-center justify-center px-4 py-2 rounded-lg font-medium",
+                        "border border-gray-300 dark:border-gray-600",
+                        "text-gray-700 dark:text-gray-300",
+                        "bg-white dark:bg-gray-800",
+                        "hover:bg-gray-50 dark:hover:bg-gray-700",
+                        "transition-all duration-200"
+                      )}>
                         View All {profileEducation.length} Education Entries
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </button>
@@ -419,31 +615,42 @@ const CandidateDashboard: React.FC = () => {
 
           {/* Certifications Summary */}
           {profileCertifications.length > 0 && (
-            <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
+            <Card className={cn(
+              "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
+              "bg-white dark:bg-gray-800",
+              "border-gray-200 dark:border-gray-700"
+            )}>
               <CardHeader>
-                <CardTitle style={applyColor('darkNavy')}>Certifications</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-gray-900 dark:text-white">Certifications</CardTitle>
+                <CardDescription className="text-gray-600 dark:text-gray-400">
                   Your certifications & courses
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {profileCertifications.slice(0, 2).map((cert: any, index: number) => (
-                    <div key={`certification-${index}-${cert.name}`} className="border-l-4 border-purple pl-4 py-1">
-                      <p className="font-semibold text-gray-900">{cert.name}</p>
-                      <p className="text-sm text-gray-600">{cert.issuer}</p>
-                      <p className="text-xs text-gray-500">
+                    <div key={`certification-${index}-${cert.name}`} className="border-l-4 border-purple-500 pl-4 py-1">
+                      <p className="font-semibold text-gray-900 dark:text-white">{cert.name}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{cert.issuer}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
                         Issued: {new Date(cert.issueDate).toLocaleDateString()}
                         {cert.expiryDate && ` • Expires: ${new Date(cert.expiryDate).toLocaleDateString()}`}
                       </p>
                       {cert.credentialId && (
-                        <p className="text-xs text-gray-500">ID: {cert.credentialId}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">ID: {cert.credentialId}</p>
                       )}
                     </div>
                   ))}
                   {profileCertifications.length > 2 && (
                     <Link href="/dashboard/candidate/profile">
-                      <button className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all" style={applyBorderColor('blue')}>
+                      <button className={cn(
+                        "w-full flex items-center justify-center px-4 py-2 rounded-lg font-medium",
+                        "border border-gray-300 dark:border-gray-600",
+                        "text-gray-700 dark:text-gray-300",
+                        "bg-white dark:bg-gray-800",
+                        "hover:bg-gray-50 dark:hover:bg-gray-700",
+                        "transition-all duration-200"
+                      )}>
                         View All {profileCertifications.length} Certifications
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </button>
@@ -456,31 +663,53 @@ const CandidateDashboard: React.FC = () => {
         </div>
 
         {/* CV/Resume Status */}
-        <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
+        <Card className={cn(
+          "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
+          "bg-white dark:bg-gray-800",
+          "border-gray-200 dark:border-gray-700"
+        )}>
           <CardHeader>
-            <CardTitle style={applyColor('darkNavy')}>CV/Resume Status</CardTitle>
-            <CardDescription>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-gray-900 dark:text-white">CV/Resume Status</CardTitle>
+              {/* Verification status reminder */}
+              {verificationData?.verificationStatus === 'none' && (
+                <Badge variant="destructive" className="animate-pulse bg-red-500 text-white">
+                  Verification Required
+                </Badge>
+              )}
+            </div>
+            <CardDescription className="text-gray-600 dark:text-gray-400">
               Manage your uploaded resumes
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className={cn(
+              "flex items-center justify-between p-4 rounded-lg border",
+              "bg-gray-50 dark:bg-gray-900",
+              "border-gray-200 dark:border-gray-700"
+            )}>
               <div className="flex items-center space-x-3">
-                <FileText className="h-8 w-8 text-blue-600" />
+                <FileText className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                 <div>
-                  <p className="font-medium text-gray-900">
+                  <p className="font-medium text-gray-900 dark:text-white">
                     {profileCvs.length > 0 ? `${profileCvs.length} CV(s) Uploaded` : 'No CVs Uploaded'}
                   </p>
-                  <p className="text-sm text-gray-600">
-                    {profileCvs.length > 0 
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {profileCvs.length > 0
                       ? `Primary CV: ${primaryCv?.originalName || 'Not set'}`
                       : 'Upload your CV to apply for jobs'
                     }
                   </p>
+                  {/* Verification tip */}
+                  {verificationData?.verificationStatus === 'none' && (
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                      ⚠️ Uploading documents helps with verification
+                    </p>
+                  )}
                 </div>
               </div>
               <Link href="/dashboard/candidate/profile">
-                <button className="px-6 py-3 text-white rounded-lg font-medium transition-all hover:shadow-lg" style={applyBgColor('gold')}>
+                <button className="px-6 py-3 text-white rounded-lg font-medium transition-all hover:shadow-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700">
                   {profileCvs.length > 0 ? 'Manage CVs' : 'Upload CV'}
                   <ArrowRight className="ml-2 h-4 w-4 inline" />
                 </button>
@@ -491,31 +720,45 @@ const CandidateDashboard: React.FC = () => {
 
         {/* Certifications Status */}
         {profileCertifications.length > 0 && (
-          <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
+          <Card className={cn(
+            "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
+            "bg-white dark:bg-gray-800",
+            "border-gray-200 dark:border-gray-700"
+          )}>
             <CardHeader>
-              <CardTitle style={applyColor('darkNavy')}>Certifications & Courses</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-gray-900 dark:text-white">Certifications & Courses</CardTitle>
+              <CardDescription className="text-gray-600 dark:text-gray-400">
                 Your professional certifications and training
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className={cn(
+                "flex items-center justify-between p-4 rounded-lg border",
+                "bg-gray-50 dark:bg-gray-900",
+                "border-gray-200 dark:border-gray-700"
+              )}>
                 <div className="flex items-center space-x-3">
-                  <Award className="h-8 w-8 text-purple-600" />
+                  <Award className="h-8 w-8 text-purple-600 dark:text-purple-400" />
                   <div>
-                    <p className="font-medium text-gray-900">
+                    <p className="font-medium text-gray-900 dark:text-white">
                       {profileCertifications.length} Certification(s) Added
                     </p>
-                    <p className="text-sm text-gray-600">
-                      {profileCertifications.length === 1 
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {profileCertifications.length === 1
                         ? '1 certification in your profile'
                         : `${profileCertifications.length} certifications in your profile`
                       }
                     </p>
+                    {/* Verification tip */}
+                    {verificationData?.verificationStatus === 'partial' && (
+                      <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                        ✅ Certifications help boost verification score
+                      </p>
+                    )}
                   </div>
                 </div>
                 <Link href="/dashboard/candidate/profile">
-                  <button className="px-6 py-3 text-white rounded-lg font-medium transition-all hover:shadow-lg" style={applyBgColor('teal')}>
+                  <button className="px-6 py-3 text-white rounded-lg font-medium transition-all hover:shadow-lg bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700">
                     Manage Certifications
                     <ArrowRight className="ml-2 h-4 w-4 inline" />
                   </button>
@@ -524,6 +767,116 @@ const CandidateDashboard: React.FC = () => {
             </CardContent>
           </Card>
         )}
+
+        {/* Verification Status Card */}
+        <Card className={cn(
+          "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
+          "bg-white dark:bg-gray-800",
+          "border-l-4 border-blue-500",
+          "border-gray-200 dark:border-gray-700"
+        )}>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-gray-900 dark:text-white">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  Account Verification Status
+                </div>
+              </CardTitle>
+              <VerificationBadge
+                autoFetch={true}
+                size="md"
+                showText={true}
+                showTooltip={true}
+                className="shadow-md"
+              />
+            </div>
+            <CardDescription className="text-gray-600 dark:text-gray-400">
+              Increase your trust score and get more opportunities
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className={cn(
+                  "p-4 rounded-lg border",
+                  verificationData?.verificationDetails?.emailVerified
+                    ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                    : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700'
+                )}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className={cn(
+                      "h-2 w-2 rounded-full",
+                      verificationData?.verificationDetails?.emailVerified ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                    )} />
+                    <span className="font-medium text-gray-700 dark:text-gray-300">Email Verification</span>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {verificationData?.verificationDetails?.emailVerified
+                      ? '✅ Your email is verified'
+                      : '⚠️ Verify your email address'}
+                  </p>
+                </div>
+
+                <div className={cn(
+                  "p-4 rounded-lg border",
+                  verificationData?.verificationDetails?.profileVerified
+                    ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                    : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700'
+                )}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className={cn(
+                      "h-2 w-2 rounded-full",
+                      verificationData?.verificationDetails?.profileVerified ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                    )} />
+                    <span className="font-medium text-gray-700 dark:text-gray-300">Profile Verification</span>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {verificationData?.verificationDetails?.profileVerified
+                      ? '✅ Your profile is verified'
+                      : '📝 Complete your profile details'}
+                  </p>
+                </div>
+
+                <div className={cn(
+                  "p-4 rounded-lg border",
+                  verificationData?.verificationDetails?.documentsVerified
+                    ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                    : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700'
+                )}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className={cn(
+                      "h-2 w-2 rounded-full",
+                      verificationData?.verificationDetails?.documentsVerified ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                    )} />
+                    <span className="font-medium text-gray-700 dark:text-gray-300">Document Verification</span>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {verificationData?.verificationDetails?.documentsVerified
+                      ? '✅ Your documents are verified'
+                      : '📄 Upload and verify documents'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Last verified: {verificationData?.verificationDetails?.lastVerified
+                      ? new Date(verificationData.verificationDetails.lastVerified).toLocaleDateString()
+                      : 'Never'}
+                  </p>
+                </div>
+                <Link href="/dashboard/candidate/verification">
+                  <button className="px-6 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:from-blue-600 hover:to-blue-700 transition-all shadow-sm hover:shadow-md">
+                    View Full Verification Details
+                    <ArrowRight className="ml-2 h-4 w-4 inline" />
+                  </button>
+                </Link>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   )

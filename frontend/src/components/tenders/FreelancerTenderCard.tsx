@@ -1,472 +1,377 @@
-// components/tenders/FreelancerTenderCard.tsx
+// components/tenders/freelance/FreelanceTenderCard.tsx
 import React from 'react';
-import Link from 'next/link';
+import { Clock, DollarSign, MapPin, Globe, Save, Eye, Zap, Award, Users, Briefcase } from 'lucide-react';
 import { Tender } from '@/services/tenderService';
-import { 
-  CalendarIcon, 
-  CurrencyDollarIcon, 
-  ClockIcon, 
-  BookmarkIcon,
-  BuildingOfficeIcon,
-  BuildingLibraryIcon,
-  CheckBadgeIcon,
-  EyeIcon,
-  SparklesIcon
-} from '@heroicons/react/24/outline';
-import { BookmarkIcon as BookmarkSolid } from '@heroicons/react/24/solid';
+import { useToggleSaveTender } from '@/hooks/useTenders';
+import { formatDeadline, getStatusColor } from '@/services/tenderService';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/social/ui/Button';
+import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/Card';
+import { cn } from '@/lib/utils';
 
-interface FreelancerTenderCardProps {
+interface FreelanceTenderCardProps {
   tender: Tender;
-  onSaveToggle?: (tenderId: string, saved: boolean) => void;
-  saved?: boolean;
+  variant?: 'grid' | 'list';
+  size?: 'small' | 'medium' | 'large';
   showActions?: boolean;
-  compact?: boolean;
+  className?: string;
 }
 
-const FreelancerTenderCard: React.FC<FreelancerTenderCardProps> = ({ 
+const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({ 
   tender, 
-  onSaveToggle, 
-  saved = false,
+  variant = 'grid', 
+  size = 'medium',
   showActions = true,
-  compact = false
+  className 
 }) => {
-  // Safe access to tender properties
-  const tenderId = tender?._id || '';
-  const title = tender?.title || 'Untitled Tender';
-  const description = tender?.description || 'No description available';
-  const skillsRequired = tender?.skillsRequired || [];
-  const budget = tender?.budget || { min: 0, max: 0, currency: 'USD', isNegotiable: false };
-  const deadline = tender?.deadline || new Date().toISOString();
-  const duration = tender?.duration || 0;
-  const status = tender?.status || 'draft';
-  const tenderType = tender?.tenderType || 'company';
-  const company = tender?.company;
-  const organization = tender?.organization;
-  const metadata = tender?.metadata || { views: 0, proposalCount: 0, savedBy: [] };
-  const isSaved = tender?.isSaved || saved;
-
-  const formatCurrency = (amount: number, currency: string) => {
-    const validCurrency = currency && currency.trim() ? currency : 'USD';
-    
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: validCurrency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  const getDaysRemaining = (deadline: string) => {
-    try {
-      const now = new Date();
-      const deadlineDate = new Date(deadline);
-      const diffTime = deadlineDate.getTime() - now.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays;
-    } catch (error) {
-      return 0;
-    }
-  };
-
-  const daysRemaining = getDaysRemaining(deadline);
-  const isExpired = daysRemaining < 0;
-  const isUrgent = daysRemaining <= 3 && daysRemaining >= 0;
-  const isNew = () => {
-    const created = new Date(tender.createdAt);
-    const now = new Date();
-    const diffDays = Math.ceil((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
-    return diffDays <= 2;
-  };
-
-  const handleSaveClick = async (e: React.MouseEvent) => {
+  const { mutate: toggleSave } = useToggleSaveTender();
+  const isActive = new Date(tender.deadline) > new Date();
+  
+  const handleSaveToggle = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (onSaveToggle && tenderId) {
-      onSaveToggle(tenderId, !isSaved);
+    toggleSave(tender._id);
+  };
+
+  const handleViewDetails = (e: React.MouseEvent) => {
+    e.preventDefault();
+    window.location.href = `/dashboard/freelancer/tenders/${tender._id}`;
+  };
+
+  // Format budget
+  const formatBudget = () => {
+    if (!tender.freelanceSpecific) return 'Budget not specified';
+    
+    const { engagementType, budget, weeklyHours } = tender.freelanceSpecific;
+    
+    if (engagementType === 'fixed_price' && budget) {
+      return `${budget.currency} ${budget.min.toLocaleString()} - ${budget.max.toLocaleString()}`;
+    } else if (engagementType === 'hourly' && weeklyHours) {
+      return `Hourly • ${weeklyHours} hrs/week`;
+    }
+    
+    return 'Contact for price';
+  };
+
+  // Calculate days remaining
+  const calculateDaysRemaining = () => {
+    const deadline = new Date(tender.deadline);
+    const now = new Date();
+    const diffTime = deadline.getTime() - now.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  const daysRemaining = calculateDaysRemaining();
+  const isSaved = tender.metadata?.savedBy?.length > 0;
+
+  // Size-based styling
+  const getSizeClasses = () => {
+    switch (size) {
+      case 'small':
+        return 'p-4';
+      case 'large':
+        return 'p-6';
+      default:
+        return 'p-5';
     }
   };
 
-// Replace your getOwnerInfo function with this:
-const getOwnerInfo = () => {
-  console.log('🔍 Tender data for owner info:', {
-    tenderType,
-    organization,
-    company,
-    hasOrganization: !!organization,
-    hasCompany: !!company
-  });
-
-  // Handle organization tenders
-  if (tenderType === 'organization') {
-    if (organization) {
-      return {
-        type: 'organization',
-        name: organization.name || 'Organization',
-        verified: organization.verified || false,
-        logo: organization.logo || '',
-        industry: organization.industry || 'Various Services',
-        description: organization.description || ''
-      };
-    }
-    // Fallback for organization tenders without organization data
-    return {
-      type: 'organization',
-      name: 'Organization',
-      verified: false,
-      logo: '',
-      industry: 'Various Services',
-      description: ''
-    };
-  } 
-  // Handle company tenders
-  else {
-    if (company) {
-      return {
-        type: 'company',
-        name: company.name || 'Company',
-        verified: company.verified || false,
-        logo: company.logo || '',
-        industry: company.industry || 'Business Services',
-        description: company.description || ''
-      };
-    }
-    // Fallback for company tenders without company data
-    return {
-      type: 'company',
-      name: 'Company',
-      verified: false,
-      logo: '',
-      industry: 'Business Services',
-      description: ''
-    };
-  }
-};
-
-  const ownerInfo = getOwnerInfo();
-
-  if (!tender) {
+  // Variant-based rendering
+  if (variant === 'list') {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-pulse">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="h-12 w-12 bg-gray-200 rounded-xl"></div>
-          <div className="flex-1">
-            <div className="h-4 bg-gray-200 rounded mb-2 w-3/4"></div>
-            <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-          </div>
-        </div>
-        <div className="h-5 bg-gray-200 rounded mb-3"></div>
-        <div className="h-3 bg-gray-200 rounded mb-2"></div>
-        <div className="h-3 bg-gray-200 rounded w-3/4 mb-4"></div>
-      </div>
-    );
-  }
-
-  if (compact) {
-    return (
-      <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-200 overflow-hidden group">
-        <div className="p-6">
-          {/* Header */}
-          <div className="flex justify-between items-start mb-4">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                {isNew() && (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-green-500 to-emerald-500 text-white">
-                    <SparklesIcon className="h-3 w-3 mr-1" />
-                    New
-                  </span>
+      <Card className={cn(
+        "w-full border border-gray-200 dark:border-gray-800 hover:border-green-300 dark:hover:border-green-700 transition-all duration-300 hover:shadow-md dark:hover:shadow-green-900/20",
+        className
+      )}>
+        <CardContent className={cn("p-6", getSizeClasses())}>
+          <div className="flex flex-col md:flex-row md:items-start gap-6">
+            {/* Left Section - Main Info */}
+            <div className="flex-1 space-y-4">
+              <div className="flex items-start justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-semibold text-lg text-gray-900 dark:text-gray-100 line-clamp-1">
+                      {tender.title}
+                    </h3>
+                    {tender.freelanceSpecific?.urgency === 'urgent' && (
+                      <Badge className="bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200">
+                        <Zap className="h-3 w-3 mr-1" />
+                        Urgent
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800">
+                      {tender.procurementCategory}
+                    </Badge>
+                    <Badge variant={tender.workflowType === 'open' ? 'default' : 'secondary'} className="text-xs">
+                      {tender.workflowType === 'open' ? 'Open' : 'Closed'} Workflow
+                    </Badge>
+                    {tender.freelanceSpecific?.experienceLevel && (
+                      <Badge variant="outline" className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800">
+                        <Award className="h-3 w-3 mr-1" />
+                        {tender.freelanceSpecific.experienceLevel}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                
+                {showActions && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleSaveToggle}
+                    className="text-gray-400 hover:text-green-600 dark:hover:text-green-400"
+                  >
+                    <Save className={cn(
+                      "h-5 w-5",
+                      isSaved && "fill-green-500 text-green-500 dark:fill-green-400 dark:text-green-400"
+                    )} />
+                  </Button>
                 )}
-                {isUrgent && (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-red-500 to-pink-500 text-white">
-                    Urgent
-                  </span>
-                )}
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  tenderType === 'organization' 
-                    ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                    : 'bg-blue-100 text-blue-800 border border-blue-200'
-                }`}>
-                  {tenderType === 'organization' ? 'Organization' : 'Company'}
-                </span>
               </div>
-              
-              <Link href={`/dashboard/freelancer/tenders/${tenderId}`}>
-                <h3 className="text-lg font-semibold text-gray-900 hover:text-blue-600 cursor-pointer line-clamp-2 group-hover:underline">
-                  {title}
-                </h3>
-              </Link>
-            </div>
-            
-            {showActions && onSaveToggle && (
-              <button
-                onClick={handleSaveClick}
-                className="flex-shrink-0 p-2 text-gray-400 hover:text-blue-500 transition-colors"
-              >
-                {isSaved ? (
-                  <BookmarkSolid className="h-5 w-5 text-blue-500" />
-                ) : (
-                  <BookmarkIcon className="h-5 w-5" />
-                )}
-              </button>
-            )}
-          </div>
 
-          {/* Owner Info */}
-          {ownerInfo && (
-            <div className="flex items-center gap-2 mb-3">
-              {ownerInfo.type === 'organization' ? (
-                <BuildingLibraryIcon className="h-4 w-4 text-purple-500" />
-              ) : (
-                <BuildingOfficeIcon className="h-4 w-4 text-blue-500" />
+              <p className="text-gray-600 dark:text-gray-400 text-sm line-clamp-2">
+                {tender.description}
+              </p>
+
+              {/* Skills */}
+              {tender.skillsRequired && tender.skillsRequired.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Required Skills</p>
+                  <div className="flex flex-wrap gap-2">
+                    {tender.skillsRequired.slice(0, 5).map((skill, index) => (
+                      <Badge key={index} variant="secondary" className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                        {skill}
+                      </Badge>
+                    ))}
+                    {tender.skillsRequired.length > 5 && (
+                      <Badge variant="outline" className="text-gray-500 dark:text-gray-500">
+                        +{tender.skillsRequired.length - 5} more
+                      </Badge>
+                    )}
+                  </div>
+                </div>
               )}
-              <span className="text-sm text-gray-600 flex items-center gap-1">
-                {ownerInfo.name}
-                {ownerInfo.verified && (
-                  <CheckBadgeIcon className="h-4 w-4 text-green-500" />
-                )}
-              </span>
             </div>
-          )}
 
-          {/* Description */}
-          <p className="text-gray-600 text-sm mb-4 line-clamp-2">
-            {description}
-          </p>
+            {/* Right Section - Stats & Actions */}
+            <div className="md:w-64 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-500">
+                    <DollarSign className="h-4 w-4" />
+                    <span>Budget</span>
+                  </div>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{formatBudget()}</p>
+                </div>
+                
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-500">
+                    <Clock className="h-4 w-4" />
+                    <span>Deadline</span>
+                  </div>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{formatDeadline(tender.deadline)}</p>
+                </div>
+              </div>
 
-          {/* Skills */}
-          {skillsRequired.length > 0 && (
-            <div className="flex flex-wrap gap-1 mb-4">
-              {skillsRequired.slice(0, 3).map((skill, index) => (
-                <span
-                  key={index}
-                  className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                    tenderType === 'organization'
-                      ? 'bg-purple-100 text-purple-800'
-                      : 'bg-blue-100 text-blue-800'
-                  }`}
+              {/* Language & Timezone */}
+              {(tender.freelanceSpecific?.languagePreference || tender.freelanceSpecific?.timezonePreference) && (
+                <div className="flex items-center gap-4 text-sm">
+                  {tender.freelanceSpecific.languagePreference && (
+                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                      <Globe className="h-4 w-4" />
+                      <span>{tender.freelanceSpecific.languagePreference}</span>
+                    </div>
+                  )}
+                  {tender.freelanceSpecific.timezonePreference && (
+                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                      <MapPin className="h-4 w-4" />
+                      <span>{tender.freelanceSpecific.timezonePreference}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Countdown & Status */}
+              <div className="flex items-center gap-2">
+                {isActive && daysRemaining >= 0 && (
+                  <Badge 
+                    variant={daysRemaining <= 3 ? 'destructive' : 'outline'} 
+                    className="bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800"
+                  >
+                    <Clock className="h-3 w-3 mr-1" />
+                    {daysRemaining === 0 ? 'Ends Today' : `${daysRemaining} days left`}
+                  </Badge>
+                )}
+                <Badge className={getStatusColor(tender)}>
+                  {tender.status.replace('_', ' ')}
+                </Badge>
+              </div>
+
+              {showActions && (
+                <Button 
+                  onClick={handleViewDetails}
+                  className="w-full bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white"
                 >
-                  {skill}
-                </span>
-              ))}
-              {skillsRequired.length > 3 && (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                  +{skillsRequired.length - 3} more
-                </span>
+                  <Eye className="h-4 w-4 mr-2" />
+                  View Details
+                </Button>
               )}
             </div>
-          )}
-
-          {/* Footer */}
-          <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-            {/* Budget */}
-            {budget && (budget.min > 0 || budget.max > 0) && (
-              <div className="flex items-center gap-1 text-sm font-semibold text-gray-900">
-                <CurrencyDollarIcon className="h-4 w-4 text-green-500" />
-                {formatCurrency(budget.min, budget.currency)}
-                {budget.max > budget.min && ` - ${formatCurrency(budget.max, budget.currency)}`}
-              </div>
-            )}
-
-            {/* Deadline */}
-            <div className="flex items-center gap-1 text-sm">
-              <CalendarIcon className="h-4 w-4 text-gray-400" />
-              <span className={isExpired ? "text-red-600 font-medium" : isUrgent ? "text-orange-600 font-medium" : "text-gray-600"}>
-                {isExpired ? 'Expired' : `${daysRemaining}d left`}
-              </span>
-            </div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     );
   }
 
+  // Grid View (default)
   return (
-    <div className="bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-200 overflow-hidden group">
-      <div className="p-6">
-        {/* Header with Status and Actions */}
-        <div className="flex justify-between items-start mb-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-3">
-              {isNew() && (
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-sm">
-                  <SparklesIcon className="h-3 w-3 mr-1" />
-                  New
-                </span>
-              )}
-              {isUrgent && (
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gradient-to-r from-red-500 to-pink-500 text-white shadow-sm">
+    <Card className={cn(
+      "overflow-hidden border border-gray-200 dark:border-gray-800 hover:border-green-300 dark:hover:border-green-700 transition-all duration-300 hover:shadow-lg dark:hover:shadow-xl",
+      size === 'large' ? 'h-full' : '',
+      className
+    )}>
+      {/* Gradient Header */}
+      <div 
+        className="h-2 w-full"
+        style={{
+          background: 'linear-gradient(90deg, #E8F8F0 0%, #CFF5E7 100%)'
+        }}
+      />
+
+      <CardHeader className={cn("pb-3", getSizeClasses())}>
+        <div className="flex justify-between items-start">
+          <div className="space-y-1">
+            <h3 className={cn(
+              "font-semibold text-gray-900 dark:text-gray-100 line-clamp-2",
+              size === 'small' ? 'text-base' : 'text-lg',
+              size === 'large' ? 'text-xl' : ''
+            )}>
+              {tender.title}
+            </h3>
+            <div className="flex items-center gap-2 text-sm">
+              <Badge variant="outline" className="bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800">
+                {tender.procurementCategory}
+              </Badge>
+              {tender.freelanceSpecific?.urgency === 'urgent' && (
+                <Badge className="bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200">
+                  <Zap className="h-3 w-3 mr-1" />
                   Urgent
-                </span>
-              )}
-              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                tenderType === 'organization' 
-                  ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                  : 'bg-blue-100 text-blue-800 border border-blue-200'
-              }`}>
-                {tenderType === 'organization' ? 'Organization Project' : 'Company Project'}
-              </span>
-              {tender.visibility === 'invite_only' && (
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
-                  Invite Only
-                </span>
+                </Badge>
               )}
             </div>
-            
-            <Link href={`/dashboard/freelancer/tenders/${tenderId}`}>
-              <h3 className="text-xl font-bold text-gray-900 hover:text-blue-600 cursor-pointer line-clamp-2 group-hover:underline mb-2">
-                {title}
-              </h3>
-            </Link>
+          </div>
+          {showActions && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleSaveToggle}
+              className="text-gray-400 hover:text-green-600 dark:hover:text-green-400"
+            >
+              <Save className={cn(
+                "h-5 w-5",
+                isSaved && "fill-green-500 text-green-500 dark:fill-green-400 dark:text-green-400"
+              )} />
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+
+      <CardContent className={cn("space-y-4", getSizeClasses())}>
+        {/* Budget & Timeline */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-500">
+              <DollarSign className="h-4 w-4" />
+              <span>Budget</span>
+            </div>
+            <p className="font-medium text-gray-900 dark:text-gray-100">{formatBudget()}</p>
           </div>
           
-          <div className="flex items-center gap-2">
-            {showActions && onSaveToggle && (
-              <button
-                onClick={handleSaveClick}
-                className={`flex-shrink-0 p-3 rounded-xl transition-all duration-300 ${
-                  isSaved 
-                    ? 'bg-blue-50 text-blue-500 hover:bg-blue-100' 
-                    : 'text-gray-400 hover:text-blue-500 hover:bg-gray-50'
-                }`}
-                title={isSaved ? 'Remove from saved' : 'Save tender'}
-              >
-                {isSaved ? (
-                  <BookmarkSolid className="h-5 w-5" />
-                ) : (
-                  <BookmarkIcon className="h-5 w-5" />
-                )}
-              </button>
-            )}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-500">
+              <Clock className="h-4 w-4" />
+              <span>Deadline</span>
+            </div>
+            <p className="font-medium text-gray-900 dark:text-gray-100">{formatDeadline(tender.deadline)}</p>
           </div>
         </div>
-
-        {/* Owner Info */}
-        {ownerInfo && (
-          <div className="flex items-center gap-3 mb-4 p-3 bg-gray-50 rounded-xl">
-            {ownerInfo.type === 'organization' ? (
-              <BuildingLibraryIcon className="h-5 w-5 text-purple-500" />
-            ) : (
-              <BuildingOfficeIcon className="h-5 w-5 text-blue-500" />
-            )}
-            <div className="flex-1">
-              <span className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                {ownerInfo.name}
-                {ownerInfo.verified && (
-                  <CheckBadgeIcon className="h-4 w-4 text-green-500" />
-                )}
-              </span>
-              <span className="text-xs text-gray-600 capitalize">{ownerInfo.industry}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Description */}
-        <p className="text-gray-600 text-sm mb-4 line-clamp-3 leading-relaxed">
-          {description}
-        </p>
 
         {/* Skills */}
-        {skillsRequired.length > 0 && (
-          <div className="mb-4">
+        {tender.skillsRequired && tender.skillsRequired.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Required Skills</p>
             <div className="flex flex-wrap gap-2">
-              {skillsRequired.slice(0, 6).map((skill, index) => (
-                <span
-                  key={index}
-                  className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium ${
-                    tenderType === 'organization'
-                      ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                      : 'bg-blue-50 text-blue-700 border border-blue-200'
-                  }`}
-                >
+              {tender.skillsRequired.slice(0, 3).map((skill, index) => (
+                <Badge key={index} variant="secondary" className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
                   {skill}
-                </span>
+                </Badge>
               ))}
-              {skillsRequired.length > 6 && (
-                <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
-                  +{skillsRequired.length - 6} more
-                </span>
+              {tender.skillsRequired.length > 3 && (
+                <Badge variant="outline" className="text-gray-500 dark:text-gray-500">
+                  +{tender.skillsRequired.length - 3} more
+                </Badge>
               )}
             </div>
           </div>
         )}
 
-        {/* Stats */}
-        <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
-          <div className="flex items-center gap-1">
-            <EyeIcon className="h-4 w-4" />
-            <span>{metadata.views || 0} views</span>
+        {/* Experience Level */}
+        {tender.freelanceSpecific?.experienceLevel && (
+          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <Award className="h-4 w-4" />
+            <span className="capitalize">{tender.freelanceSpecific.experienceLevel} Level</span>
           </div>
-          {/* <div className="flex items-center gap-1">
-            <UserGroupIcon className="h-4 w-4" />
-            <span>{metadata.proposalCount || 0} proposals</span>
-          </div> */}
-          <div className="flex items-center gap-1">
-            <BookmarkIcon className="h-4 w-4" />
-            <span>{metadata.savedBy?.length || 0} saves</span>
-          </div>
-        </div>
+        )}
 
-        {/* Footer Info */}
-        <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-gray-100">
-          {/* Budget */}
-          {budget && (budget.min > 0 || budget.max > 0) && (
-            <div className="flex items-center gap-2">
-              <CurrencyDollarIcon className="h-5 w-5 text-green-500" />
-              <div>
-                <div className="font-semibold text-gray-900 text-lg">
-                  {formatCurrency(budget.min, budget.currency)} - {formatCurrency(budget.max, budget.currency)}
-                </div>
-                {budget.isNegotiable && (
-                  <div className="text-xs text-gray-500">Budget is negotiable</div>
-                )}
-              </div>
+        {/* Language & Timezone */}
+        {tender.freelanceSpecific?.languagePreference && (
+          <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+              <Globe className="h-4 w-4" />
+              <span>{tender.freelanceSpecific.languagePreference}</span>
             </div>
-          )}
-
-          {/* Timeline */}
-          <div className="flex items-center gap-4">
-            {/* Deadline */}
-            <div className="flex items-center gap-2">
-              <CalendarIcon className="h-4 w-4 text-gray-400" />
-              <div className="text-right">
-                <div className={`text-sm font-semibold ${isExpired ? "text-red-600" : isUrgent ? "text-orange-600" : "text-gray-900"}`}>
-                  {isExpired ? 'Expired' : `${daysRemaining} days left`}
-                </div>
-                <div className="text-xs text-gray-500">Deadline</div>
-              </div>
-            </div>
-
-            {/* Duration */}
-            {duration > 0 && (
-              <div className="flex items-center gap-2">
-                <ClockIcon className="h-4 w-4 text-gray-400" />
-                <div className="text-right">
-                  <div className="text-sm font-semibold text-gray-900">{duration} days</div>
-                  <div className="text-xs text-gray-500">Duration</div>
-                </div>
+            {tender.freelanceSpecific.timezonePreference && (
+              <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                <MapPin className="h-4 w-4" />
+                <span>{tender.freelanceSpecific.timezonePreference}</span>
               </div>
             )}
           </div>
-        </div>
+        )}
 
-        {/* Action Buttons */}
-        <div className="mt-6 flex gap-3">
-          <Link href={`/dashboard/freelancer/tenders/${tenderId}`} className="flex-1">
-            <button className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white py-3 px-4 rounded-xl transition-all duration-300 font-semibold shadow-sm hover:shadow-md">
-              View Details
-            </button>
-          </Link>
-          
-          {!isExpired && status === 'published' && (
-            <Link href={`/dashboard/freelancer/proposals/create?tender=${tenderId}`} className="flex-1">
-              <button className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white py-3 px-4 rounded-xl transition-all duration-300 font-semibold shadow-sm hover:shadow-md">
-                Apply Now
-              </button>
-            </Link>
-          )}
-        </div>
-      </div>
-    </div>
+        {/* Countdown Badge */}
+        {isActive && daysRemaining >= 0 && (
+          <div className="flex items-center gap-2">
+            <Badge 
+              variant={daysRemaining <= 3 ? 'destructive' : 'outline'} 
+              className="bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800"
+            >
+              <Clock className="h-3 w-3 mr-1" />
+              {daysRemaining === 0 ? 'Ends Today' : `${daysRemaining} days left`}
+            </Badge>
+            <Badge className={getStatusColor(tender)}>
+              {tender.status.replace('_', ' ')}
+            </Badge>
+          </div>
+        )}
+      </CardContent>
+
+      {showActions && (
+        <CardFooter className={cn("pt-4 border-t border-gray-100 dark:border-gray-800", getSizeClasses())}>
+          <Button 
+            onClick={handleViewDetails}
+            className="w-full bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white"
+          >
+            <Eye className="h-4 w-4 mr-2" />
+            View Details
+          </Button>
+        </CardFooter>
+      )}
+    </Card>
   );
 };
 
-export default FreelancerTenderCard;
+export default FreelanceTenderCard;

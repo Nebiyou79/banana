@@ -273,15 +273,36 @@ exports.uploadLogo = asyncHandler(async (req, res, next) => {
       });
     }
 
+    const logoFile = req.files.logo[0];
+    
+    // ✅ ADDED: Validate file was actually written
+    const filePath = path.join(process.cwd(), 'public', 'uploads', 'company', 'logos', logoFile.filename);
+    try {
+      await fs.access(filePath);
+      console.log(`✅ Logo file verified: ${filePath}`);
+    } catch (error) {
+      console.error(`❌ Logo file not found: ${filePath}`);
+      return res.status(500).json({
+        success: false,
+        message: 'Logo file was not saved properly'
+      });
+    }
+
     const company = await Company.findOne({ user: req.user.userId });
     if (!company) {
+      // Delete the uploaded file if company not found
+      try {
+        await fs.unlink(filePath);
+      } catch (error) {
+        console.log('ℹ️ Could not delete orphaned logo file');
+      }
+      
       return res.status(404).json({
         success: false,
         message: 'Company profile not found'
       });
     }
 
-    const logoFile = req.files.logo[0];
     const logoUrl = `/uploads/company/logos/${logoFile.filename}`;
 
     // Delete old logo if exists
@@ -289,8 +310,9 @@ exports.uploadLogo = asyncHandler(async (req, res, next) => {
       try {
         const oldLogoPath = path.join(process.cwd(), 'public', company.logoUrl);
         await fs.unlink(oldLogoPath);
+        console.log(`🗑️ Deleted old logo: ${oldLogoPath}`);
       } catch (error) {
-        console.log('ℹ️ Old logo not found:', error.message);
+        console.log('ℹ️ Old logo not found or already deleted');
       }
     }
 
@@ -298,17 +320,30 @@ exports.uploadLogo = asyncHandler(async (req, res, next) => {
     company.logoUrl = logoUrl;
     await company.save();
 
+    console.log(`✅ Logo uploaded successfully for company: ${company._id}`);
+
     res.status(200).json({
       success: true,
       message: 'Logo uploaded successfully',
       data: {
-        logoUrl: company.logoFullUrl,
-        logoPath: logoUrl
+        logoUrl: logoUrl,
+        logoFullUrl: `${req.protocol}://${req.get('host')}${logoUrl}`
       }
     });
 
   } catch (error) {
     console.error('❌ Logo upload error:', error);
+    
+    // Clean up uploaded file if error occurred
+    if (req.files?.logo?.[0]) {
+      try {
+        const filePath = path.join(process.cwd(), 'public', 'uploads', 'company', 'logos', req.files.logo[0].filename);
+        await fs.unlink(filePath);
+      } catch (cleanupError) {
+        console.log('ℹ️ Could not clean up failed upload');
+      }
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Failed to upload logo'

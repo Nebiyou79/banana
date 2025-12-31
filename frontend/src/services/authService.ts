@@ -4,6 +4,8 @@ import api from '@/lib/axios';
 import { handleError, handleSuccess } from '@/lib/error-handler'; // ADD THIS IMPORT
 
 export interface User {
+  companyName: string;
+  id: string | undefined;
   _id: string;
   name: string;
   email: string;
@@ -22,6 +24,8 @@ export interface User {
   company?: string;
   hasCompanyProfile?: boolean;
   savedJobs?: string[];
+  avatar: string | undefined;
+  hourlyRate?: number;
 }
 
 export interface AuthResponse {
@@ -158,83 +162,83 @@ const getErrorMessage = (error: any): string => {
 
 export const authService = {
   // Login user with enhanced error handling
-login: async (data: LoginData): Promise<AuthResponse> => {
-  try {
-    const response = await api.post<AuthResponse>('/auth/login', data, {
-      timeout: 10000,
-    });
-    
-    // If backend returns success: true
-    if (response.data.success) {
-      const { user, token } = response.data.data;
-      setStoredToken(token);
-      
-      if (user) {
-        localStorage.setItem('user', JSON.stringify(user));
+  login: async (data: LoginData): Promise<AuthResponse> => {
+    try {
+      const response = await api.post<AuthResponse>('/auth/login', data, {
+        timeout: 10000,
+      });
+
+      // If backend returns success: true
+      if (response.data.success) {
+        const { user, token } = response.data.data;
+        setStoredToken(token);
+
+        if (user) {
+          localStorage.setItem('user', JSON.stringify(user));
+        }
+
+        handleSuccess('Login successful! Welcome back!');
+        return response.data;
+      } else {
+        // If backend returns success: false with a message (like invalid credentials)
+        const errorMessage = response.data.message || 'Login failed';
+
+        // Show the toast notification
+        handleError(errorMessage);
+
+        // Return a structured error that won't cause runtime errors
+        // This allows components to handle the error gracefully
+        return {
+          success: false,
+          message: errorMessage,
+          data: response.data.data || null,
+          _isHandled: true // Flag to indicate we've already shown toast
+        } as AuthResponse;
       }
-      
-      handleSuccess('Login successful! Welcome back!');
-      return response.data;
-    } else {
-      // If backend returns success: false with a message (like invalid credentials)
-      const errorMessage = response.data.message || 'Login failed';
-      
-      // Show the toast notification
+    } catch (error: any) {
+      const errorMessage = getErrorMessage(error);
       handleError(errorMessage);
-      
-      // Return a structured error that won't cause runtime errors
-      // This allows components to handle the error gracefully
+
+      // Return a structured error response instead of throwing
       return {
         success: false,
         message: errorMessage,
-        data: response.data.data || null,
-        _isHandled: true // Flag to indicate we've already shown toast
-      } as AuthResponse;
+        data: null,
+        _isHandled: true
+      } as unknown as AuthResponse;
     }
-  } catch (error: any) {
-    const errorMessage = getErrorMessage(error);
-    handleError(errorMessage);
-    
-    // Return a structured error response instead of throwing
-    return {
-      success: false,
-      message: errorMessage,
-      data: null,
-      _isHandled: true
-    } as unknown as AuthResponse;
-  }
-},
+  },
 
   // Register user with enhanced error handling
-register: async (data: RegisterData): Promise<AuthResponse> => {
-  try {
-    const response = await api.post<AuthResponse>('/auth/register', data);
-    
-    if (response.data.success) {
-      // Handle OTP verification flow - no token yet
-      if (response.data.data?.requiresVerification) {
-        handleSuccess('Registration successful! Please check your email for verification code.');
+  register: async (data: RegisterData): Promise<AuthResponse> => {
+    try {
+      const response = await api.post<AuthResponse>('/auth/register', data);
+
+      if (response.data.success) {
+        // Handle OTP verification flow - no token yet
+        if (response.data.data?.requiresVerification) {
+          handleSuccess('Registration successful! Please check your email for verification code.');
+          return response.data;
+        }
+
+        // Handle immediate login case (if backend returns token)
+        const { user, token } = response.data.data;
+        if (token) {
+          setStoredToken(token);
+        }
+        handleSuccess('Registration successful! Your account has been created.');
         return response.data;
+      } else {
+        const errorMessage = response.data.message || 'Registration failed';
+        handleError(errorMessage);
+        throw new Error(errorMessage);
       }
-      
-      // Handle immediate login case (if backend returns token)
-      const { user, token } = response.data.data;
-      if (token) {
-        setStoredToken(token);
-      }
-      handleSuccess('Registration successful! Your account has been created.');
-      return response.data;
-    } else {
-      const errorMessage = response.data.message || 'Registration failed';
+    } catch (error: any) {
+      const errorMessage = getErrorMessage(error);
       handleError(errorMessage);
       throw new Error(errorMessage);
     }
-  } catch (error: any) {
-    const errorMessage = getErrorMessage(error);
-    handleError(errorMessage);
-    throw new Error(errorMessage);
-  }
-},
+  },
 
   // Logout user
   logout: async (): Promise<void> => {
@@ -354,54 +358,54 @@ register: async (data: RegisterData): Promise<AuthResponse> => {
     }
   },
 
-// Add this to your authService exports
-resetPasswordDirect: async (data: ResetPasswordDirectData): Promise<{ 
-  success: boolean; 
-  message: string;
-}> => {
-  try {
-    const response = await api.post('/auth/reset-password-direct', data);
-    handleSuccess('Password reset successfully! You can now login with your new password.');
-    return response.data;
-  } catch (error: any) {
-    const errorMessage = getErrorMessage(error);
-    handleError(errorMessage);
-    throw new Error(errorMessage);
-  }
-},
-// Verify reset OTP - enhanced response
-verifyResetOTP: async (data: VerifyResetOTPData): Promise<{ 
-  success: boolean; 
-  message: string; 
-  data?: { resetToken: string; email: string } 
-}> => {
-  try {
-    const response = await api.post('/auth/verify-reset-otp', data);
-    handleSuccess('OTP verified successfully! You can now reset your password.');
-    return response.data;
-  } catch (error: any) {
-    const errorMessage = getErrorMessage(error);
-    handleError(errorMessage);
-    throw new Error(errorMessage);
-  }
-},
+  // Add this to your authService exports
+  resetPasswordDirect: async (data: ResetPasswordDirectData): Promise<{
+    success: boolean;
+    message: string;
+  }> => {
+    try {
+      const response = await api.post('/auth/reset-password-direct', data);
+      handleSuccess('Password reset successfully! You can now login with your new password.');
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = getErrorMessage(error);
+      handleError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  },
+  // Verify reset OTP - enhanced response
+  verifyResetOTP: async (data: VerifyResetOTPData): Promise<{
+    success: boolean;
+    message: string;
+    data?: { resetToken: string; email: string }
+  }> => {
+    try {
+      const response = await api.post('/auth/verify-reset-otp', data);
+      handleSuccess('OTP verified successfully! You can now reset your password.');
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = getErrorMessage(error);
+      handleError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  },
 
-// Reset password with token
-resetPasswordWithToken: async (data: ResetPasswordWithTokenData): Promise<{ 
-  success: boolean; 
-  message: string;
-  data?: { email: string }
-}> => {
-  try {
-    const response = await api.post('/auth/reset-password', data);
-    handleSuccess('Password reset successfully! You can now login with your new password.');
-    return response.data;
-  } catch (error: any) {
-    const errorMessage = getErrorMessage(error);
-    handleError(errorMessage);
-    throw new Error(errorMessage);
-  }
-},
+  // Reset password with token
+  resetPasswordWithToken: async (data: ResetPasswordWithTokenData): Promise<{
+    success: boolean;
+    message: string;
+    data?: { email: string }
+  }> => {
+    try {
+      const response = await api.post('/auth/reset-password', data);
+      handleSuccess('Password reset successfully! You can now login with your new password.');
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = getErrorMessage(error);
+      handleError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  },
 };
 
 function handleInfo(arg0: string) {

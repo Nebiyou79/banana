@@ -87,17 +87,23 @@ exports.getJobs = async (req, res, next) => {
   }
 };
 
-// @desc    Create job
+// @desc    Create job - FIXED VERSION
 // @route   POST /api/v1/job
 // @access  Private (Company only)
 exports.createJob = async (req, res, next) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
       return res.status(400).json({
         success: false,
         message: 'Validation failed',
-        errors: errors.array()
+        errors: errors.array(),
+        details: errors.array().map(err => ({
+          field: err.path,
+          message: err.msg,
+          value: err.value
+        }))
       });
     }
 
@@ -118,15 +124,72 @@ exports.createJob = async (req, res, next) => {
       });
     }
 
+    // Log the incoming data for debugging
+    console.log('📥 Received job data:', JSON.stringify(req.body, null, 2));
+
+    // VALIDATE EDUCATION LEVEL BEFORE CREATING JOB
+    const validEducationLevels = [
+      'primary-education',
+      'secondary-education', 
+      'tvet-level-i',
+      'tvet-level-ii',
+      'tvet-level-iii',
+      'tvet-level-iv',
+      'tvet-level-v',
+      'undergraduate-bachelors',
+      'postgraduate-masters',
+      'doctoral-phd',
+      'lecturer',
+      'professor',
+      'none-required',
+      
+      // Backward compatibility
+      'high-school',
+      'diploma',
+      'bachelors',
+      'masters',
+      'phd'
+    ];
+
+    if (req.body.educationLevel && !validEducationLevels.includes(req.body.educationLevel)) {
+      console.log('❌ Invalid education level:', req.body.educationLevel);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: [`Invalid education level: ${req.body.educationLevel}`],
+        details: [{
+          field: 'educationLevel',
+          message: 'Invalid education level',
+          value: req.body.educationLevel,
+          validOptions: validEducationLevels
+        }]
+      });
+    }
+
+    // Transform education level if using old values
+    const educationLevelMapping = {
+      'high-school': 'secondary-education',
+      'diploma': 'tvet-level-iii',
+      'bachelors': 'undergraduate-bachelors',
+      'masters': 'postgraduate-masters',
+      'phd': 'doctoral-phd'
+    };
+
     const jobData = {
       ...req.body,
+      // Normalize education level if needed
+      educationLevel: educationLevelMapping[req.body.educationLevel] || req.body.educationLevel,
       company: company._id,
       jobType: 'company',
       createdBy: userId
     };
 
+    console.log('📤 Creating job with data:', JSON.stringify(jobData, null, 2));
+
     const job = await Job.create(jobData);
     await job.populate('company', 'name logoUrl verified industry');
+
+    console.log('✅ Job created successfully:', job._id);
 
     res.status(201).json({
       success: true,
@@ -137,17 +200,33 @@ exports.createJob = async (req, res, next) => {
     console.error('Create job error:', error);
     
     if (error.name === 'ValidationError') {
+      console.log('❌ Mongoose validation errors:', error.errors);
       const messages = Object.values(error.errors).map(val => val.message);
       return res.status(400).json({
         success: false,
         message: 'Validation failed',
-        errors: messages
+        errors: messages,
+        details: Object.values(error.errors).map(err => ({
+          field: err.path,
+          message: err.message,
+          value: err.value
+        }))
+      });
+    }
+    
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Duplicate job entry',
+        errors: ['A job with similar details already exists']
       });
     }
     
     res.status(500).json({
       success: false,
-      message: 'Error creating job'
+      message: 'Error creating job',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -834,24 +913,16 @@ exports.unsaveJob = async (req, res, next) => {
   }
 };
 
-// @desc    Get saved jobs for candidate
+// @desc    Get saved jobs for candidate - ROBUST FIXED VERSION
 // @route   GET /api/v1/job/saved
 // @access  Private (Candidate)
 exports.getSavedJobs = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.userId)
-      .populate({
-        path: 'savedJobs',
-        match: { 
-          status: 'active',
-          applicationDeadline: { $gt: new Date() }
-        },
-        populate: [
-          { path: 'company', select: 'name logoUrl verified industry' },
-          { path: 'organization', select: 'name logoUrl verified industry organizationType' }
-        ]
-      });
-
+    const userId = req.user.userId || req.user._id;
+    
+    // First get user with saved job IDs
+    const user = await User.findById(userId).select('savedJobs');
+    
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -859,16 +930,37 @@ exports.getSavedJobs = async (req, res, next) => {
       });
     }
 
+    if (!user.savedJobs || user.savedJobs.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: []
+      });
+    }
+
+    // Get the actual jobs with proper population
+    const savedJobs = await Job.find({
+      _id: { $in: user.savedJobs },
+      status: 'active',
+      $or: [
+        { applicationDeadline: { $gt: new Date() } },
+        { applicationDeadline: null }
+      ]
+    })
+    .populate('company', 'name logoUrl verified industry')
+    .populate('organization', 'name logoUrl verified industry organizationType')
+    .lean();
+
     res.status(200).json({
       success: true,
-      data: user.savedJobs || []
+      data: savedJobs
     });
 
   } catch (error) {
     console.error('Get saved jobs error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching saved jobs'
+      message: 'Error fetching saved jobs',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

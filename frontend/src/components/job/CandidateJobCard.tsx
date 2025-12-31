@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// components/job/CandidateJobCard.tsx - COMPLETE FIXED VERSION
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { Job, jobService } from '@/services/jobService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/Button';
 import { 
   MapPin, 
   Briefcase, 
@@ -15,14 +15,12 @@ import {
   Building2,
   Eye,
   Users,
-  Flag,
-  BookOpen,
-  GraduationCap,
-  Globe,
-  Shield,
-  ExternalLink,
   Bookmark,
   BookmarkCheck,
+  FileCheck,
+  ExternalLink,
+  User,
+  Hash
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -33,6 +31,7 @@ interface CandidateJobCardProps {
   isSaved?: boolean;
   showActions?: boolean;
   className?: string;
+  userApplications?: any[];
 }
 
 const CandidateJobCard: React.FC<CandidateJobCardProps> = ({ 
@@ -41,7 +40,8 @@ const CandidateJobCard: React.FC<CandidateJobCardProps> = ({
   onUnsaveJob, 
   isSaved = false,
   showActions = true,
-  className = ''
+  className = '',
+  userApplications = []
 }) => {
   const [saving, setSaving] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -49,14 +49,16 @@ const CandidateJobCard: React.FC<CandidateJobCardProps> = ({
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
-  const saveButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Sync local state with prop changes
+  const hasApplied = userApplications.some(app => app.job?._id === job._id);
+  const userApplication = userApplications.find(app => app.job?._id === job._id);
+
   React.useEffect(() => {
     setLocalIsSaved(isSaved);
   }, [isSaved]);
 
   const formatDate = (dateString: string) => {
+    if (!dateString) return '';
     const date = new Date(dateString);
     const now = new Date();
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
@@ -67,6 +69,7 @@ const CandidateJobCard: React.FC<CandidateJobCardProps> = ({
   };
 
   const getLocationText = (location: Job['location']) => {
+    if (!location) return 'Location not specified';
     if (location.region === 'international') return '🌍 Remote Worldwide';
     
     const city = location.city || location.region;
@@ -74,27 +77,28 @@ const CandidateJobCard: React.FC<CandidateJobCardProps> = ({
     return `${city}, ${country}`;
   };
 
-  // Separate save and unsave handlers using jobService
-  const handleSaveJob = useCallback(async (e: React.MouseEvent) => {
-    // NUCLEAR EVENT PREVENTION
-    e.preventDefault();
-    e.stopPropagation();
-    e.nativeEvent.stopImmediatePropagation();
+  const getDemographicInfo = () => {
+    if (!job.demographicRequirements) return null;
     
-    const requestId = `${job._id}-${Date.now()}-${Math.random()}`;
-    console.log(`🚀 Save request ${requestId} initiated`);
+    const { sex, age } = job.demographicRequirements;
+    const info = [];
     
-    // Use window-level locking to prevent multiple requests
-    if ((window as any).__currentSaveRequest) {
-      console.log('🛑 Global save lock active, ignoring click');
-      return;
+    if (sex && sex !== 'any') {
+      info.push(jobService.getSexRequirementLabel(sex));
     }
     
-    // Set global lock
-    (window as any).__currentSaveRequest = requestId;
+    if (age && (age.min || age.max)) {
+      info.push(jobService.formatAgeRequirement(job.demographicRequirements));
+    }
+    
+    return info.length > 0 ? info.join(' • ') : null;
+  };
 
+  const handleSaveJob = useCallback(async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
     if (!isAuthenticated) {
-      delete (window as any).__currentSaveRequest;
       toast({
         title: 'Authentication Required',
         description: 'Please log in to save jobs',
@@ -104,112 +108,55 @@ const CandidateJobCard: React.FC<CandidateJobCardProps> = ({
       return;
     }
 
-    console.log('💾 Save job clicked, current state:', localIsSaved);
     setSaving(true);
-
     try {
-      // Use jobService.saveJob
-      const result = await jobService.saveJob(job._id);
-      console.log('📡 Server response received:', result);
-      
+      await jobService.saveJob(job._id);
       setLocalIsSaved(true);
       onSaveJob?.(job._id);
       toast({ 
-        title: '💼 Job Saved', 
+        title: 'Job Saved', 
         description: 'Job has been added to your saved jobs',
         variant: 'success' 
       });
     } catch (error: any) {
-      console.error('❌ Error saving job:', error);
-      
-      if (error.response?.status === 404) {
-        toast({ 
-          title: '❌ Feature Not Available', 
-          description: 'Saving jobs is currently unavailable. Please try again later.',
-          variant: 'destructive' 
-        });
-      } else {
-        toast({ 
-          title: '❌ Error saving job', 
-          description: error.message || 'Please try again',
-          variant: 'destructive' 
-        });
-      }
+      console.error('Error saving job:', error);
+      toast({ 
+        title: 'Error saving job', 
+        description: error.message || 'Please try again',
+        variant: 'destructive' 
+      });
     } finally {
       setSaving(false);
-      // Clear global lock after a short delay
-      setTimeout(() => {
-        if ((window as any).__currentSaveRequest === requestId) {
-          delete (window as any).__currentSaveRequest;
-        }
-      }, 1000);
     }
-  }, [job._id, localIsSaved, isAuthenticated, router, toast, onSaveJob]);
+  }, [job._id, isAuthenticated, router, toast, onSaveJob]);
 
   const handleUnsaveJob = useCallback(async (e: React.MouseEvent) => {
-    // NUCLEAR EVENT PREVENTION
     e.preventDefault();
     e.stopPropagation();
-    e.nativeEvent.stopImmediatePropagation();
     
-    const requestId = `${job._id}-${Date.now()}-${Math.random()}`;
-    console.log(`🗑️ Unsave request ${requestId} initiated`);
-    
-    // Use window-level locking to prevent multiple requests
-    if ((window as any).__currentSaveRequest) {
-      console.log('🛑 Global save lock active, ignoring click');
-      return;
-    }
-    
-    // Set global lock
-    (window as any).__currentSaveRequest = requestId;
+    if (!isAuthenticated) return;
 
-    if (!isAuthenticated) {
-      delete (window as any).__currentSaveRequest;
-      return;
-    }
-
-    console.log('🗑️ Unsave job clicked, current state:', localIsSaved);
     setSaving(true);
-
     try {
-      // Use jobService.unsaveJob
-      const result = await jobService.unsaveJob(job._id);
-      console.log('📡 Server response received:', result);
-      
+      await jobService.unsaveJob(job._id);
       setLocalIsSaved(false);
       onUnsaveJob?.(job._id);
       toast({ 
-        title: '🗑️ Job Removed', 
+        title: 'Job Removed', 
         description: 'Job has been removed from your saved jobs',
         variant: 'default' 
       });
     } catch (error: any) {
-      console.error('❌ Error unsaving job:', error);
-      
-      if (error.response?.status === 404) {
-        toast({ 
-          title: '❌ Feature Not Available', 
-          description: 'Unsaving jobs is currently unavailable. Please try again later.',
-          variant: 'destructive' 
-        });
-      } else {
-        toast({ 
-          title: '❌ Error removing job', 
-          description: error.message || 'Please try again',
-          variant: 'destructive' 
-        });
-      }
+      console.error('Error unsaving job:', error);
+      toast({ 
+        title: 'Error removing job', 
+        description: error.message || 'Please try again',
+        variant: 'destructive' 
+      });
     } finally {
       setSaving(false);
-      // Clear global lock after a short delay
-      setTimeout(() => {
-        if ((window as any).__currentSaveRequest === requestId) {
-          delete (window as any).__currentSaveRequest;
-        }
-      }, 1000);
     }
-  }, [job._id, localIsSaved, isAuthenticated, toast, onUnsaveJob]);
+  }, [job._id, isAuthenticated, toast, onUnsaveJob]);
 
   const handleQuickApply = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -225,13 +172,18 @@ const CandidateJobCard: React.FC<CandidateJobCardProps> = ({
       return;
     }
 
+    if (hasApplied) {
+      router.push(`/dashboard/candidate/applications/${userApplication?._id}`);
+      return;
+    }
+
     setApplying(true);
     try {
-      await router.push(`/dashboard/candidate/jobs/${job._id}?apply=true`);
+      await router.push(`/dashboard/candidate/apply/${job._id}`);
     } catch (error) {
       console.error('Error applying to job:', error);
       toast({
-        title: '❌ Application Error',
+        title: 'Application Error',
         description: 'Failed to apply to job. Please try again.',
         variant: 'destructive',
       });
@@ -244,68 +196,57 @@ const CandidateJobCard: React.FC<CandidateJobCardProps> = ({
     new Date(job.applicationDeadline).getTime() - Date.now() < 3 * 24 * 60 * 60 * 1000);
 
   const isNew = (() => {
+    if (!job.createdAt) return false;
     const createdAt = new Date(job.createdAt);
     const now = new Date();
     const diffInHours = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
     return diffInHours < 24;
   })();
 
-  const isEthiopianJob = job.location.region !== 'international';
-
-  // Get company/organization info
+  const isEthiopianJob = job.location?.region !== 'international';
   const ownerInfo = job.jobType === 'organization' ? job.organization : job.company;
   const ownerName = ownerInfo?.name || 'Unknown';
   const ownerVerified = ownerInfo?.verified || false;
-  const ownerIndustry = ownerInfo?.industry;
+  const demographicInfo = getDemographicInfo();
 
   return (
-    <div className={`p-6 rounded-2xl border border-gray-200 hover:border-blue-300 hover:shadow-xl transition-all duration-300 group backdrop-blur-sm bg-white/95 ${className}`}>
+    <div className={`group bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all duration-300 p-6 ${className}`}>
       {/* Header */}
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-start space-x-4 flex-1 min-w-0">
           {ownerInfo?.logoUrl ? (
-            <div className="flex-shrink-0">
-              <Image 
-                src={ownerInfo.logoUrl} 
-                alt={ownerName}
-                className="w-14 h-14 rounded-xl object-cover border-2 border-gray-100 group-hover:border-blue-100 transition-colors shadow-sm"
-                width={56}
-                height={56}
-              />
-            </div>
+            <Image 
+              src={ownerInfo.logoUrl} 
+              alt={ownerName}
+              className="w-12 h-12 rounded-lg object-cover border border-gray-200"
+              width={48}
+              height={48}
+            />
           ) : (
-            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+            <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
               <Building2 className="w-6 h-6 text-white" />
             </div>
           )}
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
-                <h3 className="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2 mb-2">
+                <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2 mb-2">
                   <Link 
                     href={`/dashboard/candidate/jobs/${job._id}`} 
-                    className="hover:underline decoration-2 underline-offset-4"
-                    onClick={(e) => e.stopPropagation()} // Prevent card click when clicking title
+                    className="hover:underline"
                   >
                     {job.title}
                   </Link>
                 </h3>
-                <div className="flex items-center space-x-3 flex-wrap">
-                  <p className="text-gray-700 font-medium">{ownerName}</p>
+                <div className="flex items-center space-x-2 flex-wrap">
+                  <p className="text-sm text-gray-700 font-medium">{ownerName}</p>
                   {ownerVerified && (
-                    <span className="inline-flex items-center text-xs text-green-600 bg-green-50 px-2.5 py-1 rounded-full border border-green-200">
-                      <CheckCircle className="w-3 h-3 mr-1" />
-                      Verified
-                    </span>
+                    <CheckCircle className="w-4 h-4 text-green-500" />
                   )}
-                  {ownerIndustry && (
-                    <span className="text-xs text-gray-600 bg-gray-50 px-2.5 py-1 rounded-full border border-gray-200">
-                      {ownerIndustry}
-                    </span>
-                  )}
-                  {job.jobType === 'organization' && (
-                    <span className="text-xs text-purple-600 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200">
-                      {jobService.getJobTypeDisplayLabel(job)}
+                  {job.jobNumber && (
+                    <span className="inline-flex items-center text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded-md">
+                      <Hash className="w-3 h-3 mr-1" />
+                      {job.jobNumber}
                     </span>
                   )}
                 </div>
@@ -314,80 +255,57 @@ const CandidateJobCard: React.FC<CandidateJobCardProps> = ({
           </div>
         </div>
         
-        <div className="flex flex-col items-end space-y-3 flex-shrink-0 ml-4">
+        <div className="flex flex-col items-end space-y-2 ml-4">
           {showActions && (
-            <button
-              ref={saveButtonRef}
+            <Button
               onClick={localIsSaved ? handleUnsaveJob : handleSaveJob}
               disabled={saving}
-              className={`p-2.5 rounded-xl transition-all duration-200 ${
-                localIsSaved 
-                  ? 'text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 shadow-sm' 
-                  : 'text-gray-400 bg-gray-50 hover:bg-gray-100 hover:text-blue-500 border border-gray-200'
-              } disabled:opacity-50 disabled:cursor-not-allowed group/save relative`}
-              title={localIsSaved ? 'Remove from saved' : 'Save job'}
-              // Add pointer-events control
-              style={{ pointerEvents: saving ? 'none' : 'auto' }}
+              variant="outline"
+              size="sm"
+              className={`p-2 ${localIsSaved ? 'bg-blue-50 border-blue-200 text-blue-600' : ''}`}
             >
               {saving ? (
-                <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
               ) : localIsSaved ? (
-                <BookmarkCheck className="w-5 h-5 fill-current text-blue-600" />
+                <BookmarkCheck className="w-4 h-4 fill-current" />
               ) : (
-                <Bookmark className="w-5 h-5 group-hover/save:scale-110 transition-transform" />
+                <Bookmark className="w-4 h-4" />
               )}
-            </button>
+            </Button>
           )}
-          <div className="flex flex-col items-end space-y-1">
-            <span className="text-xs text-gray-500 bg-gray-50 px-2.5 py-1 rounded-full border border-gray-200">
-              {formatDate(job.createdAt)}
+          <span className="text-xs text-gray-500">{formatDate(job.createdAt)}</span>
+          {isNew && (
+            <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full font-medium">
+              New
             </span>
-            {isNew && (
-              <span className="text-xs text-green-600 bg-green-50 px-2.5 py-1 rounded-full border border-green-200 font-medium">
-                New
-              </span>
-            )}
-          </div>
+          )}
         </div>
       </div>
       
       {/* Badges */}
       <div className="flex flex-wrap gap-2 mb-4">
-        <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200">
-          <Briefcase className="w-4 h-4 mr-1.5" />
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+          <Briefcase className="w-3 h-3 mr-1" />
           {jobService.getJobTypeLabel(job.type)}
         </span>
-        <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-purple-100 text-purple-800 border border-purple-200">
-          <BookOpen className="w-4 h-4 mr-1.5" />
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
           {jobService.getExperienceLabel(job.experienceLevel)}
         </span>
-        {job.educationLevel && (
-          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-indigo-100 text-indigo-800 border border-indigo-200">
-            <GraduationCap className="w-4 h-4 mr-1.5" />
-            {jobService.getEducationLabel(job.educationLevel)}
-          </span>
-        )}
-        {job.remote && job.remote !== 'on-site' && (
-          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-green-100 text-green-800 border border-green-200">
-            <Globe className="w-4 h-4 mr-1.5" />
+        {job.remote !== 'on-site' && (
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
             {job.remote === 'remote' ? '🌍 Remote' : '🏢 Hybrid'}
           </span>
         )}
         {isUrgent && (
-          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-red-100 text-red-800 border border-red-200">
-            <Clock className="w-4 h-4 mr-1.5" />
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+            <Clock className="w-3 h-3 mr-1" />
             Urgent
           </span>
         )}
-        {job.featured && (
-          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
-            ⭐ Featured
-          </span>
-        )}
-        {isEthiopianJob && (
-          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-amber-100 text-amber-800 border border-amber-200">
-            <Shield className="w-4 h-4 mr-1.5" />
-            Ethiopian Job
+        {hasApplied && (
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+            <FileCheck className="w-3 h-3 mr-1" />
+            Applied
           </span>
         )}
       </div>
@@ -396,16 +314,25 @@ const CandidateJobCard: React.FC<CandidateJobCardProps> = ({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center text-sm text-gray-600">
           <MapPin className="w-4 h-4 mr-2" />
-          <span className="font-medium">{getLocationText(job.location)}</span>
-          {isEthiopianJob && (
-            <Flag className="w-4 h-4 ml-3 text-green-600" />
-          )}
+          <span>{getLocationText(job.location)}</span>
         </div>
-        
-        <div className="text-lg font-bold text-gray-900">
+        <div className="text-sm font-semibold text-gray-900">
           {jobService.formatSalary(job.salary)}
         </div>
       </div>
+
+      {/* Demographic Requirements */}
+      {demographicInfo && (
+        <div className="mb-4">
+          <div className="flex items-center text-sm text-gray-600 mb-1">
+            <User className="w-4 h-4 mr-2" />
+            <span className="font-medium">Requirements:</span>
+          </div>
+          <p className="text-sm text-gray-700 bg-blue-50 p-2 rounded-lg">
+            {demographicInfo}
+          </p>
+        </div>
+      )}
 
       {/* Skills */}
       {job.skills && job.skills.length > 0 && (
@@ -414,13 +341,13 @@ const CandidateJobCard: React.FC<CandidateJobCardProps> = ({
             {job.skills.slice(0, 4).map((skill, index) => (
               <span 
                 key={index} 
-                className="bg-gray-50 text-gray-700 text-sm px-3 py-1.5 rounded-lg border border-gray-200 font-medium"
+                className="bg-gray-50 text-gray-700 text-sm px-2 py-1 rounded-md border border-gray-200"
               >
                 {skill}
               </span>
             ))}
             {job.skills.length > 4 && (
-              <span className="text-sm text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
+              <span className="text-sm text-gray-500 bg-gray-50 px-2 py-1 rounded-md">
                 +{job.skills.length - 4} more
               </span>
             )}
@@ -439,41 +366,43 @@ const CandidateJobCard: React.FC<CandidateJobCardProps> = ({
       
       {/* Footer */}
       <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-        <div className="flex items-center space-x-6 text-sm text-gray-500">
-          <span className="flex items-center font-medium">
-            <Eye className="w-4 h-4 mr-1.5" />
-            {job.viewCount || job.views || 0} views
+        <div className="flex items-center space-x-4 text-sm text-gray-500">
+          <span className="flex items-center">
+            <Eye className="w-4 h-4 mr-1" />
+            {job.viewCount || 0}
           </span>
-          <span className="flex items-center font-medium">
-            <Users className="w-4 h-4 mr-1.5" />
-            {job.applicationCount || 0} applications
+          <span className="flex items-center">
+            <Users className="w-4 h-4 mr-1" />
+            {job.applicationCount || 0}
           </span>
         </div>
         
-        <div className="flex space-x-3">
+        <div className="flex space-x-2">
           <Link 
             href={`/dashboard/candidate/jobs/${job._id}`}
-            className="px-6 py-3 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-all duration-200 font-semibold shadow-sm hover:shadow-md flex items-center gap-2"
-            onClick={(e) => e.stopPropagation()} // Prevent card click
+            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2"
           >
             View Details
             <ExternalLink className="w-4 h-4" />
           </Link>
           {showActions && (
-            <button 
+            <Button 
               onClick={handleQuickApply}
               disabled={applying}
-              className="px-6 py-3 text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center gap-2"
+              size="sm"
+              variant={hasApplied ? "outline" : "primary"}
             >
               {applying ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                  <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent mr-2"></div>
                   Applying...
                 </>
+              ) : hasApplied ? (
+                'View Application'
               ) : (
                 'Quick Apply'
               )}
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -482,16 +411,12 @@ const CandidateJobCard: React.FC<CandidateJobCardProps> = ({
       {job.applicationDeadline && (
         <div className="mt-4 pt-4 border-t border-gray-100">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-500 flex items-center font-medium">
+            <span className="text-gray-500 flex items-center">
               <Calendar className="w-4 h-4 mr-2" />
               Application deadline:
             </span>
-            <span className="font-bold text-gray-700">
-              {new Date(job.applicationDeadline).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric'
-              })}
+            <span className="font-medium text-gray-700">
+              {new Date(job.applicationDeadline).toLocaleDateString()}
             </span>
           </div>
         </div>

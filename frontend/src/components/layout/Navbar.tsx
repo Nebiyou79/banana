@@ -2,8 +2,8 @@ import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from '@/contexts/AuthContext';
-import { 
-  ChevronDown, 
+import {
+  ChevronDown,
   LogOut,
   User,
   Menu,
@@ -65,36 +65,36 @@ export default function Navbar({ onMenuToggle }: NavbarProps) {
 
   const getQuickLinks = () => {
     if (!user) return [];
-    
+
     switch (user.role) {
       case "candidate":
         return [
           { href: "/dashboard/candidate/jobs", label: "Find Jobs" },
-          {href: "/dashboard/candidate/profile", label: "Profile"},
-          {href: "/dashboard/candidate", label: "Dashboard"},
-          // { href: "/dashboard/candidate/applications", label: "Applications" },
+          { href: "/dashboard/candidate/profile", label: "Profile" },
+          { href: "/dashboard/candidate", label: "Dashboard" },
+          { href: "/dashboard/candidate/social", label: "Social Feed" },
         ];
       case "freelancer":
         return [
           { href: "/dashboard/freelancer/tenders", label: "Browse Tenders" },
-          {href: "/dashboard/freelancer/profile", label: "Profile"},
-          {href: "/dashboard/freelancer", label: "Dashboard"},
-          // { href: "/dashboard/freelancer/proposals", label: "My Proposals" },
+          { href: "/dashboard/freelancer/profile", label: "Profile" },
+          { href: "/dashboard/freelancer", label: "Dashboard" },
+          { href: "/dashboard/freelancer/social", label: "Social Feed" },
         ];
       case "company":
         return [
           { href: "/dashboard/company/jobs", label: "Manage Jobs" },
           { href: "/tenders", label: "Browse Tenders" },
-          {href: "/dashboard/company/profile", label: "Profile"},
-          {href: "/dashboard/company", label: "Dashboard"},
-          // { href: "/dashboard/company/applications", label: "Applications" },
+          { href: "/dashboard/company/profile", label: "Profile" },
+          { href: "/dashboard/company", label: "Dashboard" },
+          { href: "/dashboard/company/social", label: "Social Feed" },
         ];
       case "organization":
         return [
           { href: "/dashboard/organization/tenders", label: "My Tenders" },
-          {href: "/dashboard/organization/profile", label: "Profile"},
-          {href: "/dashboard/organization", label: "Dashboard"},
-          // { href: "/dashboard/organization/applications", label: "Applications" },
+          { href: "/dashboard/organization/profile", label: "Profile" },
+          { href: "/dashboard/organization", label: "Dashboard" },
+          { href: "/dashboard/organization/social", label: "Social Feed" },
         ];
       case "admin":
         return [
@@ -110,18 +110,17 @@ export default function Navbar({ onMenuToggle }: NavbarProps) {
 
   // Navigation links for logged-out users
   const publicNavLinks = [
-    { href: "/signin", label: "Find Jobs" },
-    { href: "/signin", label: "Find Tenders" },
-    { href: "/signin", label: "Find Candidates" },
-    { href: "/signin", label: "Find Talent" }
+    { href: "/login", label: "Find Jobs" },
+    { href: "/login", label: "Find Tenders" },
+    { href: "/login", label: "Find Candidates" },
+    { href: "/login", label: "Find Talent" }
   ];
 
   return (
-    <nav className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${
-      isScrolled 
-        ? 'bg-white/95 backdrop-blur-lg shadow-lg border-b border-gray-200 py-3' 
-        : 'bg-white py-4 border-b border-gray-100'
-    }`}>
+    <nav className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${isScrolled
+      ? 'bg-white/95 backdrop-blur-lg shadow-lg border-b border-gray-200 py-3'
+      : 'bg-white py-4 border-b border-gray-100'
+      }`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Left Section - Logo */}
@@ -138,9 +137,9 @@ export default function Navbar({ onMenuToggle }: NavbarProps) {
             <Link href="/" className="flex items-center space-x-3 group">
               <div className="relative">
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden">
-                  <Image 
-                    src="/logo.png" 
-                    alt="Banana" 
+                  <Image
+                    src="/logo.png"
+                    alt="Banana"
                     width={48}
                     height={48}
                     className="object-contain"
@@ -218,9 +217,8 @@ export default function Navbar({ onMenuToggle }: NavbarProps) {
                     <p className="text-sm font-medium text-gray-900">{user.name}</p>
                     <p className="text-xs text-gray-500 capitalize">{user.role}</p>
                   </div>
-                  <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${
-                    isProfileDropdownOpen ? 'rotate-180' : ''
-                  }`} />
+                  <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isProfileDropdownOpen ? 'rotate-180' : ''
+                    }`} />
                 </button>
 
                 {/* Dropdown Menu */}

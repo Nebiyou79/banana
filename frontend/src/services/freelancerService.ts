@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import api from '@/lib/axios';
 import { handleError, handleSuccess } from '@/lib/error-handler';
+
 export interface TenderFilters {
   page?: number;
   limit?: number;
@@ -58,6 +59,7 @@ export interface Tender {
   createdAt: string;
   updatedAt: string;
 }
+
 export interface PortfolioFormData {
   title: string;
   description: string;
@@ -92,13 +94,15 @@ export interface PortfolioItem {
   createdAt: string;
   updatedAt: string;
 }
-
 export interface ProfileData {
   name: string;
   bio?: string;
   location?: string;
   phone?: string;
   website?: string;
+  // NEW: Age and Gender fields
+  dateOfBirth?: string;
+  gender?: 'male' | 'female' | 'other' | 'prefer-not-to-say';
   skills: Array<{
     name: string;
     level: 'beginner' | 'intermediate' | 'expert';
@@ -176,6 +180,10 @@ export interface UserProfile {
   certifications?: Certification[];
   profileCompleted: boolean;
   verificationStatus: string;
+  // NEW: Age and Gender fields
+  dateOfBirth?: string;
+  gender?: 'male' | 'female' | 'other' | 'prefer-not-to-say';
+  age?: number; // Virtual field calculated from dateOfBirth
   freelancerProfile?: {
     headline?: string;
     hourlyRate?: number;
@@ -232,6 +240,11 @@ export interface DashboardStats {
   socialLinks?: {
     total: number;
   };
+  // NEW: Age and gender stats
+  demographics?: {
+    age: number | null;
+    gender: string;
+  };
 }
 
 export interface FreelancerStats {
@@ -245,6 +258,9 @@ export interface FreelancerStats {
   profileViews: number;
   clientReviews: number;
   averageRating: number;
+  // NEW: Age and gender
+  age?: number | null;
+  gender?: string;
 }
 
 export interface ServiceData {
@@ -279,6 +295,7 @@ export interface AvatarUploadResponse {
   size: number;
   profileCompletion?: number;
 }
+
 export interface Certification {
   _id: string;
   name: string;
@@ -463,46 +480,65 @@ export const freelancerService = {
     }
   },
 
- updateProfile: async (data: ProfileData): Promise<{ profile: UserProfile; profileCompletion: number }> => {
-    try {
-      const response = await api.put('/freelancer/profile', data);
-      
-      if (!response.data.success) {
-        // Handle validation errors from backend
-        if (response.data.errors) {
-          response.data.errors.forEach((error: string) => {
-            handleError(error);
-          });
-          return Promise.reject(new Error('Validation failed'));
-        }
-        
-        const errorMessage = response.data.message || 'Failed to update profile';
-        handleError(errorMessage);
-        return Promise.reject(new Error(errorMessage));
-      }
-      
-      handleSuccess('Profile updated successfully');
-      return {
-        profile: response.data.data,
-        profileCompletion: response.data.profileCompletion
-      };
-    } catch (error: any) {
-      console.error('Update profile error:', error);
-      
-      // Handle axios error with validation messages
-      if (error.response?.data?.errors) {
-        error.response.data.errors.forEach((err: string) => {
-          handleError(err);
-        });
-      } else if (error.response?.data?.message) {
-        handleError(error.response.data.message);
-      } else {
-        handleError(error, 'Failed to update profile');
-      }
-      
-      return Promise.reject(error);
+// freelancerService.ts - UPDATED updateProfile function
+// freelancerService.ts - FIXED updateProfile function
+updateProfile: async (data: ProfileData): Promise<{ profile: UserProfile; profileCompletion: number }> => {
+  try {
+    // Validate and clean the bio field - THIS IS THE FIX
+    const cleanedData = {
+      ...data,
+      bio: typeof data.bio === 'string' ? data.bio.substring(0, 1000) : '', // Limit to 1000 chars and ensure it's a string
+      // Ensure dateOfBirth is properly formatted for backend
+      dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth).toISOString() : undefined,
+    };
+
+    // Remove any interface code that might have been accidentally copied
+    if (cleanedData.bio && cleanedData.bio.includes('interface ProfileData')) {
+      cleanedData.bio = ''; // Reset bio if it contains interface code
     }
-  },
+
+    console.log('📤 Sending profile update data:', cleanedData);
+
+    const response = await api.put('/freelancer/profile', cleanedData);
+    
+    if (!response.data.success) {
+      // Handle validation errors from backend
+      if (response.data.errors) {
+        response.data.errors.forEach((error: string) => {
+          handleError(error);
+        });
+        return Promise.reject(new Error('Validation failed'));
+      }
+      
+      const errorMessage = response.data.message || 'Failed to update profile';
+      handleError(errorMessage);
+      return Promise.reject(new Error(errorMessage));
+    }
+    
+    console.log('✅ Profile update response:', response.data);
+    
+    handleSuccess('Profile updated successfully');
+    return {
+      profile: response.data.data,
+      profileCompletion: response.data.profileCompletion
+    };
+  } catch (error: any) {
+    console.error('❌ Update profile error:', error);
+    
+    // Handle axios error with validation messages
+    if (error.response?.data?.errors) {
+      error.response.data.errors.forEach((err: string) => {
+        handleError(err);
+      });
+    } else if (error.response?.data?.message) {
+      handleError(error.response.data.message);
+    } else {
+      handleError(error, 'Failed to update profile');
+    }
+    
+    return Promise.reject(error);
+  }
+},
 
   // Services Management
   getServices: async (): Promise<Service[]> => {
@@ -640,7 +676,8 @@ export const freelancerService = {
       return Promise.reject(error);
     }
   },
- // Tender Management
+
+  // Tender Management
   getTenders: async (filters: TenderFilters = {}): Promise<{
     data: Tender[];
     pagination: {
@@ -764,7 +801,8 @@ export const freelancerService = {
       return Promise.reject(error);
     }
   },
-   getCertifications: async (): Promise<Certification[]> => {
+
+  getCertifications: async (): Promise<Certification[]> => {
     try {
       const response = await api.get('/freelancer/certifications');
       

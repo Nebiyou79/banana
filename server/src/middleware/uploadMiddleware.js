@@ -20,6 +20,7 @@ const createUploadDirs = () => {
 createUploadDirs();
 
 // Configure storage for company files
+// FIXED: Better filename generation
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     let uploadPath = path.join(process.cwd(), 'public', 'uploads', 'company');
@@ -30,14 +31,22 @@ const storage = multer.diskStorage({
       uploadPath = path.join(uploadPath, 'banners');
     }
     
+    // Ensure directory exists
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    
     cb(null, uploadPath);
   },
   filename: function (req, file, cb) {
-    const companyId = req.params.id || req.user?.userId || 'temp';
+    // FIX: Use only user ID from authenticated user
+    const companyId = req.user?.userId || 'unknown';
     const timestamp = Date.now();
+    const randomString = Math.random().toString(36).substring(2, 15);
     const fileExtension = path.extname(file.originalname);
-    const fileName = `${companyId}-${timestamp}${fileExtension}`;
+    const fileName = `${companyId}-${timestamp}-${randomString}${fileExtension}`;
     
+    console.log(`📁 Saving file: ${fileName} for user: ${companyId}`);
     cb(null, fileName);
   }
 });
