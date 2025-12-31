@@ -73,7 +73,7 @@ export const getProfileImages = (profile?: any) => {
     // Check common locations for cover photo
     const coverPhoto = profile.user?.coverPhoto || profile.coverPhoto;
     const avatar = profile.user?.avatar;
-
+     
     console.log('📷 getProfileImages:', {
         hasProfile: !!profile,
         coverPhotoSource: coverPhoto ? 'found' : 'not found',
