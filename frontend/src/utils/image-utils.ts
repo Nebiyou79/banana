@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/lib/image-utils.ts
 import { profileService } from '@/services/profileService';
 
