@@ -1,8 +1,8 @@
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
-import { v4 as uuidv4 } from 'uuid';
-import sharp from 'sharp';
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
+const sharp = require('sharp');
 
 // Configure storage
 const storage = multer.diskStorage({
@@ -369,7 +369,7 @@ const cleanupUploadedFiles = async (req) => {
   }
 };
 
-export {
+module.exports = {
   upload,
   uploadAvatar,
   uploadCoverPhoto,
