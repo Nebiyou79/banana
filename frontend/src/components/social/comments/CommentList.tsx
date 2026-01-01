@@ -358,17 +358,17 @@ export const CommentList: React.FC<CommentListProps> = ({
         <div className="space-y-4">
             {[1, 2, 3].map((i) => (
                 <div key={i} className="flex gap-3 animate-pulse">
-                    <div className="h-10 w-10 rounded-full bg-gray-200" />
+                    <div className="h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700" />
                     <div className="flex-1 space-y-2">
                         <div className="flex items-center gap-2">
-                            <div className="h-4 w-24 bg-gray-200 rounded" />
-                            <div className="h-3 w-16 bg-gray-200 rounded" />
+                            <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+                            <div className="h-3 w-16 bg-gray-200 dark:bg-gray-700 rounded" />
                         </div>
-                        <div className="h-3 w-full bg-gray-200 rounded" />
-                        <div className="h-3 w-2/3 bg-gray-200 rounded" />
+                        <div className="h-3 w-full bg-gray-200 dark:bg-gray-700 rounded" />
+                        <div className="h-3 w-2/3 bg-gray-200 dark:bg-gray-700 rounded" />
                         <div className="flex gap-4">
-                            <div className="h-4 w-16 bg-gray-200 rounded" />
-                            <div className="h-4 w-16 bg-gray-200 rounded" />
+                            <div className="h-4 w-16 bg-gray-200 dark:bg-gray-700 rounded" />
+                            <div className="h-4 w-16 bg-gray-200 dark:bg-gray-700 rounded" />
                         </div>
                     </div>
                 </div>
@@ -379,11 +379,11 @@ export const CommentList: React.FC<CommentListProps> = ({
     // Render error state
     const renderErrorState = () => (
         <div className="text-center py-8">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-100 mb-4">
-                <AlertCircle className="h-6 w-6 text-red-600" />
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
+                <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Unable to load comments</h3>
-            <p className="text-gray-600 mb-4">{error}</p>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Unable to load comments</h3>
+            <p className="text-gray-600 dark:text-gray-300 mb-4">{error}</p>
             <Button onClick={handleRetry} variant="secondary" className="gap-2">
                 <Loader2 className="h-4 w-4" />
                 Try Again
@@ -394,11 +394,11 @@ export const CommentList: React.FC<CommentListProps> = ({
     // Render empty state
     const renderEmptyState = () => (
         <div className="text-center py-12">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
-                <MessageSquare className="h-8 w-8 text-blue-600" />
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/30 mb-4">
+                <MessageSquare className="h-8 w-8 text-blue-600 dark:text-blue-400" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No comments yet</h3>
-            <p className="text-gray-600 mb-4 max-w-md mx-auto">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No comments yet</h3>
+            <p className="text-gray-600 dark:text-gray-300 mb-4 max-w-md mx-auto">
                 Be the first to start the conversation. Share your thoughts and engage with others.
             </p>
         </div>
@@ -407,15 +407,15 @@ export const CommentList: React.FC<CommentListProps> = ({
     // Render sort buttons
     const renderSortButtons = () => (
         <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 font-medium">Sort by:</span>
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+            <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Sort by:</span>
+            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
                 {(['createdAt', 'engagement.likes', 'trending'] as const).map((type) => (
                     <button
                         key={type}
                         onClick={() => handleSortChange(type)}
                         className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 ${sortConfig.sortBy === type
-                            ? 'bg-white shadow-sm text-blue-600'
-                            : 'text-gray-600 hover:text-gray-900'
+                            ? 'bg-white dark:bg-gray-700 shadow-sm text-blue-600 dark:text-blue-400'
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300'
                             }`}
                     >
                         {getSortIcon(type)}
@@ -438,11 +438,11 @@ export const CommentList: React.FC<CommentListProps> = ({
         <div className={className} ref={containerRef}>
             {/* Header */}
             {showHeader && (
-                <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700 gap-4">
                     <div className="flex items-center gap-3">
-                        <h2 className="text-xl font-bold text-gray-900">Comments</h2>
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Comments</h2>
                         {totalComments > 0 && (
-                            <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-sm font-medium">
+                            <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 text-sm font-medium">
                                 {totalComments}
                             </span>
                         )}
@@ -454,29 +454,29 @@ export const CommentList: React.FC<CommentListProps> = ({
             {/* Tabs */}
             {showTabs && pinnedComments.length > 0 && (
                 <div className="mb-6">
-                    <div className="flex space-x-1 border-b border-gray-200">
+                    <div className="flex space-x-1 border-b border-gray-200 dark:border-gray-700">
                         <button
                             onClick={() => setActiveTab('all')}
                             className={`px-4 py-2 text-sm font-medium ${activeTab === 'all'
-                                ? 'border-b-2 border-blue-500 text-blue-600'
-                                : 'text-gray-500 hover:text-gray-700'
+                                ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                                 }`}
                         >
                             All Comments
-                            <span className="ml-1.5 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
+                            <span className="ml-1.5 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-1.5 py-0.5 rounded-full">
                                 {totalComments}
                             </span>
                         </button>
                         <button
                             onClick={() => setActiveTab('pinned')}
                             className={`px-4 py-2 text-sm font-medium flex items-center ${activeTab === 'pinned'
-                                ? 'border-b-2 border-yellow-500 text-yellow-600'
-                                : 'text-gray-500 hover:text-gray-700'
+                                ? 'border-b-2 border-yellow-500 text-yellow-600 dark:text-yellow-400'
+                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                                 }`}
                         >
                             <Sparkles size={12} className="mr-1.5" />
                             Pinned
-                            <span className="ml-1.5 text-xs bg-yellow-100 text-yellow-600 px-1.5 py-0.5 rounded-full">
+                            <span className="ml-1.5 text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 px-1.5 py-0.5 rounded-full">
                                 {pinnedComments.length}
                             </span>
                         </button>
@@ -492,7 +492,7 @@ export const CommentList: React.FC<CommentListProps> = ({
                     transition={{ duration: 0.2 }}
                     className="mb-6"
                 >
-                    <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4">
                         <CommentComposer
                             postId={postId}
                             onAdded={handleCommentAdded}
@@ -508,7 +508,7 @@ export const CommentList: React.FC<CommentListProps> = ({
                 <div className="mb-6">
                     <div className="flex items-center gap-2 mb-4">
                         <Sparkles className="h-4 w-4 text-yellow-500" />
-                        <h3 className="text-sm font-semibold text-gray-900">Pinned Comments</h3>
+                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Pinned Comments</h3>
                     </div>
                     <div className="space-y-4">
                         {pinnedComments.map((comment) => (
@@ -521,7 +521,7 @@ export const CommentList: React.FC<CommentListProps> = ({
                                 onCommentUpdated={handleCommentUpdated}
                                 onCommentDeleted={handleCommentDeleted}
                                 maxDepth={maxDepth}
-                                className="bg-yellow-50/50 border border-yellow-100 rounded-xl p-4"
+                                className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-100 dark:border-yellow-800/30 rounded-xl p-4"
                                 isHighlighted={newCommentIds.has(comment._id)}
                             />
                         ))}
@@ -561,10 +561,10 @@ export const CommentList: React.FC<CommentListProps> = ({
                                         onCommentDeleted={handleCommentDeleted}
                                         maxDepth={maxDepth}
                                         className={`
-                                            bg-white rounded-xl border border-gray-200 p-4 
+                                            bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 
                                             shadow-sm hover:shadow-md transition-shadow
                                             ${index > 0 ? 'mt-4' : ''}
-                                            ${newCommentIds.has(comment._id) ? 'ring-2 ring-blue-500 ring-opacity-50' : ''}
+                                            ${newCommentIds.has(comment._id) ? 'ring-2 ring-blue-500 dark:ring-blue-400 ring-opacity-50' : ''}
                                         `}
                                         isHighlighted={newCommentIds.has(comment._id)}
                                     />
@@ -580,7 +580,7 @@ export const CommentList: React.FC<CommentListProps> = ({
                                     onClick={handleLoadMore}
                                     loading={isLoadingMore}
                                     disabled={isLoadingMore}
-                                    className="px-6 gap-2"
+                                    className="px-6 gap-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
                                 >
                                     {isLoadingMore ? (
                                         <>
@@ -599,12 +599,12 @@ export const CommentList: React.FC<CommentListProps> = ({
 
                         {/* End of Comments */}
                         {!hasMore && getFilteredComments().length > 0 && (
-                            <div className="text-center py-6 border-t border-gray-100">
-                                <div className="inline-flex items-center gap-2 text-gray-400 text-sm">
+                            <div className="text-center py-6 border-t border-gray-100 dark:border-gray-800">
+                                <div className="inline-flex items-center gap-2 text-gray-400 dark:text-gray-500 text-sm">
                                     <MessageSquare size={16} />
                                     <span>All comments loaded</span>
                                 </div>
-                                <p className="text-gray-500 text-xs mt-2">
+                                <p className="text-gray-500 dark:text-gray-400 text-xs mt-2">
                                     Showing {getFilteredComments().length} of {totalComments} comments
                                 </p>
                             </div>

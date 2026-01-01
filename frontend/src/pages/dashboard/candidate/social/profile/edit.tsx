@@ -1,4 +1,4 @@
-// pages/social/candidate/profile/edit.tsx - SIMPLIFIED VERSION
+// pages/dashboard/candidate/social/profile/edit.tsx - SIMPLIFIED VERSION
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -86,7 +86,7 @@ export default function CandidateEditProfilePage() {
 
     const handleCancel = () => {
         if (window.confirm('Are you sure you want to cancel? Any unsaved changes will be lost.')) {
-            router.push('/social/candidate/profile');
+            router.push('/dashboard/candidate/social/profile');
         }
     };
 
@@ -172,7 +172,7 @@ export default function CandidateEditProfilePage() {
                                         </div>
                                     </div>
                                     <Button
-                                        onClick={() => router.push('/social/candidate/profile')}
+                                        onClick={() => router.push('/dashboard/candidate/social/profile')}
                                         variant="premium"
                                         className="backdrop-blur-lg border-gray-300"
                                     >
@@ -298,7 +298,7 @@ export default function CandidateEditProfilePage() {
                                             </Button>
 
                                             <Button
-                                                onClick={() => router.push('/social/candidate/profile')}
+                                                onClick={() => router.push('/dashboard/candidate/social/profile')}
                                                 className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
                                             >
                                                 <CheckCircle className="w-4 h-4 mr-2" />

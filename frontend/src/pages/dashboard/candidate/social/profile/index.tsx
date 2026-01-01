@@ -1,4 +1,4 @@
-// app/social/candidate/profile/page.tsx - FIXED VERSION
+// app/dashboard/candidate/social/profile/page.tsx - FIXED VERSION
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { SocialDashboardLayout } from '@/components/social/layout/SocialDashboard';
@@ -114,7 +114,7 @@ const CandidateProfilePage: React.FC = () => {
   };
 
   const handleEditProfile = () => {
-    router.push('/social/candidate/profile/edit');
+    router.push('/dashboard/candidate/social/profile/edit');
   };
 
   const handleFollow = (isFollowing: boolean) => {

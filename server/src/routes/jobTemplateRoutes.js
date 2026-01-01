@@ -1,6 +1,6 @@
 const express = require('express');
 const  adminAuth  = require('../middleware/adminAuth');
-const { adminLimiter } = require('../middleware/rateLimit');
+const { adminLimiter } = require('../middleware/rateLimiter');
 const {
   getJobTemplates,
   getTemplateById,

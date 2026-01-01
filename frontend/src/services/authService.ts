@@ -254,10 +254,10 @@ export const authService = {
       // Handle network errors gracefully
       if (error.code === 'ECONNREFUSED' || error.message === 'Network Error') {
         console.warn('Logout API unavailable, proceeding with client-side cleanup');
-        handleInfo('Logged out successfully (offline mode)');
+        handleInfo('Logged out successfully (offline mode)'); // Now this will work
       } else {
         console.error('Logout error:', error);
-        handleError(error, 'Error during logout');
+        handleError('Error during logout');
       }
     } finally {
       setStoredToken(null);

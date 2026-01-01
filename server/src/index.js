@@ -9,7 +9,14 @@ const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
-
+const { 
+  generalLimiter, 
+  authLimiter, 
+  adminLimiter,
+  socialLimiter,
+  followListLimiter,
+  followStatusLimiter 
+} = require('./middleware/rateLimiter');
 // Load environment variables FIRST
 dotenv.config();
 
@@ -68,30 +75,17 @@ app.use(helmet({
 }));
 app.use(compression());
 
-// Rate limiting
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // limit each IP to 5 login requests per windowMs
-  message: 'Too many login attempts from this IP, please try again later.'
-});
-
-const adminLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // limit each IP to 200 requests per windowMs
-  message: 'Too many admin requests from this IP, please try again later.'
-});
-
 // Apply rate limiting
 app.use('/api/v1/auth', authLimiter);
 app.use('/api/v1/admin', adminLimiter);
-app.use(generalLimiter);
-
+app.use((req, res, next) => {
+  // Skip rate limiting for follow routes (they'll have their own limiters)
+  if (req.path.startsWith('/api/v1/follow')) {
+    return next();
+  }
+  // Apply general limiter to all other routes
+  generalLimiter(req, res, next);
+});
 // Logging
 app.use(morgan('combined'));
 

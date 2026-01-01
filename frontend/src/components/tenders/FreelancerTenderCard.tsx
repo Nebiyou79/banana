@@ -17,16 +17,16 @@ interface FreelanceTenderCardProps {
   className?: string;
 }
 
-const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({ 
-  tender, 
-  variant = 'grid', 
+const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
+  tender,
+  variant = 'grid',
   size = 'medium',
   showActions = true,
-  className 
+  className
 }) => {
   const { mutate: toggleSave } = useToggleSaveTender();
   const isActive = new Date(tender.deadline) > new Date();
-  
+
   const handleSaveToggle = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -41,15 +41,15 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
   // Format budget
   const formatBudget = () => {
     if (!tender.freelanceSpecific) return 'Budget not specified';
-    
+
     const { engagementType, budget, weeklyHours } = tender.freelanceSpecific;
-    
+
     if (engagementType === 'fixed_price' && budget) {
       return `${budget.currency} ${budget.min.toLocaleString()} - ${budget.max.toLocaleString()}`;
     } else if (engagementType === 'hourly' && weeklyHours) {
       return `Hourly • ${weeklyHours} hrs/week`;
     }
-    
+
     return 'Contact for price';
   };
 
@@ -100,7 +100,7 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
                       </Badge>
                     )}
                   </div>
-                  
+
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline" className="bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800">
                       {tender.procurementCategory}
@@ -116,7 +116,7 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
                     )}
                   </div>
                 </div>
-                
+
                 {showActions && (
                   <Button
                     variant="ghost"
@@ -166,7 +166,7 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
                   </div>
                   <p className="font-medium text-gray-900 dark:text-gray-100">{formatBudget()}</p>
                 </div>
-                
+
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-500">
                     <Clock className="h-4 w-4" />
@@ -197,21 +197,21 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
               {/* Countdown & Status */}
               <div className="flex items-center gap-2">
                 {isActive && daysRemaining >= 0 && (
-                  <Badge 
-                    variant={daysRemaining <= 3 ? 'destructive' : 'outline'} 
+                  <Badge
+                    variant={daysRemaining <= 3 ? 'destructive' : 'outline'}
                     className="bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800"
                   >
                     <Clock className="h-3 w-3 mr-1" />
                     {daysRemaining === 0 ? 'Ends Today' : `${daysRemaining} days left`}
                   </Badge>
                 )}
-                <Badge className={getStatusColor(tender)}>
+                <Badge className={getStatusColor(tender.status)}>
                   {tender.status.replace('_', ' ')}
                 </Badge>
               </div>
 
               {showActions && (
-                <Button 
+                <Button
                   onClick={handleViewDetails}
                   className="w-full bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white"
                 >
@@ -234,7 +234,7 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
       className
     )}>
       {/* Gradient Header */}
-      <div 
+      <div
         className="h-2 w-full"
         style={{
           background: 'linear-gradient(90deg, #E8F8F0 0%, #CFF5E7 100%)'
@@ -289,7 +289,7 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
             </div>
             <p className="font-medium text-gray-900 dark:text-gray-100">{formatBudget()}</p>
           </div>
-          
+
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-500">
               <Clock className="h-4 w-4" />
@@ -345,14 +345,14 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
         {/* Countdown Badge */}
         {isActive && daysRemaining >= 0 && (
           <div className="flex items-center gap-2">
-            <Badge 
-              variant={daysRemaining <= 3 ? 'destructive' : 'outline'} 
+            <Badge
+              variant={daysRemaining <= 3 ? 'destructive' : 'outline'}
               className="bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800"
             >
               <Clock className="h-3 w-3 mr-1" />
               {daysRemaining === 0 ? 'Ends Today' : `${daysRemaining} days left`}
             </Badge>
-            <Badge className={getStatusColor(tender)}>
+            <Badge className={getStatusColor(tender.status)}>
               {tender.status.replace('_', ' ')}
             </Badge>
           </div>
@@ -361,7 +361,7 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
 
       {showActions && (
         <CardFooter className={cn("pt-4 border-t border-gray-100 dark:border-gray-800", getSizeClasses())}>
-          <Button 
+          <Button
             onClick={handleViewDetails}
             className="w-full bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white"
           >

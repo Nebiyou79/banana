@@ -89,7 +89,7 @@ export function SocialDashboardLayout({
         variant: 'destructive',
       });
 
-      router.push(`/social/${user?.role}`);
+      router.push(`/dashboard/${user?.role}/social`);
     }
   }, [user, isLoading, isAuthenticated, requiredRole, router]);
 

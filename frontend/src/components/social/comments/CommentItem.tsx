@@ -1,5 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // components/social/comments/CommentItem.tsx
 import React, { useState, useEffect } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/social/ui/Avatar';
@@ -337,7 +335,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
   const renderContent = () => {
     if (isDeleted) {
       return (
-        <div className="text-gray-400 italic text-sm">
+        <div className="text-gray-400 dark:text-gray-500 italic text-sm">
           This comment has been deleted.
         </div>
       );
@@ -345,7 +343,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
 
     if (isHidden) {
       return (
-        <div className="text-gray-400 italic text-sm">
+        <div className="text-gray-400 dark:text-gray-500 italic text-sm">
           This comment is hidden.
         </div>
       );
@@ -362,13 +360,13 @@ export const CommentItem: React.FC<CommentItemProps> = ({
           <textarea
             value={editedContent}
             onChange={(e) => setEditedContent(e.target.value)}
-            className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+            className="w-full px-4 py-3 text-sm border border-gray-300 dark:border-gray-600 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             rows={3}
             autoFocus
             maxLength={2000}
           />
           <div className="flex items-center justify-between">
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-gray-500 dark:text-gray-400">
               {editedContent.length}/2000 characters
             </div>
             <div className="flex gap-2">
@@ -379,7 +377,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                   setIsEditing(false);
                   setEditedContent(localComment.content);
                 }}
-                className="px-3 text-sm"
+                className="px-3 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300"
               >
                 Cancel
               </Button>
@@ -388,7 +386,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                 variant="default"
                 onClick={handleEdit}
                 disabled={editedContent.trim() === localComment.content || !editedContent.trim()}
-                className="px-4 text-sm bg-blue-600 hover:bg-blue-700"
+                className="px-4 text-sm bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white"
               >
                 Save changes
               </Button>
@@ -399,7 +397,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
     }
 
     return (
-      <div className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap break-words">
+      <div className="text-gray-800 dark:text-gray-200 text-sm leading-relaxed whitespace-pre-wrap break-words">
         {localComment.content}
       </div>
     );
@@ -414,7 +412,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
         {localComment.media.map((media, index) => (
           <div
             key={index}
-            className="relative rounded-lg overflow-hidden border border-gray-200 bg-gray-100 max-w-md"
+            className="relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 max-w-md"
           >
             {media.type === 'image' ? (
               <img
@@ -450,7 +448,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
     if (isDeleted || isHidden) return null;
 
     return (
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 flex-wrap">
         {localComment.author?.verificationStatus === 'verified' && (
           <Badge variant="success" size="sm" className="px-1.5 py-0.5">
             <CheckCircle size={10} className="mr-1" />
@@ -459,19 +457,19 @@ export const CommentItem: React.FC<CommentItemProps> = ({
         )}
 
         {localComment.author?.role === 'admin' && (
-          <Badge variant="destructive" size="sm" className="px-1.5 py-0.5 bg-purple-100 text-purple-800 border-purple-200">
+          <Badge variant="destructive" size="sm" className="px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-700">
             Admin
           </Badge>
         )}
 
         {localComment.author?.role === 'moderator' && (
-          <Badge variant="secondary" size="sm" className="px-1.5 py-0.5 bg-green-100 text-green-800 border-green-200">
+          <Badge variant="secondary" size="sm" className="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-700">
             Moderator
           </Badge>
         )}
 
         {localComment.metadata?.isPinned && (
-          <Badge variant="outline" size="sm" className="px-1.5 py-0.5 bg-yellow-50 text-yellow-700 border-yellow-200">
+          <Badge variant="outline" size="sm" className="px-1.5 py-0.5 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-700">
             <Pin size={10} className="mr-1" />
             Pinned
           </Badge>
@@ -493,7 +491,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
         <div className="flex items-center justify-between mb-2">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
+            className="flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium"
             type="button"
             disabled={isLoadingReplies}
           >
@@ -516,7 +514,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
               <button
                 onClick={handleRefreshReplies}
                 disabled={isLoadingReplies}
-                className="text-xs text-blue-600 hover:text-blue-700 disabled:opacity-50 flex items-center gap-1"
+                className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 disabled:opacity-50 flex items-center gap-1"
                 type="button"
               >
                 <RefreshCw size={10} className={isLoadingReplies ? 'animate-spin' : ''} />
@@ -529,7 +527,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
               <button
                 onClick={loadMoreReplies}
                 disabled={isLoadingReplies}
-                className="text-xs text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 disabled:opacity-50"
                 type="button"
               >
                 {isLoadingReplies ? 'Loading...' : `Show ${actualReplyCount - localReplies.length} more`}
@@ -576,7 +574,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                   onCommentUpdated={onCommentUpdated}
                   onCommentDeleted={onCommentDeleted}
                   maxDepth={maxDepth}
-                  className={`pt-3 ${index > 0 ? 'border-t border-gray-100' : ''}`}
+                  className={`pt-3 ${index > 0 ? 'border-t border-gray-100 dark:border-gray-800' : ''}`}
                 />
               ))}
             </motion.div>
@@ -587,7 +585,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="text-center py-4 text-gray-500 text-sm"
+              className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm"
             >
               <p>No replies loaded yet.</p>
               <Button
@@ -595,7 +593,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                 size="sm"
                 onClick={loadCommentReplies}
                 loading={isLoadingReplies}
-                className="mt-2"
+                className="mt-2 text-gray-600 dark:text-gray-400"
               >
                 Load replies
               </Button>
@@ -611,7 +609,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.2 }}
-      className={`relative ${depth > 0 ? 'ml-6 pl-4 border-l-2 border-gray-100' : ''} ${isHighlighted ? 'bg-blue-50 rounded-xl p-3 -m-3' : ''
+      className={`relative ${depth > 0 ? 'ml-6 pl-4 border-l-2 border-gray-100 dark:border-gray-800' : ''} ${isHighlighted ? 'bg-blue-50 dark:bg-blue-900/30 rounded-xl p-3 -m-3' : ''
         } ${className}`}
       id={`comment-${localComment._id}`}
     >
@@ -619,7 +617,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
         <div className="flex gap-3">
           {/* Avatar */}
           <div className="flex-shrink-0">
-            <Avatar className={`${compact ? "h-8 w-8" : "h-10 w-10"} ring-1 ring-gray-100`}>
+            <Avatar className={`${compact ? "h-8 w-8" : "h-10 w-10"} ring-1 ring-gray-200 dark:ring-gray-700`}>
               {!isDeleted ? (
                 <>
                   <AvatarImage
@@ -627,12 +625,12 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                     alt={localComment.author?.name}
                     className="object-cover"
                   />
-                  <AvatarFallback className="bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600 font-medium">
+                  <AvatarFallback className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 text-blue-600 dark:text-blue-400 font-medium">
                     {localComment.author?.name?.charAt(0).toUpperCase() || 'U'}
                   </AvatarFallback>
                 </>
               ) : (
-                <AvatarFallback className="bg-gray-100 text-gray-400">
+                <AvatarFallback className="bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600">
                   <Trash2 size={14} />
                 </AvatarFallback>
               )}
@@ -644,20 +642,20 @@ export const CommentItem: React.FC<CommentItemProps> = ({
             {/* Header */}
             <div className="flex items-start justify-between mb-2">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className={`font-medium ${isDeleted ? 'text-gray-400' : 'text-gray-900'
+                <span className={`font-medium ${isDeleted ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'
                   } text-sm`}>
                   {isDeleted ? 'Deleted User' : localComment.author?.name || 'Unknown User'}
                 </span>
 
                 {renderAuthorBadge()}
 
-                <span className="text-gray-500 text-xs flex items-center gap-1">
+                <span className="text-gray-500 dark:text-gray-400 text-xs flex items-center gap-1">
                   <Clock size={10} />
                   {formatTime(localComment.createdAt)}
                 </span>
 
                 {localComment.metadata?.edited?.isEdited && !isDeleted && (
-                  <span className="text-xs text-gray-400 italic">
+                  <span className="text-xs text-gray-400 dark:text-gray-500 italic">
                     (edited)
                   </span>
                 )}
@@ -670,16 +668,16 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 p-0"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 p-0 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300"
                     >
                       <MoreVertical size={14} />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuContent align="end" className="w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
                     {canEdit && (
                       <DropdownMenuItem
                         onClick={() => setIsEditing(true)}
-                        className="text-sm"
+                        className="text-sm text-gray-700 dark:text-gray-300"
                       >
                         <Edit size={12} className="mr-2" />
                         Edit
@@ -689,19 +687,19 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                     {canReply && (
                       <DropdownMenuItem
                         onClick={() => setIsReplying(true)}
-                        className="text-sm"
+                        className="text-sm text-gray-700 dark:text-gray-300"
                       >
                         <Reply size={12} className="mr-2" />
                         Reply
                       </DropdownMenuItem>
                     )}
 
-                    {(canEdit || canDelete || canPin) && <DropdownMenuSeparator />}
+                    {(canEdit || canDelete || canPin) && <DropdownMenuSeparator className="bg-gray-200 dark:bg-gray-700" />}
 
                     {canReport && (
                       <DropdownMenuItem
                         onClick={handleReport}
-                        className="text-sm text-orange-600"
+                        className="text-sm text-orange-600 dark:text-orange-400"
                       >
                         <Flag size={12} className="mr-2" />
                         Report
@@ -711,7 +709,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                     {canDelete && (
                       <DropdownMenuItem
                         onClick={handleDelete}
-                        className="text-sm text-red-600"
+                        className="text-sm text-red-600 dark:text-red-400"
                         disabled={isDeleting}
                       >
                         <Trash2 size={12} className="mr-2" />
@@ -722,7 +720,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                     {/* Debug option */}
                     {process.env.NODE_ENV === 'development' && (
                       <>
-                        <DropdownMenuSeparator />
+                        <DropdownMenuSeparator className="bg-gray-200 dark:bg-gray-700" />
                         <DropdownMenuItem
                           onClick={() => console.log('Comment debug:', {
                             id: localComment._id,
@@ -730,7 +728,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                             localReplies: localReplies.length,
                             hasLoadedReplies
                           })}
-                          className="text-sm text-gray-500"
+                          className="text-sm text-gray-500 dark:text-gray-400"
                         >
                           Debug Info
                         </DropdownMenuItem>
@@ -756,8 +754,8 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                     onClick={handleLikeToggle}
                     disabled={isLiking || !currentUserId}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-sm ${userReaction
-                      ? 'bg-red-50 text-red-600 border border-red-100'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 border border-transparent'
+                      ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-800'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 border border-transparent'
                       } disabled:opacity-50 disabled:cursor-not-allowed`}
                     type="button"
                   >
@@ -778,7 +776,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                 {canReply && (
                   <button
                     onClick={() => setIsReplying(!isReplying)}
-                    className="flex items-center gap-2 px-3 py-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors text-sm border border-transparent"
+                    className="flex items-center gap-2 px-3 py-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors text-sm border border-transparent"
                     type="button"
                   >
                     <MessageCircle size={14} />
@@ -806,7 +804,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                     compact={true}
                     submitLabel="Reply"
                     onCancel={() => setIsReplying(false)}
-                    className="bg-gray-50/50 p-3 rounded-lg"
+                    className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg"
                   />
                 </motion.div>
               )}

@@ -1,4 +1,4 @@
-// pages/social/freelancer/profile/edit.tsx
+// pages/dashboard/freelancer/social/profile/edit.tsx
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -183,7 +183,7 @@ export default function FreelancerEditProfilePage() {
                   </span>
                 </div>
                 <Button
-                  onClick={() => router.push('/social/freelancer/profile')}
+                  onClick={() => router.push('/dashboard/candidate/social/profile')}
                   className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600"
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
@@ -372,7 +372,7 @@ export default function FreelancerEditProfilePage() {
                     </Button>
 
                     <Button
-                      onClick={() => router.push('/social/freelancer/profile')}
+                      onClick={() => router.push('/dashboard/candidate/social/profile')}
                       variant="outline"
                       className="border-emerald-200 text-emerald-700 hover:border-emerald-300"
                     >

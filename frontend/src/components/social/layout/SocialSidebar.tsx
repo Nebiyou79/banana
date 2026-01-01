@@ -38,13 +38,6 @@ const SocialSidebar: React.FC<SocialSidebarProps> = ({ onClose, userProfile }) =
   if (!user) return null;
 
   const getNavigationItems = () => {
-    const baseItems = [
-      {
-        href: `/dashboard/${user.role}/company`,
-        label: "Social Dashboard",
-        icon: Home,
-      },
-    ];
 
     const roleItems = {
       candidate: [
@@ -84,7 +77,7 @@ const SocialSidebar: React.FC<SocialSidebarProps> = ({ onClose, userProfile }) =
       ],
     };
 
-    return [...baseItems, ...(roleItems[user.role as keyof typeof roleItems] || [])];
+    return [...(roleItems[user.role as keyof typeof roleItems] || [])];
   };
 
   const navigationItems = getNavigationItems();

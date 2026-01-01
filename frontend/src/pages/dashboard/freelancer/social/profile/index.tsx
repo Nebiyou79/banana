@@ -1,4 +1,4 @@
-// app/social/freelancer/profile/page.tsx
+// app/dashboard/candidate/social/profile/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -116,7 +116,7 @@ export default function FreelancerProfilePage() {
     };
 
     const handleEditProfile = () => {
-        window.location.href = '/social/freelancer/profile/edit';
+        window.location.href = '/dashboard/candidate/social/profile/edit';
     };
 
     const handleFollow = (isFollowing: boolean) => {
@@ -133,7 +133,7 @@ export default function FreelancerProfilePage() {
                 console.log('Sharing profile:', profile);
                 break;
             case 'add_portfolio':
-                window.location.href = '/social/freelancer/portfolio/create';
+                window.location.href = '/dashboard/candidate/social/portfolio/create';
                 break;
             default:
                 console.log('Action:', action, data);
@@ -495,7 +495,7 @@ export default function FreelancerProfilePage() {
                                 <h2 className="text-2xl font-bold text-gray-900">Portfolio</h2>
                             </div>
                             <Button
-                                onClick={() => window.location.href = '/social/freelancer/portfolio/create'}
+                                onClick={() => window.location.href = '/dashboard/candidate/social/portfolio/create'}
                                 variant="premium"
                                 className="bg-gradient-to-r from-amber-500 to-orange-500"
                             >
@@ -738,7 +738,7 @@ export default function FreelancerProfilePage() {
                     {isOwnProfile && (
                         <div className="fixed bottom-8 right-8 z-50 flex flex-col gap-3">
                             <Button
-                                onClick={() => window.location.href = '/social/freelancer/portfolio/create'}
+                                onClick={() => window.location.href = '/dashboard/candidate/social/portfolio/create'}
                                 className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 shadow-xl hover:shadow-2xl transition-all duration-300 group"
                                 size="lg"
                             >

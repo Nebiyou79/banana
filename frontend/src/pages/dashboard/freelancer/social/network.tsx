@@ -884,7 +884,7 @@ const NetworkContent = () => {
 // Main Component
 const NetworkPage = () => {
   const router = useRouter();
-  const role = router.query.role as string || 'freelance';
+  const role = router.query.role as string || 'freelancer';
 
   return (
     <RoleThemeProvider>
@@ -892,7 +892,7 @@ const NetworkPage = () => {
         <title>Network | Banana Social</title>
       </Head>
 
-      <SocialDashboardLayout requiredRole={role as any | "freelance"}>
+      <SocialDashboardLayout requiredRole={role as any | "freelancer"}>
         <NetworkContent />
       </SocialDashboardLayout>
     </RoleThemeProvider>
