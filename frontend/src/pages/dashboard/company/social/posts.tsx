@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // pages/dashboard/[role]/social/posts.tsx - Unified Posts Management
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
@@ -6,12 +7,10 @@ import { SocialDashboardLayout } from '@/components/social/layout/SocialDashboar
 import { EditablePostCard } from '@/components/social/post/EditablePostCard';
 import { PostComposer } from '@/components/social/post/PostComposer';
 import { Button } from '@/components/social/ui/Button';
-import { Badge } from '@/components/social/ui/Badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import {
   Trash2,
   Pin,
-  BarChart3,
   Filter,
   Search,
   Grid,
@@ -22,16 +21,12 @@ import {
   Plus,
   TrendingUp,
   Sparkles,
-  Eye,
-  Clock,
-  Users,
   FileText,
-  MoreVertical,
   Loader2,
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
-import { postService, Post, PostsResponse } from '@/services/postService';
+import { postService, Post } from '@/services/postService';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleThemeProvider, useTheme } from '@/components/social/theme/RoleThemeProvider';
 
@@ -905,7 +900,7 @@ export default function MyPostsPage() {
   const { role } = router.query;
 
   return (
-    <SocialDashboardLayout requiredRole={role as any || 'candidate'}>
+    <SocialDashboardLayout requiredRole={role as any || 'company'}>
       <RoleThemeProvider>
         <MyPostsPageContent />
       </RoleThemeProvider>

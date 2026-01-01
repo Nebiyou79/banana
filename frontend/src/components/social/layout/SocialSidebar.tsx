@@ -40,7 +40,7 @@ const SocialSidebar: React.FC<SocialSidebarProps> = ({ onClose, userProfile }) =
   const getNavigationItems = () => {
     const baseItems = [
       {
-        href: `/social/${user.role}`,
+        href: `/dashboard/${user.role}/company`,
         label: "Social Dashboard",
         icon: Home,
       },
@@ -52,28 +52,28 @@ const SocialSidebar: React.FC<SocialSidebarProps> = ({ onClose, userProfile }) =
         { href: "/dashboard/candidate/social/posts", label: "My Posts", icon: MessageCircle },
         { href: "/dashboard/candidate/social/network", label: "My Network", icon: Users2 },
         { href: "/dashboard/candidate/social/profile", label: "Profile", icon: Bell },
-        { href: "/dashboard/candidate/social/Edit Profile", label: "Edit Profile", icon: Edit },
+        { href: "/dashboard/candidate/social/edit", label: "Edit Profile", icon: Edit },
       ],
       freelancer: [
         { href: "/dashboard/freelancer/social", label: "My Feed", icon: TrendingUp, badge: "Hot" },
         { href: "/dashboard/freelancer/social/posts", label: "My Posts", icon: MessageCircle },
         { href: "/dashboard/freelancer/social/network", label: "My Network", icon: Users2 },
         { href: "/dashboard/freelancer/social/profile", label: "Profile", icon: Bell },
-        { href: "/dashboard/freelancer/social/Edit Profile", label: "Edit Profile", icon: Edit },
+        { href: "/dashboard/freelancer/social/edit", label: "Edit Profile", icon: Edit },
       ],
       company: [
         { href: "/dashboard/company/social", label: "Company Feed", icon: TrendingUp, badge: "New" },
         { href: "/dashboard/company/social/posts", label: "Company Posts", icon: MessageCircle },
         { href: "/dashboard/company/social/network", label: "Our Network", icon: Users2 },
         { href: "/dashboard/company/social/profile", label: "Profile", icon: Bell },
-        { href: "/dashboard/company/social/Edit Profile", label: "Edit Profile", icon: Edit },
+        { href: "/dashboard/company/social/edit", label: "Edit Profile", icon: Edit },
       ],
       organization: [
         { href: "/dashboard/organization/social", label: "Organization Feed", icon: TrendingUp },
         { href: "/dashboard/organization/social/posts", label: "Organization Posts", icon: MessageCircle },
         { href: "/dashboard/organization/social/network", label: "Our Network", icon: Users2 },
         { href: "/dashboard/organization/social/profile", label: "Profile", icon: Bell },
-        { href: "/dashboard/organization/social/Edit Profile", label: "Edit Profile", icon: Edit },
+        { href: "/dashboard/organization/social/edit", label: "Edit Profile", icon: Edit },
       ],
       admin: [
         { href: "/dashboard/admin/social", label: "Platform Feed", icon: TrendingUp },

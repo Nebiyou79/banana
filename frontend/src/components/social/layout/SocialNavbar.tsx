@@ -86,9 +86,9 @@ export default function SocialNavbar({ onMenuToggle, userProfile }: SocialNavbar
         ];
       case "company":
         return [
-          { href: "/social/company/feed", label: "Company Feed" },
-          { href: "/social/company/posts", label: "Company Posts" },
-          { href: "/social/company/network", label: "Our Network" },
+          { href: "/dashboard/company/social/feed", label: "Company Feed" },
+          { href: "/dashboard/company/social/posts", label: "Company Posts" },
+          { href: "/dashboard/company/social/network", label: "Our Network" },
           { href: "/dashboard/company", label: "Main Dashboard" }
         ];
       case "organization":

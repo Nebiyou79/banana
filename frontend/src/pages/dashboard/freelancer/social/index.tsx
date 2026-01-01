@@ -1,523 +1,558 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// pages/dashboard/freelancer/index.tsx
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import { FreelancerLayout } from '@/components/layout/FreelancerLayout';
-import { freelancerService, UserProfile } from '@/services/freelancerService';
-import DashboardStats from '@/components/freelancer/DashboardStats';
-import ProfileCompletion from '@/components/freelancer/ProfileCompletion';
-import { colorClasses } from '@/utils/color';
+// /dashboard/company/social/index.tsx - Company Social Feed (CLEAN VERSION)
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  BriefcaseIcon,
-  UserGroupIcon,
-  RocketLaunchIcon,
-  ArrowTrendingUpIcon,
-  StarIcon,
-  EyeIcon,
-  CheckBadgeIcon,
-  ClockIcon,
-  ChatBubbleLeftRightIcon,
-  ShieldCheckIcon,
-  DocumentCheckIcon
-} from '@heroicons/react/24/outline';
-import Link from 'next/link';
-import VerificationBadge from '@/components/verifcation/VerificationBadge'; // Added import
-import { useVerification } from '@/hooks/useVerification'; // Added import
-import { Badge } from '@/components/ui/Badge'; // Added import
+  TrendingUp,
+  Sparkles,
+  Filter,
+  RefreshCw,
+  Pin,
+  Zap,
+  Users,
+  Globe,
+  Building2,
+  ArrowUp,
+} from 'lucide-react';
+import { SocialDashboardLayout } from '@/components/social/layout/SocialDashboard';
+import { PostComposer } from '@/components/social/post/PostComposer';
+import { PostCard } from '@/components/social/post/PostCard';
+import { Button } from '@/components/social/ui/Button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { postService, Post } from '@/services/postService';
+import { RoleThemeProvider, useTheme } from '@/components/social/theme/RoleThemeProvider';
+import { colorClasses } from '@/utils/color';
 
-const FreelancerDashboard = () => {
-  const [dashboardData, setDashboardData] = useState<any>(null);
-  const [professionalStats, setProfessionalStats] = useState<any>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [certifications, setCertifications] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+// Custom infinite scroll hook
+const useInfiniteScroll = <T,>(
+  fetchFunction: (page: number) => Promise<{ data: T[]; hasMore: boolean }>,
+  options: { limit?: number; initialPage?: number } = {}
+) => {
+  const [items, setItems] = useState<T[]>([]);
+  const [page, setPage] = useState(options.initialPage || 1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const lastItemRef = useRef<HTMLDivElement>(null);
 
-  const { verificationData, loading: verificationLoading } = useVerification(); // Added verification hook
+  const loadMore = useCallback(async () => {
+    if (isLoading || !hasMore) return;
 
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
-
-  const loadDashboardData = async () => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-
-      // Load profile data first
-      const profile = await freelancerService.getProfile();
-
-      // Load certifications
-      let certificationsData: React.SetStateAction<any[]> = [];
-      try {
-        certificationsData = await freelancerService.getCertifications();
-        setCertifications(certificationsData);
-      } catch (error) {
-        console.warn('Certifications not available yet');
-        certificationsData = [];
-      }
-
-      // ✅ FIX: Merge certifications into profile data
-      const profileWithCertifications = {
-        ...profile,
-        certifications: certificationsData
-      };
-
-      setUserProfile(profileWithCertifications);
-
-      // Load dashboard overview
-      const dashboard = await freelancerService.getDashboardOverview();
-      setDashboardData(dashboard);
-
-      // Load professional stats
-      try {
-        const stats = await freelancerService.getFreelancerStats();
-        setProfessionalStats(stats);
-      } catch (error) {
-        console.warn('Professional stats not available yet');
-        setProfessionalStats({
-          profileStrength: dashboard.stats.profile.completion,
-          jobSuccessScore: dashboard.stats.earnings.successRate,
-          onTimeDelivery: 85,
-          responseRate: 92,
-          totalEarnings: dashboard.stats.earnings.total,
-          totalJobs: dashboard.stats.proposals.accepted,
-          activeProposals: dashboard.stats.proposals.pending,
-          profileViews: dashboard.stats.profile.views,
-          clientReviews: dashboard.stats.ratings.count,
-          averageRating: dashboard.stats.ratings.average
-        });
+      const result = await fetchFunction(page);
+      setItems(prev => [...prev, ...result.data]);
+      setHasMore(result.hasMore);
+      if (result.data.length > 0) {
+        setPage(prev => prev + 1);
       }
     } catch (error) {
-      console.error('Failed to load dashboard data:', error);
+      console.error('Failed to load more items:', error);
     } finally {
       setIsLoading(false);
     }
+  }, [page, isLoading, hasMore, fetchFunction]);
+
+  const refresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const result = await fetchFunction(1);
+      setItems(result.data);
+      setPage(2);
+      setHasMore(result.hasMore);
+    } catch (error) {
+      console.error('Failed to refresh items:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [fetchFunction]);
+
+  useEffect(() => {
+    if (!lastItemRef.current || !hasMore || isLoading) return;
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMore();
+        }
+      },
+      { threshold: 0.5 }
+    );
+
+    observerRef.current.observe(lastItemRef.current);
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [loadMore, hasMore, isLoading]);
+
+  return {
+    items,
+    loadMore,
+    refresh,
+    isLoading,
+    isRefreshing,
+    hasMore,
+    lastItemRef,
+    reset: () => {
+      setItems([]);
+      setPage(1);
+      setHasMore(true);
+      refresh();
+    }
+  };
+};
+
+type FeedType = 'all' | 'following' | 'trending' | 'announcements';
+
+interface FeedFilter {
+  type: FeedType;
+  timeframe?: 'today' | 'week' | 'month';
+  sortBy?: 'recent' | 'popular' | 'trending';
+}
+
+function FreelancerSocialFeedContent() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState<FeedType>('all');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filter, setFilter] = useState<FeedFilter>({
+    type: 'all',
+    timeframe: 'today',
+    sortBy: 'recent'
+  });
+  const [newPostsCount, setNewPostsCount] = useState(0);
+  const [pinnedPosts, setPinnedPosts] = useState<Post[]>([]);
+  const [trendingPosts, setTrendingPosts] = useState<Post[]>([]);
+  const [feedPosts, setFeedPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(1);
+  const mainContentRef = useRef<HTMLDivElement>(null);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+
+  // Always show back to top button
+  useEffect(() => {
+    setShowBackToTop(true);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  if (isLoading) {
-    return (
-      <FreelancerLayout>
-        <div className="flex items-center justify-center min-h-96">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading your dashboard...</p>
-          </div>
-        </div>
-      </FreelancerLayout>
-    );
-  }
+  // Fetch feed posts
+  const fetchFeedPosts = useCallback(async (pageNum: number) => {
+    try {
+      const params: any = {
+        page: pageNum,
+        limit: 10,
+        sortBy: filter.sortBy
+      };
 
-  if (!dashboardData || !userProfile) {
-    return (
-      <FreelancerLayout>
-        <div className="flex items-center justify-center min-h-96">
-          <div className="text-center">
-            <div className="text-green-500 text-6xl mb-4">⚠️</div>
-            <h2 className={`text-2xl font-bold ${colorClasses.text.darkNavy} mb-2`}>
-              Unable to Load Dashboard
-            </h2>
-            <p className="text-gray-600">Please try refreshing the page</p>
-          </div>
-        </div>
-      </FreelancerLayout>
-    );
-  }
+      if (activeTab === 'announcements') {
+        params.type = 'job';
+      } else if (activeTab === 'following') {
+        params.following = true;
+      } else if (activeTab === 'trending') {
+        params.sortBy = 'trending';
+      }
+
+      if (filter.timeframe) {
+        const now = new Date();
+        const timeframeMap: Record<string, Date> = {
+          today: new Date(now.setDate(now.getDate() - 1)),
+          week: new Date(now.setDate(now.getDate() - 7)),
+          month: new Date(now.setDate(now.getDate() - 30))
+        };
+        params.since = timeframeMap[filter.timeframe].toISOString();
+      }
+
+      const response = await postService.getFeedPosts(params);
+      return {
+        data: response.data.filter((post: Post) => !post.pinned),
+        hasMore: response.pagination ? pageNum < response.pagination.pages : false
+      };
+    } catch (error) {
+      console.error('Failed to fetch feed posts:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load feed posts"
+      });
+      return { data: [], hasMore: false };
+    }
+  }, [activeTab, filter.timeframe, filter.sortBy, toast]);
+
+  // Load initial data
+  const loadInitialData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await fetchFeedPosts(1);
+      setFeedPosts(result.data);
+      setHasMore(result.hasMore);
+      setPage(2);
+    } catch (error) {
+      console.error('Failed to load initial data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchFeedPosts]);
+
+  // Load more posts
+  const loadMorePosts = async () => {
+    if (loading || !hasMore) return;
+
+    setLoading(true);
+    try {
+      const result = await fetchFeedPosts(page);
+      setFeedPosts(prev => [...prev, ...result.data]);
+      setHasMore(result.hasMore);
+      setPage(prev => prev + 1);
+    } catch (error) {
+      console.error('Failed to load more posts:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Refresh feed
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadInitialData();
+    setIsRefreshing(false);
+    setNewPostsCount(0);
+    toast({
+      variant: "default",
+      title: "Feed refreshed",
+      description: "Latest posts loaded"
+    });
+  };
+
+  // Load pinned and trending posts
+  useEffect(() => {
+    const loadSpecialPosts = async () => {
+      try {
+        const pinnedResponse = await postService.getFeedPosts({
+          limit: 3,
+          type: activeTab === 'announcements' ? 'job' : undefined
+        });
+        setPinnedPosts(pinnedResponse.data || []);
+
+        const trendingResponse = await postService.getFeedPosts({
+          limit: 3,
+        });
+        setTrendingPosts(trendingResponse.data || []);
+      } catch (error) {
+        console.error('Failed to load special posts:', error);
+      }
+    };
+
+    loadSpecialPosts();
+  }, [activeTab]);
+
+  // Load initial data on mount and filter change
+  useEffect(() => {
+    loadInitialData();
+  }, [loadInitialData]);
+
+  const handleFilterChange = (key: keyof FeedFilter, value: any) => {
+    setFilter(prev => ({ ...prev, [key]: value }));
+    loadInitialData();
+  };
+
+  const handleViewProfile = (userId: string) => {
+    window.location.href = `/profile/${userId}`;
+  };
+
+  const handlePostCreated = (post: Post) => {
+    loadInitialData();
+    toast({
+      variant: "success",
+      title: "Success",
+      description: "Post created successfully"
+    });
+  };
 
   return (
-    <FreelancerLayout>
-      <div className="min-h-screen bg-gray-50">
-        {/* Header Section */}
-        <div className="bg-gradient-to-r from-green-600 to-emerald-700 text-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex-1">
-                <div className="flex items-center space-x-4 mb-4">
-                  <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
-                    {userProfile.avatar ? (
-                      <img
-                        src={userProfile.avatar}
-                        alt={userProfile.name}
-                        className="w-14 h-14 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="text-white text-xl font-bold">
-                        {userProfile.name.split(' ').map(n => n[0]).join('')}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <h1 className="text-2xl lg:text-3xl font-bold">
-                        Welcome back, {userProfile.name}!
-                      </h1>
-                      {/* Verification Badge */}
-                      {!verificationLoading && (
-                        <VerificationBadge
-                          autoFetch={true}
-                          size="md"
-                          showText={true}
-                          showTooltip={true}
-                          className="shadow-lg border border-white/30"
-                        />
-                      )}
+    <div className="min-h-screen" ref={mainContentRef}>
+      {/* Always Visible Back to Top Button */}
+      <button
+        onClick={scrollToTop}
+        className={`fixed bottom-8 right-8 z-50 p-3 ${colorClasses.bg.darkNavy} ${colorClasses.text.white} rounded-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110`}
+        aria-label="Back to top"
+      >
+        <ArrowUp className="w-5 h-5" />
+      </button>
+
+      {/* Main Content - Clean Layout */}
+      <div className="max-w-4xl mx-auto px-4 py-6">
+        {/* Header */}
+        <div className="mb-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+            <div>
+              <h1 className={`text-2xl md:text-3xl font-bold ${colorClasses.text.darkNavy} mb-2`}>
+                🏢 Company Social Feed
+              </h1>
+              <p className={`${colorClasses.text.gray800} text-sm`}>
+                Connect with your industry network and share updates
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                loading={isRefreshing}
+                className={`${colorClasses.border.darkNavy} ${colorClasses.text.darkNavy} hover:${colorClasses.bg.darkNavy} hover:text-white`}
+                size="sm"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Refresh
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Post Composer */}
+        <div className="mb-6">
+          <PostComposer
+            onPostCreated={handlePostCreated}
+            roleContext="company"
+            mode="create"
+          />
+        </div>
+
+        {/* Main Feed */}
+        <div className={`rounded-xl border ${colorClasses.border.gray100} ${colorClasses.bg.white} shadow-sm overflow-hidden`}>
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FeedType)}>
+            <div className="border-b">
+              <div className="px-4 md:px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <TabsList className="bg-transparent flex-wrap">
+                  <TabsTrigger
+                    value="all"
+                    className={`data-[state=active]:${colorClasses.bg.darkNavy} data-[state=active]:${colorClasses.text.white} text-xs md:text-sm`}
+                  >
+                    <Globe className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                    All
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="following"
+                    className={`data-[state=active]:${colorClasses.bg.darkNavy} data-[state=active]:${colorClasses.text.white} text-xs md:text-sm`}
+                  >
+                    <Users className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                    Following
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="trending"
+                    className={`data-[state=active]:${colorClasses.bg.darkNavy} data-[state=active]:${colorClasses.text.white} text-xs md:text-sm`}
+                  >
+                    <TrendingUp className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                    Trending
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="announcements"
+                    className={`data-[state=active]:${colorClasses.bg.darkNavy} data-[state=active]:${colorClasses.text.white} text-xs md:text-sm`}
+                  >
+                    <Building2 className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                    Announcements
+                  </TabsTrigger>
+                </TabsList>
+
+                {/* Filter Button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`${colorClasses.text.gray800} text-xs md:text-sm`}
+                >
+                  <Filter className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                  Filters
+                </Button>
+              </div>
+
+              {/* Filter Panel */}
+              {showFilters && (
+                <div className={`px-4 md:px-6 py-4 ${colorClasses.bg.gray100} border-b`}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className={`block text-xs md:text-sm font-medium ${colorClasses.text.gray800} mb-1`}>
+                        Timeframe
+                      </label>
+                      <select
+                        value={filter.timeframe}
+                        onChange={(e) => handleFilterChange('timeframe', e.target.value)}
+                        className={`w-full rounded-lg border ${colorClasses.border.gray400} px-3 py-2 text-xs md:text-sm focus:outline-none ${colorClasses.border.darkNavy}`}
+                      >
+                        <option value="today">Today</option>
+                        <option value="week">This Week</option>
+                        <option value="month">This Month</option>
+                      </select>
                     </div>
-                    <p className="text-green-100 mt-1">
-                      {userProfile.freelancerProfile?.headline || 'Ready to find your next project'}
-                    </p>
+                    <div>
+                      <label className={`block text-xs md:text-sm font-medium ${colorClasses.text.gray800} mb-1`}>
+                        Sort By
+                      </label>
+                      <select
+                        value={filter.sortBy}
+                        onChange={(e) => handleFilterChange('sortBy', e.target.value)}
+                        className={`w-full rounded-lg border ${colorClasses.border.gray400} px-3 py-2 text-xs md:text-sm focus:outline-none ${colorClasses.border.darkNavy}`}
+                      >
+                        <option value="recent">Most Recent</option>
+                        <option value="popular">Most Popular</option>
+                        <option value="trending">Trending</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
+              )}
+            </div>
 
-                {/* Verification Status Info */}
-                {verificationData && (
-                  <div className="mt-4 flex items-center gap-4 flex-wrap">
-                    <div className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2">
-                      <div className="text-sm text-green-100">
-                        <span className="font-medium">Trust Score: </span>
-                        <span className={`font-bold ${verificationData.verificationStatus === 'full' ? 'text-green-300' :
-                            verificationData.verificationStatus === 'partial' ? 'text-yellow-300' : 'text-red-300'
-                          }`}>
-                          {verificationData.verificationStatus === 'full' ? 'Excellent' :
-                            verificationData.verificationStatus === 'partial' ? 'Good' : 'Needs Improvement'}
-                        </span>
-                      </div>
+            {/* Pinned Announcements */}
+            {activeTab === 'announcements' && pinnedPosts.length > 0 && (
+              <div className={`px-4 md:px-6 py-4 ${colorClasses.bg.goldenMustard} bg-opacity-10 border-b`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Pin className={`w-4 h-4 ${colorClasses.text.goldenMustard}`} />
+                  <h3 className={`font-semibold ${colorClasses.text.darkNavy} text-sm md:text-base`}>
+                    Pinned Announcements
+                  </h3>
+                </div>
+                <div className="space-y-3">
+                  {pinnedPosts.map((post) => (
+                    <div key={post._id} className="transform transition-transform hover:scale-[1.02]">
+                      <PostCard
+                        post={post}
+                        currentUserId={user?._id}
+                        onViewProfile={handleViewProfile}
+                        condensed={true}
+                      />
                     </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-                    {verificationData.verificationStatus !== 'full' && (
-                      <Link href="/dashboard/freelancer/verification">
-                        <button className="bg-white text-green-700 px-4 py-2 rounded-lg font-semibold hover:bg-green-50 transition-all duration-200 shadow-sm hover:shadow-md flex items-center text-sm">
-                          <ShieldCheckIcon className="w-4 h-4 mr-2" />
-                          Improve Verification
-                        </button>
-                      </Link>
+            {/* Trending Section */}
+            {activeTab === 'trending' && trendingPosts.length > 0 && (
+              <div className={`px-4 md:px-6 py-4 ${colorClasses.bg.blue} bg-opacity-10 border-b`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <TrendingUp className={`w-4 h-4 ${colorClasses.text.blue}`} />
+                  <h3 className={`font-semibold ${colorClasses.text.darkNavy} text-sm md:text-base`}>
+                    Trending Now
+                  </h3>
+                </div>
+                <div className="space-y-3">
+                  {trendingPosts.map((post) => (
+                    <div key={post._id} className="transform transition-transform hover:scale-[1.02]">
+                      <PostCard
+                        post={post}
+                        currentUserId={user?._id}
+                        onViewProfile={handleViewProfile}
+                        condensed={true}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Feed Content */}
+            <TabsContent value={activeTab} className="m-0">
+              <div className="p-4 md:p-6">
+                {feedPosts.length === 0 && !loading ? (
+                  <div className="text-center py-8">
+                    <div className={`w-12 h-12 ${colorClasses.bg.blue} bg-opacity-20 rounded-full flex items-center justify-center mx-auto mb-4`}>
+                      <Sparkles className={`w-6 h-6 ${colorClasses.text.blue}`} />
+                    </div>
+                    <h3 className={`text-base md:text-lg font-semibold ${colorClasses.text.darkNavy} mb-2`}>
+                      No posts yet
+                    </h3>
+                    <p className={`${colorClasses.text.gray800} text-sm mb-4`}>
+                      {activeTab === 'following'
+                        ? 'Follow more people to see their posts here'
+                        : 'Be the first to share something!'}
+                    </p>
+                    {activeTab !== 'following' && (
+                      <Button
+                        onClick={() => document.getElementById('post-composer')?.scrollIntoView({ behavior: 'smooth' })}
+                        variant="default"
+                        className={`${colorClasses.bg.blue} hover:${colorClasses.bg.darkNavy} text-white text-sm`}
+                      >
+                        Create First Post
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {feedPosts.map((post: Post, index) => (
+                      <div
+                        key={post._id}
+                        ref={index === feedPosts.length - 1 ? undefined : undefined}
+                        className="transform transition-transform hover:scale-[1.01]"
+                      >
+                        <PostCard
+                          post={post}
+                          currentUserId={user?._id}
+                          onViewProfile={handleViewProfile}
+                        />
+                      </div>
+                    ))}
+
+                    {/* Load More Button */}
+                    {hasMore && (
+                      <div className="pt-6 text-center">
+                        <Button
+                          variant="outline"
+                          onClick={loadMorePosts}
+                          loading={loading}
+                          className={`${colorClasses.border.darkNavy} ${colorClasses.text.darkNavy} hover:${colorClasses.bg.darkNavy} hover:text-white`}
+                        >
+                          Load More Posts
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* End of Feed */}
+                    {!hasMore && feedPosts.length > 0 && (
+                      <div className="text-center py-6 border-t">
+                        <div className={`w-8 h-8 ${colorClasses.bg.gray100} rounded-full flex items-center justify-center mx-auto mb-3`}>
+                          <Zap className={`w-4 h-4 ${colorClasses.text.gray400}`} />
+                        </div>
+                        <p className={`${colorClasses.text.gray800} text-sm`}>
+                          You`ve reached the end of the feed
+                        </p>
+                      </div>
                     )}
                   </div>
                 )}
               </div>
-
-              <div className="mt-6 lg:mt-0">
-                <Link href="/dashboard/freelancer/tenders">
-                  <button className="bg-white text-green-600 px-6 py-3 rounded-xl font-semibold hover:bg-green-50 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center">
-                    <RocketLaunchIcon className="w-5 h-5 mr-2" />
-                    Find New Projects
-                  </button>
-                </Link>
-              </div>
-            </div>
-          </div>
+            </TabsContent>
+          </Tabs>
         </div>
 
-        {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 -mt-8">
-          {/* Stats Overview */}
-          <div className="mb-8">
-            <DashboardStats
-              stats={{
-                ...dashboardData.stats,
-                certifications: {
-                  total: certifications.length
-                }
-              }}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-            {/* Left Column - Profile & Activity */}
-            <div className="xl:col-span-2 space-y-8">
-              {/* Profile Strength & Verification */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="lg:col-span-2">
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                    <div className="p-6">
-                      <div className="flex items-center justify-between mb-6">
-                        <h3 className={`text-xl font-bold ${colorClasses.text.darkNavy} flex items-center`}>
-                          <DocumentCheckIcon className="w-6 h-6 mr-3 text-green-500" />
-                          Profile & Verification Status
-                        </h3>
-                        <div className="flex items-center gap-2">
-                          {/* Verification Badge */}
-                          <VerificationBadge
-                            autoFetch={true}
-                            size="sm"
-                            showText={false}
-                            showTooltip={true}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-6">
-                        {/* Profile Completion */}
-                        <div>
-                          <ProfileCompletion
-                            profile={userProfile}
-                            showActions={true}
-                            onImprove={() => window.location.href = '/dashboard/freelancer/profile'}
-                          />
-                        </div>
-
-                        {/* Verification Details */}
-                        {verificationData && (
-                          <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
-                            <div className="flex items-center justify-between mb-3">
-                              <h4 className="font-semibold text-gray-900 flex items-center">
-                                <ShieldCheckIcon className="w-5 h-5 mr-2 text-green-600" />
-                                Verification Details
-                              </h4>
-                              <span className={`text-sm font-medium ${verificationData.verificationStatus === 'full' ? 'text-green-600' :
-                                  verificationData.verificationStatus === 'partial' ? 'text-yellow-600' : 'text-red-600'
-                                }`}>
-                                {verificationData.verificationStatus === 'full' ? 'Fully Verified' :
-                                  verificationData.verificationStatus === 'partial' ? 'Partially Verified' : 'Not Verified'}
-                              </span>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                              <div className={`p-3 rounded-lg ${verificationData.verificationDetails?.profileVerified ? 'bg-green-100 border border-green-300' : 'bg-gray-100 border border-gray-300'}`}>
-                                <div className="flex items-center gap-2 mb-1">
-                                  <div className={`w-2 h-2 rounded-full ${verificationData.verificationDetails?.profileVerified ? 'bg-green-500' : 'bg-gray-400'}`} />
-                                  <span className="text-sm font-medium text-gray-700">Profile</span>
-                                </div>
-                                <p className="text-xs text-gray-600">
-                                  {verificationData.verificationDetails?.profileVerified
-                                    ? '✅ Verified'
-                                    : '⚠️ Needs completion'}
-                                </p>
-                              </div>
-
-                              <div className={`p-3 rounded-lg ${verificationData.verificationDetails?.documentsVerified ? 'bg-green-100 border border-green-300' : 'bg-gray-100 border border-gray-300'}`}>
-                                <div className="flex items-center gap-2 mb-1">
-                                  <div className={`w-2 h-2 rounded-full ${verificationData.verificationDetails?.documentsVerified ? 'bg-green-500' : 'bg-gray-400'}`} />
-                                  <span className="text-sm font-medium text-gray-700">Documents</span>
-                                </div>
-                                <p className="text-xs text-gray-600">
-                                  {verificationData.verificationDetails?.documentsVerified
-                                    ? '✅ Verified'
-                                    : '📄 Upload required'}
-                                </p>
-                              </div>
-
-                              <div className={`p-3 rounded-lg ${verificationData.verificationDetails?.socialVerified ? 'bg-green-100 border border-green-300' : 'bg-gray-100 border border-gray-300'}`}>
-                                <div className="flex items-center gap-2 mb-1">
-                                  <div className={`w-2 h-2 rounded-full ${verificationData.verificationDetails?.socialVerified ? 'bg-green-500' : 'bg-gray-400'}`} />
-                                  <span className="text-sm font-medium text-gray-700">Social Profile</span>
-                                </div>
-                                <p className="text-xs text-gray-600">
-                                  {verificationData.verificationDetails?.socialVerified
-                                    ? '✅ Verified'
-                                    : '🔗 Connect accounts'}
-                                </p>
-                              </div>
-                            </div>
-
-                            {verificationData.verificationStatus !== 'full' && (
-                              <div className="mt-4">
-                                <Link href="/dashboard/freelancer/verification">
-                                  <button className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white px-4 py-2 rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all shadow-sm hover:shadow-md">
-                                    Complete Verification Steps
-                                  </button>
-                                </Link>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Performance Metrics */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className={`text-xl font-bold ${colorClasses.text.darkNavy} flex items-center`}>
-                    <ArrowTrendingUpIcon className="w-6 h-6 mr-3 text-green-500" />
-                    Performance Metrics
-                  </h3>
-                  <span className="text-sm text-gray-500">Last 90 days</span>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                  <div className="text-center p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-200">
-                    <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <CheckBadgeIcon className="w-6 h-6 text-green-600" />
-                    </div>
-                    <div className="text-2xl font-bold text-green-700 mb-1">
-                      {professionalStats?.jobSuccessScore || 0}%
-                    </div>
-                    <div className="text-sm text-gray-600 font-medium">Job Success</div>
-                  </div>
-
-                  <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl border border-blue-200">
-                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <ClockIcon className="w-6 h-6 text-blue-600" />
-                    </div>
-                    <div className="text-2xl font-bold text-blue-700 mb-1">
-                      {professionalStats?.onTimeDelivery || 0}%
-                    </div>
-                    <div className="text-sm text-gray-600 font-medium">On Time</div>
-                  </div>
-
-                  <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-violet-50 rounded-xl border border-purple-200">
-                    <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <ChatBubbleLeftRightIcon className="w-6 h-6 text-purple-600" />
-                    </div>
-                    <div className="text-2xl font-bold text-purple-700 mb-1">
-                      {professionalStats?.responseRate || 0}%
-                    </div>
-                    <div className="text-sm text-gray-600 font-medium">Response Rate</div>
-                  </div>
-
-                  <div className="text-center p-4 bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl border border-orange-200">
-                    <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <EyeIcon className="w-6 h-6 text-orange-600" />
-                    </div>
-                    <div className="text-2xl font-bold text-orange-700 mb-1">
-                      {professionalStats?.profileViews || 0}
-                    </div>
-                    <div className="text-sm text-gray-600 font-medium">Profile Views</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column - Quick Actions & Insights */}
-            <div className="space-y-8">
-              {/* Quick Actions */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-                <h3 className={`text-xl font-bold ${colorClasses.text.darkNavy} mb-6 flex items-center`}>
-                  <RocketLaunchIcon className="w-6 h-6 mr-3 text-green-500" />
-                  Quick Actions
-                </h3>
-
-                <div className="space-y-3">
-                  <Link href="/tenders">
-                    <button className="w-full flex items-center p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl hover:shadow-md transition-all duration-200 group text-left">
-                      <BriefcaseIcon className="w-8 h-8 text-green-600 mr-4 p-2 bg-white rounded-lg shadow-sm" />
-                      <div>
-                        <div className="font-semibold text-gray-900 group-hover:text-green-700">
-                          Find Projects
-                        </div>
-                        <div className="text-sm text-gray-600">Browse available opportunities</div>
-                      </div>
-                    </button>
-                  </Link>
-
-                  <Link href="/dashboard/freelancer/profile">
-                    <button className="w-full flex items-center p-4 bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 rounded-xl hover:shadow-md transition-all duration-200 group text-left">
-                      <UserGroupIcon className="w-8 h-8 text-blue-600 mr-4 p-2 bg-white rounded-lg shadow-sm" />
-                      <div>
-                        <div className="font-semibold text-gray-900 group-hover:text-blue-700">
-                          Update Profile
-                        </div>
-                        <div className="text-sm text-gray-600">Improve your visibility</div>
-                      </div>
-                    </button>
-                  </Link>
-
-                  <Link href="/dashboard/freelancer/portfolio">
-                    <button className="w-full flex items-center p-4 bg-gradient-to-r from-purple-50 to-violet-50 border border-purple-200 rounded-xl hover:shadow-md transition-all duration-200 group text-left">
-                      <StarIcon className="w-8 h-8 text-purple-600 mr-4 p-2 bg-white rounded-lg shadow-sm" />
-                      <div>
-                        <div className="font-semibold text-gray-900 group-hover:text-purple-700">
-                          Add Portfolio
-                        </div>
-                        <div className="text-sm text-gray-600">Showcase your work</div>
-                      </div>
-                    </button>
-                  </Link>
-
-                  {/* Verification Action */}
-                  <Link href="/dashboard/freelancer/verification">
-                    <button className="w-full flex items-center p-4 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-xl hover:shadow-md transition-all duration-200 group text-left">
-                      <ShieldCheckIcon className="w-8 h-8 text-amber-600 mr-4 p-2 bg-white rounded-lg shadow-sm" />
-                      <div>
-                        <div className="font-semibold text-gray-900 group-hover:text-amber-700">
-                          Verification Status
-                        </div>
-                        <div className="text-sm text-gray-600">Increase your trust score</div>
-                        {verificationData && verificationData.verificationStatus === 'partial' && (
-                          <Badge className="mt-1 bg-yellow-100 text-yellow-800 border border-yellow-300">
-                            In Progress
-                          </Badge>
-                        )}
-                      </div>
-                    </button>
-                  </Link>
-                </div>
-              </div>
-
-              {/* Pro Tips */}
-              <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-6 text-white">
-                <h3 className="text-xl font-bold mb-4 flex items-center">
-                  <StarIcon className="w-6 h-6 mr-3 text-amber-400" />
-                  Pro Tips
-                </h3>
-
-                <ul className="space-y-3 text-sm text-gray-200">
-                  <li className="flex items-start">
-                    <div className="w-2 h-2 bg-amber-400 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                    <span>Customize your proposals for each project</span>
-                  </li>
-                  <li className="flex items-start">
-                    <div className="w-2 h-2 bg-amber-400 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                    <span>Respond to client messages within 24 hours</span>
-                  </li>
-                  <li className="flex items-start">
-                    <div className="w-2 h-2 bg-amber-400 rounded-full mt=2 mr-3 flex-shrink-0"></div>
-                    <span>Complete verification for better opportunities</span>
-                  </li>
-                  <li className="flex items-start">
-                    <div className="w-2 h-2 bg-amber-400 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                    <span>Ask clients for reviews after project completion</span>
-                  </li>
-                </ul>
-
-                <div className="mt-4 pt-4 border-t border-gray-700">
-                  <div className="text-xs text-gray-400">
-                    Tips based on top-performing freelancers
-                  </div>
-                </div>
-              </div>
-
-              {/* Verification Benefits */}
-              <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-6 text-white">
-                <h3 className="text-xl font-bold mb-4 flex items-center">
-                  <ShieldCheckIcon className="w-6 h-6 mr-3 text-white" />
-                  Verification Benefits
-                </h3>
-
-                <ul className="space-y-3 text-sm text-green-100">
-                  <li className="flex items-start">
-                    <div className="w-2 h-2 bg-white rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                    <span>Get 3x more project invites</span>
-                  </li>
-                  <li className="flex items-start">
-                    <div className="w-2 h-2 bg-white rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                    <span>Higher trust score with clients</span>
-                  </li>
-                  <li className="flex items-start">
-                    <div className="w-2 h-2 bg-white rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                    <span>Featured in search results</span>
-                  </li>
-                  <li className="flex items-start">
-                    <div className="w-2 h-2 bg-white rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                    <span>Priority support access</span>
-                  </li>
-                </ul>
-
-                <div className="mt-6">
-                  <Link href="/dashboard/freelancer/verification">
-                    <button className="w-full bg-white text-green-700 px-4 py-3 rounded-xl font-semibold hover:bg-green-50 transition-all duration-200 shadow-lg hover:shadow-xl">
-                      Complete Verification Now
-                    </button>
-                  </Link>
-                </div>
-              </div>
-            </div>
+        {/* Simple Stats at Bottom */}
+        <div className={`mt-6 text-center ${colorClasses.text.gray800} text-sm`}>
+          <div className="inline-flex items-center gap-4">
+            <span>📊 {feedPosts.length} posts loaded</span>
+            <span>•</span>
+            <span>🔄 Last updated: Just now</span>
           </div>
         </div>
       </div>
-    </FreelancerLayout>
+    </div>
   );
-};
+}
 
-export default FreelancerDashboard;
+export default function FreelancerSocialFeed() {
+  return (
+    <SocialDashboardLayout requiredRole="freelancer">
+      <RoleThemeProvider>
+        <FreelancerSocialFeedContent />
+      </RoleThemeProvider>
+    </SocialDashboardLayout>
+  );
+}

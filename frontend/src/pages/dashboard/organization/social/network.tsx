@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // /pages/dashboard/[role]/social/network.tsx
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
@@ -886,7 +887,7 @@ const NetworkContent = () => {
 // Main Component
 const NetworkPage = () => {
   const router = useRouter();
-  const role = router.query.role as string || 'candidate';
+  const role = router.query.role as string || 'organization';
 
   return (
     <RoleThemeProvider>
@@ -894,7 +895,7 @@ const NetworkPage = () => {
         <title>Network | Banana Social</title>
       </Head>
 
-      <SocialDashboardLayout requiredRole={role as any}>
+      <SocialDashboardLayout requiredRole={role as any | "organization"}>
         <NetworkContent />
       </SocialDashboardLayout>
     </RoleThemeProvider>

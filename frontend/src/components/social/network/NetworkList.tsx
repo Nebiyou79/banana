@@ -1,5 +1,7 @@
+/* eslint-disable @typescript-eslint/no-unsafe-function-type */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // components/social/network/NetworkList.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Users2, UserPlus, Loader2, Search, Filter, RefreshCw, ChevronRight, Users, ChevronLeft, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { followService, Follow, FollowUser, FollowSuggestion, FollowStats } from '@/services/followService';
 import { useToast } from '@/hooks/use-toast';
@@ -18,6 +20,29 @@ interface NetworkListProps {
     className?: string;
     showPagination?: boolean;
 }
+
+// Custom debounce hook
+const useDebounce = (callback: Function, delay: number) => {
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  return useCallback((...args: any[]) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    timeoutRef.current = setTimeout(() => {
+      callback(...args);
+    }, delay);
+  }, [callback, delay]);
+};
 
 const NetworkList: React.FC<NetworkListProps> = ({
     type,
@@ -41,25 +66,44 @@ const NetworkList: React.FC<NetworkListProps> = ({
     const [hasMore, setHasMore] = useState(true);
     const [totalPages, setTotalPages] = useState(1);
     const [stats, setStats] = useState<FollowStats>({ followers: 0, following: 0, pendingRequests: 0, totalConnections: 0 });
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const abortControllerRef = useRef<AbortController | null>(null);
     const { toast } = useToast();
 
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+            }
+        };
+    }, []);
+
     // Fetch network stats
-    const fetchStats = async () => {
+    const fetchStats = useCallback(async () => {
         try {
             const statsData = await followService.getFollowStats();
             setStats(statsData);
         } catch (error) {
             console.error('Error fetching stats:', error);
         }
-    };
+    }, []);
 
-    const fetchConnections = async (pageNum: number = 1, append: boolean = false) => {
+    const fetchConnections = useCallback(async (pageNum: number = 1, append: boolean = false) => {
+        // Cancel previous request if exists
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+
+        // Create new abort controller
+        abortControllerRef.current = new AbortController();
+
         try {
             setIsLoading(true);
 
             if (type === 'suggestions') {
                 const suggestionData = await followService.getFollowSuggestions({
-                    limit: pageNum * limit
+                    limit: limit // Use limit instead of pageNum * limit
                 });
 
                 const suggestionUsers: FollowUser[] = suggestionData.map(s => ({
@@ -81,7 +125,8 @@ const NetworkList: React.FC<NetworkListProps> = ({
 
                 setTotalCount(suggestionData.length);
                 setTotalPages(Math.ceil(suggestionData.length / limit));
-                setHasMore(suggestionData.length >= pageNum * limit);
+                setHasMore(false); // Suggestions don't have pagination
+
             } else {
                 let response;
                 const params = {
@@ -121,11 +166,19 @@ const NetworkList: React.FC<NetworkListProps> = ({
                 }
             }
 
-            // Fetch updated stats
-            await fetchStats();
-
-        } catch (error) {
+        } catch (error: any) {
+            // Don't show error if request was aborted
+            if (error.name === 'AbortError') {
+                return;
+            }
+            
             console.error(`Error fetching ${type}:`, error);
+            
+            // Don't show toast for rate limiting - already handled in service
+            if (error.message?.includes('Too many requests')) {
+                return;
+            }
+            
             toast({
                 title: "Error",
                 description: `Failed to load ${type}`,
@@ -134,15 +187,29 @@ const NetworkList: React.FC<NetworkListProps> = ({
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [type, filter, limit, onConnectionCountChange, toast]);
 
+    // Initial fetch
     useEffect(() => {
         fetchConnections(1, false);
-    }, [type, filter]);
+    }, [type, filter, fetchConnections]);
 
+    // Fetch stats on mount
     useEffect(() => {
         fetchStats();
-    }, []);
+    }, [fetchStats]);
+
+    // Use custom debounce for search
+    const debouncedHandleSearch = useDebounce((query: string) => {
+        // This is where you would trigger an API search if needed
+        // Currently filtering is done client-side
+    }, 300);
+
+    // Update search query with debounce
+    const handleSearchChange = (query: string) => {
+        setSearchQuery(query);
+        debouncedHandleSearch(query);
+    };
 
     const filteredConnections = connections.filter(user => {
         if (!searchQuery.trim()) return true;
@@ -154,19 +221,22 @@ const NetworkList: React.FC<NetworkListProps> = ({
         );
     });
 
-    const handlePageChange = (newPage: number) => {
+    const handlePageChange = useCallback((newPage: number) => {
         if (newPage < 1 || newPage > totalPages) return;
         setPage(newPage);
         fetchConnections(newPage, false);
-    };
+    }, [totalPages, fetchConnections]);
 
-    const handleLoadMore = () => {
+    const handleLoadMore = useCallback(() => {
         const nextPage = page + 1;
         setPage(nextPage);
         fetchConnections(nextPage, true);
-    };
+    }, [page, fetchConnections]);
 
-    const handleFollowChange = (userId: string, following: boolean) => {
+    const handleFollowChange = useCallback((userId: string, following: boolean) => {
+        // Clear cache for this user
+        followService.clearCache();
+
         if (type === 'following') {
             // Remove from list when unfollowing
             setConnections(prev => prev.filter(u => u._id !== userId));
@@ -183,18 +253,29 @@ const NetworkList: React.FC<NetworkListProps> = ({
         }
 
         onConnectionCountChange?.(type === 'following' ? totalCount - 1 : totalCount);
-    };
+    }, [type, totalCount, onConnectionCountChange]);
 
-    const handleRefresh = async () => {
-        await fetchConnections(1, false);
-        toast({
-            title: "Refreshed",
-            description: "List has been refreshed",
-            variant: "default"
-        });
-    };
+    const handleRefresh = useCallback(async () => {
+        setIsRefreshing(true);
+        try {
+            // Clear cache before refresh
+            followService.clearCache();
+            await fetchConnections(1, false);
+            await fetchStats();
+            
+            toast({
+                title: "Refreshed",
+                description: "List has been refreshed",
+                variant: "default"
+            });
+        } catch (error) {
+            console.error('Refresh error:', error);
+        } finally {
+            setIsRefreshing(false);
+        }
+    }, [fetchConnections, fetchStats, toast]);
 
-    const getTypeTitle = () => {
+    const getTypeTitle = useCallback(() => {
         switch (type) {
             case 'followers': return 'Followers';
             case 'following': return 'Following';
@@ -202,9 +283,9 @@ const NetworkList: React.FC<NetworkListProps> = ({
             case 'requests': return 'Requests';
             default: return 'Connections';
         }
-    };
+    }, [type]);
 
-    const getTypeDescription = () => {
+    const getTypeDescription = useCallback(() => {
         const count = type === 'suggestions' ? totalCount : stats[type === 'followers' ? 'followers' : type === 'following' ? 'following' : 'pendingRequests'];
 
         switch (type) {
@@ -214,15 +295,15 @@ const NetworkList: React.FC<NetworkListProps> = ({
             case 'requests': return `${count} pending requests`;
             default: return '';
         }
-    };
+    }, [type, totalCount, stats]);
 
     // Pagination component
-    const Pagination = () => {
+    const Pagination = useCallback(() => {
         if (!showPagination || totalPages <= 1) return null;
 
         const maxVisiblePages = 5;
         let startPage = Math.max(1, page - Math.floor(maxVisiblePages / 2));
-        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+        const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
 
         if (endPage - startPage + 1 < maxVisiblePages) {
             startPage = Math.max(1, endPage - maxVisiblePages + 1);
@@ -244,6 +325,7 @@ const NetworkList: React.FC<NetworkListProps> = ({
                         onClick={() => handlePageChange(1)}
                         disabled={page === 1}
                         className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="First page"
                     >
                         <ChevronsLeft className="w-4 h-4" />
                     </button>
@@ -252,6 +334,7 @@ const NetworkList: React.FC<NetworkListProps> = ({
                         onClick={() => handlePageChange(page - 1)}
                         disabled={page === 1}
                         className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Previous page"
                     >
                         <ChevronLeft className="w-4 h-4" />
                     </button>
@@ -276,6 +359,8 @@ const NetworkList: React.FC<NetworkListProps> = ({
                                 ? 'bg-blue-600 text-white'
                                 : 'hover:bg-gray-100'
                                 }`}
+                            aria-label={`Page ${pageNum}`}
+                            aria-current={pageNum === page ? 'page' : undefined}
                         >
                             {pageNum}
                         </button>
@@ -297,6 +382,7 @@ const NetworkList: React.FC<NetworkListProps> = ({
                         onClick={() => handlePageChange(page + 1)}
                         disabled={page === totalPages}
                         className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Next page"
                     >
                         <ChevronRight className="w-4 h-4" />
                     </button>
@@ -305,13 +391,14 @@ const NetworkList: React.FC<NetworkListProps> = ({
                         onClick={() => handlePageChange(totalPages)}
                         disabled={page === totalPages}
                         className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Last page"
                     >
                         <ChevronsRight className="w-4 h-4" />
                     </button>
                 </div>
             </div>
         );
-    };
+    }, [showPagination, totalPages, page, totalCount, limit, handlePageChange]);
 
     return (
         <div className={`space-y-4 ${className}`}>
@@ -332,10 +419,10 @@ const NetworkList: React.FC<NetworkListProps> = ({
                             variant="outline"
                             size="sm"
                             onClick={handleRefresh}
-                            disabled={isLoading}
+                            disabled={isLoading || isRefreshing}
                             className="flex items-center gap-1.5"
                         >
-                            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
                             <span className="hidden sm:inline">Refresh</span>
                         </Button>
                     )}
@@ -363,9 +450,10 @@ const NetworkList: React.FC<NetworkListProps> = ({
                             <input
                                 type="search"
                                 value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onChange={(e) => handleSearchChange(e.target.value)}
                                 placeholder={`Search ${getTypeTitle().toLowerCase()}...`}
                                 className="w-full pl-10 pr-3 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                disabled={isLoading}
                             />
                         </div>
                     )}
@@ -374,6 +462,7 @@ const NetworkList: React.FC<NetworkListProps> = ({
                         <div className="flex gap-1">
                             <button
                                 onClick={() => setFilter('all')}
+                                disabled={isLoading}
                                 className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${filter === 'all'
                                     ? 'bg-blue-600 text-white'
                                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
@@ -382,6 +471,7 @@ const NetworkList: React.FC<NetworkListProps> = ({
                             </button>
                             <button
                                 onClick={() => setFilter('recent')}
+                                disabled={isLoading}
                                 className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${filter === 'recent'
                                     ? 'bg-blue-600 text-white'
                                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
@@ -417,8 +507,9 @@ const NetworkList: React.FC<NetworkListProps> = ({
                                 variant="default"
                                 size="sm"
                                 onClick={handleRefresh}
+                                disabled={isRefreshing}
                             >
-                                <RefreshCw className="w-3.5 h-3.5 mr-2" />
+                                <RefreshCw className={`w-3.5 h-3.5 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
                                 Find Suggestions
                             </Button>
                         )}

@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   TrendingUp,
-  Bell,
   Sparkles,
   Filter,
   RefreshCw,
@@ -13,14 +12,11 @@ import {
   Globe,
   Building2,
   ArrowUp,
-  Hash,
-  Briefcase
 } from 'lucide-react';
 import { SocialDashboardLayout } from '@/components/social/layout/SocialDashboard';
 import { PostComposer } from '@/components/social/post/PostComposer';
 import { PostCard } from '@/components/social/post/PostCard';
 import { Button } from '@/components/social/ui/Button';
-import { Badge } from '@/components/social/ui/Badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -122,7 +118,6 @@ interface FeedFilter {
 function CompanySocialFeedContent() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { colors, role } = useTheme();
   const [activeTab, setActiveTab] = useState<FeedType>('all');
   const [showFilters, setShowFilters] = useState(false);
   const [filter, setFilter] = useState<FeedFilter>({
@@ -528,7 +523,7 @@ function CompanySocialFeedContent() {
                           <Zap className={`w-4 h-4 ${colorClasses.text.gray400}`} />
                         </div>
                         <p className={`${colorClasses.text.gray800} text-sm`}>
-                          You've reached the end of the feed
+                          You`ve reached the end of the feed
                         </p>
                       </div>
                     )}

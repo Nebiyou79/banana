@@ -11,7 +11,7 @@ import CandidateAdCard from '../CandidateAdCard';
 import CompanyAdCard from '../CompanyAdCard';
 import FreelancerAdCard from '../FreelanceAdCard';
 import OrganizationAdCard from '../OrganizationAdCard';
-import { getAdsForRole, adConfig, AdData, trackClick } from '@/data/ads';
+import { getAdsForRole, adConfig, AdData } from '@/data/ads';
 
 interface SocialDashboardLayoutProps {
   children: React.ReactNode;
@@ -132,7 +132,7 @@ export function SocialDashboardLayout({
             </svg>
           </div>
           <h2 className="text-3xl font-bold text-white mb-3">Access Denied</h2>
-          <p className="text-white/70 text-lg tracking-wide">You don't have permission to access this page.</p>
+          <p className="text-white/70 text-lg tracking-wide">You don`t have permission to access this page.</p>
         </div>
       </div>
     );

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // /pages/dashboard/[role]/social/network.tsx
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
@@ -18,12 +19,10 @@ import {
   Search,
   TrendingUp,
   Sparkles,
-  Target,
   BarChart3,
   Loader2,
   Eye,
   RefreshCw,
-  Filter,
   ChevronRight,
   Bell,
   MessageSquare,
@@ -33,7 +32,6 @@ import {
   Award,
   Mail,
   ExternalLink,
-  Users,
   Network
 } from 'lucide-react';
 import { RoleThemeProvider, useTheme } from '@/components/social/theme/RoleThemeProvider';
@@ -886,7 +884,7 @@ const NetworkContent = () => {
 // Main Component
 const NetworkPage = () => {
   const router = useRouter();
-  const role = router.query.role as string || 'candidate';
+  const role = router.query.role as string || 'company';
 
   return (
     <RoleThemeProvider>
@@ -894,7 +892,7 @@ const NetworkPage = () => {
         <title>Network | Banana Social</title>
       </Head>
 
-      <SocialDashboardLayout requiredRole={role as any}>
+      <SocialDashboardLayout requiredRole={role as any | 'company'}>
         <NetworkContent />
       </SocialDashboardLayout>
     </RoleThemeProvider>

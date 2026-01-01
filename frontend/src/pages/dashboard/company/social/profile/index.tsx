@@ -1,4 +1,4 @@
-// pages/social/company/profile/index.tsx
+// pages/dashboard/company/social/profile/index.tsx
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { SocialDashboardLayout } from '@/components/social/layout/SocialDashboard';
@@ -114,7 +114,7 @@ export default function CompanyProfilePage() {
     };
 
     const handleEdit = () => {
-        window.location.href = '/social/company/profile/edit';
+        window.location.href = '/dashboard/company/social/profile/edit';
     };
 
     const handleAction = (action: string, data?: any) => {
@@ -449,7 +449,7 @@ export default function CompanyProfilePage() {
                             Create your company profile to showcase your business, products, and connect with customers.
                         </p>
                         <Button
-                            onClick={() => window.location.href = '/social/company/profile/edit'}
+                            onClick={() => window.location.href = '/dashboard/company/social/profile/edit'}
                             variant="premium"
                             className="backdrop-blur-lg border-gray-300"
                         >

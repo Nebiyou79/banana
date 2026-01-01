@@ -1,4 +1,4 @@
-// pages/social/company/profile/edit.tsx
+// pages/dashboard/company/social/profile/edit.tsx
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -85,7 +85,7 @@ export default function CompanyEditProfilePage() {
     };
 
     const handleBackToProfile = () => {
-        router.push('/social/company/profile');
+        router.push('/dashboard/company/social/profile');
     };
 
     // Show loading while checking authorization
@@ -148,7 +148,7 @@ export default function CompanyEditProfilePage() {
                                         <CompanyProfileForm
                                             onSuccess={() => {
                                                 toast.success('Company profile created successfully');
-                                                router.push('/social/company/profile');
+                                                router.push('/dashboard/company/social/profile');
                                             }}
                                             onCancel={handleCancel}
                                             mode="create"
@@ -321,7 +321,7 @@ export default function CompanyEditProfilePage() {
                                             variant="outline"
                                             className="w-full justify-start"
                                             onClick={() => {
-                                                router.push('/social/company/verification');
+                                                router.push('/dashboard/company/social/verification');
                                             }}
                                         >
                                             <BadgeCheck className="w-4 h-4 mr-2" />
@@ -331,7 +331,7 @@ export default function CompanyEditProfilePage() {
                                             variant="outline"
                                             className="w-full justify-start"
                                             onClick={() => {
-                                                router.push('/social/company/settings');
+                                                router.push('/dashboard/company/social/settings');
                                             }}
                                         >
                                             <Building className="w-4 h-4 mr-2" />
@@ -341,7 +341,7 @@ export default function CompanyEditProfilePage() {
                                             variant="outline"
                                             className="w-full justify-start"
                                             onClick={() => {
-                                                router.push('/social/company/analytics');
+                                                router.push('/dashboard/company/social/analytics');
                                             }}
                                         >
                                             <Sparkles className="w-4 h-4 mr-2" />

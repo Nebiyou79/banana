@@ -12,13 +12,12 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/Form';
-import { Loader2, Save, Plus, Trash2, Briefcase, GraduationCap, Award, Calendar, User } from 'lucide-react';
+import { Loader2, Save, Plus, Trash2, Briefcase, GraduationCap, Award, Calendar } from 'lucide-react';
 import { candidateService, CV } from '@/services/candidateService';
 import { useAuth } from '@/contexts/AuthContext';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import CVUploadCard from '@/components/candidate/CVUploadCard';
 import SkillsInput from '@/components/candidate/SkillsInput';
-import { applyBgColor, applyColor, applyBorderColor } from '@/utils/color';
 import { useToast } from '@/hooks/use-toast';
 
 interface ProfileFormData {

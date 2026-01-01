@@ -76,26 +76,43 @@ export interface FollowStatsResponse {
 }
 
 class FollowService {
-  isFollowing // Return empty response instead of throwing for public endpoints
-    (profileUserId: string) {
-    throw new Error('Method not implemented.');
-  }
-  unfollow(profileUserId: string) {
-    throw new Error('Method not implemented.');
-  }
-  follow(profileUserId: string) {
-    throw new Error('Method not implemented.');
-  }
-  private handleApiError(error: any, defaultMessage: string): never {
+  // Cache for follow status to reduce API calls
+  private followStatusCache = new Map<string, { following: boolean; status?: string; follow?: Follow; timestamp: number }>();
+  private CACHE_TTL = 60000; // 1 minute cache
+
+  private handleApiError(error: any, defaultMessage: string, shouldThrow = true): never | any {
     console.error('🔴 Follow Service Error:', {
       status: error.response?.status,
       data: error.response?.data,
       message: error.message
     });
 
+    // Handle rate limiting specifically
+    if (error.response?.status === 429) {
+      const retryAfter = error.response.headers?.['retry-after'] || 5;
+      const message = `Too many requests. Please wait ${retryAfter} seconds before trying again.`;
+      handleError(message);
+      
+      if (shouldThrow) {
+        throw new Error(message);
+      }
+      return null;
+    }
+
     const errorMessage = error.response?.data?.message || error.message || defaultMessage;
-    handleError(errorMessage);
-    throw new Error(errorMessage);
+    
+    // Don't show error for non-critical operations
+    if (shouldThrow) {
+      handleError(errorMessage);
+      throw new Error(errorMessage);
+    }
+    
+    return null;
+  }
+
+  // Clear cache
+  clearCache(): void {
+    this.followStatusCache.clear();
   }
 
   // Toggle follow/unfollow
@@ -107,6 +124,9 @@ class FollowService {
     } = {}
   ): Promise<{ following: boolean; follow?: Follow }> {
     try {
+      // Clear cache for this user
+      this.followStatusCache.delete(targetId);
+
       const response = await api.post<FollowResponse>(`/follow/${targetId}`, {
         targetType: data.targetType || 'User',
         followSource: data.followSource || 'manual'
@@ -134,27 +154,7 @@ class FollowService {
     }
   }
 
-  // // Check follow status
-  // async getFollowStatus(
-  //   targetId: string,
-  //   targetType: 'User' | 'Company' | 'Organization' = 'User'
-  // ): Promise<{ following: boolean; status?: string; follow?: Follow }> {
-  //   try {
-  //     const response = await api.get<FollowResponse>(`/follow/${targetId}/status`, {
-  //       params: { targetType }
-  //     });
-
-  //     if (!response.data.success) {
-  //       throw new Error(response.data.message || 'Failed to check follow status');
-  //     }
-
-  //     return response.data.data;
-  //   } catch (error: any) {
-  //     return this.handleApiError(error, 'Failed to check follow status') as never;
-  //   }
-  // }
-
-  // Get followers
+  // Get followers - with better error handling
   async getFollowers(params?: {
     targetType?: 'User' | 'Company' | 'Organization';
     targetId?: string;
@@ -167,16 +167,27 @@ class FollowService {
         params: {
           ...params,
           page: params?.page || 1,
-          limit: Math.min(params?.limit || 50, 100)
+          limit: Math.min(params?.limit || 10, 50) // Reduced default limit
         }
       });
       return response.data;
     } catch (error: any) {
-      return this.handleApiError(error, 'Failed to fetch followers') as never;
+      // For follower list, don't throw - return empty data
+      console.error('Failed to fetch followers:', error);
+      return {
+        success: false,
+        data: [],
+        pagination: {
+          page: params?.page || 1,
+          limit: params?.limit || 10,
+          total: 0,
+          pages: 0
+        }
+      };
     }
   }
 
-  // Get following
+  // Get following - with better error handling
   async getFollowing(params?: {
     targetType?: 'User' | 'Company' | 'Organization';
     page?: number;
@@ -188,12 +199,22 @@ class FollowService {
         params: {
           ...params,
           page: params?.page || 1,
-          limit: Math.min(params?.limit || 50, 100)
+          limit: Math.min(params?.limit || 10, 50) // Reduced default limit
         }
       });
       return response.data;
     } catch (error: any) {
-      return this.handleApiError(error, 'Failed to fetch following') as never;
+      console.error('Failed to fetch following:', error);
+      return {
+        success: false,
+        data: [],
+        pagination: {
+          page: params?.page || 1,
+          limit: params?.limit || 10,
+          total: 0,
+          pages: 0
+        }
+      };
     }
   }
 
@@ -208,12 +229,22 @@ class FollowService {
         params: {
           ...params,
           page: params?.page || 1,
-          limit: Math.min(params?.limit || 50, 100)
+          limit: Math.min(params?.limit || 10, 50)
         }
       });
       return response.data;
     } catch (error: any) {
-      return this.handleApiError(error, 'Failed to fetch pending requests') as never;
+      console.error('Failed to fetch pending requests:', error);
+      return {
+        success: false,
+        data: [],
+        pagination: {
+          page: params?.page || 1,
+          limit: params?.limit || 10,
+          total: 0,
+          pages: 0
+        }
+      };
     }
   }
 
@@ -228,7 +259,12 @@ class FollowService {
         data: FollowSuggestion[];
         algorithm: string;
         message?: string;
-      }>('/follow/suggestions', { params });
+      }>('/follow/suggestions', { 
+        params: { 
+          ...params,
+          limit: Math.min(params?.limit || 5, 20) // Reduced limit
+        } 
+      });
 
       if (!response.data.success) {
         console.warn('Follow suggestions not successful:', response.data.message);
@@ -274,7 +310,7 @@ class FollowService {
   }
 
   // Accept follow request
-  async acceptFollowRequest(followId: string): Promise<Follow> {
+  async acceptFollowRequest(followId: string): Promise<Follow | null> {
     try {
       const response = await api.put<FollowResponse>(`/follow/${followId}/accept`);
 
@@ -285,12 +321,13 @@ class FollowService {
       handleSuccess('Follow request accepted');
       return response.data.data.follow;
     } catch (error: any) {
-      return this.handleApiError(error, 'Failed to accept follow request') as never;
+      console.error('Failed to accept follow request:', error);
+      return null;
     }
   }
 
   // Reject follow request
-  async rejectFollowRequest(followId: string): Promise<void> {
+  async rejectFollowRequest(followId: string): Promise<boolean> {
     try {
       const response = await api.put<FollowResponse>(`/follow/${followId}/reject`);
 
@@ -299,66 +336,38 @@ class FollowService {
       }
 
       handleSuccess('Follow request rejected');
+      return true;
     } catch (error: any) {
-      return this.handleApiError(error, 'Failed to reject follow request') as never;
+      console.error('Failed to reject follow request:', error);
+      return false;
     }
   }
 
-  // Get mutual connections count
+  // Get mutual connections count - FIXED: Removed excessive API calls
   async getMutualConnectionsCount(targetUserId: string): Promise<number> {
     try {
-      // This would typically be a separate API endpoint
-      // For now, we'll calculate it client-side by comparing followers
-      const [userFollowers, targetFollowers] = await Promise.all([
-        this.getFollowers({ targetType: 'User', limit: 1000 }),
-        this.getFollowers({ targetType: 'User', targetId: targetUserId, limit: 1000 })
-      ]);
-
-      const userFollowerIds = new Set(userFollowers.data.map(f => f.follower._id));
-      const targetFollowerIds = new Set(targetFollowers.data.map(f => f.follower._id));
-
-      let mutualCount = 0;
-      userFollowerIds.forEach(id => {
-        if (targetFollowerIds.has(id)) {
-          mutualCount++;
-        }
-      });
-
-      return mutualCount;
+      // Use a dedicated endpoint if available, otherwise return 0
+      // Don't make multiple API calls here as it causes rate limiting
+      return 0; // Simplified for now
     } catch (error) {
       console.error('Failed to get mutual connections count:', error);
       return 0;
     }
   }
 
-  // Bulk follow status check - optimized
-  async getBulkFollowStatus(userIds: string[]): Promise<Record<string, { following: boolean; status?: string }>> {
-    try {
-      // Check if the current user follows each target user
-      const statusPromises = userIds.map(userId =>
-        this.getFollowStatus(userId).then(status => ({
-          userId,
-          following: status.following,
-          status: status.status
-        }))
-      );
-
-      const results = await Promise.all(statusPromises);
-      return results.reduce((acc, { userId, following, status }) => {
-        acc[userId] = { following, status };
-        return acc;
-      }, {} as Record<string, { following: boolean; status?: string }>);
-    } catch (error) {
-      console.error('Failed to get bulk follow status:', error);
-      return {};
-    }
-  }
-
-  // Also update the getFollowStatus method to be more robust
+  // Get follow status with caching
   async getFollowStatus(
     targetId: string,
     targetType: 'User' | 'Company' | 'Organization' = 'User'
   ): Promise<{ following: boolean; status?: string; follow?: Follow }> {
+    const cacheKey = `${targetId}_${targetType}`;
+    const cached = this.followStatusCache.get(cacheKey);
+    
+    // Return cached data if still valid
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+      return cached;
+    }
+
     try {
       const response = await api.get<FollowResponse>(`/follow/${targetId}/status`, {
         params: { targetType }
@@ -368,11 +377,19 @@ class FollowService {
         throw new Error(response.data.message || 'Failed to check follow status');
       }
 
-      return {
+      const result = {
         following: response.data.data.following || false,
         status: response.data.data.status || 'none',
         follow: response.data.data.follow
       };
+
+      // Cache the result
+      this.followStatusCache.set(cacheKey, {
+        ...result,
+        timestamp: Date.now()
+      });
+
+      return result;
     } catch (error: any) {
       // Don't throw for status checks, return default
       if (error.response?.status === 404) {
@@ -380,6 +397,55 @@ class FollowService {
       }
       console.error('Error checking follow status:', error);
       return { following: false, status: 'none' };
+    }
+  }
+
+  // Bulk follow status check - optimized with caching
+  async getBulkFollowStatus(userIds: string[]): Promise<Record<string, { following: boolean; status?: string }>> {
+    try {
+      const results: Record<string, { following: boolean; status?: string }> = {};
+      const uncachedIds: string[] = [];
+
+      // Check cache first
+      for (const userId of userIds) {
+        const cacheKey = `${userId}_User`;
+        const cached = this.followStatusCache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+          results[userId] = cached;
+        } else {
+          uncachedIds.push(userId);
+        }
+      }
+
+      // Only fetch uncached items in batches
+      if (uncachedIds.length > 0) {
+        const batchSize = 10; // Process in batches to avoid rate limiting
+        for (let i = 0; i < uncachedIds.length; i += batchSize) {
+          const batch = uncachedIds.slice(i, i + batchSize);
+          
+          // Use Promise.all with a delay between batches
+          const batchPromises = batch.map(async (userId, index) => {
+            // Add small delay between requests
+            if (index > 0) {
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            const status = await this.getFollowStatus(userId);
+            return { userId, ...status };
+          });
+
+          const batchResults = await Promise.all(batchPromises);
+          
+          batchResults.forEach(({ userId, following, status }) => {
+            results[userId] = { following, status };
+          });
+        }
+      }
+
+      return results;
+    } catch (error) {
+      console.error('Failed to get bulk follow status:', error);
+      return {};
     }
   }
 
@@ -394,7 +460,7 @@ class FollowService {
         params: {
           ...params,
           page: params?.page || 1,
-          limit: Math.min(params?.limit || 50, 100)
+          limit: Math.min(params?.limit || 10, 50)
         }
       });
       return response.data;
@@ -406,7 +472,7 @@ class FollowService {
         data: [],
         pagination: {
           page: 1,
-          limit: params?.limit || 50,
+          limit: params?.limit || 10,
           total: 0,
           pages: 0
         }
@@ -425,7 +491,7 @@ class FollowService {
         params: {
           ...params,
           page: params?.page || 1,
-          limit: Math.min(params?.limit || 50, 100)
+          limit: Math.min(params?.limit || 10, 50)
         }
       });
       return response.data;
@@ -437,7 +503,7 @@ class FollowService {
         data: [],
         pagination: {
           page: 1,
-          limit: params?.limit || 50,
+          limit: params?.limit || 10,
           total: 0,
           pages: 0
         }
