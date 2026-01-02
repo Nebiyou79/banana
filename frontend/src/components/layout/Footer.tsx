@@ -1,125 +1,244 @@
 // /src/components/layouts/Footer.tsx
 import Link from 'next/link';
-import { Briefcase, Mail, Phone, MapPin, Send, Shield, Globe } from 'lucide-react';
+import { Briefcase, Mail, Phone, MapPin, Navigation, Facebook, Youtube, MessageCircle, Send } from 'lucide-react';
 import { colors } from '@/utils/color';
+import { useAuth } from '@/contexts/AuthContext';
+import Image from 'next/image';
 
 export default function Footer() {
+  const { user } = useAuth();
+
+  // Get role-based links for Quick Links section
+  const getRoleBasedLinks = () => {
+    if (!user) {
+      return [
+        { href: "/signup", label: "Find Jobs", icon: "💼" },
+        { href: "/signup", label: "Find Tenders", icon: "📋" },
+        { href: "/signup", label: "For Companies", icon: "🏢" },
+        { href: "/signup", label: "For Organizations", icon: "🏛️" }
+      ];
+    }
+
+    switch (user.role) {
+      case "candidate":
+        return [
+          { href: "/dashboard/candidate/jobs", label: "Find Jobs", icon: "💼" },
+          { href: "/dashboard/candidate", label: "Dashboard", icon: "📊" },
+          { href: "/dashboard/candidate/profile", label: "Profile", icon: "👤" },
+          { href: "/dashboard/candidate/social", label: "Social Feed", icon: "💬" },
+        ];
+      case "freelancer":
+        return [
+          { href: "/dashboard/freelancer/tenders", label: "Browse Tenders", icon: "📋" },
+          { href: "/dashboard/freelancer", label: "Dashboard", icon: "📊" },
+          { href: "/dashboard/freelancer/profile", label: "Profile", icon: "👤" },
+          { href: "/dashboard/freelancer/social", label: "Social Feed", icon: "💬" },
+        ];
+      case "company":
+        return [
+          { href: "/dashboard/company/jobs", label: "Manage Jobs", icon: "💼" },
+          { href: "/tenders", label: "Browse Tenders", icon: "📋" },
+          { href: "/dashboard/company", label: "Dashboard", icon: "📊" },
+          { href: "/dashboard/company/social", label: "Social Feed", icon: "💬" },
+        ];
+      case "organization":
+        return [
+          { href: "/dashboard/organization/tenders", label: "My Tenders", icon: "📋" },
+          { href: "/dashboard/organization", label: "Dashboard", icon: "📊" },
+          { href: "/dashboard/organization/profile", label: "Profile", icon: "👤" },
+          { href: "/dashboard/organization/social", label: "Social Feed", icon: "💬" },
+        ];
+      case "admin":
+        return [
+          { href: "/dashboard/admin/users", label: "User Management", icon: "👥" },
+          { href: "/dashboard/admin/jobs", label: "Job Management", icon: "📊" },
+          { href: "/dashboard/admin", label: "Dashboard", icon: "🛡️" },
+        ];
+      default:
+        return [];
+    }
+  };
+
+  const roleBasedLinks = getRoleBasedLinks();
+
   return (
-    <footer style={{ backgroundColor: colors.darkNavy, color: colors.white }}>
-      {/* Main Footer Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {/* Company Info */}
-          <div className="lg:col-span-1">
-            <Link href="/" className="flex items-center space-x-3 mb-6">
-              <div 
-                className="w-10 h-10 rounded-xl flex items-center justify-center"
-                style={{ backgroundColor: colors.goldenMustard }}
-              >
-                <Briefcase className="w-6 h-6" style={{ color: colors.darkNavy }} />
+    <footer className="relative overflow-hidden">
+      {/* Background Pattern */}
+      <div
+        className="absolute inset-0 z-0 opacity-5"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%23ffffff' fill-opacity='1' fill-rule='evenodd'/%3E%3C/svg%3E")`,
+          backgroundColor: colors.darkNavy
+        }}
+      />
+
+      {/* Main Content */}
+      <div className="relative z-10" style={{ backgroundColor: colors.white, color: colors.darkNavy }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
+            {/* Company Info */}
+            <div className="space-y-6">
+              {/* Logo - Bigger size */}
+              <Link href="/" className="flex items-center space-x-3 group">
+                <div className="relative">
+                  <div className="w-20 h-20 rounded-xl flex items-center justify-center overflow-hidden">
+                    <Image
+                      src="/logo.png"
+                      alt="Banana"
+                      width={108}
+                      height={108}
+                    />
+                  </div>
+                </div>
+                <span className="text-2xl font-bold text-gray-900">Banana</span>
+              </Link>
+
+              <p className="text-lg leading-relaxed max-w-md" style={{ color: colors.darkNavy }}>
+                Connecting exceptional talent with world-class opportunities. Your career journey starts here.
+              </p>
+
+              <div className="flex space-x-4 pt-4">
+                <a href="https://www.facebook.com/jobonbanana" className="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-lg" style={{ backgroundColor: colors.gray800, color: colors.white }}>
+                  <Facebook className="w-5 h-5" />
+                </a>
+                <a href="#" className="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-lg" style={{ backgroundColor: colors.gray800, color: colors.white }}>
+                  <Youtube className="w-5 h-5" />
+                </a>
+                <a href="#" className="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-lg" style={{ backgroundColor: colors.gray800, color: colors.white }}>
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" />
+                  </svg>
+                </a>
+                <a href="#" className="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-lg" style={{ backgroundColor: colors.gray800, color: colors.white }}>
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.4-1.08.39-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
+                  </svg>
+                </a>
               </div>
-              <span className="text-2xl font-bold">
-                Banana <span style={{ color: colors.gold }}>Jobs</span>
-              </span>
-            </Link>
-            <p className="mb-6 max-w-xs" style={{ color: colors.gray400 }}>
-              Connecting top talent with amazing opportunities worldwide. Find your dream job or the perfect candidate.
-            </p>
-            <div className="flex space-x-4">
-              <a href="#" className="w-10 h-10 rounded-full flex items-center justify-center transition-colors" style={{ backgroundColor: colors.gray800, color: colors.white }}>
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z"/>
-                </svg>
-              </a>
-              <a href="#" className="w-10 h-10 rounded-full flex items-center justify-center transition-colors" style={{ backgroundColor: colors.gray800, color: colors.white }}>
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M22.46 6c-.77.35-1.6.58-2.46.69.88-.53 1.56-1.37 1.88-2.38-.83.5-1.75.85-2.72 1.05C18.37 4.5 17.26 4 16 4c-2.35 0-4.27 1.92-4.27 4.29 0 .34.04.67.11.98C8.28 9.09 5.11 7.38 3 4.79c-.37.63-.58 1.37-.58 2.15 0 1.49.75 2.81 1.91 3.56-.71 0-1.37-.20-1.95-.5v.03c0 2.08 1.48 3.82 3.44 4.21a4.22 4.22 0 0 1-1.93.07 4.28 4.28 0 0 0 4 2.98 8.521 8.521 0 0 1-5.33 1.84c-.34 0-.68-.02-1.02-.06C3.44 20.29 5.7 21 8.12 21 16 21 20.33 14.46 20.33 8.79c0-.19 0-.37-.01-.56.84-.6 1.56-1.36 2.14-2.23z"/>
-                </svg>
-              </a>
-              <a href="#" className="w-10 h-10 rounded-full flex items-center justify-center transition-colors" style={{ backgroundColor: colors.gray800, color: colors.white }}>
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-                </svg>
-              </a>
             </div>
-          </div>
 
-          {/* Quick Links */}
-          <div>
-            <h3 className="text-lg font-semibold mb-6 flex items-center">
-              <Send className="w-5 h-5 mr-2" style={{ color: colors.blue }} />
-              Quick Links
-            </h3>
-            <ul className="space-y-3">
-              {['Browse Jobs', 'Browse Companies', 'Find Talent', 'Post a Job', 'About Us'].map((item) => (
-                <li key={item}>
-                  <Link href={`/${item.toLowerCase().replace(/\s+/g, '-')}`} className="transition-colors" style={{ color: colors.gray400 }}>
-                    {item}
+            {/* Quick Links */}
+            <div>
+              <h3 className="text-xl font-semibold mb-8 flex items-center pb-3 border-b" style={{ borderColor: colors.gray800 }}>
+                <Send className="w-5 h-5 mr-3" style={{ color: colors.gold }} />
+                Quick Navigation
+              </h3>
+              <div className="space-y-4">
+                {roleBasedLinks.map((item) => (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    className="flex items-center space-x-3 p-3 rounded-lg transition-all duration-300 hover:bg-gray-800/50 hover:pl-4 group"
+                    style={{ color: colors.darkNavy }}
+                  >
+                    <span className="text-lg">{item.icon}</span>
+                    <span className="font-medium group-hover:text-white transition-colors">
+                      {item.label}
+                    </span>
                   </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Resources */}
-          <div>
-            <h3 className="text-lg font-semibold mb-6 flex items-center">
-              <Globe className="w-5 h-5 mr-2" style={{ color: colors.blue }} />
-              Resources
-            </h3>
-            <ul className="space-y-3">
-              {['Blog', 'Career Advice', 'Resume Tips', 'Interview Tips', 'Help Center'].map((item) => (
-                <li key={item}>
-                  <Link href={`/${item.toLowerCase().replace(/\s+/g, '-')}`} className="transition-colors" style={{ color: colors.gray400 }}>
-                    {item}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Contact Info */}
-          <div>
-            <h3 className="text-lg font-semibold mb-6 flex items-center">
-              <Shield className="w-5 h-5 mr-2" style={{ color: colors.blue }} />
-              Contact Us
-            </h3>
-            <div className="space-y-4">
-              <div className="flex items-center space-x-3">
-                <Mail className="w-5 h-5" style={{ color: colors.blue }} />
-                <span style={{ color: colors.gray400 }}>info@bananajobs.com</span>
+                ))}
               </div>
-              <div className="flex items-center space-x-3">
-                <Phone className="w-5 h-5" style={{ color: colors.blue }} />
-                <span style={{ color: colors.gray400 }}>+1 (555) 123-4567</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <MapPin className="w-5 h-5" style={{ color: colors.blue }} />
-                <span style={{ color: colors.gray400 }}>San Francisco, CA</span>
+            </div>
+
+            {/* Contact Info */}
+            <div>
+              <h3 className="text-xl font-semibold mb-8 flex items-center pb-3 border-b" style={{ borderColor: colors.gray800 }}>
+                <MapPin className="w-5 h-5 mr-3" style={{ color: colors.gold }} />
+                Contact & Location
+              </h3>
+              <div className="space-y-6">
+                <div className="flex items-start space-x-4 p-3 rounded-lg hover:bg-gray-800/50 transition-colors">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: colors.darkNavy }}>
+                    <Mail className="w-5 h-5" style={{ color: colors.gold }} />
+                  </div>
+                  <div>
+                    <p className="text-sm uppercase tracking-wider font-semibold mb-1" style={{ color: colors.darkNavy }}>
+                      Email
+                    </p>
+                    <a
+                      href="mailto:getbananalink@gmail.com"
+                      className="text-lg font-medium hover:text-gold transition-colors"
+                      style={{ color: colors.darkNavy }}
+                    >
+                      getbananalink@gmail.com
+                    </a>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-4 p-3 rounded-lg hover:bg-gray-800/50 transition-colors">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: colors.darkNavy }}>
+                    <Phone className="w-5 h-5" style={{ color: colors.gold }} />
+                  </div>
+                  <div>
+                    <p className="text-sm uppercase tracking-wider font-semibold mb-1" style={{ color: colors.darkNavy }}>
+                      Phone
+                    </p>
+                    <a
+                      href="tel:0926123457"
+                      className="text-lg font-medium hover:text-gold transition-colors"
+                      style={{ color: colors.darkNavy }}
+                    >
+                      0926123457
+                    </a>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-4 p-3 rounded-lg hover:bg-gray-800/50 transition-colors">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: colors.darkNavy }}>
+                    <Navigation className="w-5 h-5" style={{ color: colors.gold }} />
+                  </div>
+                  <div>
+                    <p className="text-sm uppercase tracking-wider font-semibold mb-1" style={{ color: colors.darkNavy }}>
+                      Office Location
+                    </p>
+                    <a
+                      href="https://maps.app.goo.gl/4fkiJhGe12EG8y7V8"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-lg font-medium hover:text-gold transition-colors group"
+                      style={{ color: colors.white }}
+                    >
+                      <span className="flex items-center">
+                        22 Meklit Building, 1st Floor
+                        <svg
+                          className="w-4 h-4 ml-2 transform group-hover:translate-x-1 transition-transform"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </span>
+                    </a>
+                    <p className="text-sm mt-1" style={{ color: colors.darkNavy }}>
+                      View on Google Maps →
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Bottom Bar */}
-      <div style={{ borderColor: colors.gray800 }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-            <p style={{ color: colors.gray400 }}>
-              © 2024 Banana. All rights reserved.
-            </p>
-            <div className="flex space-x-6">
-              {['Privacy Policy', 'Terms of Service', 'Cookie Policy'].map((item) => (
-                <Link 
-                  key={item}
-                  href={`/${item.toLowerCase().replace(/\s+/g, '-')}`}
-                  className="text-sm transition-colors"
-                  style={{ color: colors.gray400 }}
-                >
-                  {item}
-                </Link>
-              ))}
+        {/* Bottom Bar */}
+        <div style={{ borderTop: `1px solid ${colors.gray800}` }}>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+              <p className="text-sm" style={{ color: colors.gray400 }}>
+                © {new Date().getFullYear()} Banana Jobs. All rights reserved. Made with ❤️ for the global workforce.
+              </p>
+              <div className="flex items-center space-x-6">
+                {['Privacy Policy', 'Terms of Service', 'Cookie Policy'].map((item) => (
+                  <Link
+                    key={item}
+                    href={`/${item.toLowerCase().replace(/\s+/g, '-')}`}
+                    className="text-sm font-medium hover:text-gold transition-colors"
+                    style={{ color: colors.gray400 }}
+                  >
+                    {item}
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
         </div>

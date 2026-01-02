@@ -1,9 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // pages/verification/organization.tsx
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import {
   BuildingLibraryIcon,
-  DocumentCheckIcon,
   CalendarIcon,
   ClockIcon,
   MapPinIcon,
@@ -12,7 +12,6 @@ import {
   ShieldCheckIcon,
   UsersIcon,
   BanknotesIcon,
-  ChartBarIcon,
   CheckBadgeIcon,
   DocumentTextIcon,
   GlobeAltIcon,
@@ -20,7 +19,6 @@ import {
   UserGroupIcon,
   ClipboardDocumentCheckIcon,
   IdentificationIcon,
-  CheckCircleIcon
 } from '@heroicons/react/24/outline';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import appointmentService, { DocumentRequirement, AppointmentSlot, Appointment } from '@/services/apointmentService';

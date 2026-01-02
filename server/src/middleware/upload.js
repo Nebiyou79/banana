@@ -4,20 +4,27 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const sharp = require('sharp');
 
-// Configure storage
+// Configure storage - FIXED to use proper directory structure
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    let uploadPath = 'uploads/';
-
+    // Always use public/uploads as base directory
+    const baseDir = path.join(process.cwd(), 'public', 'uploads');
+    
+    let uploadPath = baseDir;
+    
     // Create subdirectories based on file type
     if (file.fieldname === 'avatar') {
-      uploadPath = 'uploads/avatars/';
+      uploadPath = path.join(baseDir, 'avatars');
     } else if (file.fieldname === 'coverPhoto') {
-      uploadPath = 'uploads/covers/';
+      uploadPath = path.join(baseDir, 'covers');
+    } else if (file.fieldname === 'media') {
+      uploadPath = path.join(baseDir, 'general');
     }
 
+    // Create directory if it doesn't exist
     if (!fs.existsSync(uploadPath)) {
       fs.mkdirSync(uploadPath, { recursive: true });
+      console.log(`✅ Created upload directory: ${uploadPath}`);
     }
 
     cb(null, uploadPath);
@@ -119,14 +126,15 @@ const generateThumbnail = async (file, width = 300, height = 300) => {
       return null;
     }
 
-    const fileName = path.basename(file.filename);
-    const thumbnailPath = `uploads/thumbnails/${fileName}`;
-
-    // Create thumbnails directory if it doesn't exist
-    const thumbDir = path.dirname(thumbnailPath);
-    if (!fs.existsSync(thumbDir)) {
-      fs.mkdirSync(thumbDir, { recursive: true });
+    // Ensure thumbnails directory exists
+    const thumbnailsDir = path.join(process.cwd(), 'public', 'uploads', 'thumbnails');
+    if (!fs.existsSync(thumbnailsDir)) {
+      fs.mkdirSync(thumbnailsDir, { recursive: true });
     }
+
+    const fileName = path.basename(file.filename);
+    const thumbnailPath = path.join('thumbnails', fileName);
+    const fullThumbnailPath = path.join(thumbnailsDir, fileName);
 
     await sharp(file.path)
       .resize(width, height, {
@@ -134,7 +142,7 @@ const generateThumbnail = async (file, width = 300, height = 300) => {
         position: 'center'
       })
       .jpeg({ quality: 80 })
-      .toFile(thumbnailPath);
+      .toFile(fullThumbnailPath);
 
     return thumbnailPath;
   } catch (error) {
@@ -154,17 +162,19 @@ const generateThumbnails = async (file, sizes = [
       return [];
     }
 
+    // Ensure thumbnails directory exists
+    const thumbnailsDir = path.join(process.cwd(), 'public', 'uploads', 'thumbnails');
+    if (!fs.existsSync(thumbnailsDir)) {
+      fs.mkdirSync(thumbnailsDir, { recursive: true });
+    }
+
     const thumbnails = [];
+    const baseFileName = path.basename(file.filename, path.extname(file.filename));
 
     for (const size of sizes) {
-      const fileName = path.basename(file.filename, path.extname(file.filename));
-      const thumbnailPath = `uploads/thumbnails/${fileName}_${size.suffix}.jpg`;
-
-      // Create thumbnails directory if it doesn't exist
-      const thumbDir = path.dirname(thumbnailPath);
-      if (!fs.existsSync(thumbDir)) {
-        fs.mkdirSync(thumbDir, { recursive: true });
-      }
+      const thumbnailFileName = `${baseFileName}_${size.suffix}.jpg`;
+      const thumbnailPath = path.join('thumbnails', thumbnailFileName);
+      const fullThumbnailPath = path.join(thumbnailsDir, thumbnailFileName);
 
       await sharp(file.path)
         .resize(size.width, size.height, {
@@ -172,10 +182,12 @@ const generateThumbnails = async (file, sizes = [
           position: 'center'
         })
         .jpeg({ quality: 80 })
-        .toFile(thumbnailPath);
+        .toFile(fullThumbnailPath);
 
       thumbnails.push({
         path: thumbnailPath,
+        fullPath: fullThumbnailPath,
+        url: `/uploads/${thumbnailPath}`,
         width: size.width,
         height: size.height,
         suffix: size.suffix
@@ -189,7 +201,24 @@ const generateThumbnails = async (file, sizes = [
   }
 };
 
-// Enhanced file upload function
+// Helper function to get the correct base URL
+const getBaseUrl = () => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  // First check environment variables
+  if (process.env.APP_URL) {
+    return process.env.APP_URL;
+  }
+  
+  if (process.env.BACKEND_URL) {
+    return process.env.BACKEND_URL;
+  }
+  
+  // Fallback to hardcoded URLs
+  return isProduction ? 'https://getbananalink.com' : 'http://localhost:4000';
+};
+
+// Enhanced file upload function - FIXED for production
 const uploadToCloudinary = async (file, folder = 'general') => {
   try {
     if (!file) {
@@ -203,21 +232,27 @@ const uploadToCloudinary = async (file, folder = 'general') => {
     if (file.mimetype.startsWith('image/')) {
       thumbnails = await generateThumbnails(file);
       if (thumbnails.length > 0) {
-        thumbnailUrl = `/thumbnails/${path.basename(thumbnails[1].path)}`; // Use medium size as default thumbnail
+        // Use medium size as default thumbnail
+        thumbnailUrl = `/uploads/${thumbnails[1].path}`;
       }
     }
 
-    // Determine the base URL
-    const baseUrl = process.env.BACKEND_URL || 'http://localhost:4000';
-
-    // Determine the file path based on fieldname
-    let filePath = '';
+    // Get correct base URL
+    const baseUrl = getBaseUrl();
+    
+    // Determine the relative path for the file
+    let relativePath = '';
+    let fileType = 'general';
+    
     if (file.fieldname === 'avatar') {
-      filePath = `avatars/${file.filename}`;
+      relativePath = `avatars/${file.filename}`;
+      fileType = 'avatars';
     } else if (file.fieldname === 'coverPhoto') {
-      filePath = `covers/${file.filename}`;
+      relativePath = `covers/${file.filename}`;
+      fileType = 'covers';
     } else {
-      filePath = `general/${file.filename}`;
+      relativePath = `general/${file.filename}`;
+      fileType = 'general';
     }
 
     // Get image metadata if it's an image
@@ -227,16 +262,25 @@ const uploadToCloudinary = async (file, folder = 'general') => {
     }
 
     return {
-      url: `${baseUrl}/uploads/${filePath}`,
-      path: `/uploads/${filePath}`,
+      // Full URL for frontend use
+      url: `${baseUrl}/uploads/${relativePath}`,
+      
+      // Relative path for database storage (more flexible)
+      path: `/uploads/${relativePath}`,
+      
+      // Thumbnail URLs
       thumbnail: thumbnailUrl ? `${baseUrl}${thumbnailUrl}` : null,
+      
+      // All thumbnails
       thumbnails: thumbnails.map(thumb => ({
-        url: `${baseUrl}/${thumb.path}`,
-        path: `/${thumb.path}`,
+        url: `${baseUrl}/uploads/${thumb.path}`,
+        path: `/uploads/${thumb.path}`,
         width: thumb.width,
         height: thumb.height,
         suffix: thumb.suffix
       })),
+      
+      // File information
       filename: file.filename,
       originalname: file.originalname,
       mimetype: file.mimetype,
@@ -244,7 +288,11 @@ const uploadToCloudinary = async (file, folder = 'general') => {
       fieldname: file.fieldname,
       encoding: file.encoding,
       metadata,
-      uploadedAt: new Date().toISOString()
+      uploadedAt: new Date().toISOString(),
+      
+      // Additional info for debugging
+      baseUrl: baseUrl,
+      fileType: fileType
     };
   } catch (error) {
     console.error('File upload error:', error);
@@ -354,6 +402,7 @@ const cleanupUploadedFiles = async (req) => {
     if (req.file) {
       if (fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
+        console.log(`🗑️ Cleaned up file: ${req.file.path}`);
       }
     }
 
@@ -361,12 +410,19 @@ const cleanupUploadedFiles = async (req) => {
       for (const file of req.files) {
         if (fs.existsSync(file.path)) {
           fs.unlinkSync(file.path);
+          console.log(`🗑️ Cleaned up file: ${file.path}`);
         }
       }
     }
   } catch (error) {
     console.error('Error cleaning up uploaded files:', error);
   }
+};
+
+// Helper function to generate file URL (use this in your controllers)
+const generateFileUrl = (filename, type = 'general') => {
+  const baseUrl = getBaseUrl();
+  return `${baseUrl}/uploads/${type}/${filename}`;
 };
 
 module.exports = {
@@ -382,5 +438,7 @@ module.exports = {
   generateThumbnails,
   validateFileType,
   validateFileSize,
-  cleanupUploadedFiles
+  cleanupUploadedFiles,
+  generateFileUrl, // Export the helper function
+  getBaseUrl // Export for use in other files
 };

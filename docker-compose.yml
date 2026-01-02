@@ -6,7 +6,7 @@ services:
       context: ./server
       dockerfile: Dockerfile
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"  # Only accessible locally by nginx
     environment:
       - NODE_ENV=production
     env_file:
@@ -14,13 +14,16 @@ services:
     restart: unless-stopped
     volumes:
       - ./server/public/uploads:/app/public/uploads
+      - uploads_volume:/app/public/uploads  # Add named volume for consistency
+    networks:
+      - app-network
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"  # Only accessible locally by nginx
     environment:
       - NODE_ENV=production
     env_file:
@@ -28,3 +31,29 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+    networks:
+      - app-network
+
+# Optional: Add nginx service if you want to run it in Docker too
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./sites-enabled:/etc/nginx/sites-enabled
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+    networks:
+      - app-network
+
+volumes:
+  uploads_volume:  # Named volume for uploads
+
+networks:
+  app-network:
+    driver: bridge

@@ -277,7 +277,7 @@ export const adConfig: RoleAdConfig = {
             title: 'High-Paying Remote Projects',
             subtitle: 'Access premium freelance projects with budgets starting at $10k. Work with global clients.',
             link: 'https://example.com/freelance-projects',
-            image: '/ads/freelancer/remote-projects.jpg',
+            image: '/ads/freelancer/tool-suite.jpg',
             cta: 'Browse Projects',
             sponsored: true,
             priority: 9,

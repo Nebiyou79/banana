@@ -226,7 +226,10 @@ const handleUploadError = (err, req, res, next) => {
 
 // Utility function to get file URL
 const getFileUrl = (filename, type = 'portfolio') => {
-  const baseUrl = process.env.BASE_URL || 'http://localhost:4000';
+  const isProduction = process.env.NODE_ENV === 'production';
+  const baseUrl = isProduction 
+    ? 'https://getbananalink.com' 
+    : 'http://localhost:4000';
   return `${baseUrl}/uploads/${type}/${filename}`;
 };
 

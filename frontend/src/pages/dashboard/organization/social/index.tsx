@@ -143,7 +143,7 @@ function OrganizationSocialFeedContent() {
   };
 
   const handleViewProfile = (userId: string) => {
-    window.location.href = `/profile/${userId}`;
+    window.location.href = `/social/profile/${userId}`;
   };
 
   const handlePostCreated = (post: Post) => {

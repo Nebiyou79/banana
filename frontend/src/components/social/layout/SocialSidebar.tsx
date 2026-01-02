@@ -1,4 +1,3 @@
-// components/social/layout/SocialSidebar.tsx
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,9 +8,7 @@ import {
   Users2,
   LogOut,
   ArrowLeft,
-  Star,
   Bell,
-  Search,
   BarChart3,
   Settings,
   Shield,
@@ -38,42 +35,41 @@ const SocialSidebar: React.FC<SocialSidebarProps> = ({ onClose, userProfile }) =
   if (!user) return null;
 
   const getNavigationItems = () => {
-
     const roleItems = {
       candidate: [
         { href: "/dashboard/candidate/social", label: "My Feed", icon: TrendingUp, badge: "Hot" },
         { href: "/dashboard/candidate/social/posts", label: "My Posts", icon: MessageCircle },
-        { href: "/dashboard/candidate/social/network", label: "My Network", icon: Users2 },
+        { href: "/dashboard/candidate/social/network", label: "Network", icon: Users2 },
         { href: "/dashboard/candidate/social/profile", label: "Profile", icon: Bell },
-        { href: "/dashboard/candidate/social/edit", label: "Edit Profile", icon: Edit },
+        { href: "/dashboard/candidate/social/edit", label: "Edit", icon: Edit },
       ],
       freelancer: [
         { href: "/dashboard/freelancer/social", label: "My Feed", icon: TrendingUp, badge: "Hot" },
         { href: "/dashboard/freelancer/social/posts", label: "My Posts", icon: MessageCircle },
-        { href: "/dashboard/freelancer/social/network", label: "My Network", icon: Users2 },
+        { href: "/dashboard/freelancer/social/network", label: "Network", icon: Users2 },
         { href: "/dashboard/freelancer/social/profile", label: "Profile", icon: Bell },
-        { href: "/dashboard/freelancer/social/edit", label: "Edit Profile", icon: Edit },
+        { href: "/dashboard/freelancer/social/edit", label: "Edit", icon: Edit },
       ],
       company: [
         { href: "/dashboard/company/social", label: "Company Feed", icon: TrendingUp, badge: "New" },
         { href: "/dashboard/company/social/posts", label: "Company Posts", icon: MessageCircle },
-        { href: "/dashboard/company/social/network", label: "Our Network", icon: Users2 },
+        { href: "/dashboard/company/social/network", label: "Network", icon: Users2 },
         { href: "/dashboard/company/social/profile", label: "Profile", icon: Bell },
-        { href: "/dashboard/company/social/edit", label: "Edit Profile", icon: Edit },
+        { href: "/dashboard/company/social/edit", label: "Edit", icon: Edit },
       ],
       organization: [
-        { href: "/dashboard/organization/social", label: "Organization Feed", icon: TrendingUp },
-        { href: "/dashboard/organization/social/posts", label: "Organization Posts", icon: MessageCircle },
-        { href: "/dashboard/organization/social/network", label: "Our Network", icon: Users2 },
+        { href: "/dashboard/organization/social", label: "Org Feed", icon: TrendingUp },
+        { href: "/dashboard/organization/social/posts", label: "Org Posts", icon: MessageCircle },
+        { href: "/dashboard/organization/social/network", label: "Network", icon: Users2 },
         { href: "/dashboard/organization/social/profile", label: "Profile", icon: Bell },
-        { href: "/dashboard/organization/social/edit", label: "Edit Profile", icon: Edit },
+        { href: "/dashboard/organization/social/edit", label: "Edit", icon: Edit },
       ],
       admin: [
         { href: "/dashboard/admin/social", label: "Platform Feed", icon: TrendingUp },
-        { href: "/dashboard/admin/social/moderation", label: "Content Moderation", icon: Shield, badge: "23" },
-        { href: "/dashboard/admin/social/analytics", label: "Social Analytics", icon: BarChart3 },
-        { href: "/dashboard/admin/social/users", label: "User Activity", icon: Users2 },
-        { href: "/dashboard/admin/social/settings", label: "Social Settings", icon: Settings },
+        { href: "/dashboard/admin/social/moderation", label: "Moderation", icon: Shield, badge: "23" },
+        { href: "/dashboard/admin/social/analytics", label: "Analytics", icon: BarChart3 },
+        { href: "/dashboard/admin/social/users", label: "Users", icon: Users2 },
+        { href: "/dashboard/admin/social/settings", label: "Settings", icon: Settings },
       ],
     };
 
@@ -164,7 +160,7 @@ const SocialSidebar: React.FC<SocialSidebarProps> = ({ onClose, userProfile }) =
           <div className="p-2 rounded-lg bg-slate-100 group-hover:bg-slate-200 transition-colors duration-300">
             <ArrowLeft className="w-4 h-4 text-slate-600" />
           </div>
-          <span className="text-sm font-semibold text-slate-700">Back to Main Dashboard</span>
+          <span className="text-sm font-semibold text-slate-700">Back to Dashboard</span>
         </Link>
 
         {/* Enhanced User Card */}
@@ -193,7 +189,6 @@ const SocialSidebar: React.FC<SocialSidebarProps> = ({ onClose, userProfile }) =
                 <span className="inline-block px-3 py-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-xs font-bold rounded-lg shadow-lg">
                   {getRoleDisplayName(user.role)}
                 </span>
-                {/* Verification Badge for Social Sidebar - Auto-fetches from API */}
                 <VerificationBadge
                   size="sm"
                   showText={true}
@@ -207,8 +202,8 @@ const SocialSidebar: React.FC<SocialSidebarProps> = ({ onClose, userProfile }) =
         </div>
       </div>
 
-      {/* NAVIGATION */}
-      <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+      {/* NAVIGATION - Updated with smaller, more compact buttons */}
+      <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
         {navigationItems.map((item) => {
           const isActive = router.pathname === item.href;
           const IconComp = item.icon;
@@ -218,22 +213,22 @@ const SocialSidebar: React.FC<SocialSidebarProps> = ({ onClose, userProfile }) =
               key={item.href}
               href={item.href}
               onClick={onClose}
-              className={`group relative flex items-center justify-between px-4 py-4 rounded-xl border transition-all duration-300 transform hover:scale-105 ${isActive
-                ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-2xl shadow-blue-500/25 border-transparent"
-                : "bg-white/80 backdrop-blur-sm text-slate-700 border-white/50 shadow-lg hover:shadow-xl hover:border-white/80"
+              className={`group relative flex items-center justify-between px-3 py-2.5 rounded-lg border transition-all duration-200 ${isActive
+                ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/25 border-transparent"
+                : "bg-white/70 backdrop-blur-sm text-slate-700 border-white/40 shadow-sm hover:shadow-md hover:bg-white/90 hover:border-blue-200/50"
                 }`}
             >
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg transition-colors duration-300 ${isActive
+                <div className={`p-1.5 rounded-md transition-colors duration-200 ${isActive
                   ? "bg-white/20"
-                  : "bg-slate-100 group-hover:bg-blue-100"
+                  : "bg-slate-100/80 group-hover:bg-blue-100/80"
                   }`}>
                   <IconComp
-                    className={`w-5 h-5 transition-colors duration-300 ${isActive ? "text-white" : "text-slate-600 group-hover:text-blue-600"
+                    className={`w-4 h-4 transition-colors duration-200 ${isActive ? "text-white" : "text-slate-600 group-hover:text-blue-600"
                       }`}
                   />
                 </div>
-                <span className={`font-semibold text-sm transition-colors duration-300 ${isActive ? "text-white" : "text-slate-700 group-hover:text-slate-900"
+                <span className={`font-medium text-xs transition-colors duration-200 ${isActive ? "text-white font-semibold" : "text-slate-700 group-hover:text-slate-900"
                   }`}>
                   {item.label}
                 </span>
@@ -250,12 +245,12 @@ const SocialSidebar: React.FC<SocialSidebarProps> = ({ onClose, userProfile }) =
             handleLogout();
             onClose?.();
           }}
-          className="flex items-center justify-center gap-3 w-full px-4 py-3 rounded-xl bg-white/80 backdrop-blur-sm border border-white/50 text-red-600 shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 group"
+          className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-lg bg-white/80 backdrop-blur-sm border border-white/50 text-red-600 shadow-sm hover:shadow-md transition-all duration-200 group"
         >
-          <div className="p-2 rounded-lg bg-red-100 group-hover:bg-red-200 transition-colors duration-300">
-            <LogOut className="w-4 h-4" />
+          <div className="p-1.5 rounded-md bg-red-100 group-hover:bg-red-200 transition-colors duration-200">
+            <LogOut className="w-3.5 h-3.5" />
           </div>
-          <span className="text-sm font-semibold">Sign Out</span>
+          <span className="text-xs font-semibold">Sign Out</span>
         </button>
 
         <div className="flex items-center justify-center gap-2 mt-3">

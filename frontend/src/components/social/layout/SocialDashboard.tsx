@@ -5,7 +5,7 @@ import SocialNavbar from './SocialNavbar';
 import SocialSidebar from './SocialSidebar';
 import { profileService } from '@/services/profileService';
 import { toast } from '@/hooks/use-toast';
-import { Sparkles, Zap, TrendingUp, Bell } from 'lucide-react';
+import { Sparkles, Zap, TrendingUp, Bell, ChevronRight } from 'lucide-react';
 import { Profile } from '@/services/profileService';
 import CandidateAdCard from '../CandidateAdCard';
 import CompanyAdCard from '../CompanyAdCard';
@@ -16,13 +16,13 @@ import { getAdsForRole, adConfig, AdData } from '@/data/ads';
 interface SocialDashboardLayoutProps {
   children: React.ReactNode;
   requiredRole?: 'candidate' | 'company' | 'freelancer' | 'admin' | 'organization';
-  adLimit?: number; // Number of ads to show
+  adLimit?: number;
 }
 
 export function SocialDashboardLayout({
   children,
   requiredRole,
-  adLimit = 3
+  adLimit = 2 // Reduced default to prevent overflow
 }: SocialDashboardLayoutProps) {
   const { user, isLoading, isAuthenticated } = useAuth();
   const router = useRouter();
@@ -70,7 +70,6 @@ export function SocialDashboardLayout({
       const userAds = getAdsForRole(user.role, adConfig, adLimit);
       setAds(userAds);
 
-      // Calculate ad statistics
       const stats = userAds.reduce((acc, ad) => ({
         totalImpressions: acc.totalImpressions + ad.impressions,
         totalClicks: acc.totalClicks + ad.clicks
@@ -88,7 +87,6 @@ export function SocialDashboardLayout({
         description: 'You do not have permission to access this page.',
         variant: 'destructive',
       });
-
       router.push(`/dashboard/${user?.role}/social`);
     }
   }, [user, isLoading, isAuthenticated, requiredRole, router]);
@@ -102,12 +100,10 @@ export function SocialDashboardLayout({
   if (isLoading || checkingProfile) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 flex items-center justify-center relative overflow-hidden">
-        {/* Animated Background */}
         <div className="absolute inset-0">
           <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl animate-pulse" />
           <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse delay-1000" />
         </div>
-
         <div className="relative text-center">
           <div className="w-20 h-20 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin mx-auto"></div>
           <p className="mt-6 text-lg font-semibold text-slate-700">
@@ -156,8 +152,7 @@ export function SocialDashboardLayout({
 
   /* ------------------- MAIN LAYOUT ------------------- */
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 relative overflow-hidden">
-
+    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-purple-50/20 relative overflow-hidden">
       {/* DESKTOP SIDEBAR */}
       <div className="hidden lg:block fixed inset-y-0 left-0 z-30">
         <div className="h-full">
@@ -172,7 +167,6 @@ export function SocialDashboardLayout({
             className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden animate-in fade-in duration-300"
             onClick={() => setSidebarOpen(false)}
           />
-
           <div className="fixed inset-y-0 left-0 z-50 lg:hidden animate-in slide-in-from-left-80 duration-300">
             <SocialSidebar userProfile={userProfile} onClose={() => setSidebarOpen(false)} />
           </div>
@@ -180,8 +174,7 @@ export function SocialDashboardLayout({
       )}
 
       {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col min-h-0 lg:ml-80">
-
+      <div className="flex-1 flex flex-col min-h-screen lg:ml-80">
         {/* NAVBAR */}
         <div className="flex-shrink-0 z-20">
           <SocialNavbar userProfile={userProfile} onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
@@ -189,69 +182,65 @@ export function SocialDashboardLayout({
 
         {/* PAGE CONTENT */}
         <main className="flex-1 overflow-auto pt-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {/* HEADER - Simplified */}
+            <div className="mb-6 lg:mb-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                <div>
+                  <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
+                    <span>Dashboard</span>
+                    <ChevronRight className="w-4 h-4" />
+                    <span className="text-slate-700 font-medium">
+                      {router.pathname.split('/').pop()?.replace(/-/g, ' ') || 'Home'}
+                    </span>
+                  </div>
+                  <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">
+                    Welcome back, {user?.name}
+                  </h1>
+                </div>
 
-            {/* HEADER */}
-            <div className="mb-10 text-center lg:text-left">
-              <div className="flex items-center justify-between mb-4">
-                <h1 className="text-4xl font-bold text-slate-800">
-                  {router.pathname.split('/').pop()?.replace(/-/g, ' ') || 'Dashboard'}
-                </h1>
-
-                {/* Notifications & Stats */}
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2 text-sm text-slate-600">
-                    <TrendingUp className="w-4 h-4 text-blue-500" />
-                    <span>Ad CTR: {adStats.totalImpressions > 0
-                      ? `${((adStats.totalClicks / adStats.totalImpressions) * 100).toFixed(1)}%`
-                      : '0%'}</span>
+                <div className="flex items-center gap-3">
+                  <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                    <span className="text-slate-700">Live</span>
+                    <Sparkles className="w-4 h-4 text-amber-500" />
                   </div>
                   <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
                     <Bell className="w-5 h-5 text-slate-600" />
                   </button>
                 </div>
               </div>
+            </div>
 
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-                <p className="text-lg text-slate-600">
-                  Welcome back,{' '}
-                  <span className="font-semibold text-blue-600">
-                    {user?.name}
-                  </span>
-                  <span className="mx-3 text-slate-400">•</span>
-                  <span className="capitalize text-slate-500 font-medium">{user?.role}</span>
-                </p>
+            {/* MAIN CONTENT LAYOUT */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+              {/* Main Content - Clean Layout */}
+              <div className="lg:col-span-2">
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+                  {/* Simple header for main content */}
+                  <div className="px-6 py-4 border-b border-slate-100">
+                    <h2 className="text-lg font-semibold text-slate-800">
+                      {router.pathname.includes('feed') ? 'Your Feed' :
+                        router.pathname.includes('connections') ? 'Connections' :
+                          router.pathname.includes('messages') ? 'Messages' : 'Dashboard'}
+                    </h2>
+                  </div>
 
-                {/* LIVE TAG */}
-                <div className="flex items-center justify-center lg:justify-end mt-3 lg:mt-0">
-                  <div className="flex items-center space-x-2 text-sm font-semibold text-slate-700 
-                      bg-white/90 backdrop-blur-sm px-5 py-2.5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                    <span>Live</span>
-                    <Sparkles className="w-4 h-4 text-amber-500" />
+                  {/* Main content area - clean and minimal */}
+                  <div className="p-6">
+                    {children}
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Main Content */}
-              <div className="lg:col-span-2">
-                {/* MAIN CARD */}
-                <div className="bg-white rounded-2xl border border-slate-200 
-                    shadow-lg p-8 transition-all duration-300 hover:shadow-xl">
-                  {children}
-                </div>
-              </div>
-
-              {/* Right Sidebar */}
+              {/* Right Sidebar - Fixed Height Container */}
               <div className="space-y-6">
-                {/* Profile Card */}
+                {/* Profile Card - Simplified */}
                 {userProfile && (
-                  <div className="bg-white rounded-2xl border border-slate-200 shadow-lg p-6">
-                    <div className="flex items-center gap-4">
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+                    <div className="flex items-start gap-4">
                       <div className="relative">
-                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center overflow-hidden shadow-md">
+                        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center overflow-hidden">
                           {userProfile.user.avatar ? (
                             <img
                               src={userProfile.user.avatar}
@@ -259,27 +248,27 @@ export function SocialDashboardLayout({
                               className="w-full h-full object-cover"
                             />
                           ) : (
-                            <span className="text-white text-2xl font-bold">
+                            <span className="text-white text-xl font-bold">
                               {userProfile.user.name.charAt(0).toUpperCase()}
                             </span>
                           )}
                         </div>
                       </div>
-                      <div>
-                        <h3 className="font-bold text-slate-800 text-lg">{userProfile.user.name}</h3>
-                        <p className="text-slate-600 text-sm">{userProfile.headline || 'No headline set'}</p>
-                        <div className="flex gap-6 mt-3">
-                          <div className="text-center">
-                            <div className="font-bold text-slate-800 text-xl">
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-slate-800">{userProfile.user.name}</h3>
+                        <p className="text-sm text-slate-600 mt-1">{userProfile.headline || 'No headline set'}</p>
+                        <div className="flex gap-4 mt-3">
+                          <div>
+                            <div className="font-semibold text-slate-800">
                               {userProfile.socialStats?.followerCount || 0}
                             </div>
-                            <div className="text-sm text-slate-500">Followers</div>
+                            <div className="text-xs text-slate-500">Followers</div>
                           </div>
-                          <div className="text-center">
-                            <div className="font-bold text-slate-800 text-xl">
+                          <div>
+                            <div className="font-semibold text-slate-800">
                               {userProfile.socialStats?.followingCount || 0}
                             </div>
-                            <div className="text-sm text-slate-500">Following</div>
+                            <div className="text-xs text-slate-500">Following</div>
                           </div>
                         </div>
                       </div>
@@ -287,66 +276,61 @@ export function SocialDashboardLayout({
                   </div>
                 )}
 
-                {/* Advertisements Section */}
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-slate-800">Recommended for you</h3>
-                    <span className="text-xs text-slate-500">{ads.length} ads</span>
+                {/* Advertisements Section - Fixed Height */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="px-5 py-4 border-b border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-slate-800">Recommended</h3>
+                      <span className="text-xs text-slate-500">{ads.length} ads</span>
+                    </div>
                   </div>
 
-                  <div className="space-y-6">
+                  {/* Fixed height container for ads */}
+                  <div className="p-5 space-y-5 max-h-[calc(100vh-400px)] overflow-y-auto">
                     {ads.length > 0 ? (
                       ads.map(ad => renderAdComponent(ad))
                     ) : (
-                      <div className="bg-slate-50 rounded-2xl border border-slate-200 p-8 text-center">
-                        <Sparkles className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                        <h4 className="font-semibold text-slate-600 mb-2">No ads available</h4>
-                        <p className="text-sm text-slate-500">Check back later for new opportunities</p>
+                      <div className="text-center py-8">
+                        <Sparkles className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                        <p className="text-sm text-slate-500">No recommendations available</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Ad Stats for Admin */}
-                {user?.role === 'admin' && (
-                  <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-6 text-white">
-                    <h4 className="font-semibold mb-4 flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4" />
-                      Platform Insights
-                    </h4>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="text-center p-3 bg-white/10 rounded-xl">
-                        <div className="text-xl font-bold">24k</div>
-                        <div className="text-xs text-slate-300">Users</div>
+                {/* Quick Stats */}
+                <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-5 text-white">
+                  <h4 className="font-semibold mb-4 flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4" />
+                    Your Stats
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white/10 rounded-lg p-3">
+                      <div className="text-lg font-bold">
+                        {adStats.totalImpressions > 0
+                          ? `${((adStats.totalClicks / adStats.totalImpressions) * 100).toFixed(1)}%`
+                          : '0%'}
                       </div>
-                      <div className="text-center p-3 bg-white/10 rounded-xl">
-                        <div className="text-xl font-bold">1.2k</div>
-                        <div className="text-xs text-slate-300">Posts</div>
-                      </div>
-                      <div className="text-center p-3 bg-white/10 rounded-xl">
-                        <div className="text-xl font-bold">89%</div>
-                        <div className="text-xs text-slate-300">Engagement</div>
-                      </div>
+                      <div className="text-xs text-slate-300 mt-1">Ad CTR</div>
                     </div>
-                    <div className="mt-4 pt-4 border-t border-white/10 text-xs text-slate-400">
-                      {adStats.totalImpressions.toLocaleString()} total ad impressions
+                    <div className="bg-white/10 rounded-lg p-3">
+                      <div className="text-lg font-bold">
+                        {adStats.totalImpressions.toLocaleString()}
+                      </div>
+                      <div className="text-xs text-slate-300 mt-1">Impressions</div>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             </div>
 
-            {/* FOOTER CREDITS */}
-            <div className="flex items-center justify-center gap-2 mt-8 text-slate-500 text-sm">
+            {/* FOOTER */}
+            <div className="flex items-center justify-center gap-2 mt-8 pt-6 border-t border-slate-200 text-slate-500 text-sm">
               <Zap className="w-4 h-4 text-amber-500" />
-              <span>Powered by Banana Social</span>
-              <span className="text-slate-400">•</span>
-              <span>v2.1.0</span>
+              <span>Banana Social v2.1.0</span>
             </div>
-
           </div>
         </main>
-
       </div>
     </div>
   );

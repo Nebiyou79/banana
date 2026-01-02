@@ -69,8 +69,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         { href: "/dashboard/freelancer/profile", label: "My Profile", icon: User },
         { href: "/dashboard/freelancer/portfolio", label: "Portfolio", icon: Folder },
         { href: "/dashboard/freelancer/tenders", label: "Browse Tenders", icon: ClipboardList },
-        { href: "/dashboard/freelancer/saved-tenders", label: "Saved Tenders", icon: BarChart3 },
-        { href: "/dashboard/freelancer/verification", label: "Verification", icon: CheckCircle },
+        { href: "/dashboard/freelancer/tenders/saved", label: "Saved Tenders", icon: BarChart3 },
+        { href: "/dashboard/freelancer/verifcation", label: "Verification", icon: CheckCircle },
       ],
       company: [
         { href: "/dashboard/company/social", label: "Social Feed", icon: TrendingUp, badge: "New" },
@@ -83,7 +83,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         { href: "/dashboard/company/my-tenders/saved", label: "Saved Tenders", icon: Save },
         { href: "/dashboard/company/profile", label: "Company Profile", icon: Building2 },
         { href: "/dashboard/company/products", label: "Company Products", icon: Package },
-        { href: "/dashboard/company/verification", label: "Verification", icon: CheckCircle },
+        { href: "/dashboard/company/verifcation", label: "Verification", icon: CheckCircle },
       ],
       organization: [
         { href: "/dashboard/organization/social", label: "Social Feed", icon: TrendingUp, badge: "New" },

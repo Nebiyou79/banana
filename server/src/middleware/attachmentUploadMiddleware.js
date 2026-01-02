@@ -127,13 +127,13 @@ const handleAttachmentUploadError = (err, req, res, next) => {
 const getFileUrl = (filename, fileType = 'applications') => {
   if (!filename) return null;
   
-  const baseUrl = process.env.BACKEND_URL || 'http://localhost:4000';
-  let cleanBaseUrl = baseUrl;
-  if (baseUrl.endsWith('/api/v1')) {
-    cleanBaseUrl = baseUrl.replace('/api/v1', '');
-  }
+  const isProduction = process.env.NODE_ENV === 'production';
+  const baseUrl = isProduction 
+    ? 'https://getbananalink.com' 
+    : 'http://localhost:4000';
   
-  return `${cleanBaseUrl}/api/v1/uploads/${fileType}/${filename}`;
+  // The path should be /uploads/... not /api/v1/uploads/...
+  return `${baseUrl}/uploads/${fileType}/${filename}`;
 };
 
 // Helper function to process uploaded files

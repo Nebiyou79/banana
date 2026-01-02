@@ -12,8 +12,8 @@ const {
   getMyCVs,
   getCompanyApplications,
   getOrganizationApplications,
-  getCompanyApplicationDetails,      // ADD THIS IMPORT
-  getOrganizationApplicationDetails // ADD THIS IMPORT
+  getCompanyApplicationDetails,
+  getOrganizationApplicationDetails
 } = require('../controllers/applicationController');
 const { verifyToken } = require('../middleware/authMiddleware');
 const { restrictTo } = require('../middleware/roleMiddleware');
