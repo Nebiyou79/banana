@@ -1,10 +1,12 @@
-FROM node:18-alpine
+FROM node:18-bullseye  # Changed from alpine to bullseye to fix sharp module
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files FIRST for better caching
 COPY package*.json ./
-RUN npm ci --only=production
+
+# Install dependencies - use npm install instead of npm ci
+RUN npm install --omit=dev
 
 # Copy source code
 COPY . .

@@ -1,6 +1,20 @@
 // /server/src/middleware/rateLimiter.js
 const rateLimit = require('express-rate-limit');
 
+// Safe key generator for IPv6 support
+const getSafeKey = (req) => {
+  // Use the built-in ipKeyGenerator helper for IPv6 support
+  const { ipKeyGenerator } = require('express-rate-limit');
+  const ip = ipKeyGenerator(req);
+  
+  // Add user ID if available for more granularity
+  if (req.user?.userId) {
+    return `${req.user.userId}-${ip}`;
+  }
+  
+  return ip;
+};
+
 // Different rate limits for different routes
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -12,6 +26,7 @@ const generalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true, // Don't count successful requests toward limit
+  keyGenerator: getSafeKey,
 });
 
 const authLimiter = rateLimit({
@@ -23,6 +38,7 @@ const authLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: getSafeKey,
 });
 
 const adminLimiter = rateLimit({
@@ -34,6 +50,7 @@ const adminLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: getSafeKey,
 });
 
 // MORE PERMISSIVE LIMITER FOR SOCIAL/FOLLOW ROUTES
@@ -47,10 +64,7 @@ const socialLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: false,
-  keyGenerator: (req) => {
-    // Use user ID + IP for more granular rate limiting
-    return req.user?.userId ? `${req.user.userId}-${req.ip}` : req.ip;
-  }
+  keyGenerator: getSafeKey,
 });
 
 // EVEN MORE PERMISSIVE FOR FOLLOW LISTS
@@ -64,6 +78,7 @@ const followListLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true, // Only count failed requests
+  keyGenerator: getSafeKey,
 });
 
 // VERY PERMISSIVE FOR FOLLOW STATUS CHECKS
@@ -77,6 +92,7 @@ const followStatusLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
+  keyGenerator: getSafeKey,
 });
 
 module.exports = {
