@@ -1,4 +1,4 @@
-FROM node:18-bullseye  # Changed from alpine to bullseye to fix sharp module
+FROM node:18-bullseye
 
 WORKDIR /app
 
