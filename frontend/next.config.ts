@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: {
@@ -57,7 +58,7 @@ const nextConfig = {
     ];
   },
 
-  webpack: (config, { isServer }) => {
+  webpack: (config: { resolve: { fallback: { fs: boolean; net: boolean; tls: boolean; }; }; }, { isServer }: any) => {
     if (!isServer) {
       config.resolve.fallback = {
         fs: false,
