@@ -2,23 +2,22 @@ version: '3.8'
 
 services:
   backend:
-    build: 
+    build:
       context: ./server
       dockerfile: Dockerfile
+    container_name: banana-backend
     ports:
-      - "127.0.0.1:4000:4000"  # Only accessible locally by nginx
-    environment:
-      - NODE_ENV=production
-      - APP_URL=https://getbananalink.com
-      - BACKEND_URL=https://getbananalink.com
-      - BASE_URL=https://getbananalink.com
-      - CORS_ORIGIN=https://getbananalink.com
+      - "127.0.0.1:4000:4000"
     env_file:
       - ./server/.env.production
-    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      APP_URL: https://getbananalink.com
+      BASE_URL: https://getbananalink.com
+      CORS_ORIGIN: https://getbananalink.com
     volumes:
-      - uploads_volume:/app/public/uploads:rw
-      # Remove code mount to prevent conflicts: - ./server:/app:ro
+      - uploads_volume:/app/public/uploads
+    restart: unless-stopped
     networks:
       - app-network
     healthcheck:
@@ -26,28 +25,26 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 30s
+
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    container_name: banana-frontend
     ports:
-      - "127.0.0.1:3000:3000"  # Only accessible locally by nginx
-    environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=https://getbananalink.com/api/v1
-      - NEXT_PUBLIC_BACKEND_URL=https://getbananalink.com
+      - "127.0.0.1:3000:3000"
     env_file:
       - ./frontend/.env.production
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: https://getbananalink.com/api/v1
+      NEXT_PUBLIC_BACKEND_URL: https://getbananalink.com
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
-    volumes:
-      # Remove these volumes to prevent conflicts with standalone build
-      # - ./frontend/public:/app/public:ro
-      # - static_volume:/app/.next/static
     networks:
       - app-network
     healthcheck:
@@ -59,9 +56,6 @@ services:
 volumes:
   uploads_volume:
     driver: local
-  # Remove static_volume - not needed with standalone build
-  # static_volume:
-  #   driver: local
 
 networks:
   app-network:
