@@ -5,7 +5,6 @@ const cookieParser = require('cookie-parser');
 const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const path = require('path');
-const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
@@ -17,7 +16,8 @@ const {
   followListLimiter,
   followStatusLimiter 
 } = require('./middleware/rateLimiter');
-// Load environment variables FIRST
+const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads');
+
 dotenv.config();
 
 // Check if required environment variables are set
@@ -94,39 +94,29 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads'), {
+// Serve uploads
+app.use('/uploads', express.static(UPLOADS_DIR, {
   maxAge: '1d',
   etag: true,
-  index: false
+  index: false,
 }));
 
-// For thumbnails:
-app.use('/thumbnails', express.static(path.join(process.cwd(), 'public', 'uploads', 'thumbnails'), {
-  maxAge: '1d',
-  etag: true,
-  index: false
-}));
+// Serve thumbnails
+app.use(
+  '/thumbnails',
+  express.static(path.join(UPLOADS_DIR, 'thumbnails'), {
+    maxAge: '1d',
+    etag: true,
+    index: false,
+  })
+);
 
-// Add this for better error handling
+// Allow cross-origin images
 app.use('/uploads', (req, res, next) => {
-  res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   next();
 });
 
-app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads'), {
-  maxAge: '1d',
-  etag: true,
-  index: false
-}));
-
-// Add this for better error handling
-app.use('/uploads', (req, res, next) => {
-  res.set('Cross-Origin-Resource-Policy', 'cross-origin');
-  next();
-});
-console.log('📁 Serving uploads from:', path.join(__dirname, '..', 'uploads'));
-console.log('🖼️ Serving thumbnails from:', path.join(__dirname, '..', 'uploads', 'thumbnails'));
-console.log('Serving static files from:', path.join(process.cwd(), 'public', 'uploads'));
 
 // Core Routes
 const authRoutes = require('./routes/authRoutes');
