@@ -3,7 +3,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { authService, LoginData, RegisterData, User } from '@/services/authService';
-import { useToast } from '@/hooks/use-toast';
+import { toast, useToast } from '@/hooks/use-toast';
 import { handleError, handleSuccess } from '@/lib/error-handler'; // ADD THIS IMPORT
 
 interface AuthContextType {
@@ -260,10 +260,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       (currentPath === '/login' || currentPath === '/register')) {
       const userRole = user?.role || authService.getUserRole();
       if (userRole) {
-        router.push(`/dashboard/${userRole}`);
+        const targetPath = `/dashboard/${userRole}`;
+        // Only redirect if we're not already navigating to the target
+        if (currentPath !== targetPath) {
+          router.push(targetPath);
+        }
       }
     }
-  }, [hasToken, isAuthenticated, isInitialized, userLoading, router, user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasToken, isAuthenticated, isInitialized, userLoading, router.pathname]);
 
   const isLoading = userLoading || loginMutation.isPending || registerMutation.isPending || !isInitialized;
 
@@ -280,8 +285,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-function handleInfo(arg0: string) {
-  throw new Error('Function not implemented.');
+function handleInfo(message: string) {
+  if (typeof window !== 'undefined') {
+    toast({
+      title: 'Info',
+      description: message,
+      variant: 'default',
+    });
+  }
 }
 
 export type { User };

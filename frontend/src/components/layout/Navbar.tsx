@@ -84,7 +84,7 @@ export default function Navbar({ onMenuToggle }: NavbarProps) {
       case "company":
         return [
           { href: "/dashboard/company/jobs", label: "Manage Jobs" },
-          { href: "/tenders", label: "Browse Tenders" },
+          { href: "/dashboard/company/tenders", label: "Browse Tenders" },
           { href: "/dashboard/company/profile", label: "Profile" },
           { href: "/dashboard/company", label: "Dashboard" },
           { href: "/dashboard/company/social", label: "Social Feed" },

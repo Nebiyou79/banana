@@ -55,7 +55,7 @@ const SocialSidebar: React.FC<SocialSidebarProps> = ({ onClose, userProfile }) =
         { href: "/dashboard/company/social/posts", label: "Company Posts", icon: MessageCircle },
         { href: "/dashboard/company/social/network", label: "Network", icon: Users2 },
         { href: "/dashboard/company/social/profile", label: "Profile", icon: Bell },
-        { href: "/dashboard/company/social/profileedit", label: "Edit", icon: Edit },
+        { href: "/dashboard/company/social/profile/edit", label: "Edit", icon: Edit },
       ],
       organization: [
         { href: "/dashboard/organization/social", label: "Org Feed", icon: TrendingUp },

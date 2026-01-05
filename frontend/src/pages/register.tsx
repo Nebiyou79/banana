@@ -4,8 +4,8 @@ import { useRouter } from 'next/router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { 
-  Eye, EyeOff, Loader2, Briefcase, ArrowRight, 
+import {
+  Eye, EyeOff, Loader2, Briefcase, ArrowRight,
   CheckCircle, Shield, Zap
 } from 'lucide-react';
 import Link from 'next/link';
@@ -92,7 +92,7 @@ export default function RegisterPage() {
       }
 
       const result = await registerUser(values);
-      
+
       // Check if OTP verification is required
       if (result.data?.requiresVerification) {
         setVerificationEmail(values.email);
@@ -118,7 +118,7 @@ export default function RegisterPage() {
 
     } catch (error: any) {
       console.error('Registration error:', error);
-      
+
       // Handle specific error cases with toast
       if (error.message.includes('already exists')) {
         toast({
@@ -153,8 +153,8 @@ export default function RegisterPage() {
   if (requiresVerification) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
-        <OTPVerification 
-          email={verificationEmail} 
+        <OTPVerification
+          email={verificationEmail}
           onBack={() => setRequiresVerification(false)}
         />
       </div>
@@ -167,7 +167,7 @@ export default function RegisterPage() {
       <div className={`hidden lg:flex lg:w-1/2 relative overflow-hidden ${colorClasses.bg.darkNavy}`}>
         <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:60px_60px]"></div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
-        
+
         <div className="relative z-10 flex flex-col justify-between items-center px-16 py-12">
           {/* Logo */}
           <div className="pl-12 flex items-center space-x-3">
@@ -240,7 +240,7 @@ export default function RegisterPage() {
         <div className="w-full max-w-md">
           {/* Mobile Logo - Improved to match desktop layout */}
           <div className="lg:hidden flex justify-center items-center mt-4 mb-10">
-            <div 
+            <div
               className={`
                 rounded-2xl 
                 px-6 py-5 
@@ -253,7 +253,7 @@ export default function RegisterPage() {
               `}
             >
               {/* Logo Container */}
-              <div 
+              <div
                 className={`
                   w-16 h-16 
                   rounded-xl 
@@ -380,23 +380,22 @@ export default function RegisterPage() {
                             {[1, 2, 3, 4].map((i) => (
                               <div
                                 key={i}
-                                className={`h-2 flex-1 rounded-full ${
-                                  i <= passwordStrength 
-                                    ? passwordStrength === 1 ? 'bg-red-400' 
-                                      : passwordStrength === 2 ? 'bg-orange-400' 
-                                      : passwordStrength === 3 ? 'bg-yellow-400' 
-                                      : 'bg-green-400'
+                                className={`h-2 flex-1 rounded-full ${i <= passwordStrength
+                                    ? passwordStrength === 1 ? 'bg-red-400'
+                                      : passwordStrength === 2 ? 'bg-orange-400'
+                                        : passwordStrength === 3 ? 'bg-yellow-400'
+                                          : 'bg-green-400'
                                     : 'bg-gray-200'
-                                }`}
+                                  }`}
                               />
                             ))}
                           </div>
                           <p className="text-xs text-gray-600 font-medium">
-                            {passwordStrength === 0 ? 'Very weak' 
-                              : passwordStrength === 1 ? 'Weak' 
-                              : passwordStrength === 2 ? 'Fair' 
-                              : passwordStrength === 3 ? 'Good' 
-                              : 'Strong'}
+                            {passwordStrength === 0 ? 'Very weak'
+                              : passwordStrength === 1 ? 'Weak'
+                                : passwordStrength === 2 ? 'Fair'
+                                  : passwordStrength === 3 ? 'Good'
+                                    : 'Strong'}
                           </p>
                         </div>
                       )}
@@ -468,7 +467,7 @@ export default function RegisterPage() {
                             Freelancer
                           </SelectItem>
                           <SelectItem value="company" className="text-base py-3 hover:bg-blue-50 focus:bg-blue-50">
-                            Company 
+                            Company
                           </SelectItem>
                           <SelectItem value="organization" className="text-base py-3 hover:bg-blue-50 focus:bg-blue-50">
                             Organization
@@ -499,8 +498,8 @@ export default function RegisterPage() {
                   </label>
                 </div>
 
-                <SleekButton 
-                  type="submit" 
+                <SleekButton
+                  type="submit"
                   className="w-full h-12 rounded-xl text-base font-semibold bg-gradient-to-r from-blue-600 to-purple-600 text-white transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-[1.02] transform"
                   disabled={isLoading}
                   onMouseEnter={() => setIsHovered(true)}

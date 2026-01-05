@@ -30,7 +30,7 @@ export function DashboardLayout({ children, requiredRole }: DashboardLayoutProps
         setSidebarOpen(true);
       }
     };
-    
+
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
@@ -159,7 +159,7 @@ export function DashboardLayout({ children, requiredRole }: DashboardLayoutProps
                     <span className="capitalize">{user?.role}</span>
                   </p>
                 </div>
-                
+
                 {/* Quick Actions */}
                 <div className="hidden lg:flex items-center space-x-3">
                   <div className={`flex items-center space-x-2 text-sm ${colorClasses.text.gray800} ${colorClasses.bg.white} px-4 py-2 rounded-lg shadow-sm border ${colorClasses.border.gray400}`}>
