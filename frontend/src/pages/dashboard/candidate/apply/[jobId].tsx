@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// pages/dashboard/candidate/apply/[jobId].tsx - PREMIUM FIXED VERSION
+// pages/dashboard/candidate/apply/[jobId].tsx - MOBILE OPTIMIZED
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { GetServerSideProps } from 'next';
@@ -8,12 +8,12 @@ import { jobService, type Job } from '@/services/jobService';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  ArrowLeft, 
-  Briefcase, 
-  Building, 
-  MapPin, 
-  Clock, 
+import {
+  ArrowLeft,
+  Briefcase,
+  Building,
+  MapPin,
+  Clock,
   DollarSign,
   Loader2,
   AlertCircle,
@@ -21,11 +21,14 @@ import {
   Shield,
   CheckCircle,
   Star,
-  Target
+  Target,
+  ChevronLeft,
+  Calendar
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Badge } from '@/components/ui/Badge';
+import { colors, colorClasses } from '@/utils/color';
 
 interface ApplyPageProps {
   initialJob: Job | null;
@@ -59,10 +62,10 @@ const ApplyPage: React.FC<ApplyPageProps> = ({ initialJob, error: initialError }
       const jobData = await jobService.getJob(jobId);
       setJob(jobData);
     } catch (error: any) {
-      console.error('❌ Failed to load job:', error);
+      console.error('Failed to load job:', error);
       const errorMessage = error.message || 'Failed to load job details';
       setError(errorMessage);
-      
+
       toast({
         title: 'Error',
         description: errorMessage,
@@ -79,7 +82,7 @@ const ApplyPage: React.FC<ApplyPageProps> = ({ initialJob, error: initialError }
       description: 'Your application has been sent successfully.',
       variant: 'default'
     });
-    
+
     setTimeout(() => {
       router.push('/dashboard/candidate/applications');
     }, 2000);
@@ -104,19 +107,19 @@ const ApplyPage: React.FC<ApplyPageProps> = ({ initialJob, error: initialError }
   if (!user) {
     return (
       <DashboardLayout>
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-4">
-          <Card className="max-w-md w-full mx-4 backdrop-blur-xl bg-white/80 border border-white/20 shadow-2xl rounded-3xl">
-            <CardContent className="p-8 text-center">
-              <div className="w-16 h-16 bg-rose-100/50 rounded-2xl flex items-center justify-center mx-auto mb-6 backdrop-blur-sm border border-rose-200/30">
-                <AlertCircle className="h-8 w-8 text-rose-500/80" />
+        <div className="min-h-screen bg-white flex items-center justify-center p-4">
+          <Card className="w-full max-w-sm bg-white border-0 shadow-none">
+            <CardContent className="p-6 text-center">
+              <div className="w-14 h-14 bg-amber-50 rounded-xl flex items-center justify-center mx-auto mb-5">
+                <AlertCircle className="h-7 w-7 text-amber-500" />
               </div>
-              <h2 className="text-2xl font-bold text-slate-800 mb-4">Authentication Required</h2>
-              <p className="text-slate-600 mb-8 text-lg leading-relaxed">
+              <h2 className="text-xl font-bold text-gray-900 mb-3">Authentication Required</h2>
+              <p className="text-gray-600 mb-6 text-base leading-relaxed">
                 Please log in as a candidate to apply for jobs.
               </p>
-              <Button 
+              <Button
                 onClick={() => router.push('/auth/login')}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg transition-all duration-300 hover:scale-105 py-3 text-lg"
+                className={`w-full ${colorClasses.bg.darkNavy} hover:opacity-90 text-white py-3.5 text-base font-medium rounded-lg`}
               >
                 Log In
               </Button>
@@ -130,19 +133,19 @@ const ApplyPage: React.FC<ApplyPageProps> = ({ initialJob, error: initialError }
   if (user.role !== 'candidate') {
     return (
       <DashboardLayout>
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-4">
-          <Card className="max-w-md w-full mx-4 backdrop-blur-xl bg-white/80 border border-white/20 shadow-2xl rounded-3xl">
-            <CardContent className="p-8 text-center">
-              <div className="w-16 h-16 bg-rose-100/50 rounded-2xl flex items-center justify-center mx-auto mb-6 backdrop-blur-sm border border-rose-200/30">
-                <AlertCircle className="h-8 w-8 text-rose-500/80" />
+        <div className="min-h-screen bg-white flex items-center justify-center p-4">
+          <Card className="w-full max-w-sm bg-white border-0 shadow-none">
+            <CardContent className="p-6 text-center">
+              <div className="w-14 h-14 bg-rose-50 rounded-xl flex items-center justify-center mx-auto mb-5">
+                <AlertCircle className="h-7 w-7 text-rose-500" />
               </div>
-              <h2 className="text-2xl font-bold text-slate-800 mb-4">Access Denied</h2>
-              <p className="text-slate-600 mb-8 text-lg leading-relaxed">
+              <h2 className="text-xl font-bold text-gray-900 mb-3">Access Denied</h2>
+              <p className="text-gray-600 mb-6 text-base leading-relaxed">
                 Only candidates can apply for jobs. Please switch to a candidate account.
               </p>
-              <Button 
+              <Button
                 onClick={() => router.push('/dashboard')}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg transition-all duration-300 hover:scale-105 py-3 text-lg"
+                className={`w-full ${colorClasses.bg.darkNavy} hover:opacity-90 text-white py-3.5 text-base font-medium rounded-lg`}
               >
                 Go to Dashboard
               </Button>
@@ -156,11 +159,11 @@ const ApplyPage: React.FC<ApplyPageProps> = ({ initialJob, error: initialError }
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-4">
-          <div className="text-center backdrop-blur-xl bg-white/60 rounded-3xl p-12 shadow-2xl border border-white/20">
-            <Loader2 className="h-16 w-16 animate-spin text-blue-500/80 mx-auto mb-6" />
-            <p className="text-slate-700 text-xl font-medium mb-3">Loading job details...</p>
-            <p className="text-slate-500 text-lg">Job ID: {jobId}</p>
+        <div className="min-h-screen bg-white flex items-center justify-center p-4">
+          <div className="text-center">
+            <Loader2 className={`h-12 w-12 animate-spin ${colorClasses.text.darkNavy} mx-auto mb-4`} />
+            <p className="text-gray-800 text-lg font-medium mb-2">Loading job details...</p>
+            <p className="text-gray-500 text-sm">Job ID: {jobId}</p>
           </div>
         </div>
       </DashboardLayout>
@@ -170,31 +173,31 @@ const ApplyPage: React.FC<ApplyPageProps> = ({ initialJob, error: initialError }
   if (error || !job) {
     return (
       <DashboardLayout>
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-4">
-          <Card className="max-w-md w-full mx-4 backdrop-blur-xl bg-white/80 border border-white/20 shadow-2xl rounded-3xl">
-            <CardContent className="p-8 text-center">
-              <div className="w-16 h-16 bg-rose-100/50 rounded-2xl flex items-center justify-center mx-auto mb-6 backdrop-blur-sm border border-rose-200/30">
-                <AlertCircle className="h-8 w-8 text-rose-500/80" />
+        <div className="min-h-screen bg-white flex items-center justify-center p-4">
+          <Card className="w-full max-w-sm bg-white border-0 shadow-none">
+            <CardContent className="p-6 text-center">
+              <div className="w-14 h-14 bg-rose-50 rounded-xl flex items-center justify-center mx-auto mb-5">
+                <AlertCircle className="h-7 w-7 text-rose-500" />
               </div>
-              <h2 className="text-2xl font-bold text-slate-800 mb-4">Unable to Load Job</h2>
-              <p className="text-slate-600 mb-8 text-lg leading-relaxed">
+              <h2 className="text-xl font-bold text-gray-900 mb-3">Unable to Load Job</h2>
+              <p className="text-gray-600 mb-6 text-base leading-relaxed">
                 {error || 'The job you are looking for does not exist or has been removed.'}
               </p>
-              <div className="space-y-4">
-                <Button onClick={handleRetry} className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg transition-all duration-300 hover:scale-105 py-3">
-                  <RefreshCw className="h-5 w-5 mr-3" />
+              <div className="space-y-3">
+                <Button onClick={handleRetry} className={`w-full ${colorClasses.bg.darkNavy} hover:opacity-90 text-white py-3.5`}>
+                  <RefreshCw className="h-4.5 w-4.5 mr-2.5" />
                   Try Again
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => router.push('/dashboard/candidate/jobs')}
-                  className="w-full border-slate-300 text-slate-700 hover:bg-slate-50 transition-all duration-300 py-3"
+                  className="w-full border-gray-300 text-gray-700 hover:bg-gray-50 py-3.5"
                 >
                   Browse Other Jobs
                 </Button>
               </div>
               {jobId && (
-                <p className="text-sm text-slate-500 mt-6">Job ID: {jobId}</p>
+                <p className="text-xs text-gray-400 mt-5">Job ID: {jobId}</p>
               )}
             </CardContent>
           </Card>
@@ -209,24 +212,24 @@ const ApplyPage: React.FC<ApplyPageProps> = ({ initialJob, error: initialError }
   if (!isJobActive) {
     return (
       <DashboardLayout>
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-4">
-          <Card className="max-w-md w-full mx-4 backdrop-blur-xl bg-white/80 border border-white/20 shadow-2xl rounded-3xl">
-            <CardContent className="p-8 text-center">
-              <div className="w-16 h-16 bg-amber-100/50 rounded-2xl flex items-center justify-center mx-auto mb-6 backdrop-blur-sm border border-amber-200/30">
-                <Clock className="h-8 w-8 text-amber-500/80" />
+        <div className="min-h-screen bg-white flex items-center justify-center p-4">
+          <Card className="w-full max-w-sm bg-white border-0 shadow-none">
+            <CardContent className="p-6 text-center">
+              <div className="w-14 h-14 bg-amber-50 rounded-xl flex items-center justify-center mx-auto mb-5">
+                <Clock className="h-7 w-7 text-amber-500" />
               </div>
-              <h2 className="text-2xl font-bold text-slate-800 mb-4">
+              <h2 className="text-xl font-bold text-gray-900 mb-3">
                 {isDeadlinePassed ? 'Application Closed' : 'Job Not Available'}
               </h2>
-              <p className="text-slate-600 mb-8 text-lg leading-relaxed">
-                {isDeadlinePassed 
+              <p className="text-gray-600 mb-6 text-base leading-relaxed">
+                {isDeadlinePassed
                   ? 'The application deadline for this job has passed.'
                   : 'This job is no longer accepting applications.'
                 }
               </p>
-              <Button 
+              <Button
                 onClick={() => router.push('/dashboard/candidate/jobs')}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg transition-all duration-300 hover:scale-105 py-3 text-lg"
+                className={`w-full ${colorClasses.bg.darkNavy} hover:opacity-90 text-white py-3.5 text-base font-medium rounded-lg`}
               >
                 Browse Active Jobs
               </Button>
@@ -239,113 +242,134 @@ const ApplyPage: React.FC<ApplyPageProps> = ({ initialJob, error: initialError }
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header */}
-          <div className="mb-8">
-            <Button
-              variant="ghost"
-              onClick={handleCancel}
-              className="mb-8 text-slate-600 hover:text-slate-800 transition-all duration-300 hover:scale-105 group"
-            >
-              <ArrowLeft className="h-5 w-5 mr-3 group-hover:-translate-x-1 transition-transform" />
-              Back to Job Details
-            </Button>
+      <div className="min-h-screen bg-white">
+        {/* Mobile Header */}
+        <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleCancel}
+            className="p-2 -ml-2"
+          >
+            <ChevronLeft className="h-5 w-5 text-gray-700" />
+          </Button>
+          <div className="ml-2 flex-1">
+            <h1 className="text-base font-semibold text-gray-900 truncate">Apply for Position</h1>
+            <p className="text-xs text-gray-500 truncate">
+              {job.title} • {jobService.getOwnerName(job)}
+            </p>
+          </div>
+        </div>
 
-            {/* Job Summary Card */}
-            <Card className="backdrop-blur-xl bg-white/80 border border-white/20 shadow-2xl rounded-3xl mb-8 overflow-hidden">
-              <CardContent className="p-8">
-                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-8">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-4 mb-6">
-                      <h1 className="text-3xl font-bold text-slate-800 bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
-                        {job.title}
-                      </h1>
-                      <div className="flex gap-2">
-                        {job.featured && (
-                          <Badge className="bg-purple-500/10 text-purple-600 border-purple-200/30 backdrop-blur-sm px-4 py-2">
-                            <Star className="h-4 w-4 mr-2" />
-                            Featured
-                          </Badge>
-                        )}
-                        {job.urgent && (
-                          <Badge className="bg-rose-500/10 text-rose-600 border-rose-200/30 backdrop-blur-sm px-4 py-2">
-                            <Target className="h-4 w-4 mr-2" />
-                            Urgent
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-6 text-base text-slate-600 mb-6 flex-wrap">
-                      <div className="flex items-center gap-3 bg-slate-500/5 px-4 py-2 rounded-2xl backdrop-blur-sm border border-slate-200/30">
-                        <Building className="h-5 w-5" />
-                        <span className="font-medium">{jobService.getOwnerName(job)}</span>
-                        {(job.company?.verified || job.organization?.verified) && (
-                          <Shield className="h-5 w-5 text-emerald-600 ml-2" />
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 bg-slate-500/5 px-4 py-2 rounded-2xl backdrop-blur-sm border border-slate-200/30">
-                        <MapPin className="h-5 w-5" />
-                        <span className="font-medium">{job.location?.city || 'N/A'}, {job.location?.region || 'N/A'}</span>
-                      </div>
-                      <div className="flex items-center gap-3 bg-slate-500/5 px-4 py-2 rounded-2xl backdrop-blur-sm border border-slate-200/30">
-                        <Briefcase className="h-5 w-5" />
-                        <span className="font-medium">{jobService.getJobTypeLabel(job.type)}</span>
-                      </div>
-                      {job.salary && (
-                        <div className="flex items-center gap-3 bg-slate-500/5 px-4 py-2 rounded-2xl backdrop-blur-sm border border-slate-200/30">
-                          <DollarSign className="h-5 w-5" />
-                          <span className="font-medium">{jobService.formatSalary(job.salary)}</span>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {job.shortDescription && (
-                      <p className="text-slate-700 text-lg leading-relaxed bg-slate-500/5 p-6 rounded-2xl border border-slate-200/30 backdrop-blur-sm">
-                        {job.shortDescription}
-                      </p>
+        {/* Main Content */}
+        <div className="p-4">
+          {/* Job Summary Card */}
+          <Card className="bg-white border border-gray-200 rounded-xl mb-6">
+            <CardContent className="p-4">
+              <div className="mb-4">
+                <div className="flex flex-wrap items-start gap-2 mb-3">
+                  <h2 className="text-lg font-bold text-gray-900 flex-1 min-w-0">
+                    {job.title}
+                  </h2>
+                  <div className="flex gap-1.5">
+                    {job.featured && (
+                      <Badge className={`${colorClasses.bg.goldenMustard} text-white border-0 px-2 py-0.5 text-xs`}>
+                        <Star className="h-3 w-3 mr-1 inline" />
+                        Featured
+                      </Badge>
+                    )}
+                    {job.urgent && (
+                      <Badge className="bg-rose-500 text-white border-0 px-2 py-0.5 text-xs">
+                        <Target className="h-3 w-3 mr-1 inline" />
+                        Urgent
+                      </Badge>
                     )}
                   </div>
-                  
-                  {job.applicationDeadline && (
-                    <div className="flex items-center gap-4 px-6 py-4 bg-amber-500/5 rounded-2xl border border-amber-200/30 backdrop-blur-sm">
-                      <Clock className="h-6 w-6 text-amber-600" />
-                      <div>
-                        <p className="text-base font-semibold text-amber-800">Apply before</p>
-                        <p className="text-base text-amber-700 font-medium">
-                          {new Date(job.applicationDeadline).toLocaleDateString()}
-                        </p>
-                      </div>
+                </div>
+
+                {/* Mobile Compact Job Info */}
+                <div className="space-y-2 mb-4">
+                  <div className="flex items-center gap-2">
+                    <Building className="h-3.5 w-3.5 text-gray-500" />
+                    <span className="text-sm font-medium text-gray-700 truncate">
+                      {jobService.getOwnerName(job)}
+                    </span>
+                    {(job.company?.verified || job.organization?.verified) && (
+                      <Shield className="h-3.5 w-3.5 text-emerald-500 ml-0.5" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-3.5 w-3.5 text-gray-500" />
+                    <span className="text-sm text-gray-600">
+                      {job.location?.city || 'N/A'}, {job.location?.region || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Briefcase className="h-3.5 w-3.5 text-gray-500" />
+                    <span className="text-sm text-gray-600">
+                      {jobService.getJobTypeLabel(job.type)}
+                    </span>
+                  </div>
+                  {job.salary && (
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-3.5 w-3.5 text-gray-500" />
+                      <span className="text-sm text-gray-600">
+                        {jobService.formatSalary(job.salary)}
+                      </span>
                     </div>
                   )}
                 </div>
 
-                {/* Application Status */}
-                <div className="mt-6 p-6 bg-blue-500/5 rounded-2xl border border-blue-200/30 backdrop-blur-sm">
-                  <div className="flex items-center gap-4">
-                    <CheckCircle className="h-7 w-7 text-blue-600" />
+                {job.shortDescription && (
+                  <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg">
+                    {job.shortDescription}
+                  </p>
+                )}
+              </div>
+
+              {job.applicationDeadline && (
+                <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-100">
+                  <div className="flex items-center gap-2.5">
+                    <Calendar className="h-4.5 w-4.5 text-amber-600" />
                     <div>
-                      <p className="text-lg font-semibold text-blue-900">Ready to Apply</p>
-                      <p className="text-blue-700 text-base">
-                        Complete the application form below to apply for this position
+                      <p className="text-xs font-semibold text-amber-800">Apply before</p>
+                      <p className="text-sm text-amber-700 font-medium">
+                        {new Date(job.applicationDeadline).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
+                  <div className={`text-xs px-2.5 py-1 rounded-full ${colorClasses.bg.darkNavy} text-white`}>
+                    Active
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Application Status Banner */}
+          <div className="mb-6 p-3.5 bg-blue-50 rounded-xl border border-blue-100">
+            <div className="flex items-center gap-3">
+              <CheckCircle className="h-5 w-5 text-blue-600" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-blue-900">Ready to Apply</p>
+                <p className="text-xs text-blue-700">
+                  Complete the form below to submit your application
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Application Form */}
-          <ApplicationForm
-            jobId={job._id}
-            jobTitle={job.title}
-            companyName={jobService.getOwnerName(job)}
-            onSuccess={handleApplicationSuccess}
-            onCancel={handleCancel}
-            onError={handleApplicationError}
-          />
+          <div className="bg-white rounded-xl border border-gray-200">
+            <ApplicationForm
+              jobId={job._id}
+              jobTitle={job.title}
+              companyName={jobService.getOwnerName(job)}
+              onSuccess={handleApplicationSuccess}
+              onCancel={handleCancel}
+              onError={handleApplicationError}
+            />
+          </div>
         </div>
       </div>
     </DashboardLayout>
@@ -366,15 +390,15 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     }
 
     const job = await jobService.getJob(jobId);
-    
+
     return {
       props: {
         initialJob: job,
       },
     };
   } catch (error: any) {
-    console.error('❌ SSR Error fetching job:', error);
-    
+    console.error('SSR Error fetching job:', error);
+
     return {
       props: {
         initialJob: null,

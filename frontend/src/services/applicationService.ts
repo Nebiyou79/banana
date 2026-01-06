@@ -344,7 +344,7 @@ const handleApiError = (error: any, defaultMessage: string): never => {
       data: error.config?.data
     }
   });
-  
+
   if (error.response?.data?.message) {
     const message = error.response.data.message;
     console.error('🔴 Server Error Message:', message);
@@ -377,31 +377,31 @@ const handleApiError = (error: any, defaultMessage: string): never => {
 // Clean filters to remove empty values
 const cleanFilters = (filters?: ApplicationFilters): ApplicationFilters => {
   if (!filters) return {};
-  
+
   const cleaned: ApplicationFilters = {};
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== '' && value !== null && value !== undefined && value !== 'all') {
       cleaned[key as keyof ApplicationFilters] = value;
     }
   });
-  
+
   return cleaned;
 };
 
 // Utility function to convert Mongoose documents to plain objects
 const convertMongooseDocToPlainObject = (doc: any): any => {
   if (!doc) return doc;
-  
+
   // If it's a Mongoose document, convert to plain object
   if (doc._doc && typeof doc._doc === 'object') {
     return { ...doc._doc };
   }
-  
+
   // If it has toObject method, use it
   if (typeof doc.toObject === 'function') {
     return doc.toObject();
   }
-  
+
   // Otherwise return as is
   return doc;
 };
@@ -409,30 +409,30 @@ const convertMongooseDocToPlainObject = (doc: any): any => {
 // Enhanced file field name detection
 const getFileFieldName = (file: File, index?: number): string => {
   const fileName = file.name.toLowerCase();
-  
+
   console.log('📁 [Frontend] Detecting field name for file:', file.name, { fileName });
 
   // Check if this is a reference document based on filename patterns
-  if (fileName.includes('reference') || 
-      fileName.includes('recommendation') || 
-      fileName.includes('letter') ||
-      fileName.includes('ref-') ||
-      fileName.includes('rec-')) {
+  if (fileName.includes('reference') ||
+    fileName.includes('recommendation') ||
+    fileName.includes('letter') ||
+    fileName.includes('ref-') ||
+    fileName.includes('rec-')) {
     console.log(`📁 [Frontend] ${file.name} -> referencePdfs`);
     return 'referencePdfs';
   }
-  
+
   // Check if this is an experience document based on filename patterns
-  if (fileName.includes('experience') || 
-      fileName.includes('work') || 
-      fileName.includes('employment') ||
-      fileName.includes('exp-') ||
-      fileName.includes('job-') ||
-      fileName.includes('employment-')) {
+  if (fileName.includes('experience') ||
+    fileName.includes('work') ||
+    fileName.includes('employment') ||
+    fileName.includes('exp-') ||
+    fileName.includes('job-') ||
+    fileName.includes('employment-')) {
     console.log(`📁 [Frontend] ${file.name} -> experiencePdfs`);
     return 'experiencePdfs';
   }
-  
+
   // Default: assume it's a reference document
   console.log(`📁 [Frontend] ${file.name} -> referencePdfs (default)`);
   return 'referencePdfs';
@@ -458,17 +458,17 @@ const getFileExtension = (file: any): string => {
     const ext = file.mimetype.split('/')[1];
     if (ext) return ext;
   }
-  
+
   if (file.filename) {
     const ext = file.filename.split('.').pop();
     if (ext && ext.length < 6) return ext;
   }
-  
+
   if (file.originalName) {
     const ext = file.originalName.split('.').pop();
     if (ext && ext.length < 6) return ext;
   }
-  
+
   return 'file';
 };
 
@@ -491,7 +491,7 @@ const getCandidateCVs = async (): Promise<CV[]> => {
     const enhancedCVs = cvsData.map((cv: any) => {
       // Convert Mongoose document if needed
       const plainCV = convertMongooseDocToPlainObject(cv);
-      
+
       return {
         _id: plainCV._id,
         filename: plainCV.filename,
@@ -525,7 +525,7 @@ const getCandidateCVs = async (): Promise<CV[]> => {
       // Transform the CV data to match the CV interface
       const cvs = profile.cvs.map((cv: any) => {
         const plainCV = convertMongooseDocToPlainObject(cv);
-        
+
         return {
           _id: plainCV._id,
           filename: plainCV.filename,
@@ -563,10 +563,10 @@ const getCandidateCVs = async (): Promise<CV[]> => {
 const getFileSize = (file: Attachment | CV): string => {
   // Convert Mongoose document first
   const plainFile = convertMongooseDocToPlainObject(file);
-  
+
   // Handle various file size scenarios
   const bytes = plainFile.size;
-  
+
   if (bytes === undefined || bytes === null) {
     debug('⚠️ No file size available for file:', plainFile);
     return 'Unknown size';
@@ -581,11 +581,9 @@ const getFileSize = (file: Attachment | CV): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-// FIXED: Enhanced file URL generation - removed text document handling since we're not creating text files anymore
+// FIXED: Smart file URL generation that works in all environments
 const getCorrectFileUrl = (file: any, type: 'cv' | 'references' | 'experience' | 'applications'): string => {
   const plainFile = convertMongooseDocToPlainObject(file);
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
-  const cleanBackendUrl = backendUrl.replace(/\/+$/, '');
 
   console.log('🔗 File URL generation details:', {
     type,
@@ -596,32 +594,68 @@ const getCorrectFileUrl = (file: any, type: 'cv' | 'references' | 'experience' |
     path: plainFile.path
   });
 
-  // Strategy 1: Use direct URL if available and valid
-  if (plainFile.url) {
-    let url = plainFile.url;
-    if (!url.startsWith('http')) {
-      // Ensure URL starts with /api/v1
-      if (!url.startsWith('/api/v1')) {
-        url = `/api/v1${url.startsWith('/') ? url : '/' + url}`;
-      }
-      url = `${cleanBackendUrl}${url}`;
+  // Helper function to normalize URLs
+  const normalizeUrl = (inputUrl: string): string => {
+    // If it's already a full URL, return as is
+    if (inputUrl.startsWith('http')) {
+      return inputUrl;
     }
-    console.log('✅ Using direct URL:', url);
-    return url;
+
+    // If it's a relative URL, add the current origin
+    if (typeof window !== 'undefined') {
+      const currentOrigin = window.location.origin;
+      // Ensure the path starts with a slash
+      const path = inputUrl.startsWith('/') ? inputUrl : '/' + inputUrl;
+      return `${currentOrigin}${path}`;
+    } else {
+      // Server-side: use environment variable
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      const cleanBackendUrl = backendUrl.replace(/\/+$/, '');
+      const path = inputUrl.startsWith('/') ? inputUrl : '/' + inputUrl;
+      return `${cleanBackendUrl}${path}`;
+    }
+  };
+
+  // Strategy 1: Use URL from database (preferred)
+  if (plainFile.url) {
+    // If URL contains localhost:4000, handle it specially
+    if (plainFile.url.includes('localhost:4000')) {
+      // Extract the path part after localhost:4000
+      const pathMatch = plainFile.url.match(/localhost:4000(\/.*)/);
+      if (pathMatch && pathMatch[1]) {
+        const path = pathMatch[1];
+        const normalizedUrl = normalizeUrl(path);
+        console.log('✅ Converted localhost URL:', normalizedUrl);
+        return normalizedUrl;
+      }
+    }
+
+    // Normalize the URL
+    const normalizedUrl = normalizeUrl(plainFile.url);
+    console.log('✅ Using normalized URL:', normalizedUrl);
+    return normalizedUrl;
   }
 
-  // Strategy 2: For application attachments, use the uploads endpoint
-  if (type === 'applications' || type === 'references' || type === 'experience') {
-    const url = `${cleanBackendUrl}/api/v1/uploads/applications/${plainFile.filename}`;
-    console.log('✅ Using applications upload URL:', url);
-    return url;
-  }
-
-  // Strategy 3: Use filename with proper type-based path
+  // Strategy 2: Build from filename
   if (plainFile.filename) {
-    const url = `${cleanBackendUrl}/api/v1/uploads/${type}/${plainFile.filename}`;
-    console.log('✅ Using filename URL:', url);
-    return url;
+    // Determine the correct endpoint path
+    let endpointPath = '';
+    if (type === 'applications' || type === 'references' || type === 'experience') {
+      endpointPath = `/api/v1/uploads/applications/${plainFile.filename}`;
+    } else {
+      endpointPath = `/api/v1/uploads/${type}/${plainFile.filename}`;
+    }
+
+    const normalizedUrl = normalizeUrl(endpointPath);
+    console.log('✅ Built URL from filename:', normalizedUrl);
+    return normalizedUrl;
+  }
+
+  // Strategy 3: Fallback to path
+  if (plainFile.path) {
+    const normalizedUrl = normalizeUrl(plainFile.path);
+    console.log('✅ Using path URL:', normalizedUrl);
+    return normalizedUrl;
   }
 
   console.log('❌ No valid file identifiers found:', plainFile);
@@ -644,7 +678,7 @@ const downloadFile = async (file: Attachment | CV | any, type: 'cv' | 'reference
   try {
     // Convert Mongoose document to plain object first
     const plainFile = convertMongooseDocToPlainObject(file);
-    
+
     debug('📥 Starting download process for file:', {
       type,
       filename: plainFile.originalName || plainFile.filename,
@@ -695,9 +729,9 @@ const downloadFile = async (file: Attachment | CV | any, type: 'cv' | 'reference
     }
 
     // Determine filename with fallbacks
-    const downloadFilename = plainFile.originalName || 
-                            plainFile.filename || 
-                            `document_${plainFile._id}.${getFileExtension(plainFile)}`;
+    const downloadFilename = plainFile.originalName ||
+      plainFile.filename ||
+      `document_${plainFile._id}.${getFileExtension(plainFile)}`;
 
     // Create download link and trigger download
     const url = window.URL.createObjectURL(blob);
@@ -752,7 +786,7 @@ const viewFile = async (file: Attachment | CV | any, type: 'cv' | 'references' |
   try {
     // Convert Mongoose document first
     const plainFile = convertMongooseDocToPlainObject(file);
-    
+
     debug('👁️ Attempting to view file:', {
       type,
       file: {
@@ -772,7 +806,7 @@ const viewFile = async (file: Attachment | CV | any, type: 'cv' | 'references' |
     }
 
     const viewUrl = getEnhancedFileDownloadUrl(plainFile, type);
-    
+
     if (!viewUrl) {
       throw new Error('Could not generate view URL');
     }
@@ -796,12 +830,12 @@ const viewFile = async (file: Attachment | CV | any, type: 'cv' | 'references' |
     if (!newWindow) {
       throw new Error('Popup blocked. Please allow popups for this site to view files.');
     }
-    
+
     debug('✅ File opened in new tab successfully');
-    
+
   } catch (err) {
     console.error('❌ Error viewing file:', err);
-    
+
     // Fallback to download if view fails
     try {
       debug('🔄 View failed, attempting download as fallback...');
@@ -819,7 +853,7 @@ const viewFile = async (file: Attachment | CV | any, type: 'cv' | 'references' |
 export const canViewInline = (file: Attachment | CV): boolean => {
   // Convert Mongoose document first
   const plainFile = convertMongooseDocToPlainObject(file);
-  
+
   if (!plainFile.mimetype) {
     // If no mimetype, check by extension
     const filename = plainFile.filename || plainFile.originalName || '';
@@ -829,7 +863,7 @@ export const canViewInline = (file: Attachment | CV): boolean => {
     debug(`📄 Inline view check by extension: ${filename} -> ${result}`);
     return result;
   }
-  
+
   const inlineTypes = [
     'application/pdf',
     'image/jpeg',
@@ -840,7 +874,7 @@ export const canViewInline = (file: Attachment | CV): boolean => {
     'text/plain',
     'text/html'
   ];
-  
+
   const result = inlineTypes.includes(plainFile.mimetype);
   debug(`📄 Inline view check by MIME: ${plainFile.mimetype} -> ${result}`);
   return result;
@@ -892,7 +926,7 @@ export const cvService = {
     try {
       debug('🔄 Fetching user CVs...');
       const candidateProfile = await candidateService.getProfile();
-      
+
       if (!candidateProfile.cvs || candidateProfile.cvs.length === 0) {
         debug('⚠️ No CVs found in candidate profile');
         return [];
@@ -900,7 +934,7 @@ export const cvService = {
 
       const cvs: CV[] = candidateProfile.cvs.map(cv => {
         const plainCV = convertMongooseDocToPlainObject(cv);
-        
+
         return {
           _id: plainCV._id,
           filename: plainCV.filename,
@@ -928,13 +962,13 @@ export const cvService = {
     try {
       // Use candidateService's uploadCVs method
       const uploadedCVs = await candidateService.uploadCVs([file]);
-      
+
       if (!uploadedCVs || uploadedCVs.length === 0) {
         throw new Error('Failed to upload CV - no CV returned');
       }
 
       const uploadedCV = uploadedCVs[0];
-      
+
       // Transform to CV format
       const cv: CV = {
         _id: uploadedCV._id,
@@ -966,7 +1000,7 @@ export const cvService = {
 
   formatFileSize: (bytes: number): string => {
     if (!bytes || bytes === 0) return '0 Bytes';
-    
+
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -978,21 +1012,21 @@ export const cvService = {
 // Enhanced main application service
 export const applicationService = {
   getCandidateCVs,
-  
+
   async applyForJob(jobId: string, data: ApplyForJobData, files?: File[]): Promise<ApplicationResponse> {
     try {
       console.log('📤 [Frontend] Submitting application for job:', jobId);
-      console.log('📁 [Frontend] Files to upload:', files?.map(f => ({ 
-        name: f.name, 
-        type: f.type, 
-        size: f.size 
+      console.log('📁 [Frontend] Files to upload:', files?.map(f => ({
+        name: f.name,
+        type: f.type,
+        size: f.size
       })));
 
       const formData = new FormData();
-      
+
       // Add JSON data with proper stringification for complex objects
       formData.append('coverLetter', data.coverLetter);
-      
+
       // Stringify arrays and objects properly
       formData.append('skills', JSON.stringify(data.skills || []));
       formData.append('references', JSON.stringify(data.references || []));
@@ -1008,26 +1042,26 @@ export const applicationService = {
       if (files && files.length > 0) {
         const referenceFiles: File[] = [];
         const experienceFiles: File[] = [];
-        
+
         console.log('📁 [Frontend] Categorizing files...');
-        
+
         files.forEach((file) => {
           const fieldName = getFileFieldName(file);
           console.log(`📁 [Frontend] File ${file.name} -> ${fieldName}`);
-          
+
           if (fieldName === 'referencePdfs') {
             referenceFiles.push(file);
           } else if (fieldName === 'experiencePdfs') {
             experienceFiles.push(file);
           }
         });
-        
+
         // Append reference documents
         referenceFiles.forEach((file, index) => {
           formData.append('referencePdfs', file);
           console.log(`📎 [Frontend] Appended reference document ${index + 1}:`, file.name);
         });
-        
+
         // Append experience documents
         experienceFiles.forEach((file, index) => {
           formData.append('experiencePdfs', file);
@@ -1053,8 +1087,8 @@ export const applicationService = {
       }
 
       const response = await api.post<ApplicationResponse>(
-        `/applications/apply/${jobId}`, 
-        formData, 
+        `/applications/apply/${jobId}`,
+        formData,
         {
           headers: {
             'Content-Type': 'multipart/form-data',
@@ -1112,7 +1146,7 @@ export const applicationService = {
       } else if (viewType === 'organization') {
         return this.getOrganizationApplicationDetails(applicationId);
       }
-      
+
       // Fallback to general endpoint
       const response = await api.get<ApplicationResponse>(`/applications/${applicationId}`);
       return response.data;
@@ -1161,7 +1195,7 @@ export const applicationService = {
   async updateApplicationStatus(applicationId: string, data: UpdateStatusData): Promise<ApplicationResponse> {
     try {
       const response = await api.put<ApplicationResponse>(`/applications/${applicationId}/status`, data);
-      
+
       const statusMessages: Record<string, string> = {
         'shortlisted': 'Candidate shortlisted successfully!',
         'interview-scheduled': 'Interview scheduled successfully!',
@@ -1185,7 +1219,7 @@ export const applicationService = {
   async addCompanyResponse(applicationId: string, data: CompanyResponseData): Promise<ApplicationResponse> {
     try {
       const response = await api.put<ApplicationResponse>(`/applications/${applicationId}/company-response`, data);
-      
+
       const responseMessages: Record<string, string> = {
         'selected-for-interview': 'Candidate selected for interview!',
         'active-consideration': 'Response sent to candidate',
@@ -1208,7 +1242,7 @@ export const applicationService = {
       const response = await api.put<{ success: boolean; message: string }>(
         `/applications/${applicationId}/withdraw`
       );
-      
+
       handleSuccess('Application withdrawn successfully');
       return response.data;
     } catch (error) {
@@ -1287,7 +1321,7 @@ export const applicationService = {
   },
 
   // ===== HELPER METHODS =====
-  
+
   getFileFieldName,
   validateApplicationData,
   getApplication,
@@ -1381,7 +1415,7 @@ export const applicationService = {
       ...application,
       statusLabel: applicationService.getStatusLabel(application.status),
       statusColor: applicationService.getStatusColor(application.status),
-      companyResponseLabel: application.companyResponse?.status 
+      companyResponseLabel: application.companyResponse?.status
         ? applicationService.getCompanyResponseLabel(application.companyResponse.status)
         : null,
       canWithdraw: applicationService.canWithdraw(application.status),
@@ -1459,14 +1493,14 @@ export const applicationService = {
   getFileType: (file: Attachment | any): 'pdf' | 'word' | 'image' | 'text' | 'document' => {
     if (!file) return 'document';
     const plainFile = convertMongooseDocToPlainObject(file);
-    
+
     if (plainFile.mimetype) {
       if (plainFile.mimetype.includes('pdf')) return 'pdf';
       if (plainFile.mimetype.includes('word')) return 'word';
       if (plainFile.mimetype.includes('image')) return 'image';
       if (plainFile.mimetype.includes('text')) return 'text';
     }
-    
+
     if (plainFile.filename) {
       const ext = plainFile.filename.toLowerCase().split('.').pop();
       if (ext === 'pdf') return 'pdf';
@@ -1474,14 +1508,14 @@ export const applicationService = {
       if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) return 'image';
       if (ext === 'txt') return 'text';
     }
-    
+
     return 'document';
   },
 
   // Enhanced file icon helper
   getFileIcon: (file: Attachment | any): string => {
     const fileType = applicationService.getFileType(file);
-    
+
     const icons: Record<'pdf' | 'word' | 'image' | 'text' | 'document', string> = {
       pdf: '📄',
       word: '📝',
@@ -1489,7 +1523,7 @@ export const applicationService = {
       text: '📃',
       document: '📎'
     };
-    
+
     return icons[fileType] || '📎';
   },
 

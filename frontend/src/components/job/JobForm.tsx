@@ -2,10 +2,10 @@
 // components/JobForm.tsx - COMPLETE VERSION WITH RICH TEXT EDITOR
 import React, { useState, useEffect } from 'react';
 import { Job, EthiopianLocation, JobSalary, Duration, VolunteerInfo, jobService } from '@/services/jobService';
-import { 
-  Briefcase, 
-  MapPin, 
-  DollarSign, 
+import {
+  Briefcase,
+  MapPin,
+  DollarSign,
   BookOpen,
   Calendar,
   CheckCircle,
@@ -70,10 +70,10 @@ interface JobCategory {
   description?: string;
 }
 
-const JobForm: React.FC<JobFormProps> = ({ 
-  initialData, 
-  onSubmit, 
-  loading = false, 
+const JobForm: React.FC<JobFormProps> = ({
+  initialData,
+  onSubmit,
+  loading = false,
   onCancel,
   companyVerified = false,
   organizationVerified = false,
@@ -155,14 +155,14 @@ const JobForm: React.FC<JobFormProps> = ({
   const opportunityTypes = jobService.getOpportunityTypes();
   const commitmentLevels = jobService.getCommitmentLevels();
   const durationUnits = jobService.getDurationUnits();
-  
+
   // Load ALL categories for both company and organization
   useEffect(() => {
     const loadAllCategories = () => {
       try {
         // Get all categories from the service
         const categories = jobService.getJobCategories();
-        
+
         if (categories && categories.length > 0) {
           console.log(`📊 Loaded ${categories.length} categories for ${jobType} form`);
           setAllCategories(categories);
@@ -186,7 +186,7 @@ const JobForm: React.FC<JobFormProps> = ({
             { value: 'cybersecurity-analyst', label: 'Cybersecurity Analyst' },
             { value: 'ui-ux-designer', label: 'UI/UX Designer' },
             { value: 'qa-engineer', label: 'QA Engineer' },
-            
+
             // Business & Management
             { value: 'project-manager', label: 'Project Manager' },
             { value: 'product-manager', label: 'Product Manager' },
@@ -195,7 +195,7 @@ const JobForm: React.FC<JobFormProps> = ({
             { value: 'hr-manager', label: 'HR Manager' },
             { value: 'recruiter', label: 'Recruiter' },
             { value: 'office-manager', label: 'Office Manager' },
-            
+
             // Marketing & Sales
             { value: 'digital-marketing', label: 'Digital Marketing Specialist' },
             { value: 'social-media-manager', label: 'Social Media Manager' },
@@ -204,54 +204,54 @@ const JobForm: React.FC<JobFormProps> = ({
             { value: 'sales-representative', label: 'Sales Representative' },
             { value: 'account-manager', label: 'Account Manager' },
             { value: 'business-development', label: 'Business Development Manager' },
-            
+
             // Finance & Accounting
             { value: 'accountant', label: 'Accountant' },
             { value: 'financial-analyst', label: 'Financial Analyst' },
             { value: 'auditor', label: 'Auditor' },
             { value: 'bookkeeper', label: 'Bookkeeper' },
             { value: 'tax-consultant', label: 'Tax Consultant' },
-            
+
             // Healthcare
             { value: 'doctor', label: 'Doctor' },
             { value: 'nurse', label: 'Nurse' },
             { value: 'pharmacist', label: 'Pharmacist' },
             { value: 'medical-lab', label: 'Medical Lab Technician' },
             { value: 'healthcare-assistant', label: 'Healthcare Assistant' },
-            
+
             // Education
             { value: 'teacher', label: 'Teacher' },
             { value: 'professor', label: 'Professor' },
             { value: 'tutor', label: 'Tutor' },
             { value: 'education-coordinator', label: 'Education Coordinator' },
-            
+
             // Engineering
             { value: 'civil-engineer', label: 'Civil Engineer' },
             { value: 'mechanical-engineer', label: 'Mechanical Engineer' },
             { value: 'electrical-engineer', label: 'Electrical Engineer' },
             { value: 'chemical-engineer', label: 'Chemical Engineer' },
-            
+
             // Creative & Design
             { value: 'graphic-designer', label: 'Graphic Designer' },
             { value: 'video-editor', label: 'Video Editor' },
             { value: 'photographer', label: 'Photographer' },
             { value: 'animator', label: 'Animator' },
-            
+
             // Customer Service
             { value: 'customer-service', label: 'Customer Service Representative' },
             { value: 'call-center', label: 'Call Center Agent' },
             { value: 'technical-support', label: 'Technical Support' },
-            
+
             // Logistics & Supply Chain
             { value: 'logistics-coordinator', label: 'Logistics Coordinator' },
             { value: 'supply-chain-manager', label: 'Supply Chain Manager' },
             { value: 'procurement-officer', label: 'Procurement Officer' },
-            
+
             // Legal
             { value: 'lawyer', label: 'Lawyer' },
             { value: 'legal-advisor', label: 'Legal Advisor' },
             { value: 'paralegal', label: 'Paralegal' },
-            
+
             // Non-profit & Social Work (Organization focused)
             { value: 'social-worker', label: 'Social Worker' },
             { value: 'community-development', label: 'Community Development Specialist' },
@@ -261,7 +261,7 @@ const JobForm: React.FC<JobFormProps> = ({
             { value: 'volunteer-coordinator', label: 'Volunteer Coordinator' },
             { value: 'grant-writer', label: 'Grant Writer' },
             { value: 'fundraising-manager', label: 'Fundraising Manager' },
-            
+
             // Other
             { value: 'research-assistant', label: 'Research Assistant' },
             { value: 'administrative-assistant', label: 'Administrative Assistant' },
@@ -270,7 +270,7 @@ const JobForm: React.FC<JobFormProps> = ({
             { value: 'security-guard', label: 'Security Guard' },
             { value: 'other', label: 'Other' }
           ];
-          
+
           setAllCategories(fallbackCategories);
         }
       } catch (error) {
@@ -333,7 +333,7 @@ const JobForm: React.FC<JobFormProps> = ({
         experienceLevel: initialData.experienceLevel,
         educationLevel: initialData.educationLevel,
         status: initialData.status,
-        applicationDeadline: initialData.applicationDeadline ? 
+        applicationDeadline: initialData.applicationDeadline ?
           new Date(initialData.applicationDeadline).toISOString().split('T')[0] : '',
         remote: initialData.remote,
         workArrangement: initialData.workArrangement || 'office',
@@ -364,7 +364,7 @@ const JobForm: React.FC<JobFormProps> = ({
           providesStipend: false
         }
       };
-      
+
       setFormData(transformedData);
       // Set category search to display the current category label
       if (initialData.category) {
@@ -482,7 +482,7 @@ const JobForm: React.FC<JobFormProps> = ({
       ...prev,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
     }));
-    
+
     // Clear error when user starts typing
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
@@ -494,7 +494,7 @@ const JobForm: React.FC<JobFormProps> = ({
       ...prev,
       description: value
     }));
-    
+
     // Clear description error when user starts typing
     if (descriptionError) {
       setDescriptionError('');
@@ -584,8 +584,8 @@ const JobForm: React.FC<JobFormProps> = ({
   };
 
   const handleArrayChange = (
-    field: 'requirements' | 'responsibilities' | 'benefits' | 'skills', 
-    index: number, 
+    field: 'requirements' | 'responsibilities' | 'benefits' | 'skills',
+    index: number,
     value: string
   ) => {
     setFormData(prev => {
@@ -603,7 +603,7 @@ const JobForm: React.FC<JobFormProps> = ({
   };
 
   const removeArrayItem = (
-    field: 'requirements' | 'responsibilities' | 'benefits' | 'skills', 
+    field: 'requirements' | 'responsibilities' | 'benefits' | 'skills',
     index: number
   ) => {
     if (formData[field].length > 1) {
@@ -648,7 +648,7 @@ const JobForm: React.FC<JobFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent, status?: 'draft' | 'active' | 'paused' | 'closed' | 'archived') => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       toast({
         title: 'Validation Error',
@@ -702,7 +702,7 @@ const JobForm: React.FC<JobFormProps> = ({
     // Organization specific fields
     if (formData.jobType === 'organization') {
       submitData.opportunityType = formData.opportunityType;
-      
+
       // Only include duration if it has values
       if (formData.duration?.value || formData.duration?.isOngoing) {
         submitData.duration = formData.duration;
@@ -713,10 +713,10 @@ const JobForm: React.FC<JobFormProps> = ({
         submitData.volunteerInfo = formData.volunteerInfo;
       }
     }
-    
+
     console.log('📤 Submitting job data:', submitData);
     console.log('📊 Available categories count:', allCategories.length);
-    
+
     try {
       await onSubmit(submitData);
     } catch (error) {
@@ -764,13 +764,13 @@ const JobForm: React.FC<JobFormProps> = ({
               {mode === 'edit' ? `Edit ${isOrganization ? 'Opportunity' : 'Job'} Posting` : `Create New ${isOrganization ? 'Opportunity' : 'Job'}`}
             </h2>
             <p className="text-gray-600">
-              {mode === 'edit' 
-                ? `Update your ${isOrganization ? 'opportunity' : 'job'} posting details below.` 
+              {mode === 'edit'
+                ? `Update your ${isOrganization ? 'opportunity' : 'job'} posting details below.`
                 : `Fill in the details to create a new ${isOrganization ? 'opportunity' : 'job'} posting.`
               }
             </p>
           </div>
-          
+
           <div className="flex items-center space-x-3">
             <div className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium flex items-center gap-1">
               {isOrganization ? <Heart className="w-4 h-4" /> : <Building className="w-4 h-4" />}
@@ -786,27 +786,25 @@ const JobForm: React.FC<JobFormProps> = ({
             </button>
           </div>
         </div>
-        
+
         {/* Progress Steps */}
         <div className="flex items-center justify-between mb-8">
           {[1, 2, 3, 4].map((step) => (
             <div key={step} className="flex items-center flex-1">
-              <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
-                step <= currentStep 
-                  ? 'bg-blue-600 text-white' 
+              <div className={`flex items-center justify-center w-8 h-8 rounded-full ${step <= currentStep
+                  ? 'bg-blue-600 text-white'
                   : 'bg-gray-200 text-gray-500'
-              }`}>
+                }`}>
                 {step}
               </div>
               {step < 4 && (
-                <div className={`flex-1 h-1 mx-2 ${
-                  step < currentStep ? 'bg-blue-600' : 'bg-gray-200'
-                }`} />
+                <div className={`flex-1 h-1 mx-2 ${step < currentStep ? 'bg-blue-600' : 'bg-gray-200'
+                  }`} />
               )}
             </div>
           ))}
         </div>
-        
+
         {/* Step Labels */}
         <div className="flex justify-between text-sm text-gray-600 mb-2">
           <span className={currentStep >= 1 ? 'text-blue-600 font-medium' : ''}>Basic Info</span>
@@ -860,7 +858,7 @@ const JobForm: React.FC<JobFormProps> = ({
             )}
             <div>
               <h5 className="font-semibold text-gray-900 mb-2">Description</h5>
-              <div 
+              <div
                 className="text-gray-700 prose prose-sm max-w-none"
                 dangerouslySetInnerHTML={{ __html: previewData.description }}
               />
@@ -876,7 +874,7 @@ const JobForm: React.FC<JobFormProps> = ({
                 <Briefcase className="w-5 h-5 mr-2 text-blue-600" />
                 Basic Information
               </h3>
-              
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Job Title */}
                 <div className="lg:col-span-2">
@@ -889,9 +887,8 @@ const JobForm: React.FC<JobFormProps> = ({
                     value={formData.title}
                     onChange={handleInputChange}
                     required
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.title ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.title ? 'border-red-300' : 'border-gray-300'
+                      }`}
                     placeholder={isOrganization ? "e.g. Community Volunteer, Education Fellow..." : "e.g. Senior Frontend Developer, Marketing Manager..."}
                   />
                   {errors.title && (
@@ -990,13 +987,12 @@ const JobForm: React.FC<JobFormProps> = ({
                       onChange={(e) => handleCategorySearchChange(e.target.value)}
                       onFocus={() => setShowCategoryDropdown(true)}
                       placeholder={`Search from ${allCategories.length} categories...`}
-                      className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.category ? 'border-red-300' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.category ? 'border-red-300' : 'border-gray-300'
+                        }`}
                     />
                     <Search className="absolute right-3 top-3.5 h-4 w-4 text-gray-400" />
                   </div>
-                  
+
                   {/* Show current selection when dropdown is closed */}
                   {!showCategoryDropdown && formData.category && (
                     <div className="mt-2">
@@ -1014,9 +1010,8 @@ const JobForm: React.FC<JobFormProps> = ({
                           <div
                             key={category.value}
                             onClick={() => handleCategorySelect(category.value, category.label)}
-                            className={`px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 ${
-                              formData.category === category.value ? 'bg-blue-50 text-blue-700' : ''
-                            }`}
+                            className={`px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 ${formData.category === category.value ? 'bg-blue-50 text-blue-700' : ''
+                              }`}
                           >
                             <div className="font-medium">{category.label}</div>
                             {category.description && (
@@ -1148,9 +1143,8 @@ const JobForm: React.FC<JobFormProps> = ({
                         type="number"
                         value={formData.demographicRequirements?.age?.min || ''}
                         onChange={(e) => handleDemographicChange('age', { min: e.target.value ? Number(e.target.value) : undefined })}
-                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.age ? 'border-red-300' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.age ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         placeholder="18"
                         min="18"
                         max="100"
@@ -1164,9 +1158,8 @@ const JobForm: React.FC<JobFormProps> = ({
                         type="number"
                         value={formData.demographicRequirements?.age?.max || ''}
                         onChange={(e) => handleDemographicChange('age', { max: e.target.value ? Number(e.target.value) : undefined })}
-                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.age ? 'border-red-300' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.age ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         placeholder="65"
                         min="18"
                         max="100"
@@ -1190,7 +1183,7 @@ const JobForm: React.FC<JobFormProps> = ({
                   <MapPin className="w-5 h-5 mr-2 text-blue-600" />
                   Location Information
                 </h3>
-                
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Region */}
                   <div>
@@ -1200,9 +1193,8 @@ const JobForm: React.FC<JobFormProps> = ({
                     <select
                       value={formData.location.region}
                       onChange={(e) => handleLocationChange('region', e.target.value)}
-                      className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.region ? 'border-red-300' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.region ? 'border-red-300' : 'border-gray-300'
+                        }`}
                     >
                       {ethiopianRegions.map(region => (
                         <option key={region.slug} value={region.slug}>
@@ -1232,9 +1224,8 @@ const JobForm: React.FC<JobFormProps> = ({
                       <select
                         value={formData.location.city}
                         onChange={(e) => handleLocationChange('city', e.target.value)}
-                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.city ? 'border-red-300' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.city ? 'border-red-300' : 'border-gray-300'
+                          }`}
                       >
                         <option value="">Select a city</option>
                         {selectedRegion?.cities.map(city => (
@@ -1334,7 +1325,7 @@ const JobForm: React.FC<JobFormProps> = ({
                   <DollarSign className="w-5 h-5 mr-2 text-blue-600" />
                   {isVolunteer ? 'Compensation Information' : 'Salary Information'}
                 </h3>
-                
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div className="lg:col-span-2">
                     <div className="flex items-center space-x-4 mb-4">
@@ -1349,7 +1340,7 @@ const JobForm: React.FC<JobFormProps> = ({
                           {isVolunteer ? 'Show compensation details' : 'Show salary in posting'}
                         </span>
                       </label>
-                      
+
                       <label className="flex items-center">
                         <input
                           type="checkbox"
@@ -1439,7 +1430,7 @@ const JobForm: React.FC<JobFormProps> = ({
                       <Heart className="w-5 h-5 mr-2 text-green-600" />
                       Volunteer Specific Information
                     </h4>
-                    
+
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1449,9 +1440,8 @@ const JobForm: React.FC<JobFormProps> = ({
                           type="number"
                           value={formData.volunteerInfo?.hoursPerWeek || ''}
                           onChange={(e) => handleVolunteerInfoChange('hoursPerWeek', e.target.value)}
-                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                            errors.hoursPerWeek ? 'border-red-300' : 'border-gray-300'
-                          }`}
+                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.hoursPerWeek ? 'border-red-300' : 'border-gray-300'
+                            }`}
                           placeholder="e.g., 20"
                           min="1"
                           max="40"
@@ -1523,7 +1513,7 @@ const JobForm: React.FC<JobFormProps> = ({
                   <BookOpen className="w-5 h-5 mr-2 text-blue-600" />
                   {isOrganization ? 'Opportunity Description & Requirements' : 'Job Description & Requirements'}
                 </h3>
-                
+
                 <div className="space-y-6">
                   {/* Job Description with Rich Text Editor */}
                   <div>
@@ -1536,10 +1526,7 @@ const JobForm: React.FC<JobFormProps> = ({
                       placeholder={`Describe the ${isOrganization ? 'opportunity responsibilities, organization mission, and impact' : 'job responsibilities, company culture, and what makes this opportunity special'}...`}
                       minHeight={300}
                       maxHeight={500}
-                      error={!!descriptionError}
                       label=""
-                      helperText={descriptionError || "Write a detailed description of the position. You can format text, add lists, links, images, and more."}
-                      required
                     />
                   </div>
 
@@ -1589,7 +1576,7 @@ const JobForm: React.FC<JobFormProps> = ({
                   <Tag className="w-5 h-5 mr-2 text-blue-600" />
                   Additional Settings
                 </h3>
-                
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Application Deadline */}
                   <div>
@@ -1602,9 +1589,8 @@ const JobForm: React.FC<JobFormProps> = ({
                       name="applicationDeadline"
                       value={formData.applicationDeadline}
                       onChange={handleInputChange}
-                      className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.applicationDeadline ? 'border-red-300' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.applicationDeadline ? 'border-red-300' : 'border-gray-300'
+                        }`}
                       min={new Date().toISOString().split('T')[0]}
                     />
                     {errors.applicationDeadline && (
@@ -1709,7 +1695,7 @@ const JobForm: React.FC<JobFormProps> = ({
                 <CheckCircle className="w-5 h-5 mr-2 text-blue-600" />
                 Review & Submit
               </h3>
-              
+
               <div className="space-y-6">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div>
@@ -1765,8 +1751,8 @@ const JobForm: React.FC<JobFormProps> = ({
                         <div>
                           <dt className="text-sm font-medium text-gray-500">Duration</dt>
                           <dd className="text-sm text-gray-900">
-                            {formData.duration.isOngoing 
-                              ? 'Ongoing' 
+                            {formData.duration.isOngoing
+                              ? 'Ongoing'
                               : `${formData.duration.value} ${formData.duration.unit}`
                             }
                           </dd>
@@ -1786,7 +1772,7 @@ const JobForm: React.FC<JobFormProps> = ({
                       </div>
                     </dl>
                   </div>
-                  
+
                   <div>
                     <h4 className="text-lg font-semibold text-gray-900 mb-4">Location & Compensation</h4>
                     <dl className="space-y-3">
@@ -1851,7 +1837,7 @@ const JobForm: React.FC<JobFormProps> = ({
                     {isOrganization ? 'Opportunity Description Preview' : 'Job Description Preview'}
                   </h4>
                   <div className="bg-white p-4 rounded-lg border border-gray-200 max-h-60 overflow-y-auto">
-                    <div 
+                    <div
                       className="text-gray-700 prose prose-sm max-w-none"
                       dangerouslySetInnerHTML={{ __html: formData.description }}
                     />
@@ -1885,7 +1871,7 @@ const JobForm: React.FC<JobFormProps> = ({
                 </button>
               )}
             </div>
-            
+
             <div className="flex space-x-3">
               {onCancel && (
                 <button
@@ -1896,7 +1882,7 @@ const JobForm: React.FC<JobFormProps> = ({
                   Cancel
                 </button>
               )}
-              
+
               {currentStep < 4 ? (
                 <button
                   type="button"
@@ -1916,7 +1902,7 @@ const JobForm: React.FC<JobFormProps> = ({
                     <Save className="w-4 h-4" />
                     {loading ? 'Saving...' : 'Save as Draft'}
                   </button>
-                  
+
                   <button
                     type="submit"
                     onClick={(e) => handleSubmit(e, 'active')}

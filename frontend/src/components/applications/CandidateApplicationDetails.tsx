@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// components/CandidateApplicationDetails.tsx - CLEAN PREMIUM VERSION
+// components/CandidateApplicationDetails.tsx - UPDATED WITH RESPONSES TAB
 import React, { useState, useEffect } from 'react';
-import { 
-  Application, 
+import {
+  Application,
   applicationService
 } from '@/services/applicationService';
 import { Button } from '@/components/ui/Button';
-import { 
+import {
   Card,
   CardContent,
   CardDescription,
@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { 
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -49,7 +49,12 @@ import {
   BookOpen,
   File,
   Star,
-  TrendingUp
+  TrendingUp,
+  MessageSquare,
+  ThumbsUp,
+  Calendar as CalendarIcon,
+  MapPin as LocationIcon,
+  UserCheck
 } from 'lucide-react';
 
 interface CandidateApplicationDetailsProps {
@@ -95,13 +100,13 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
     try {
       setIsWithdrawing(true);
       await applicationService.withdrawApplication(applicationId);
-      
+
       toast({
         title: 'Application Withdrawn',
         description: 'Your application has been successfully withdrawn',
         variant: 'default',
       });
-      
+
       await loadApplicationDetails();
       setShowWithdrawConfirm(false);
     } catch (error: any) {
@@ -179,13 +184,25 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     });
+  };
+
+  const getCompanyResponseLabel = (status: string): string => {
+    const responseLabels: { [key: string]: string } = {
+      'active-consideration': 'Active Consideration',
+      'on-hold': 'On Hold / Waiting List',
+      'rejected': 'Not Selected',
+      'selected-for-interview': 'Selected for Interview!'
+    };
+    return responseLabels[status] || status;
   };
 
   const getAllDocuments = () => {
     if (!application) return [];
-    
+
     const documents: Array<{
       id: string;
       name: string;
@@ -246,10 +263,10 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
 
     const allAttachments = applicationService.getAllAttachments(application);
     allAttachments.forEach((attachment, index) => {
-      const isAlreadyIncluded = documents.some(doc => 
+      const isAlreadyIncluded = documents.some(doc =>
         doc.file._id === attachment._id || doc.file.filename === attachment.filename
       );
-      
+
       if (!isAlreadyIncluded) {
         documents.push({
           id: `att-${index}`,
@@ -288,12 +305,12 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
           </div>
           <h3 className="text-2xl font-bold text-slate-800 mb-4">Application Not Found</h3>
           <p className="text-slate-600 mb-8 leading-relaxed">
-            The application you`re looking for doesn`t exist or may have been removed.
+            The application you're looking for doesn't exist or may have been removed.
           </p>
           {onBack && (
-            <Button 
-              onClick={onBack} 
-              variant="outline" 
+            <Button
+              onClick={onBack}
+              variant="outline"
               className="border-slate-300 bg-white/80 hover:bg-white backdrop-blur-sm text-slate-700 hover:text-slate-900 transition-all duration-300"
             >
               <ArrowLeft className="h-5 w-5 mr-3" />
@@ -309,12 +326,12 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
   const canWithdraw = applicationService.canWithdraw(application.status);
   const allDocuments = getAllDocuments();
 
-  const jobLocation = application.job.location ? 
-    `${application.job.location.city || ''}, ${application.job.location.region || ''}`.replace(/^,\s*|,\s*$/g, '') : 
+  const jobLocation = application.job.location ?
+    `${application.job.location.city || ''}, ${application.job.location.region || ''}`.replace(/^,\s*|,\s*$/g, '') :
     'Location not specified';
 
-  const ownerInfo = application.job.jobType === 'organization' 
-    ? application.job.organization 
+  const ownerInfo = application.job.jobType === 'organization'
+    ? application.job.organization
     : application.job.company;
 
   return (
@@ -326,9 +343,9 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
           <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
             <div className="flex items-start gap-6">
               {onBack && (
-                <Button 
-                  variant="outline" 
-                  onClick={onBack} 
+                <Button
+                  variant="outline"
+                  onClick={onBack}
                   className="shrink-0 bg-white/20 text-white border-white/30 hover:bg-white/30 backdrop-blur-sm transition-all duration-300 hover:scale-105"
                 >
                   <ArrowLeft className="h-5 w-5 mr-3" />
@@ -351,9 +368,9 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
                 </div>
               </div>
             </div>
-            
+
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <Badge 
+              <Badge
                 className={`text-base px-6 py-3 font-semibold border-2 backdrop-blur-sm rounded-2xl transition-all duration-300 ${getStatusColorClass(application.status)}`}
               >
                 <div className="flex items-center gap-3">
@@ -361,12 +378,12 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
                   <span className="drop-shadow-sm">{formattedApplication.statusLabel}</span>
                 </div>
               </Badge>
-              
+
               {canWithdraw && (
                 <Dialog open={showWithdrawConfirm} onOpenChange={setShowWithdrawConfirm}>
                   <DialogTrigger asChild>
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       className="bg-white/20 text-white border-white/30 hover:bg-white/30 backdrop-blur-sm transition-all duration-300 hover:scale-105"
                     >
                       Withdraw Application
@@ -376,7 +393,7 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
                     <DialogHeader>
                       <DialogTitle className="text-2xl font-bold text-slate-800">Withdraw Application</DialogTitle>
                       <DialogDescription className="text-slate-600 text-lg mt-2">
-                        Are you sure you want to withdraw your application for {application.job.title}? 
+                        Are you sure you want to withdraw your application for {application.job.title}?
                         This action cannot be undone.
                       </DialogDescription>
                     </DialogHeader>
@@ -407,30 +424,36 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
         {/* Main Content - Full Width */}
         <div className="space-y-8">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
-            <TabsList className="grid grid-cols-4 w-full bg-white/80 backdrop-blur-xl p-2 rounded-2xl border border-white/20 shadow-lg">
-              <TabsTrigger 
-                value="overview" 
+            <TabsList className="grid grid-cols-5 w-full bg-white/80 backdrop-blur-xl p-2 rounded-2xl border border-white/20 shadow-lg">
+              <TabsTrigger
+                value="overview"
                 className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-lg rounded-xl transition-all duration-300 font-medium"
               >
                 Overview
               </TabsTrigger>
-              <TabsTrigger 
-                value="documents" 
+              <TabsTrigger
+                value="documents"
                 className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-lg rounded-xl transition-all duration-300 font-medium"
               >
                 Documents ({allDocuments.length})
               </TabsTrigger>
-              <TabsTrigger 
-                value="experience" 
+              <TabsTrigger
+                value="experience"
                 className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-lg rounded-xl transition-all duration-300 font-medium"
               >
                 Experience
               </TabsTrigger>
-              <TabsTrigger 
-                value="references" 
+              <TabsTrigger
+                value="references"
                 className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-lg rounded-xl transition-all duration-300 font-medium"
               >
                 References
+              </TabsTrigger>
+              <TabsTrigger
+                value="responses"
+                className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-lg rounded-xl transition-all duration-300 font-medium"
+              >
+                Responses
               </TabsTrigger>
             </TabsList>
 
@@ -460,7 +483,7 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
                         )}
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div className="flex items-center gap-3 p-4 bg-blue-500/5 rounded-2xl border border-blue-200/30 backdrop-blur-sm">
                         <MapPin className="h-5 w-5 text-blue-600" />
@@ -481,18 +504,18 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
                         </div>
                       )}
                     </div>
-                    
+
                     <div className="flex gap-4">
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         className="border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white shadow-lg transition-all duration-300 hover:scale-105"
                         onClick={() => window.open(`/jobs/${application.job._id}`, '_blank')}
                       >
                         <ExternalLink className="h-5 w-5 mr-2" />
                         View Job Posting
                       </Button>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         className="border-slate-600 text-slate-600 hover:bg-slate-600 hover:text-white shadow-lg transition-all duration-300 hover:scale-105"
                         onClick={() => window.open('/dashboard/candidate/profile', '_blank')}
                       >
@@ -537,8 +560,8 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
                   <CardContent className="pt-8">
                     <div className="flex flex-wrap gap-3">
                       {application.skills.map((skill, index) => (
-                        <Badge 
-                          key={index} 
+                        <Badge
+                          key={index}
                           className="bg-gradient-to-r from-amber-500/10 to-amber-600/10 text-amber-700 border border-amber-200/30 px-5 py-2 text-sm font-semibold shadow-lg backdrop-blur-sm rounded-2xl"
                         >
                           {skill}
@@ -612,12 +635,11 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
                                   {doc.name}
                                 </p>
                                 <div className="flex items-center gap-6 mt-3">
-                                  <Badge className={`text-sm backdrop-blur-sm ${
-                                    doc.type === 'cv' ? 'bg-blue-500/10 text-blue-700 border-blue-200/30' :
+                                  <Badge className={`text-sm backdrop-blur-sm ${doc.type === 'cv' ? 'bg-blue-500/10 text-blue-700 border-blue-200/30' :
                                     doc.type === 'reference' ? 'bg-purple-500/10 text-purple-700 border-purple-200/30' :
-                                    doc.type === 'experience' ? 'bg-emerald-500/10 text-emerald-700 border-emerald-200/30' :
-                                    'bg-slate-500/10 text-slate-700 border-slate-200/30'
-                                  }`}>
+                                      doc.type === 'experience' ? 'bg-emerald-500/10 text-emerald-700 border-emerald-200/30' :
+                                        'bg-slate-500/10 text-slate-700 border-slate-200/30'
+                                    }`}>
                                     {doc.category}
                                   </Badge>
                                   <p className="text-sm text-slate-500 font-medium">
@@ -678,7 +700,7 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
                       <div className="text-center py-16">
                         <FileText className="h-20 w-20 text-slate-300 mx-auto mb-6" />
                         <p className="text-slate-500 text-xl font-medium">No documents submitted</p>
-                        <p className="text-slate-400 text-lg">You haven`t uploaded any documents with this application.</p>
+                        <p className="text-slate-400 text-lg">You haven't uploaded any documents with this application.</p>
                       </div>
                     )}
                   </div>
@@ -749,7 +771,7 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
                               </div>
                             )}
                           </div>
-                          
+
                           {exp.document && exp.providedAsDocument && (
                             <div className="mt-6 p-6 bg-emerald-500/5 rounded-2xl border border-emerald-200/30 backdrop-blur-sm">
                               <div className="flex items-center gap-4">
@@ -765,7 +787,7 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
                               </div>
                             </div>
                           )}
-                          
+
                           {exp.skills && exp.skills.length > 0 && (
                             <div className="flex flex-wrap gap-3 mt-6">
                               {exp.skills.map((skill, skillIndex) => (
@@ -816,7 +838,7 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
                                   <strong className="text-slate-700">Relationship:</strong> {ref.relationship}
                                 </div>
                                 <div>
-                                  <strong className="text-slate-700">Contact Allowed:</strong> 
+                                  <strong className="text-slate-700">Contact Allowed:</strong>
                                   <span className={`ml-3 font-semibold ${ref.allowsContact ? 'text-emerald-600' : 'text-rose-600'}`}>
                                     {ref.allowsContact ? 'Yes' : 'No'}
                                   </span>
@@ -865,7 +887,7 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
                               </div>
                             )}
                           </div>
-                          
+
                           {ref.document && ref.providedAsDocument && (
                             <div className="mt-6 p-6 bg-purple-500/5 rounded-2xl border border-purple-200/30 backdrop-blur-sm">
                               <div className="flex items-center gap-4">
@@ -889,6 +911,262 @@ export const CandidateApplicationDetails: React.FC<CandidateApplicationDetailsPr
                         <p className="text-slate-500 text-lg">No references provided</p>
                       </div>
                     )}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Responses Tab */}
+            <TabsContent value="responses" className="space-y-8 animate-in fade-in duration-500">
+              {/* Company Response Status */}
+              <Card className="backdrop-blur-xl bg-white/80 border border-white/20 shadow-2xl rounded-3xl overflow-hidden">
+                <CardHeader className="pb-6 border-b border-slate-200/30 bg-gradient-to-r from-slate-50/50 to-white/50 rounded-t-3xl">
+                  <CardTitle className="flex items-center gap-3 text-slate-800 text-2xl font-bold">
+                    <div className="p-3 bg-blue-500/10 rounded-2xl border border-blue-200/30">
+                      <MessageSquare className="h-6 w-6 text-blue-600" />
+                    </div>
+                    Company/Organization Responses
+                  </CardTitle>
+                  <CardDescription className="text-slate-600 text-lg">
+                    View all responses from the hiring team regarding your application
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-8">
+                  {application.companyResponse ? (
+                    <div className="space-y-8">
+                      {/* Main Response Status Card */}
+                      <div className="backdrop-blur-sm bg-gradient-to-br from-blue-50/50 to-indigo-50/30 p-8 rounded-2xl border border-blue-200/30">
+                        <div className="flex items-center justify-between mb-6">
+                          <div className="flex items-center gap-4">
+                            <div className={`p-4 rounded-2xl ${application.companyResponse.status === 'selected-for-interview'
+                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200/30'
+                              : application.companyResponse.status === 'active-consideration'
+                                ? 'bg-blue-500/10 text-blue-600 border-blue-200/30'
+                                : application.companyResponse.status === 'on-hold'
+                                  ? 'bg-amber-500/10 text-amber-600 border-amber-200/30'
+                                  : 'bg-rose-500/10 text-rose-600 border-rose-200/30'
+                              } border backdrop-blur-sm`}>
+                              {application.companyResponse.status === 'selected-for-interview' ? (
+                                <ThumbsUp className="h-6 w-6" />
+                              ) : application.companyResponse.status === 'active-consideration' ? (
+                                <Clock className="h-6 w-6" />
+                              ) : application.companyResponse.status === 'on-hold' ? (
+                                <CalendarIcon className="h-6 w-6" />
+                              ) : (
+                                <XCircle className="h-6 w-6" />
+                              )}
+                            </div>
+                            <div>
+                              <h3 className="text-xl font-bold text-slate-800">
+                                {getCompanyResponseLabel(application.companyResponse.status || 'pending')}
+                              </h3>
+                              <p className="text-slate-600">
+                                Response from {ownerInfo?.name}
+                              </p>
+                            </div>
+                          </div>
+                          {application.companyResponse.respondedAt && (
+                            <div className="text-right">
+                              <p className="text-sm text-slate-500">Responded on</p>
+                              <p className="text-base font-medium text-slate-700">
+                                {formatDate(application.companyResponse.respondedAt)}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Response Message */}
+                        {application.companyResponse.message && (
+                          <div className="mt-6 p-6 bg-white/50 rounded-2xl border border-slate-200/30">
+                            <h4 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                              <MessageSquare className="h-4 w-4" />
+                              Message from Hiring Team
+                            </h4>
+                            <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
+                              {application.companyResponse.message}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Interview Details */}
+                        {application.companyResponse.status === 'selected-for-interview' &&
+                          (application.companyResponse.interviewDate || application.companyResponse.interviewLocation) && (
+                            <div className="mt-6 p-6 bg-gradient-to-br from-emerald-50/50 to-green-50/30 rounded-2xl border border-emerald-200/30">
+                              <h4 className="font-semibold text-emerald-800 mb-4 flex items-center gap-2">
+                                <CalendarIcon className="h-4 w-4" />
+                                Interview Details
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {application.companyResponse.interviewDate && (
+                                  <div className="flex items-center gap-3 p-4 bg-white/30 rounded-xl border border-emerald-200/20">
+                                    <CalendarIcon className="h-5 w-5 text-emerald-600" />
+                                    <div>
+                                      <p className="text-sm text-emerald-700">Interview Date</p>
+                                      <p className="font-semibold text-emerald-900">
+                                        {formatDate(application.companyResponse.interviewDate)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                                {application.companyResponse.interviewTime && (
+                                  <div className="flex items-center gap-3 p-4 bg-white/30 rounded-xl border border-emerald-200/20">
+                                    <Clock className="h-5 w-5 text-emerald-600" />
+                                    <div>
+                                      <p className="text-sm text-emerald-700">Interview Time</p>
+                                      <p className="font-semibold text-emerald-900">
+                                        {application.companyResponse.interviewTime}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                                {application.companyResponse.interviewLocation && (
+                                  <div className="flex items-center gap-3 p-4 bg-white/30 rounded-xl border border-emerald-200/20">
+                                    <LocationIcon className="h-5 w-5 text-emerald-600" />
+                                    <div>
+                                      <p className="text-sm text-emerald-700">Location</p>
+                                      <p className="font-semibold text-emerald-900">
+                                        {application.companyResponse.interviewLocation}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                        {/* Response By */}
+                        {application.companyResponse.respondedBy && (
+                          <div className="mt-6 flex items-center gap-3 p-4 bg-slate-50/50 rounded-2xl border border-slate-200/30">
+                            <UserCheck className="h-5 w-5 text-slate-600" />
+                            <div>
+                              <p className="text-sm text-slate-500">Response sent by</p>
+                              <p className="font-semibold text-slate-800">
+                                {application.companyResponse.respondedBy.name}
+                                {application.companyResponse.respondedBy.email && (
+                                  <span className="text-slate-600 text-sm font-normal ml-2">
+                                    ({application.companyResponse.respondedBy.email})
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Status History Timeline */}
+                      {application.statusHistory && application.statusHistory.length > 0 && (
+                        <div className="mt-8">
+                          <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+                            <Clock className="h-5 w-5" />
+                            Application Timeline
+                          </h3>
+                          <div className="space-y-4">
+                            {application.statusHistory
+                              .sort((a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime())
+                              .map((history, index) => (
+                                <div key={history._id} className="flex items-start gap-4 p-4 rounded-2xl bg-white/50 border border-slate-200/30 hover:shadow-lg transition-all duration-300">
+                                  <div className="flex-shrink-0">
+                                    <div className={`p-3 rounded-xl border ${history.status === 'shortlisted' || history.status === 'offer-accepted'
+                                      ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200/30'
+                                      : history.status === 'rejected' || history.status === 'withdrawn'
+                                        ? 'bg-rose-500/10 text-rose-600 border-rose-200/30'
+                                        : 'bg-blue-500/10 text-blue-600 border-blue-200/30'
+                                      }`}>
+                                      {getStatusIcon(history.status)}
+                                    </div>
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="flex justify-between items-start">
+                                      <div>
+                                        <p className="font-semibold text-slate-800">
+                                          {applicationService.getStatusLabel(history.status)}
+                                        </p>
+                                        <p className="text-sm text-slate-600">
+                                          {history.message || 'Status updated'}
+                                        </p>
+                                      </div>
+                                      <p className="text-sm text-slate-500 whitespace-nowrap">
+                                        {formatDate(history.changedAt)}
+                                      </p>
+                                    </div>
+                                    {history.changedBy && (
+                                      <p className="text-sm text-slate-500 mt-2">
+                                        By {history.changedBy.name}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="w-24 h-24 mx-auto mb-6 flex items-center justify-center rounded-3xl bg-blue-50/50 border border-blue-200/30">
+                        <MessageSquare className="h-12 w-12 text-blue-400/60" />
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-800 mb-3">No Responses Yet</h3>
+                      <p className="text-slate-600 max-w-md mx-auto mb-8">
+                        The hiring team hasn't responded to your application yet.
+                        You'll see any updates or interview invitations here once they're available.
+                      </p>
+                      <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                        <Badge className="bg-blue-500/10 text-blue-600 border-blue-200/30 backdrop-blur-sm px-4 py-2">
+                          Current Status: {formattedApplication.statusLabel}
+                        </Badge>
+                        <Badge className="bg-slate-500/10 text-slate-600 border-slate-200/30 backdrop-blur-sm px-4 py-2">
+                          Applied on {formatDate(application.createdAt)}
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Quick Tips for Candidates */}
+              <Card className="backdrop-blur-xl bg-gradient-to-r from-amber-50/50 to-orange-50/30 border border-amber-200/20 shadow-2xl rounded-3xl overflow-hidden">
+                <CardHeader className="pb-6 border-b border-amber-200/30 rounded-t-3xl">
+                  <CardTitle className="flex items-center gap-3 text-amber-800 text-xl font-bold">
+                    <AlertCircle className="h-5 w-5 text-amber-600" />
+                    What to Expect Next
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/50 border border-amber-200/20">
+                      <div className="p-2 rounded-lg bg-amber-500/10">
+                        <Clock className="h-4 w-4 text-amber-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-amber-800">Response Time</p>
+                        <p className="text-sm text-amber-700">
+                          Most companies respond within 1-2 weeks. If it's been longer, it's okay to follow up politely.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/50 border border-amber-200/20">
+                      <div className="p-2 rounded-lg bg-amber-500/10">
+                        <MessageSquare className="h-4 w-4 text-amber-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-amber-800">Interview Invitations</p>
+                        <p className="text-sm text-amber-700">
+                          If selected for an interview, you'll receive details about date, time, and format here.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/50 border border-amber-200/20">
+                      <div className="p-2 rounded-lg bg-amber-500/10">
+                        <Mail className="h-4 w-4 text-amber-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-amber-800">Communication</p>
+                        <p className="text-sm text-amber-700">
+                          All official communication about this application will appear here. Check regularly for updates.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

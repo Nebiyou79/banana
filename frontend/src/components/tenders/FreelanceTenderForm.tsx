@@ -780,9 +780,9 @@ const DatePicker: React.FC<{
           {value ? format(value, "PPP") : <span>{placeholder}</span>}
         </Button>
       </PopoverTrigger>
-<PopoverContent
-  align="start"
-  className="
+      <PopoverContent
+        align="start"
+        className="
     w-72
     p-4
     rounded-xl
@@ -791,20 +791,20 @@ const DatePicker: React.FC<{
     shadow-xl
     border border-white/10
   "
->
-  <div className="space-y-2">
-    <p className="text-sm text-slate-200">Select date</p>
+      >
+        <div className="space-y-2">
+          <p className="text-sm text-slate-200">Select date</p>
 
-    <Input
-      type="date"
-      value={value ? format(value, "yyyy-MM-dd") : ""}
-      min={new Date().toISOString().split("T")[0]}
-      onChange={(e) => {
-        if (e.target.value) {
-          onChange(new Date(e.target.value));
-        }
-      }}
-      className="
+          <Input
+            type="date"
+            value={value ? format(value, "yyyy-MM-dd") : ""}
+            min={new Date().toISOString().split("T")[0]}
+            onChange={(e) => {
+              if (e.target.value) {
+                onChange(new Date(e.target.value));
+              }
+            }}
+            className="
         w-full
         bg-white/10
         border-white/20
@@ -812,9 +812,9 @@ const DatePicker: React.FC<{
         focus:ring-2
         focus:ring-indigo-400
       "
-    />
-  </div>
-</PopoverContent>
+          />
+        </div>
+      </PopoverContent>
 
     </Popover>
   );
@@ -822,10 +822,10 @@ const DatePicker: React.FC<{
 
 // ============ MAIN FORM COMPONENT ============
 
-const FreelanceTenderForm: React.FC<FreelanceTenderFormProps> = ({ 
-  defaultConfig, 
+const FreelanceTenderForm: React.FC<FreelanceTenderFormProps> = ({
+  defaultConfig,
   onSuccess,
-  tenderId 
+  tenderId
 }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -979,7 +979,7 @@ const FreelanceTenderForm: React.FC<FreelanceTenderFormProps> = ({
     try {
       // Transform skills to the correct format
       const skillsRequired = skills.map(skill => skill.name);
-      
+
       // Transform questions to the correct format
       const screeningQuestions = questions.map(q => ({
         question: q.question,
@@ -1012,15 +1012,15 @@ const FreelanceTenderForm: React.FC<FreelanceTenderFormProps> = ({
       if (data.languagePreference) {
         tenderData.languagePreference = data.languagePreference;
       }
-      
+
       if (data.timezonePreference) {
         tenderData.timezonePreference = data.timezonePreference;
       }
-      
+
       if (data.industry) {
         tenderData.industry = data.industry;
       }
-      
+
       // Add screening questions
       if (questions.length > 0) {
         tenderData.screeningQuestions = screeningQuestions;
@@ -1047,32 +1047,32 @@ const FreelanceTenderForm: React.FC<FreelanceTenderFormProps> = ({
       if (!tenderData.description || tenderData.description.trim() === '') missingFields.push('Description');
       if (!tenderData.procurementCategory) missingFields.push('Category');
       if (!tenderData.skillsRequired || tenderData.skillsRequired.length === 0) missingFields.push('Skills');
-      
+
       if (missingFields.length > 0) {
         setSubmitError(`Missing required fields: ${missingFields.join(', ')}`);
         setIsSubmitting(false);
         return;
       }
-      
+
       // Check conditional requirements
       if (tenderData.engagementType === 'hourly' && !tenderData.weeklyHours) {
         setSubmitError('Weekly hours is required for hourly engagements');
         setIsSubmitting(false);
         return;
       }
-      
+
       if (tenderData.engagementType === 'fixed_price' && !tenderData.budget) {
         setSubmitError('Budget is required for fixed price engagements');
         setIsSubmitting(false);
         return;
       }
-      
+
       if (tenderData.workflowType === 'closed' && !tenderData.sealedBidConfirmation) {
         setSubmitError('Sealed bid confirmation is required for closed workflow');
         setIsSubmitting(false);
         return;
       }
-      
+
       // Validate deadline
       const deadlineDate = new Date(tenderData.deadline);
       if (deadlineDate <= new Date()) {
@@ -1092,11 +1092,11 @@ const FreelanceTenderForm: React.FC<FreelanceTenderFormProps> = ({
         tenderData.fileTypes = fileTypes;
       }
 
-      console.log('Submitting tender data:', { 
+      console.log('Submitting tender data:', {
         title: tenderData.title,
         skillsCount: tenderData.skillsRequired?.length,
         hasFiles: files.length > 0,
-        tenderId 
+        tenderId
       });
 
       // Call the mutation
@@ -1121,10 +1121,10 @@ const FreelanceTenderForm: React.FC<FreelanceTenderFormProps> = ({
 
           // Redirect based on user role
           const userRole = localStorage.getItem('userRole') || 'organization';
-          const redirectPath = userRole === 'company' 
+          const redirectPath = userRole === 'company'
             ? '/dashboard/company/my-tenders'
             : '/dashboard/organization/tenders';
-          
+
           // Navigate to the correct page
           window.location.href = redirectPath;
 
@@ -1374,8 +1374,6 @@ const FreelanceTenderForm: React.FC<FreelanceTenderFormProps> = ({
                     placeholder="Describe your project in detail..."
                     minHeight={400}
                     label=""
-                    showToolbar={true}
-                    theme="light"
                   />
                 </div>
               </FormControl>
@@ -1636,8 +1634,8 @@ const FreelanceTenderForm: React.FC<FreelanceTenderFormProps> = ({
                             <div className="font-medium text-gray-900">{type.label}</div>
                             <div className="text-xs text-gray-600">
                               {type.value === 'one_time' ? 'One-time project' :
-                               type.value === 'ongoing' ? 'Ongoing work' :
-                               'Complex project'}
+                                type.value === 'ongoing' ? 'Ongoing work' :
+                                  'Complex project'}
                             </div>
                           </div>
                         </div>
@@ -2293,13 +2291,13 @@ const FreelanceTenderForm: React.FC<FreelanceTenderFormProps> = ({
             <Star className="h-7 w-7 text-emerald-500" />
             Summary Preview
           </h4>
-          
+
           <div className="space-y-4">
             <div className="p-4 bg-white rounded-lg border border-gray-200">
               <p className="text-sm text-gray-600 mb-1">Title</p>
               <p className="font-semibold text-lg text-gray-900 truncate">{watch('title') || 'Not set'}</p>
             </div>
-            
+
             <div className="p-4 bg-white rounded-lg border border-gray-200">
               <p className="text-sm text-gray-600 mb-1">Category</p>
               <p className="font-semibold text-lg text-gray-900 truncate">
@@ -2311,21 +2309,21 @@ const FreelanceTenderForm: React.FC<FreelanceTenderFormProps> = ({
                 })()}
               </p>
             </div>
-            
+
             <div className="p-4 bg-white rounded-lg border border-gray-200">
               <p className="text-sm text-gray-600 mb-1">Engagement</p>
               <p className="font-semibold text-lg text-gray-900">
                 {ENGAGEMENT_TYPES.find(t => t.value === engagementType)?.label || 'Not set'}
               </p>
             </div>
-            
+
             <div className="p-4 bg-white rounded-lg border border-gray-200">
               <p className="text-sm text-gray-600 mb-1">Deadline</p>
               <p className="font-semibold text-lg text-gray-900">
                 {deadlineDate ? format(deadlineDate, 'MMM dd, yyyy') : 'Not set'}
               </p>
             </div>
-            
+
             <div className="p-4 bg-white rounded-lg border border-gray-200">
               <p className="text-sm text-gray-600 mb-1">Skills</p>
               <div className="flex flex-wrap gap-2 mt-2">
@@ -2343,7 +2341,7 @@ const FreelanceTenderForm: React.FC<FreelanceTenderFormProps> = ({
                 )}
               </div>
             </div>
-            
+
             <div className="p-4 bg-white rounded-lg border border-gray-200">
               <p className="text-sm text-gray-600 mb-1">Attachments</p>
               <p className="font-semibold text-lg text-gray-900">
@@ -2351,7 +2349,7 @@ const FreelanceTenderForm: React.FC<FreelanceTenderFormProps> = ({
               </p>
             </div>
           </div>
-          
+
           {engagementType === 'fixed_price' && budget && budget.min > 0 && budget.max > 0 && (
             <div className="p-6 bg-emerald-50 rounded-lg border border-emerald-100">
               <div className="text-center">
@@ -2555,7 +2553,7 @@ const FreelanceTenderForm: React.FC<FreelanceTenderFormProps> = ({
                   </li>
                 </ul>
               </div>
-              
+
               <div className="space-y-4">
                 <h4 className="font-semibold text-lg flex items-center gap-2 text-gray-900">
                   <DollarSign className="h-5 w-5 text-emerald-500" />
@@ -2580,7 +2578,7 @@ const FreelanceTenderForm: React.FC<FreelanceTenderFormProps> = ({
                   </li>
                 </ul>
               </div>
-              
+
               <div className="space-y-4">
                 <h4 className="font-semibold text-lg flex items-center gap-2 text-gray-900">
                   <Star className="h-5 w-5 text-emerald-500" />
@@ -2606,7 +2604,7 @@ const FreelanceTenderForm: React.FC<FreelanceTenderFormProps> = ({
                 </ul>
               </div>
             </div>
-            
+
             <Alert className="mt-6 bg-emerald-50 border-emerald-100">
               <Mail className="h-4 w-4 text-emerald-500" />
               <AlertDescription className="text-sm text-gray-700">

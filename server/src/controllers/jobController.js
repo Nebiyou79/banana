@@ -5,6 +5,16 @@ const Organization = require('../models/Organization');
 const User = require('../models/User');
 const { validationResult } = require('express-validator');
 
+// Helper function to count text characters (without HTML tags)
+const countTextCharacters = (html) => {
+  if (!html) return 0;
+  // Remove HTML tags
+  const text = html.replace(/<[^>]*>/g, '');
+  // Remove multiple spaces and newlines
+  const cleanText = text.replace(/\s+/g, ' ').trim();
+  return cleanText.length;
+};
+
 // @desc    Get all ACTIVE jobs (public)
 // @route   GET /api/v1/job
 // @access  Public
@@ -87,7 +97,7 @@ exports.getJobs = async (req, res, next) => {
   }
 };
 
-// @desc    Create job - FIXED VERSION
+// @desc    Create job - FIXED VERSION WITH TEXT-ONLY VALIDATION
 // @route   POST /api/v1/job
 // @access  Private (Company only)
 exports.createJob = async (req, res, next) => {
@@ -125,12 +135,16 @@ exports.createJob = async (req, res, next) => {
     }
 
     // Log the incoming data for debugging
-    console.log('📥 Received job data:', JSON.stringify(req.body, null, 2));
+    console.log('📥 Received job data:', JSON.stringify({
+      ...req.body,
+      descriptionLength: req.body.description?.length,
+      textOnlyLength: countTextCharacters(req.body.description)
+    }, null, 2));
 
     // VALIDATE EDUCATION LEVEL BEFORE CREATING JOB
     const validEducationLevels = [
       'primary-education',
-      'secondary-education', 
+      'secondary-education',
       'tvet-level-i',
       'tvet-level-ii',
       'tvet-level-iii',
@@ -142,7 +156,7 @@ exports.createJob = async (req, res, next) => {
       'lecturer',
       'professor',
       'none-required',
-      
+
       // Backward compatibility
       'high-school',
       'diploma',
@@ -166,6 +180,41 @@ exports.createJob = async (req, res, next) => {
       });
     }
 
+    // VALIDATE DESCRIPTION TEXT (NOT HTML) LENGTH
+    if (req.body.description) {
+      const textLength = countTextCharacters(req.body.description);
+      console.log('📊 Description validation:', {
+        htmlLength: req.body.description.length,
+        textLength: textLength
+      });
+
+      if (textLength < 50) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: ['Description must be at least 50 characters long (text only)'],
+          details: [{
+            field: 'description',
+            message: 'Description must be at least 50 characters long (text only)',
+            value: `Text length: ${textLength} characters`
+          }]
+        });
+      }
+
+      if (textLength > 5000) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: ['Description cannot exceed 5000 characters (text only)'],
+          details: [{
+            field: 'description',
+            message: 'Description cannot exceed 5000 characters (text only)',
+            value: `Text length: ${textLength} characters`
+          }]
+        });
+      }
+    }
+
     // Transform education level if using old values
     const educationLevelMapping = {
       'high-school': 'secondary-education',
@@ -184,7 +233,11 @@ exports.createJob = async (req, res, next) => {
       createdBy: userId
     };
 
-    console.log('📤 Creating job with data:', JSON.stringify(jobData, null, 2));
+    console.log('📤 Creating job with data:', JSON.stringify({
+      ...jobData,
+      descriptionLength: jobData.description?.length,
+      textOnlyLength: countTextCharacters(jobData.description)
+    }, null, 2));
 
     const job = await Job.create(jobData);
     await job.populate('company', 'name logoUrl verified industry');
@@ -198,7 +251,7 @@ exports.createJob = async (req, res, next) => {
     });
   } catch (error) {
     console.error('Create job error:', error);
-    
+
     if (error.name === 'ValidationError') {
       console.log('❌ Mongoose validation errors:', error.errors);
       const messages = Object.values(error.errors).map(val => val.message);
@@ -213,7 +266,7 @@ exports.createJob = async (req, res, next) => {
         }))
       });
     }
-    
+
     // Handle duplicate key errors
     if (error.code === 11000) {
       return res.status(400).json({
@@ -222,7 +275,7 @@ exports.createJob = async (req, res, next) => {
         errors: ['A job with similar details already exists']
       });
     }
-    
+
     res.status(500).json({
       success: false,
       message: 'Error creating job',
@@ -280,8 +333,8 @@ exports.getCompanyJobs = async (req, res, next) => {
     }
 
     const { page = 1, limit = 12, status } = req.query;
-    
-    const query = { 
+
+    const query = {
       company: company._id,
       jobType: 'company'
     };
@@ -313,7 +366,7 @@ exports.getCompanyJobs = async (req, res, next) => {
   }
 };
 
-// @desc    Update job - FIXED VERSION
+// @desc    Update job - FIXED VERSION WITH TEXT-ONLY VALIDATION
 // @route   PUT /api/v1/job/:id
 // @access  Private (Company/Admin only)
 exports.updateJob = async (req, res, next) => {
@@ -328,7 +381,7 @@ exports.updateJob = async (req, res, next) => {
     }
 
     let job = await Job.findById(req.params.id).lean(); // Use lean() to get plain object
-    
+
     if (!job) {
       return res.status(404).json({
         success: false,
@@ -338,7 +391,7 @@ exports.updateJob = async (req, res, next) => {
 
     const userId = req.user.userId || req.user._id;
     const company = await Company.findOne({ user: userId });
-    
+
     if (!company && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -368,6 +421,31 @@ exports.updateJob = async (req, res, next) => {
       });
     }
 
+    // VALIDATE DESCRIPTION TEXT (NOT HTML) LENGTH FOR UPDATES
+    if (req.body.description) {
+      const textLength = countTextCharacters(req.body.description);
+      console.log('📊 Description validation for update:', {
+        htmlLength: req.body.description.length,
+        textLength: textLength
+      });
+
+      if (textLength < 50) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: ['Description must be at least 50 characters long (text only)']
+        });
+      }
+
+      if (textLength > 5000) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: ['Description cannot exceed 5000 characters (text only)']
+        });
+      }
+    }
+
     // Use findByIdAndUpdate for better handling
     const updatedJob = await Job.findByIdAndUpdate(
       req.params.id,
@@ -395,7 +473,7 @@ exports.updateJob = async (req, res, next) => {
 exports.deleteJob = async (req, res, next) => {
   try {
     const job = await Job.findById(req.params.id).lean(); // Use lean() to get plain object
-    
+
     if (!job) {
       return res.status(404).json({
         success: false,
@@ -405,7 +483,7 @@ exports.deleteJob = async (req, res, next) => {
 
     const userId = req.user.userId || req.user._id;
     const company = await Company.findOne({ user: userId });
-    
+
     if (!company && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -462,8 +540,8 @@ exports.getOrganizationJobs = async (req, res, next) => {
     }
 
     const { page = 1, limit = 12, status } = req.query;
-    
-    const query = { 
+
+    const query = {
       organization: organization._id,
       jobType: 'organization'
     };
@@ -495,7 +573,7 @@ exports.getOrganizationJobs = async (req, res, next) => {
   }
 };
 
-// @desc    Create job for organization
+// @desc    Create job for organization - FIXED WITH TEXT-ONLY VALIDATION
 // @route   POST /api/v1/job/organization
 // @access  Private (Organization only)
 exports.createOrganizationJob = async (req, res, next) => {
@@ -526,6 +604,31 @@ exports.createOrganizationJob = async (req, res, next) => {
       });
     }
 
+    // VALIDATE DESCRIPTION TEXT (NOT HTML) LENGTH
+    if (req.body.description) {
+      const textLength = countTextCharacters(req.body.description);
+      console.log('📊 Description validation for organization:', {
+        htmlLength: req.body.description.length,
+        textLength: textLength
+      });
+
+      if (textLength < 50) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: ['Description must be at least 50 characters long (text only)']
+        });
+      }
+
+      if (textLength > 5000) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: ['Description cannot exceed 5000 characters (text only)']
+        });
+      }
+    }
+
     const jobData = {
       ...req.body,
       organization: organization._id,
@@ -543,7 +646,7 @@ exports.createOrganizationJob = async (req, res, next) => {
     });
   } catch (error) {
     console.error('Create organization job error:', error);
-    
+
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(val => val.message);
       return res.status(400).json({
@@ -552,7 +655,7 @@ exports.createOrganizationJob = async (req, res, next) => {
         errors: messages
       });
     }
-    
+
     res.status(500).json({
       success: false,
       message: 'Error creating opportunity'
@@ -560,7 +663,7 @@ exports.createOrganizationJob = async (req, res, next) => {
   }
 };
 
-// @desc    Update organization job - FIXED VERSION
+// @desc    Update organization job - FIXED VERSION WITH TEXT-ONLY VALIDATION
 // @route   PUT /api/v1/job/organization/:id
 // @access  Private (Organization/Admin only)
 exports.updateOrganizationJob = async (req, res, next) => {
@@ -575,7 +678,7 @@ exports.updateOrganizationJob = async (req, res, next) => {
     }
 
     const job = await Job.findById(req.params.id).lean();
-    
+
     if (!job) {
       return res.status(404).json({
         success: false,
@@ -585,7 +688,7 @@ exports.updateOrganizationJob = async (req, res, next) => {
 
     const userId = req.user.userId || req.user._id;
     const organization = await Organization.findOne({ user: userId });
-    
+
     if (!organization && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -609,6 +712,31 @@ exports.updateOrganizationJob = async (req, res, next) => {
         success: false,
         message: 'Not authorized to update this opportunity'
       });
+    }
+
+    // VALIDATE DESCRIPTION TEXT (NOT HTML) LENGTH FOR UPDATES
+    if (req.body.description) {
+      const textLength = countTextCharacters(req.body.description);
+      console.log('📊 Description validation for organization update:', {
+        htmlLength: req.body.description.length,
+        textLength: textLength
+      });
+
+      if (textLength < 50) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: ['Description must be at least 50 characters long (text only)']
+        });
+      }
+
+      if (textLength > 5000) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: ['Description cannot exceed 5000 characters (text only)']
+        });
+      }
     }
 
     const updatedJob = await Job.findByIdAndUpdate(
@@ -637,7 +765,7 @@ exports.updateOrganizationJob = async (req, res, next) => {
 exports.deleteOrganizationJob = async (req, res, next) => {
   try {
     const job = await Job.findById(req.params.id).lean();
-    
+
     if (!job) {
       return res.status(404).json({
         success: false,
@@ -647,7 +775,7 @@ exports.deleteOrganizationJob = async (req, res, next) => {
 
     const userId = req.user.userId || req.user._id;
     const organization = await Organization.findOne({ user: userId });
-    
+
     if (!organization && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -736,7 +864,7 @@ exports.getJobsForCandidate = async (req, res, next) => {
       remote
     } = req.query;
 
-    const filter = { 
+    const filter = {
       status: 'active',
       applicationDeadline: { $gt: new Date() }
     };
@@ -919,10 +1047,10 @@ exports.unsaveJob = async (req, res, next) => {
 exports.getSavedJobs = async (req, res, next) => {
   try {
     const userId = req.user.userId || req.user._id;
-    
+
     // First get user with saved job IDs
     const user = await User.findById(userId).select('savedJobs');
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -946,9 +1074,9 @@ exports.getSavedJobs = async (req, res, next) => {
         { applicationDeadline: null }
       ]
     })
-    .populate('company', 'name logoUrl verified industry')
-    .populate('organization', 'name logoUrl verified industry organizationType')
-    .lean();
+      .populate('company', 'name logoUrl verified industry')
+      .populate('organization', 'name logoUrl verified industry organizationType')
+      .lean();
 
     res.status(200).json({
       success: true,

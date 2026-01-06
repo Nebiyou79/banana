@@ -1,4 +1,4 @@
-// routes/jobRoutes.js - FIXED ROUTE ORDERING
+// routes/jobRoutes.js - FIXED ROUTE ORDERING WITH TEXT-ONLY VALIDATION
 const express = require('express');
 const router = express.Router();
 const {
@@ -22,16 +22,49 @@ const {
 } = require('../controllers/jobController');
 const { verifyToken } = require('../middleware/authMiddleware');
 const { restrictTo } = require('../middleware/roleMiddleware');
-const { body } = require('express-validator');
+const { body, custom } = require('express-validator');
+
+// Helper function to count text characters (without HTML tags)
+const countTextCharacters = (html) => {
+  if (!html) return 0;
+  // Remove HTML tags
+  const text = html.replace(/<[^>]*>/g, '');
+  // Remove multiple spaces and newlines
+  const cleanText = text.replace(/\s+/g, ' ').trim();
+  return cleanText.length;
+};
+
+// Custom validation for description text length (not HTML length)
+const validateTextLength = (fieldName, min, max) => {
+  return body(fieldName)
+    .custom((value) => {
+      if (!value) return true; // Let required validation handle empty values
+
+      const textLength = countTextCharacters(value);
+
+      if (min && textLength < min) {
+        throw new Error(`${fieldName} must be at least ${min} characters long (text only)`);
+      }
+
+      if (max && textLength > max) {
+        throw new Error(`${fieldName} cannot exceed ${max} characters (text only)`);
+      }
+
+      return true;
+    });
+};
 
 // Enhanced Validation for CREATE
 const createJobValidation = [
   body('title')
     .isLength({ min: 5, max: 100 })
     .withMessage('Title must be between 5 and 100 characters'),
-  body('description')
-    .isLength({ min: 50, max: 5000 })
-    .withMessage('Description must be between 50 and 5000 characters'),
+  // Use custom validation for description text length
+  validateTextLength('description', 50, 5000),
+  body('shortDescription')
+    .optional()
+    .isLength({ max: 200 })
+    .withMessage('Short description cannot exceed 200 characters'),
   body('category')
     .notEmpty()
     .withMessage('Category is required'),
@@ -45,7 +78,7 @@ const createJobValidation = [
     .optional()
     .isIn([
       'primary-education',
-      'secondary-education', 
+      'secondary-education',
       'tvet-level-i',
       'tvet-level-ii',
       'tvet-level-iii',
@@ -68,7 +101,7 @@ const createJobValidation = [
   body('location.region')
     .isIn([
       'addis-ababa', 'afar', 'amhara', 'benishangul-gumuz', 'dire-dawa',
-      'gambela', 'harari', 'oromia', 'sidama', 'snnpr', 'somali', 
+      'gambela', 'harari', 'oromia', 'sidama', 'snnpr', 'somali',
       'south-west-ethiopia', 'tigray', 'international'
     ])
     .withMessage('Invalid region'),
@@ -87,10 +120,12 @@ const updateJobValidation = [
     .optional()
     .isLength({ min: 5, max: 100 })
     .withMessage('Title must be between 5 and 100 characters'),
-  body('description')
+  // Use custom validation for description text length
+  validateTextLength('description', 50, 5000).optional(),
+  body('shortDescription')
     .optional()
-    .isLength({ min: 50, max: 5000 })
-    .withMessage('Description must be between 50 and 5000 characters'),
+    .isLength({ max: 200 })
+    .withMessage('Short description cannot exceed 200 characters'),
   body('category')
     .optional()
     .notEmpty()
@@ -107,7 +142,7 @@ const updateJobValidation = [
     .optional()
     .isIn([
       'primary-education',
-      'secondary-education', 
+      'secondary-education',
       'tvet-level-i',
       'tvet-level-ii',
       'tvet-level-iii',
@@ -131,7 +166,7 @@ const updateJobValidation = [
     .optional()
     .isIn([
       'addis-ababa', 'afar', 'amhara', 'benishangul-gumuz', 'dire-dawa',
-      'gambela', 'harari', 'oromia', 'sidama', 'snnpr', 'somali', 
+      'gambela', 'harari', 'oromia', 'sidama', 'snnpr', 'somali',
       'south-west-ethiopia', 'tigray', 'international'
     ])
     .withMessage('Invalid region'),

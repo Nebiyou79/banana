@@ -9,10 +9,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/Badge';
-import { 
-  Search, 
-  FileText, 
-  TrendingUp, 
+import {
+  Search,
+  FileText,
+  TrendingUp,
   Calendar,
   AlertCircle,
   Plus,
@@ -100,7 +100,7 @@ const CandidateApplicationsPage: NextPage = () => {
           <title>My Applications | JobStack</title>
           <meta name="description" content="View and manage your job applications" />
         </Head>
-        
+
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 py-8">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             {/* Header Section */}
@@ -114,7 +114,7 @@ const CandidateApplicationsPage: NextPage = () => {
                     Track and manage all your job applications in one place
                   </p>
                 </div>
-                <Button 
+                <Button
                   onClick={handleBrowseJobs}
                   className="bg-blue-600 hover:bg-blue-700 text-white shadow-2xl transition-all duration-300 hover:scale-105 px-8 py-3 text-lg font-semibold"
                 >
@@ -280,7 +280,7 @@ const CandidateApplicationsPage: NextPage = () => {
 
             {/* Applications List */}
             <div className="backdrop-blur-xl bg-white/80 border border-white/20 shadow-2xl rounded-3xl overflow-hidden">
-              <ApplicationList 
+              <ApplicationList
                 viewType="candidate"
                 onApplicationUpdate={handleApplicationUpdate}
               />
@@ -298,14 +298,14 @@ const CandidateApplicationsPage: NextPage = () => {
                     You haven`t submitted any job applications yet. Start your job search and apply to positions that match your skills and interests.
                   </p>
                   <div className="flex flex-col sm:flex-row gap-6 justify-center">
-                    <Button 
+                    <Button
                       onClick={handleBrowseJobs}
                       className="bg-blue-600 hover:bg-blue-700 text-white shadow-2xl px-10 py-4 text-xl transition-all duration-300 hover:scale-105"
                     >
                       <Plus className="h-6 w-6 mr-3" />
                       Browse Available Jobs
                     </Button>
-                    <Button 
+                    <Button
                       variant="outline"
                       onClick={() => router.push('/dashboard/candidate/profile')}
                       className="border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white px-10 py-4 text-xl transition-all duration-300 hover:scale-105"

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// services/jobService.ts - COMPLETE FIXED VERSION
+// services/jobService.ts - UPDATED WITH TEXT-ONLY VALIDATION
 import api from '@/lib/axios';
 import { handleError, handleSuccess } from '@/lib/error-handler';
 
@@ -262,7 +262,17 @@ const handleApiError = (error: any, defaultMessage: string): never => {
   }
 };
 
-// Validation functions
+// Helper function to count text characters (without HTML tags)
+const countTextCharacters = (html: string): number => {
+  if (!html) return 0;
+  // Remove HTML tags
+  const text = html.replace(/<[^>]*>/g, '');
+  // Remove multiple spaces and newlines
+  const cleanText = text.replace(/\s+/g, ' ').trim();
+  return cleanText.length;
+};
+
+// Validation functions - UPDATED TO COUNT TEXT-ONLY CHARACTERS
 const validateJobData = (data: Partial<Job>): void => {
   if (data.title && data.title.trim().length < 5) {
     throw new Error('Job title must be at least 5 characters long');
@@ -272,12 +282,16 @@ const validateJobData = (data: Partial<Job>): void => {
     throw new Error('Job title cannot exceed 100 characters');
   }
 
-  if (data.description && data.description.length < 50) {
-    throw new Error('Job description must be at least 50 characters long');
-  }
+  if (data.description) {
+    const textLength = countTextCharacters(data.description);
 
-  if (data.description && data.description.length > 5000) {
-    throw new Error('Description cannot exceed 5000 characters');
+    if (textLength < 50) {
+      throw new Error('Job description must be at least 50 characters long (text only)');
+    }
+
+    if (textLength > 5000) {
+      throw new Error('Description cannot exceed 5000 characters (text only)');
+    }
   }
 
   if (data.shortDescription && data.shortDescription.length > 200) {
@@ -365,12 +379,19 @@ export const jobService = {
     }
   },
 
-  // Create job
+  // Create job - UPDATED WITH BETTER DEBUGGING
   createJob: async (data: Partial<Job>): Promise<Job> => {
     try {
+      // Validate client-side before sending
       validateJobData(data);
 
-      console.log('📤 Sending job data to backend:', JSON.stringify(data, null, 2));
+      console.log('📤 Sending job data to backend:', {
+        ...data,
+        descriptionLength: data.description?.length,
+        textOnlyLength: countTextCharacters(data.description || ''),
+        textOnlyPreview: data.description ?
+          data.description.replace(/<[^>]*>/g, '').substring(0, 100) + '...' : ''
+      });
 
       const response = await api.post<JobResponse>('/job', data);
 
@@ -387,14 +408,21 @@ export const jobService = {
     }
   },
 
-  // Update job
+  // Update job - UPDATED WITH BETTER DEBUGGING
   updateJob: async (id: string, data: Partial<Job>): Promise<Job> => {
     try {
       if (!id) {
         throw new Error('Job ID is required');
       }
 
+      // Validate client-side before sending
       validateJobData(data);
+
+      console.log('📤 Updating job data:', {
+        jobId: id,
+        descriptionLength: data.description?.length,
+        textOnlyLength: countTextCharacters(data.description || '')
+      });
 
       const response = await api.put<JobResponse>(`/job/${id}`, data);
 
@@ -440,12 +468,19 @@ export const jobService = {
     }
   },
 
-  // Create opportunity for organization
+  // Create opportunity for organization - UPDATED WITH BETTER DEBUGGING
   createOrganizationJob: async (data: Partial<Job>): Promise<Job> => {
     try {
+      // Validate client-side before sending
       validateJobData(data);
 
-      console.log('📤 Sending organization opportunity data to backend:', JSON.stringify(data, null, 2));
+      console.log('📤 Sending organization opportunity data:', {
+        ...data,
+        descriptionLength: data.description?.length,
+        textOnlyLength: countTextCharacters(data.description || ''),
+        textOnlyPreview: data.description ?
+          data.description.replace(/<[^>]*>/g, '').substring(0, 100) + '...' : ''
+      });
 
       const response = await api.post<JobResponse>('/job/organization', data);
 
@@ -462,14 +497,21 @@ export const jobService = {
     }
   },
 
-  // Update organization opportunity
+  // Update organization opportunity - UPDATED WITH BETTER DEBUGGING
   updateOrganizationJob: async (id: string, data: Partial<Job>): Promise<Job> => {
     try {
       if (!id) {
         throw new Error('Opportunity ID is required');
       }
 
+      // Validate client-side before sending
       validateJobData(data);
+
+      console.log('📤 Updating organization opportunity:', {
+        opportunityId: id,
+        descriptionLength: data.description?.length,
+        textOnlyLength: countTextCharacters(data.description || '')
+      });
 
       const response = await api.put<JobResponse>(`/job/organization/${id}`, data);
 

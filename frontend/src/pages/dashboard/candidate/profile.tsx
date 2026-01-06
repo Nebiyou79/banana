@@ -12,13 +12,14 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/Form';
-import { Loader2, Save, Plus, Trash2, Briefcase, GraduationCap, Award, Calendar } from 'lucide-react';
+import { Loader2, Save, Plus, Trash2, Briefcase, GraduationCap, Award, Calendar, User, MapPin, Phone, Globe } from 'lucide-react';
 import { candidateService, CV } from '@/services/candidateService';
 import { useAuth } from '@/contexts/AuthContext';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import CVUploadCard from '@/components/candidate/CVUploadCard';
 import SkillsInput from '@/components/candidate/SkillsInput';
 import { useToast } from '@/hooks/use-toast';
+import { colorClasses } from '@/utils/color';
 
 interface ProfileFormData {
   skills: string[];
@@ -480,9 +481,10 @@ const CandidateProfilePage: React.FC = () => {
   if (isLoading) {
     return (
       <DashboardLayout requiredRole="candidate">
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="ml-2 text-muted-foreground">Loading profile...</span>
+        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] p-4">
+          <Loader2 className={`h-12 w-12 animate-spin ${colorClasses.text.goldenMustard}`} />
+          <span className={`mt-4 text-lg font-medium ${colorClasses.text.darkNavy}`}>Loading profile...</span>
+          <p className={`mt-2 text-sm ${colorClasses.text.gray400}`}>Please wait while we load your information</p>
         </div>
       </DashboardLayout>
     );
@@ -496,23 +498,40 @@ const CandidateProfilePage: React.FC = () => {
 
   return (
     <DashboardLayout requiredRole="candidate">
-      <div className="space-y-6 p-4 md:p-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Profile Management</h1>
-          <p className="text-muted-foreground">Update your candidate profile and CV</p>
+      <div className="min-h-screen bg-gray-100 p-3 md:p-6">
+        {/* Page Header */}
+        <div className="mb-6 md:mb-8">
+          <h1 className={`text-2xl md:text-3xl font-bold ${colorClasses.text.darkNavy}`}>
+            Profile Management
+          </h1>
+          <p className={`mt-1 md:mt-2 text-sm md:text-base ${colorClasses.text.gray400}`}>
+            Update your candidate profile and CV to showcase your skills and experience
+          </p>
         </div>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* Basic Information */}
-              <Card className="border-border bg-card shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-foreground">Basic Information</CardTitle>
-                  <CardDescription className="text-muted-foreground">Your personal details</CardDescription>
+            {/* Grid for Basic Info and CV Upload */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Basic Information Card */}
+              <Card className={`border ${colorClasses.border.gray100} ${colorClasses.bg.white} shadow-sm hover:shadow-md transition-shadow`}>
+                <CardHeader className={`pb-3 ${colorClasses.bg.darkNavy} rounded-t-lg`}>
+                  <div className="flex items-center space-x-3">
+                    <div className={`p-2 rounded-lg ${colorClasses.bg.goldenMustard}`}>
+                      <User className={`h-5 w-5 ${colorClasses.text.white}`} />
+                    </div>
+                    <div>
+                      <CardTitle className={`text-lg md:text-xl font-bold ${colorClasses.text.white}`}>
+                        Basic Information
+                      </CardTitle>
+                      <CardDescription className={`${colorClasses.text.gray100}`}>
+                        Your personal details and contact information
+                      </CardDescription>
+                    </div>
+                  </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Date of Birth Field */}
+                <CardContent className="space-y-4 pt-6">
+                  {/* Date of Birth with Age Display */}
                   <FormField
                     control={form.control}
                     name="dateOfBirth"
@@ -521,7 +540,10 @@ const CandidateProfilePage: React.FC = () => {
 
                       return (
                         <FormItem>
-                          <FormLabel className="text-foreground">Date of Birth</FormLabel>
+                          <FormLabel className={`flex items-center ${colorClasses.text.darkNavy}`}>
+                            <Calendar className="h-4 w-4 mr-2" />
+                            Date of Birth
+                          </FormLabel>
                           <FormControl>
                             <div className="space-y-2">
                               <Input
@@ -529,23 +551,24 @@ const CandidateProfilePage: React.FC = () => {
                                 {...field}
                                 value={field.value || ''}
                                 max={new Date().toISOString().split('T')[0]}
-                                onChange={(e) => {
-                                  field.onChange(e.target.value);
-                                }}
-                                className="bg-background border-input"
+                                onChange={(e) => field.onChange(e.target.value)}
+                                className={`${colorClasses.bg.white} ${colorClasses.border.gray400} focus:${colorClasses.border.goldenMustard}`}
                               />
                               {age && (
-                                <div className="text-sm text-muted-foreground flex items-center">
-                                  <Calendar className="h-4 w-4 mr-2" />
+                                <div className={`text-sm flex items-center ${colorClasses.text.teal}`}>
+                                  <Calendar className="h-3 w-3 mr-1" />
                                   Age: {age} years old
                                 </div>
                               )}
                             </div>
                           </FormControl>
                           {ageErrors.length > 0 && (
-                            <div className="text-sm text-destructive">
+                            <div className={`text-sm ${colorClasses.text.orange}`}>
                               {ageErrors.map((error, index) => (
-                                <p key={index}>{error}</p>
+                                <p key={index} className="flex items-center">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500 mr-2"></span>
+                                  {error}
+                                </p>
                               ))}
                             </div>
                           )}
@@ -561,16 +584,18 @@ const CandidateProfilePage: React.FC = () => {
                     name="gender"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-foreground">Gender</FormLabel>
+                        <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                          Gender
+                        </FormLabel>
                         <FormControl>
                           <select
                             {...field}
-                            className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
+                            className={`w-full px-3 py-2 ${colorClasses.bg.white} border ${colorClasses.border.gray400} rounded-md focus:outline-none focus:ring-2 focus:ring-offset-1 focus:${colorClasses.border.goldenMustard} ${colorClasses.text.darkNavy}`}
                           >
+                            <option value="prefer-not-to-say">Prefer not to say</option>
                             <option value="male">Male</option>
                             <option value="female">Female</option>
                             <option value="other">Other</option>
-                            <option value="prefer-not-to-say">Prefer not to say</option>
                           </select>
                         </FormControl>
                         <FormMessage />
@@ -578,80 +603,101 @@ const CandidateProfilePage: React.FC = () => {
                     )}
                   />
 
+                  {/* Bio */}
                   <FormField
                     control={form.control}
                     name="bio"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-foreground">Bio</FormLabel>
+                        <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                          Professional Bio
+                        </FormLabel>
                         <FormControl>
                           <Textarea
                             placeholder="Tell us about yourself, your career goals, and what makes you unique..."
                             rows={4}
                             {...field}
                             value={field.value || ''}
-                            className="bg-background border-input resize-none text-foreground placeholder:text-muted-foreground"
+                            className={`${colorClasses.bg.white} ${colorClasses.border.gray400} resize-none ${colorClasses.text.darkNavy} placeholder:${colorClasses.text.gray400}`}
                             maxLength={1000}
                           />
                         </FormControl>
+                        <div className={`text-xs ${colorClasses.text.gray400} text-right`}>
+                          {field.value?.length || 0}/1000 characters
+                        </div>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="location"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-foreground">Location</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="e.g., Addis Ababa, Ethiopia"
-                            {...field}
-                            value={field.value || ''}
-                            maxLength={100}
-                            className="bg-background border-input text-foreground placeholder:text-muted-foreground"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  {/* Contact Information Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Location */}
+                    <FormField
+                      control={form.control}
+                      name="location"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className={`flex items-center ${colorClasses.text.darkNavy}`}>
+                            <MapPin className="h-4 w-4 mr-2" />
+                            Location
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="e.g., Addis Ababa, Ethiopia"
+                              {...field}
+                              value={field.value || ''}
+                              maxLength={100}
+                              className={`${colorClasses.bg.white} ${colorClasses.border.gray400} ${colorClasses.text.darkNavy}`}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                  <FormField
-                    control={form.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-foreground">Phone</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="+251 91 234 5678"
-                            {...field}
-                            value={field.value || ''}
-                            maxLength={20}
-                            className="bg-background border-input text-foreground placeholder:text-muted-foreground"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                    {/* Phone */}
+                    <FormField
+                      control={form.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className={`flex items-center ${colorClasses.text.darkNavy}`}>
+                            <Phone className="h-4 w-4 mr-2" />
+                            Phone
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="+251 91 234 5678"
+                              {...field}
+                              value={field.value || ''}
+                              maxLength={20}
+                              className={`${colorClasses.bg.white} ${colorClasses.border.gray400} ${colorClasses.text.darkNavy}`}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
+                  {/* Website */}
                   <FormField
                     control={form.control}
                     name="website"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-foreground">Website/Portfolio</FormLabel>
+                        <FormLabel className={`flex items-center ${colorClasses.text.darkNavy}`}>
+                          <Globe className="h-4 w-4 mr-2" />
+                          Website/Portfolio
+                        </FormLabel>
                         <FormControl>
                           <Input
                             placeholder="https://yourportfolio.com"
                             {...field}
                             value={field.value || ''}
                             maxLength={200}
-                            className="bg-background border-input text-foreground placeholder:text-muted-foreground"
+                            className={`${colorClasses.bg.white} ${colorClasses.border.gray400} ${colorClasses.text.darkNavy}`}
                           />
                         </FormControl>
                         <FormMessage />
@@ -661,66 +707,94 @@ const CandidateProfilePage: React.FC = () => {
                 </CardContent>
               </Card>
 
-              {/* CV Upload - Updated to use theme-aware colors */}
-              <CVUploadCard
-                cvs={cvs}
-                onUpload={handleCVUpload}
-                onSetPrimary={handleSetPrimaryCV}
-                onDelete={handleDeleteCV}
-                onDownload={handleDownloadCV}
-                isUploading={isUploading}
-              />
+              {/* CV Upload Card */}
+              <div className="lg:row-span-2">
+                <CVUploadCard
+                  cvs={cvs}
+                  onUpload={handleCVUpload}
+                  onSetPrimary={handleSetPrimaryCV}
+                  onDelete={handleDeleteCV}
+                  onDownload={handleDownloadCV}
+                  isUploading={isUploading}
+                />
+              </div>
+
+              {/* Skills Card */}
+              <Card className={`border ${colorClasses.border.gray100} ${colorClasses.bg.white} shadow-sm hover:shadow-md transition-shadow lg:col-span-1`}>
+                <CardHeader className={`pb-3 ${colorClasses.bg.darkNavy} rounded-t-lg`}>
+                  <div className="flex items-center space-x-3">
+                    <div className={`p-2 rounded-lg ${colorClasses.bg.blue}`}>
+                      <Award className={`h-5 w-5 ${colorClasses.text.white}`} />
+                    </div>
+                    <div>
+                      <CardTitle className={`text-lg md:text-xl font-bold ${colorClasses.text.white}`}>
+                        Skills & Expertise
+                      </CardTitle>
+                      <CardDescription className={`${colorClasses.text.gray100}`}>
+                        Your technical and professional skills
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <SkillsInput
+                    control={form.control}
+                    name="skills"
+                    label="Add your skills"
+                    placeholder="Type a skill and press Enter or click +"
+                  />
+                </CardContent>
+              </Card>
             </div>
 
-            {/* Skills Section */}
-            <Card className="border-border bg-card shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-foreground">Skills</CardTitle>
-                <CardDescription className="text-muted-foreground">Your technical and professional skills</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <SkillsInput
-                  control={form.control}
-                  name="skills"
-                  label="Skills"
-                  placeholder="Add a skill and press Enter or click +"
-                />
-              </CardContent>
-            </Card>
-
             {/* Education Section */}
-            <Card className="border-border bg-card shadow-sm">
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle className="text-foreground">Education</CardTitle>
-                    <CardDescription className="text-muted-foreground">Your educational background</CardDescription>
+            <Card className={`border ${colorClasses.border.gray100} ${colorClasses.bg.white} shadow-sm hover:shadow-md transition-shadow`}>
+              <CardHeader className={`pb-3 ${colorClasses.bg.darkNavy} rounded-t-lg`}>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-center space-x-3">
+                    <div className={`p-2 rounded-lg ${colorClasses.bg.teal}`}>
+                      <GraduationCap className={`h-5 w-5 ${colorClasses.text.white}`} />
+                    </div>
+                    <div>
+                      <CardTitle className={`text-lg md:text-xl font-bold ${colorClasses.text.white}`}>
+                        Education Background
+                      </CardTitle>
+                      <CardDescription className={`${colorClasses.text.gray100}`}>
+                        Your academic qualifications and degrees
+                      </CardDescription>
+                    </div>
                   </div>
                   <button
                     type="button"
                     onClick={addEducation}
-                    className="flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium transition-all hover:bg-primary/90 hover:shadow-md"
+                    className={`flex items-center justify-center px-4 py-2 ${colorClasses.bg.goldenMustard} ${colorClasses.text.white} rounded-lg font-medium transition-all hover:opacity-90 active:scale-95 shadow-sm`}
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    Add Education
+                    <span className="hidden sm:inline">Add Education</span>
+                    <span className="sm:hidden">Add</span>
                   </button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="pt-6 space-y-6">
                 {education.map((edu, index) => {
                   const dateErrors = validateDate(edu.startDate, edu.endDate, edu.current, 'Education');
 
                   return (
-                    <div key={`education-${index}-${edu.institution}`} className="border border-border rounded-lg p-4 space-y-4 bg-card/50">
+                    <div key={index} className={`border ${colorClasses.border.gray100} rounded-xl p-4 md:p-6 space-y-4 ${colorClasses.bg.gray100}`}>
                       <div className="flex justify-between items-center">
-                        <div className="flex items-center space-x-2">
-                          <GraduationCap className="h-5 w-5 text-primary" />
-                          <h4 className="font-medium text-foreground">Education #{index + 1}</h4>
+                        <div className="flex items-center space-x-3">
+                          <div className={`p-2 rounded-lg ${colorClasses.bg.teal} ${colorClasses.text.white}`}>
+                            <GraduationCap className="h-4 w-4" />
+                          </div>
+                          <h4 className={`font-semibold ${colorClasses.text.darkNavy}`}>
+                            Education #{index + 1}
+                          </h4>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeEducation(index)}
-                          className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+                          className={`p-2 ${colorClasses.text.gray400} hover:${colorClasses.text.orange} transition-colors`}
+                          aria-label="Remove education entry"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -728,10 +802,10 @@ const CandidateProfilePage: React.FC = () => {
 
                       {/* Date validation errors */}
                       {dateErrors.length > 0 && (
-                        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                        <div className={`${colorClasses.bg.orange} bg-opacity-10 border ${colorClasses.border.orange} border-opacity-20 rounded-lg p-3`}>
                           {dateErrors.map((error, errorIndex) => (
-                            <p key={`education-error-${index}-${errorIndex}`} className="text-sm text-destructive flex items-center">
-                              <span className="w-2 h-2 bg-destructive rounded-full mr-2"></span>
+                            <p key={errorIndex} className={`text-sm flex items-center ${colorClasses.text.orange}`}>
+                              <span className={`w-2 h-2 rounded-full ${colorClasses.bg.orange} mr-2`}></span>
                               {error}
                             </p>
                           ))}
@@ -744,13 +818,15 @@ const CandidateProfilePage: React.FC = () => {
                           name={`education.${index}.institution`}
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-foreground">Institution *</FormLabel>
+                              <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                                Institution <span className={`${colorClasses.text.orange}`}>*</span>
+                              </FormLabel>
                               <FormControl>
                                 <Input
                                   placeholder="University of Example"
                                   {...field}
                                   value={field.value || ''}
-                                  className="bg-background border-input text-foreground"
+                                  className={`${colorClasses.bg.white} ${colorClasses.border.gray400}`}
                                 />
                               </FormControl>
                               <FormMessage />
@@ -763,13 +839,15 @@ const CandidateProfilePage: React.FC = () => {
                           name={`education.${index}.degree`}
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-foreground">Degree *</FormLabel>
+                              <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                                Degree <span className={`${colorClasses.text.orange}`}>*</span>
+                              </FormLabel>
                               <FormControl>
                                 <Input
                                   placeholder="Bachelor of Science"
                                   {...field}
                                   value={field.value || ''}
-                                  className="bg-background border-input text-foreground"
+                                  className={`${colorClasses.bg.white} ${colorClasses.border.gray400}`}
                                 />
                               </FormControl>
                               <FormMessage />
@@ -782,13 +860,15 @@ const CandidateProfilePage: React.FC = () => {
                           name={`education.${index}.field`}
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-foreground">Field of Study</FormLabel>
+                              <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                                Field of Study
+                              </FormLabel>
                               <FormControl>
                                 <Input
                                   placeholder="Computer Science"
                                   {...field}
                                   value={field.value || ''}
-                                  className="bg-background border-input text-foreground"
+                                  className={`${colorClasses.bg.white} ${colorClasses.border.gray400}`}
                                 />
                               </FormControl>
                               <FormMessage />
@@ -796,79 +876,84 @@ const CandidateProfilePage: React.FC = () => {
                           )}
                         />
 
-                        <FormField
-                          control={form.control}
-                          name={`education.${index}.startDate`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">Start Date *</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="date"
-                                  {...field}
-                                  value={field.value || ''}
-                                  max={new Date().toISOString().split('T')[0]}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value);
-                                  }}
-                                  className="bg-background border-input"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <FormField
+                              control={form.control}
+                              name={`education.${index}.startDate`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                                    Start Date <span className={`${colorClasses.text.orange}`}>*</span>
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type="date"
+                                      {...field}
+                                      value={field.value || ''}
+                                      max={new Date().toISOString().split('T')[0]}
+                                      className={`${colorClasses.bg.white} ${colorClasses.border.gray400}`}
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
 
-                        <FormField
-                          control={form.control}
-                          name={`education.${index}.endDate`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">End Date</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="date"
-                                  {...field}
-                                  value={field.value || ''}
-                                  disabled={form.watch(`education.${index}.current`)}
-                                  max={new Date().toISOString().split('T')[0]}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value);
-                                  }}
-                                  className="bg-background border-input disabled:opacity-50"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                            <FormField
+                              control={form.control}
+                              name={`education.${index}.endDate`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                                    End Date
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type="date"
+                                      {...field}
+                                      value={field.value || ''}
+                                      disabled={form.watch(`education.${index}.current`)}
+                                      max={new Date().toISOString().split('T')[0]}
+                                      className={`${colorClasses.bg.white} ${colorClasses.border.gray400} disabled:opacity-50`}
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
 
-                        <FormField
-                          control={form.control}
-                          name={`education.${index}.current`}
-                          render={({ field }) => (
-                            <FormItem className="flex items-center space-x-2">
-                              <FormControl>
-                                <input
-                                  type="checkbox"
-                                  checked={field.value || false}
-                                  onChange={(e) => {
-                                    const isChecked = e.target.checked;
-                                    field.onChange(isChecked);
-
-                                    // Clear end date when "current" is checked
-                                    if (isChecked) {
-                                      form.setValue(`education.${index}.endDate`, '');
-                                    }
-                                  }}
-                                  className="rounded border-input focus:ring-ring"
-                                />
-                              </FormControl>
-                              <FormLabel className="!mt-0 cursor-pointer text-foreground">Currently studying here</FormLabel>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                          <FormField
+                            control={form.control}
+                            name={`education.${index}.current`}
+                            render={({ field }) => (
+                              <FormItem className="flex items-center space-x-2">
+                                <FormControl>
+                                  <input
+                                    type="checkbox"
+                                    id={`education-current-${index}`}
+                                    checked={field.value || false}
+                                    onChange={(e) => {
+                                      const isChecked = e.target.checked;
+                                      field.onChange(isChecked);
+                                      if (isChecked) {
+                                        form.setValue(`education.${index}.endDate`, '');
+                                      }
+                                    }}
+                                    className={`rounded ${colorClasses.border.gray400} focus:ring-2 focus:${colorClasses.border.goldenMustard}`}
+                                  />
+                                </FormControl>
+                                <label
+                                  htmlFor={`education-current-${index}`}
+                                  className={`text-sm cursor-pointer ${colorClasses.text.darkNavy}`}
+                                >
+                                  Currently studying here
+                                </label>
+                              </FormItem>
+                            )}
+                          />
+                        </div>
                       </div>
 
                       <FormField
@@ -876,17 +961,22 @@ const CandidateProfilePage: React.FC = () => {
                         name={`education.${index}.description`}
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-foreground">Description</FormLabel>
+                            <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                              Description & Achievements
+                            </FormLabel>
                             <FormControl>
                               <Textarea
-                                placeholder="Describe your studies, achievements, courses, etc."
+                                placeholder="Describe your studies, achievements, relevant courses, GPA, honors, etc."
                                 rows={3}
                                 {...field}
                                 value={field.value || ''}
-                                className="bg-background border-input text-foreground resize-none"
+                                className={`${colorClasses.bg.white} ${colorClasses.border.gray400} resize-none`}
                                 maxLength={500}
                               />
                             </FormControl>
+                            <div className={`text-xs ${colorClasses.text.gray400} text-right`}>
+                              {field.value?.length || 0}/500 characters
+                            </div>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -896,48 +986,73 @@ const CandidateProfilePage: React.FC = () => {
                 })}
 
                 {education.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground border-2 border-dashed border-border rounded-lg">
-                    <GraduationCap className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                    <p className="mt-2">No education entries yet</p>
-                    <p className="text-sm">Add your educational background to complete your profile</p>
+                  <div className={`text-center py-12 ${colorClasses.text.gray400} border-2 border-dashed ${colorClasses.border.gray400} rounded-xl`}>
+                    <GraduationCap className="mx-auto h-12 w-12 opacity-50" />
+                    <p className="mt-4 text-lg font-medium">No education entries yet</p>
+                    <p className="mt-2 text-sm max-w-md mx-auto">
+                      Add your educational background to showcase your academic qualifications
+                    </p>
+                    <button
+                      type="button"
+                      onClick={addEducation}
+                      className={`mt-6 flex items-center mx-auto px-6 py-2 ${colorClasses.bg.goldenMustard} ${colorClasses.text.white} rounded-lg font-medium transition-all hover:opacity-90`}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add First Education Entry
+                    </button>
                   </div>
                 )}
               </CardContent>
             </Card>
 
             {/* Experience Section */}
-            <Card className="border-border bg-card shadow-sm">
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle className="text-foreground">Experience</CardTitle>
-                    <CardDescription className="text-muted-foreground">Your work experience</CardDescription>
+            <Card className={`border ${colorClasses.border.gray100} ${colorClasses.bg.white} shadow-sm hover:shadow-md transition-shadow`}>
+              <CardHeader className={`pb-3 ${colorClasses.bg.darkNavy} rounded-t-lg`}>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-center space-x-3">
+                    <div className={`p-2 rounded-lg ${colorClasses.bg.orange}`}>
+                      <Briefcase className={`h-5 w-5 ${colorClasses.text.white}`} />
+                    </div>
+                    <div>
+                      <CardTitle className={`text-lg md:text-xl font-bold ${colorClasses.text.white}`}>
+                        Work Experience
+                      </CardTitle>
+                      <CardDescription className={`${colorClasses.text.gray100}`}>
+                        Your professional work history and positions
+                      </CardDescription>
+                    </div>
                   </div>
                   <button
                     type="button"
                     onClick={addExperience}
-                    className="flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium transition-all hover:bg-primary/90 hover:shadow-md"
+                    className={`flex items-center justify-center px-4 py-2 ${colorClasses.bg.goldenMustard} ${colorClasses.text.white} rounded-lg font-medium transition-all hover:opacity-90 active:scale-95 shadow-sm`}
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    Add Experience
+                    <span className="hidden sm:inline">Add Experience</span>
+                    <span className="sm:hidden">Add</span>
                   </button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="pt-6 space-y-6">
                 {experience.map((exp, index) => {
                   const dateErrors = validateDate(exp.startDate, exp.endDate, exp.current, 'Experience');
 
                   return (
-                    <div key={`experience-${index}-${exp.company}`} className="border border-border rounded-lg p-4 space-y-4 bg-card/50">
+                    <div key={index} className={`border ${colorClasses.border.gray100} rounded-xl p-4 md:p-6 space-y-4 ${colorClasses.bg.gray100}`}>
                       <div className="flex justify-between items-center">
-                        <div className="flex items-center space-x-2">
-                          <Briefcase className="h-5 w-5 text-primary" />
-                          <h4 className="font-medium text-foreground">Experience #{index + 1}</h4>
+                        <div className="flex items-center space-x-3">
+                          <div className={`p-2 rounded-lg ${colorClasses.bg.orange} ${colorClasses.text.white}`}>
+                            <Briefcase className="h-4 w-4" />
+                          </div>
+                          <h4 className={`font-semibold ${colorClasses.text.darkNavy}`}>
+                            Experience #{index + 1}
+                          </h4>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeExperience(index)}
-                          className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+                          className={`p-2 ${colorClasses.text.gray400} hover:${colorClasses.text.orange} transition-colors`}
+                          aria-label="Remove experience entry"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -945,10 +1060,10 @@ const CandidateProfilePage: React.FC = () => {
 
                       {/* Date validation errors */}
                       {dateErrors.length > 0 && (
-                        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                        <div className={`${colorClasses.bg.orange} bg-opacity-10 border ${colorClasses.border.orange} border-opacity-20 rounded-lg p-3`}>
                           {dateErrors.map((error, errorIndex) => (
-                            <p key={`experience-error-${index}-${errorIndex}`} className="text-sm text-destructive flex items-center">
-                              <span className="w-2 h-2 bg-destructive rounded-full mr-2"></span>
+                            <p key={errorIndex} className={`text-sm flex items-center ${colorClasses.text.orange}`}>
+                              <span className={`w-2 h-2 rounded-full ${colorClasses.bg.orange} mr-2`}></span>
                               {error}
                             </p>
                           ))}
@@ -961,13 +1076,15 @@ const CandidateProfilePage: React.FC = () => {
                           name={`experience.${index}.company`}
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-foreground">Company *</FormLabel>
+                              <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                                Company <span className={`${colorClasses.text.orange}`}>*</span>
+                              </FormLabel>
                               <FormControl>
                                 <Input
                                   placeholder="Company Name"
                                   {...field}
                                   value={field.value || ''}
-                                  className="bg-background border-input text-foreground"
+                                  className={`${colorClasses.bg.white} ${colorClasses.border.gray400}`}
                                 />
                               </FormControl>
                               <FormMessage />
@@ -980,36 +1097,39 @@ const CandidateProfilePage: React.FC = () => {
                           name={`experience.${index}.position`}
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-foreground">Position *</FormLabel>
+                              <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                                Position <span className={`${colorClasses.text.orange}`}>*</span>
+                              </FormLabel>
                               <FormControl>
                                 <Input
                                   placeholder="Job Title"
                                   {...field}
                                   value={field.value || ''}
-                                  className="bg-background border-input text-foreground"
+                                  className={`${colorClasses.bg.white} ${colorClasses.border.gray400}`}
                                 />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
+                      </div>
 
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <FormField
                           control={form.control}
                           name={`experience.${index}.startDate`}
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-foreground">Start Date *</FormLabel>
+                              <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                                Start Date <span className={`${colorClasses.text.orange}`}>*</span>
+                              </FormLabel>
                               <FormControl>
                                 <Input
                                   type="date"
                                   {...field}
                                   value={field.value || ''}
                                   max={new Date().toISOString().split('T')[0]}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value);
-                                  }}
-                                  className="bg-background border-input"
+                                  className={`${colorClasses.bg.white} ${colorClasses.border.gray400}`}
                                 />
                               </FormControl>
                               <FormMessage />
@@ -1022,7 +1142,9 @@ const CandidateProfilePage: React.FC = () => {
                           name={`experience.${index}.endDate`}
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-foreground">End Date</FormLabel>
+                              <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                                End Date
+                              </FormLabel>
                               <FormControl>
                                 <Input
                                   type="date"
@@ -1030,39 +1152,9 @@ const CandidateProfilePage: React.FC = () => {
                                   value={field.value || ''}
                                   disabled={form.watch(`experience.${index}.current`)}
                                   max={new Date().toISOString().split('T')[0]}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value);
-                                  }}
-                                  className="bg-background border-input disabled:opacity-50"
+                                  className={`${colorClasses.bg.white} ${colorClasses.border.gray400} disabled:opacity-50`}
                                 />
                               </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`experience.${index}.current`}
-                          render={({ field }) => (
-                            <FormItem className="flex items-center space-x-2">
-                              <FormControl>
-                                <input
-                                  type="checkbox"
-                                  checked={field.value || false}
-                                  onChange={(e) => {
-                                    const isChecked = e.target.checked;
-                                    field.onChange(isChecked);
-
-                                    // Clear end date when "current" is checked
-                                    if (isChecked) {
-                                      form.setValue(`experience.${index}.endDate`, '');
-                                    }
-                                  }}
-                                  className="rounded border-input focus:ring-ring"
-                                />
-                              </FormControl>
-                              <FormLabel className="!mt-0 cursor-pointer text-foreground">Current position</FormLabel>
                               <FormMessage />
                             </FormItem>
                           )}
@@ -1071,20 +1163,55 @@ const CandidateProfilePage: React.FC = () => {
 
                       <FormField
                         control={form.control}
+                        name={`experience.${index}.current`}
+                        render={({ field }) => (
+                          <FormItem className="flex items-center space-x-2">
+                            <FormControl>
+                              <input
+                                type="checkbox"
+                                id={`experience-current-${index}`}
+                                checked={field.value || false}
+                                onChange={(e) => {
+                                  const isChecked = e.target.checked;
+                                  field.onChange(isChecked);
+                                  if (isChecked) {
+                                    form.setValue(`experience.${index}.endDate`, '');
+                                  }
+                                }}
+                                className={`rounded ${colorClasses.border.gray400} focus:ring-2 focus:${colorClasses.border.goldenMustard}`}
+                              />
+                            </FormControl>
+                            <label
+                              htmlFor={`experience-current-${index}`}
+                              className={`text-sm cursor-pointer ${colorClasses.text.darkNavy}`}
+                            >
+                              Current position
+                            </label>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
                         name={`experience.${index}.description`}
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-foreground">Description</FormLabel>
+                            <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                              Role Description & Achievements
+                            </FormLabel>
                             <FormControl>
                               <Textarea
-                                placeholder="Describe your responsibilities, achievements, and key contributions..."
+                                placeholder="Describe your responsibilities, key achievements, projects led, and impact made..."
                                 rows={3}
                                 {...field}
                                 value={field.value || ''}
-                                className="bg-background border-input text-foreground resize-none"
+                                className={`${colorClasses.bg.white} ${colorClasses.border.gray400} resize-none`}
                                 maxLength={500}
                               />
                             </FormControl>
+                            <div className={`text-xs ${colorClasses.text.gray400} text-right`}>
+                              {field.value?.length || 0}/500 characters
+                            </div>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -1094,55 +1221,80 @@ const CandidateProfilePage: React.FC = () => {
                         control={form.control}
                         name={`experience.${index}.skills`}
                         label="Skills used in this role"
-                        placeholder="Add skills used in this position"
+                        placeholder="Add skills relevant to this position"
                       />
                     </div>
                   );
                 })}
 
                 {experience.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground border-2 border-dashed border-border rounded-lg">
-                    <Briefcase className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                    <p className="mt-2">No experience entries yet</p>
-                    <p className="text-sm">Add your work experience to showcase your professional background</p>
+                  <div className={`text-center py-12 ${colorClasses.text.gray400} border-2 border-dashed ${colorClasses.border.gray400} rounded-xl`}>
+                    <Briefcase className="mx-auto h-12 w-12 opacity-50" />
+                    <p className="mt-4 text-lg font-medium">No experience entries yet</p>
+                    <p className="mt-2 text-sm max-w-md mx-auto">
+                      Add your work experience to showcase your professional background and achievements
+                    </p>
+                    <button
+                      type="button"
+                      onClick={addExperience}
+                      className={`mt-6 flex items-center mx-auto px-6 py-2 ${colorClasses.bg.goldenMustard} ${colorClasses.text.white} rounded-lg font-medium transition-all hover:opacity-90`}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add First Experience Entry
+                    </button>
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            {/* Certifications & Courses Section */}
-            <Card className="border-border bg-card shadow-sm">
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle className="text-foreground">Certifications & Courses</CardTitle>
-                    <CardDescription className="text-muted-foreground">Professional certifications, online courses, and training programs</CardDescription>
+            {/* Certifications Section */}
+            <Card className={`border ${colorClasses.border.gray100} ${colorClasses.bg.white} shadow-sm hover:shadow-md transition-shadow`}>
+              <CardHeader className={`pb-3 ${colorClasses.bg.darkNavy} rounded-t-lg`}>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-center space-x-3">
+                    <div className={`p-2 rounded-lg ${colorClasses.bg.gold}`}>
+                      <Award className={`h-5 w-5 ${colorClasses.text.darkNavy}`} />
+                    </div>
+                    <div>
+                      <CardTitle className={`text-lg md:text-xl font-bold ${colorClasses.text.white}`}>
+                        Certifications & Courses
+                      </CardTitle>
+                      <CardDescription className={`${colorClasses.text.gray100}`}>
+                        Professional certifications, online courses, and training programs
+                      </CardDescription>
+                    </div>
                   </div>
                   <button
                     type="button"
                     onClick={addCertification}
-                    className="flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium transition-all hover:bg-primary/90 hover:shadow-md"
+                    className={`flex items-center justify-center px-4 py-2 ${colorClasses.bg.goldenMustard} ${colorClasses.text.white} rounded-lg font-medium transition-all hover:opacity-90 active:scale-95 shadow-sm`}
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    Add Certification/Course
+                    <span className="hidden sm:inline">Add Certification</span>
+                    <span className="sm:hidden">Add</span>
                   </button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="pt-6 space-y-6">
                 {certifications.map((cert, index) => {
                   const dateErrors = validateDate(cert.issueDate, cert.expiryDate, false, 'Certification');
 
                   return (
-                    <div key={`certification-${index}-${cert.name}`} className="border border-border rounded-lg p-4 space-y-4 bg-card/50">
+                    <div key={index} className={`border ${colorClasses.border.gray100} rounded-xl p-4 md:p-6 space-y-4 ${colorClasses.bg.gray100}`}>
                       <div className="flex justify-between items-center">
-                        <div className="flex items-center space-x-2">
-                          <Award className="h-5 w-5 text-primary" />
-                          <h4 className="font-medium text-foreground">Certification #{index + 1}</h4>
+                        <div className="flex items-center space-x-3">
+                          <div className={`p-2 rounded-lg ${colorClasses.bg.gold} ${colorClasses.text.darkNavy}`}>
+                            <Award className="h-4 w-4" />
+                          </div>
+                          <h4 className={`font-semibold ${colorClasses.text.darkNavy}`}>
+                            Certification #{index + 1}
+                          </h4>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeCertification(index)}
-                          className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+                          className={`p-2 ${colorClasses.text.gray400} hover:${colorClasses.text.orange} transition-colors`}
+                          aria-label="Remove certification entry"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -1150,10 +1302,10 @@ const CandidateProfilePage: React.FC = () => {
 
                       {/* Date validation errors */}
                       {dateErrors.length > 0 && (
-                        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                        <div className={`${colorClasses.bg.orange} bg-opacity-10 border ${colorClasses.border.orange} border-opacity-20 rounded-lg p-3`}>
                           {dateErrors.map((error, errorIndex) => (
-                            <p key={`certification-error-${index}-${errorIndex}`} className="text-sm text-destructive flex items-center">
-                              <span className="w-2 h-2 bg-destructive rounded-full mr-2"></span>
+                            <p key={errorIndex} className={`text-sm flex items-center ${colorClasses.text.orange}`}>
+                              <span className={`w-2 h-2 rounded-full ${colorClasses.bg.orange} mr-2`}></span>
                               {error}
                             </p>
                           ))}
@@ -1166,31 +1318,36 @@ const CandidateProfilePage: React.FC = () => {
                           name={`certifications.${index}.name`}
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-foreground">Certification/Course Name *</FormLabel>
+                              <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                                Certification/Course Name <span className={`${colorClasses.text.orange}`}>*</span>
+                              </FormLabel>
                               <FormControl>
                                 <Input
                                   placeholder="e.g., AWS Certified Solutions Architect"
                                   {...field}
-                                  onChange={(e) => field.onChange(e.target.value)}
-                                  className="bg-background border-input text-foreground"
+                                  value={field.value || ''}
+                                  className={`${colorClasses.bg.white} ${colorClasses.border.gray400}`}
                                 />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
+
                         <FormField
                           control={form.control}
                           name={`certifications.${index}.issuer`}
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-foreground">Issuing Organization *</FormLabel>
+                              <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                                Issuing Organization <span className={`${colorClasses.text.orange}`}>*</span>
+                              </FormLabel>
                               <FormControl>
                                 <Input
                                   placeholder="e.g., Amazon Web Services, Coursera"
                                   {...field}
                                   value={field.value || ''}
-                                  className="bg-background border-input text-foreground"
+                                  className={`${colorClasses.bg.white} ${colorClasses.border.gray400}`}
                                 />
                               </FormControl>
                               <FormMessage />
@@ -1203,17 +1360,16 @@ const CandidateProfilePage: React.FC = () => {
                           name={`certifications.${index}.issueDate`}
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-foreground">Issue Date *</FormLabel>
+                              <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                                Issue Date <span className={`${colorClasses.text.orange}`}>*</span>
+                              </FormLabel>
                               <FormControl>
                                 <Input
                                   type="date"
                                   {...field}
                                   value={field.value || ''}
                                   max={new Date().toISOString().split('T')[0]}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value);
-                                  }}
-                                  className="bg-background border-input"
+                                  className={`${colorClasses.bg.white} ${colorClasses.border.gray400}`}
                                 />
                               </FormControl>
                               <FormMessage />
@@ -1226,17 +1382,16 @@ const CandidateProfilePage: React.FC = () => {
                           name={`certifications.${index}.expiryDate`}
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-foreground">Expiry Date</FormLabel>
+                              <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                                Expiry Date
+                              </FormLabel>
                               <FormControl>
                                 <Input
                                   type="date"
                                   {...field}
                                   value={field.value || ''}
                                   min={form.watch(`certifications.${index}.issueDate`)}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value);
-                                  }}
-                                  className="bg-background border-input"
+                                  className={`${colorClasses.bg.white} ${colorClasses.border.gray400}`}
                                 />
                               </FormControl>
                               <FormMessage />
@@ -1249,13 +1404,15 @@ const CandidateProfilePage: React.FC = () => {
                           name={`certifications.${index}.credentialId`}
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-foreground">Credential ID</FormLabel>
+                              <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                                Credential ID
+                              </FormLabel>
                               <FormControl>
                                 <Input
                                   placeholder="e.g., AWS-12345"
                                   {...field}
                                   value={field.value || ''}
-                                  className="bg-background border-input text-foreground"
+                                  className={`${colorClasses.bg.white} ${colorClasses.border.gray400}`}
                                 />
                               </FormControl>
                               <FormMessage />
@@ -1268,13 +1425,15 @@ const CandidateProfilePage: React.FC = () => {
                           name={`certifications.${index}.credentialUrl`}
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-foreground">Credential URL</FormLabel>
+                              <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                                Credential URL
+                              </FormLabel>
                               <FormControl>
                                 <Input
                                   placeholder="https://example.com/credential"
                                   {...field}
                                   value={field.value || ''}
-                                  className="bg-background border-input text-foreground"
+                                  className={`${colorClasses.bg.white} ${colorClasses.border.gray400}`}
                                 />
                               </FormControl>
                               <FormMessage />
@@ -1288,17 +1447,22 @@ const CandidateProfilePage: React.FC = () => {
                         name={`certifications.${index}.description`}
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-foreground">Description</FormLabel>
+                            <FormLabel className={`${colorClasses.text.darkNavy}`}>
+                              Description & Learning Outcomes
+                            </FormLabel>
                             <FormControl>
                               <Textarea
-                                placeholder="Describe what you learned, skills gained, or project completed..."
+                                placeholder="Describe what you learned, skills gained, project completed, or relevance to your career..."
                                 rows={3}
                                 {...field}
                                 value={field.value || ''}
-                                className="bg-background border-input text-foreground resize-none"
+                                className={`${colorClasses.bg.white} ${colorClasses.border.gray400} resize-none`}
                                 maxLength={500}
                               />
                             </FormControl>
+                            <div className={`text-xs ${colorClasses.text.gray400} text-right`}>
+                              {field.value?.length || 0}/500 characters
+                            </div>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -1308,32 +1472,43 @@ const CandidateProfilePage: React.FC = () => {
                 })}
 
                 {certifications.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground border-2 border-dashed border-border rounded-lg">
-                    <Award className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                    <p className="mt-2">No certifications or courses yet</p>
-                    <p className="text-sm">Add professional certifications, online courses, or training programs</p>
+                  <div className={`text-center py-12 ${colorClasses.text.gray400} border-2 border-dashed ${colorClasses.border.gray400} rounded-xl`}>
+                    <Award className="mx-auto h-12 w-12 opacity-50" />
+                    <p className="mt-4 text-lg font-medium">No certifications or courses yet</p>
+                    <p className="mt-2 text-sm max-w-md mx-auto">
+                      Add professional certifications, online courses, or training programs to enhance your profile
+                    </p>
+                    <button
+                      type="button"
+                      onClick={addCertification}
+                      className={`mt-6 flex items-center mx-auto px-6 py-2 ${colorClasses.bg.goldenMustard} ${colorClasses.text.white} rounded-lg font-medium transition-all hover:opacity-90`}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add First Certification
+                    </button>
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            <div className="flex justify-end space-x-4 pt-6 border-t border-border">
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-4 pt-6 border-t border-gray-200">
               <button
                 type="button"
                 onClick={() => window.history.back()}
-                className="px-6 py-3 border border-input bg-background text-foreground rounded-xl font-medium hover:bg-accent hover:text-accent-foreground transition-all"
+                className={`px-6 py-3 border ${colorClasses.border.gray400} ${colorClasses.bg.white} ${colorClasses.text.darkNavy} rounded-xl font-medium transition-all hover:${colorClasses.bg.gray100} active:scale-95`}
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSaving}
-                className="flex items-center px-6 py-3 bg-primary text-primary-foreground rounded-xl font-medium transition-all hover:bg-primary/90 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`flex items-center justify-center px-6 py-3 ${colorClasses.bg.goldenMustard} ${colorClasses.text.white} rounded-xl font-medium transition-all hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-md`}
               >
                 {isSaving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
+                    Saving Changes...
                   </>
                 ) : (
                   <>
