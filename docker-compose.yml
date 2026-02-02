@@ -16,7 +16,7 @@ services:
       BASE_URL: https://getbananalink.com
       CORS_ORIGIN: https://getbananalink.com
     volumes:
-      - uploads_volume:/app/public/uploads
+      - uploads_volume:/app/uploads
     restart: unless-stopped
     networks:
       - app-network
