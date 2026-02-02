@@ -177,7 +177,7 @@ export const authService = {
           localStorage.setItem('user', JSON.stringify(user));
         }
 
-        handleSuccess('Login successful! Welcome back!');
+        handleSuccess('Login successful! Welcome Back!');
         return response.data;
       } else {
         // If backend returns success: false with a message (like invalid credentials)

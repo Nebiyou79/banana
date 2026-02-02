@@ -1,9 +1,7 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// src/services/candidateService.ts
+// src/services/candidateService.ts (UPDATED FOR LOCAL STORAGE CVs)
 import api from '@/lib/axios';
 import { toast } from '@/hooks/use-toast';
-import { handleError } from '@/lib/error-handler';
 
 export interface Education {
   institution: string;
@@ -39,20 +37,35 @@ export interface SocialLinks {
   linkedin?: string;
   github?: string;
   twitter?: string;
+  tiktok?: string;
+  telegram?: string;
 }
 
+// REMOVED: CloudinaryData interface - not needed for local storage CVs
+
 export interface CV {
-  viewUrl: string;
-  downloadUrl: string;
-  url: string;
-  size: any;
-  mimetype: any;
+  // Local storage fields
   _id: string;
-  filename: string;
+  fileName: string;
   originalName: string;
-  path: string;
+  fileUrl: string;           // URL for viewing (e.g., /uploads/cv/filename.pdf)
+  downloadUrl: string;       // URL for downloading (e.g., /uploads/download/cv/filename.pdf)
+
+  // File metadata
+  size: number;
   uploadedAt: string;
   isPrimary: boolean;
+  mimetype: string;
+  fileExtension: string;
+  description?: string;
+
+  // Statistics
+  downloadCount?: number;
+  viewCount?: number;
+
+  // Legacy/backward compatibility fields
+  path?: string;             // Server file path (not exposed to frontend)
+  url?: string;              // Alias for fileUrl
 }
 
 export interface CandidateProfile {
@@ -80,14 +93,45 @@ export interface CandidateProfile {
   website?: string;
   socialLinks?: SocialLinks;
   lastLogin?: string;
-  // NEW: Age and Gender fields
   dateOfBirth?: string;
   gender?: 'male' | 'female' | 'other' | 'prefer-not-to-say';
-  age?: number; // Virtual field calculated from dateOfBirth
+  age?: number;
+  avatar?: string;           // Still uses Cloudinary for images
+  avatarPublicId?: string;
+  coverPhoto?: string;       // Still uses Cloudinary for images
+  coverPhotoPublicId?: string;
 }
 
 export interface UploadCVResponse {
-  cvs: CV[];
+  success: boolean;
+  message: string;
+  data: {
+    cv: {
+      _id: string;
+      fileName: string;
+      originalName: string;
+      size: number;
+      uploadedAt: string;
+      isPrimary: boolean;
+      mimetype: string;
+      fileExtension: string;
+      description?: string;
+      fileUrl: string;
+      downloadUrl: string;
+    };
+    totalCVs: number;
+    primaryCVId?: string;
+  };
+}
+
+export interface CVListResponse {
+  message: string;
+  success: boolean;
+  data: {
+    cvs: CV[];
+    count: number;
+    primaryCV?: CV;
+  };
 }
 
 export interface JobFilters {
@@ -113,578 +157,591 @@ export interface JobsResponse {
   };
 }
 
-// Enhanced error types for better categorization
-type ErrorType = 'NETWORK' | 'VALIDATION' | 'AUTH' | 'SERVER' | 'CLIENT' | 'UNKNOWN';
+// File validation constants
+export const ALLOWED_CV_MIME_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.oasis.opendocument.text',
+  'text/plain',
+  'application/rtf'
+];
 
-class ServiceError extends Error {
-  constructor(
-    message: string,
-    public type: ErrorType = 'UNKNOWN',
-    public originalError?: any,
-    public userFriendly?: boolean
-  ) {
-    super(message);
-    this.name = 'ServiceError';
-  }
-}
+export const ALLOWED_CV_EXTENSIONS = ['.pdf', '.doc', '.docx', '.odt', '.txt', '.rtf'];
+export const MAX_CV_SIZE_MB = 100; // Increased from 50MB to match backend
+export const MAX_CV_SIZE_BYTES = MAX_CV_SIZE_MB * 1024 * 1024;
+export const MAX_CVS_PER_USER = 10;
 
-// Enhanced toast helper with error categorization
-const showToastError = (error: ServiceError | string) => {
-  if (typeof error === 'string') {
-    toast({
-      title: 'Error',
-      description: error,
-      variant: 'destructive',
-    });
-    return;
-  }
-
-  let title = 'Error';
-  let description = error.message;
-  
-  switch (error.type) {
-    case 'NETWORK':
-      title = 'Connection Error';
-      description = 'Please check your internet connection and try again.';
-      break;
-    case 'AUTH':
-      title = 'Authentication Error';
-      description = 'Please log in again to continue.';
-      break;
-    case 'VALIDATION':
-      title = 'Validation Error';
-      break;
-    case 'SERVER':
-      title = 'Server Error';
-      description = 'Something went wrong on our end. Please try again later.';
-      break;
-    case 'CLIENT':
-      title = 'Error';
-      break;
-    default:
-      title = 'Unexpected Error';
-      description = 'An unexpected error occurred. Please try again.';
-  }
-  
-  toast({
-    title,
-    description,
-    variant: 'destructive',
-  });
-  
-  // Log detailed error for debugging (but don't show to user)
-  if (error.originalError && process.env.NODE_ENV === 'development') {
-    console.error('Service Error Details:', {
-      message: error.message,
-      type: error.type,
-      originalError: error.originalError
-    });
-  }
+// Helper function to validate MongoDB ObjectId
+export const isValidObjectId = (id: string): boolean => {
+  return /^[0-9a-fA-F]{24}$/.test(id);
 };
 
-// Success toast helper
-const showSuccess = (message: string) => {
-  toast({
-    title: 'Success',
-    description: message,
-    variant: 'success',
-  });
-};
-
-// Info toast helper
-const showInfo = (message: string) => {
-  toast({
-    title: 'Info',
-    description: message,
-    variant: 'info',
-  });
-};
-
-// Warning toast helper
-const showWarning = (message: string) => {
-  toast({
-    title: 'Warning',
-    description: message,
-    variant: 'warning',
-  });
-};
-
-// Enhanced error detection and extraction
-const isNetworkError = (error: any): boolean => {
-  return (!error.response && error.request) || error.code === 'NETWORK_ERROR' || error.message?.includes('Network Error');
-};
-
-const isTimeoutError = (error: any): boolean => {
-  return error.code === 'ECONNABORTED' || error.message?.includes('timeout');
-};
-
-const isAuthError = (error: any): boolean => {
-  return error.response?.status === 401 || error.response?.status === 403;
-};
-
-const isValidationError = (error: any): boolean => {
-  return error.response?.status === 400 || error.name === 'ValidationError';
-};
-
-const extractErrorMessage = (error: any): string => {
-  // Handle ServiceError instances
-  if (error instanceof ServiceError) {
-    return error.message;
-  }
-
-  // Handle network errors
-  if (isNetworkError(error)) {
-    return 'Unable to connect to the server. Please check your internet connection.';
-  }
-
-  // Handle timeout errors
-  if (isTimeoutError(error)) {
-    return 'Request timed out. Please try again.';
-  }
-
-  // Handle axios response errors
-  if (error.response?.data) {
-    const data = error.response.data;
-    
-    // Handle array of errors from server
-    if (data.errors && Array.isArray(data.errors)) {
-      return data.errors.join(', ');
-    }
-    
-    // Handle single error message from server
-    if (data.message) {
-      return data.message;
-    }
-    
-    // Handle error string directly
-    if (typeof data === 'string') {
-      return data;
+// File validation
+export const validateCVFile = (file: File): { valid: boolean; error?: string } => {
+  // Check file type by MIME
+  if (!ALLOWED_CV_MIME_TYPES.includes(file.type)) {
+    const fileExtension = `.${file.name.toLowerCase().split('.').pop()}`;
+    if (!ALLOWED_CV_EXTENSIONS.includes(fileExtension)) {
+      return {
+        valid: false,
+        error: `Invalid file type. Allowed: ${ALLOWED_CV_EXTENSIONS.join(', ')}`
+      };
     }
   }
 
-  // Handle generic Error instances
-  if (error.message) {
-    return error.message;
+  // Check file size
+  if (file.size > MAX_CV_SIZE_BYTES) {
+    return {
+      valid: false,
+      error: `File size must be less than ${MAX_CV_SIZE_MB}MB`
+    };
   }
 
-  // Fallback message
-  return 'An unexpected error occurred. Please try again.';
+  if (file.size === 0) {
+    return {
+      valid: false,
+      error: 'File is empty'
+    };
+  }
+
+  return { valid: true };
 };
 
-const extractErrorType = (error: any): ErrorType => {
-  if (isNetworkError(error) || isTimeoutError(error)) return 'NETWORK';
-  if (isAuthError(error)) return 'AUTH';
-  if (isValidationError(error)) return 'VALIDATION';
-  if (error.response?.status >= 500) return 'SERVER';
-  if (error.response?.status >= 400) return 'CLIENT';
-  return 'UNKNOWN';
+// Helper function to format file size
+export const formatFileSize = (bytes: number): string => {
+  if (!bytes || bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-// Safe API call wrapper with error handling
-const safeApiCall = async <T>(
-  apiCall: () => Promise<T>,
-  defaultErrorMessage: string
-): Promise<T> => {
-  try {
-    return await apiCall();
-  } catch (error: any) {
-    const message = extractErrorMessage(error);
-    const type = extractErrorType(error);
-    const serviceError = new ServiceError(message, type, error);
-    showToastError(serviceError);
-    throw serviceError;
-  }
+// Extract file extension from filename
+export const getFileExtension = (filename: string): string => {
+  const parts = filename.split('.');
+  return parts.length > 1 ? parts.pop()!.toUpperCase() : 'FILE';
 };
 
-// NEW: Age validation helper
-const validateAgeAndGender = (data: Partial<CandidateProfile>): string[] => {
-  const errors: string[] = [];
+// UPDATED: Process CV data from backend response - uses local storage format
+export const processCVResponse = (cvData: any): CV => {
+  // Use downloadUrl and fileUrl from backend
+  const downloadUrl = cvData.downloadUrl || '';
+  const fileUrl = cvData.fileUrl || cvData.url || '';
 
-  // Validate date of birth
-  if (data.dateOfBirth) {
-    try {
-      const dob = new Date(data.dateOfBirth);
-      const today = new Date();
-      const minDate = new Date(today.getFullYear() - 100, today.getMonth(), today.getDate());
-      const maxDate = new Date(today.getFullYear() - 16, today.getMonth(), today.getDate());
-      
-      if (dob > maxDate) {
-        errors.push('You must be at least 16 years old');
-      }
-      if (dob < minDate) {
-        errors.push('Please enter a valid date of birth');
-      }
-    } catch (error) {
-      errors.push('Invalid date of birth format');
-    }
-  }
+  return {
+    _id: cvData._id,
+    fileName: cvData.fileName || cvData.originalName,
+    originalName: cvData.originalName || 'Unknown',
+    fileUrl: fileUrl,
+    downloadUrl: downloadUrl,
+    size: cvData.size || 0,
+    uploadedAt: cvData.uploadedAt,
+    isPrimary: cvData.isPrimary || false,
+    mimetype: cvData.mimetype || 'application/octet-stream',
+    fileExtension: cvData.fileExtension || getFileExtension(cvData.originalName || '').toLowerCase(),
+    description: cvData.description,
+    downloadCount: cvData.downloadCount || 0,
+    viewCount: cvData.viewCount || 0,
 
-  // Validate gender
-  if (data.gender && !['male', 'female', 'other', 'prefer-not-to-say'].includes(data.gender)) {
-    errors.push('Please select a valid gender option');
-  }
-
-  return errors;
-};
-
-// Optimized payload helper to reduce data size
-const optimizeProfilePayload = (data: Partial<CandidateProfile>): Partial<CandidateProfile> => {
-  try {
-    const optimized: any = { ...data };
-    
-    // Remove undefined and empty array fields
-    Object.keys(optimized).forEach(key => {
-      if (optimized[key] === undefined || 
-          (Array.isArray(optimized[key]) && optimized[key].length === 0)) {
-        delete optimized[key];
-      }
-    });
-
-    // Limit arrays to prevent oversized payloads
-    if (optimized.skills && optimized.skills.length > 50) {
-      optimized.skills = optimized.skills.slice(0, 50);
-      showWarning('Limited to first 50 skills');
-    }
-
-    if (optimized.education && optimized.education.length > 10) {
-      optimized.education = optimized.education.slice(0, 10);
-      showWarning('Limited to first 10 education entries');
-    }
-
-    if (optimized.experience && optimized.experience.length > 15) {
-      optimized.experience = optimized.experience.slice(0, 15);
-      showWarning('Limited to first 15 experience entries');
-    }
-
-    if (optimized.certifications && optimized.certifications.length > 20) {
-      optimized.certifications = optimized.certifications.slice(0, 20);
-      showWarning('Limited to first 20 certification entries');
-    }
-
-    // Trim strings
-    if (optimized.bio) optimized.bio = optimized.bio.trim();
-    if (optimized.location) optimized.location = optimized.location.trim();
-    if (optimized.phone) optimized.phone = optimized.phone.trim();
-    if (optimized.website) optimized.website = optimized.website.trim();
-
-    return optimized;
-  } catch (error) {
-    throw new ServiceError('Failed to optimize profile data', 'CLIENT', error);
-  }
-};
-
-// Date validation helper
-const validateDates = (data: Partial<CandidateProfile>): string[] => {
-  try {
-    const errors: string[] = [];
-    const now = new Date();
-
-    if (data.education) {
-      data.education.forEach((edu, index) => {
-        if (!edu.startDate) {
-          errors.push(`Education #${index + 1}: Start date is required`);
-          return;
-        }
-
-        try {
-          const startDate = new Date(edu.startDate);
-          const endDate = edu.endDate ? new Date(edu.endDate) : null;
-
-          // Check if start date is in the future
-          if (startDate > now) {
-            errors.push(`Education #${index + 1}: Start date cannot be in the future`);
-          }
-
-          // Check if end date is before start date
-          if (endDate && endDate < startDate) {
-            errors.push(`Education #${index + 1}: End date must be after start date`);
-          }
-
-          // Check if end date is in the future for completed education
-          if (endDate && endDate > now && !edu.current) {
-            errors.push(`Education #${index + 1}: End date cannot be in the future for completed education`);
-          }
-        } catch (dateError) {
-          errors.push(`Education #${index + 1}: Invalid date format`);
-        }
-      });
-    }
-
-    if (data.experience) {
-      data.experience.forEach((exp, index) => {
-        if (!exp.startDate) {
-          errors.push(`Experience #${index + 1}: Start date is required`);
-          return;
-        }
-
-        try {
-          const startDate = new Date(exp.startDate);
-          const endDate = exp.endDate ? new Date(exp.endDate) : null;
-
-          // Check if start date is in the future
-          if (startDate > now) {
-            errors.push(`Experience #${index + 1}: Start date cannot be in the future`);
-          }
-
-          // Check if end date is before start date
-          if (endDate && endDate < startDate) {
-            errors.push(`Experience #${index + 1}: End date must be after start date`);
-          }
-
-          // Check if end date is in the future for completed experience
-          if (endDate && endDate > now && !exp.current) {
-            errors.push(`Experience #${index + 1}: End date cannot be in the future for completed experience`);
-          }
-        } catch (dateError) {
-          errors.push(`Experience #${index + 1}: Invalid date format`);
-        }
-      });
-    }
-    
-    if (data.certifications) {
-      data.certifications.forEach((cert, index) => {
-        if (!cert.issueDate) {
-          errors.push(`Certification #${index + 1}: Issue date is required`);
-          return;
-        }
-
-        try {
-          const issueDate = new Date(cert.issueDate);
-          const expiryDate = cert.expiryDate ? new Date(cert.expiryDate) : null;
-
-          // Check if issue date is in the future
-          if (issueDate > now) {
-            errors.push(`Certification #${index + 1}: Issue date cannot be in the future`);
-          }
-
-          // Check if expiry date is before issue date
-          if (expiryDate && expiryDate < issueDate) {
-            errors.push(`Certification #${index + 1}: Expiry date must be after issue date`);
-          }
-        } catch (dateError) {
-          errors.push(`Certification #${index + 1}: Invalid date format`);
-        }
-      });
-    }
-
-    return errors;
-  } catch (error) {
-    throw new ServiceError('Failed to validate dates', 'CLIENT', error);
-  }
-};
-
-// File validation helper
-const validateFiles = (files: File[]): string[] => {
-  const errors: string[] = [];
-  
-  if (!files || files.length === 0) {
-    errors.push('No files selected');
-    return errors;
-  }
-
-  // Check maximum files per upload
-  if (files.length > 10) {
-    errors.push('Maximum 10 files allowed per upload');
-  }
-
-  files.forEach(file => {
-    const allowedTypes = [
-      'application/pdf', 
-      'application/msword', 
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ];
-    const maxSize = 5 * 1024 * 1024; // 5MB (updated from 10MB)
-    
-    if (!allowedTypes.includes(file.type)) {
-      errors.push(`"${file.name}" must be PDF, DOC, or DOCX`);
-    }
-    
-    if (file.size > maxSize) {
-      errors.push(`"${file.name}" must be less than 5MB`);
-    }
-    
-    if (file.size === 0) {
-      errors.push(`"${file.name}" is empty`);
-    }
-  });
-
-  return errors;
+    // Legacy/backward compatibility
+    path: cvData.path,
+    url: fileUrl
+  };
 };
 
 export const candidateService = {
   // Get candidate profile
-  // Get candidate profile - FIXED
   getProfile: async (): Promise<CandidateProfile> => {
     try {
       const response = await api.get<{
-        message: string; 
-        success: boolean; 
-        data: { user: CandidateProfile } 
+        message: string;
+        success: boolean;
+        data: { user: CandidateProfile }
       }>('/candidate/profile');
-      
+
       if (!response.data.success) {
         throw new Error(response.data.message || 'Failed to fetch profile');
       }
-      
-      return response.data.data.user;
+
+      const user = response.data.data.user;
+      if (user.cvs) {
+        user.cvs = user.cvs.map(processCVResponse);
+      }
+
+      return user;
     } catch (error: any) {
       console.error('Failed to fetch candidate profile:', error);
-      throw new Error(error.response?.data?.message || 'Failed to load profile');
+      const errorMessage = error.response?.data?.message || 'Failed to load profile';
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      throw new Error(errorMessage);
     }
   },
 
-  // Update candidate profile - FIXED
+  // Update candidate profile
   updateProfile: async (data: Partial<CandidateProfile>): Promise<CandidateProfile> => {
     try {
       const response = await api.put<{
-        message: string; 
-        success: boolean; 
-        data: { user: CandidateProfile } 
+        message: string;
+        success: boolean;
+        data: { user: CandidateProfile }
       }>('/candidate/profile', data);
 
       if (!response.data.success) {
         throw new Error(response.data.message || 'Failed to update profile');
       }
-      
+
       toast({
         title: 'Success',
         description: 'Profile updated successfully',
         variant: 'default',
       });
-      return response.data.data.user;
+
+      const user = response.data.data.user;
+      if (user.cvs) {
+        user.cvs = user.cvs.map(processCVResponse);
+      }
+
+      return user;
     } catch (error: any) {
       console.error('Failed to update candidate profile:', error);
-      throw new Error(error.response?.data?.message || 'Failed to update profile');
+      const errorMessage = error.response?.data?.message ||
+        error.response?.data?.errors?.join(', ') ||
+        'Server error during profile update';
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      throw new Error(errorMessage);
     }
   },
 
-  // Upload CVs - FIXED
-  uploadCVs: async (files: File[]): Promise<CV[]> => {
+  // UPDATED: Upload CVs with local storage
+  uploadCVs: async (files: File[], description?: string): Promise<CV[]> => {
     try {
+      console.log(`Starting CV upload for ${files.length} file(s)...`);
+
+      // Validate files first
+      const validation = candidateService.validateCVFiles(files);
+      if (!validation.valid) {
+        throw new Error(validation.errors.join(', '));
+      }
+
+      // Create FormData - NOTE: Changed from 'files' to 'cv' field to match middleware
       const formData = new FormData();
-      files.forEach(file => {
-        formData.append('cvs', file); // Note: field name is 'cvs' (plural)
-      });
-      
-      const response = await api.post<{
-        message: string; 
-        success: boolean; 
-        data: { cvs: CV[] } 
-      }>('/candidate/cv', formData, {
-        headers: { 
+
+      // Add single file with field name 'cv' (matches localFileUpload.cv() middleware)
+      // The middleware expects a single file with field name 'cv'
+      if (files.length > 0) {
+        formData.append('cv', files[0]);
+        console.log(`Added file: ${files[0].name} (${files[0].size} bytes)`);
+      }
+
+      // Add description if provided
+      if (description) {
+        formData.append('description', description);
+      }
+
+      console.log('Uploading file to server (local storage)...');
+
+      // Upload file
+      const response = await api.post<UploadCVResponse>('/candidate/cv', formData, {
+        headers: {
           'Content-Type': 'multipart/form-data',
+        },
+        timeout: 300000, // 5 minutes for large files
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            console.log(`Upload progress: ${percentCompleted}%`);
+          }
         }
       });
 
+      console.log('Server response:', response.data);
+
       if (!response.data.success) {
-        throw new Error(response.data.message || 'Failed to upload CVs');
+        throw new Error(response.data.message || 'Upload failed');
       }
-      
+
+      if (!response.data.data?.cv) {
+        throw new Error('No CV returned from server');
+      }
+
+      // Process CV
+      const uploadedCV = processCVResponse(response.data.data.cv);
+
+      // Show success message
       toast({
         title: 'Success',
-        description: `Successfully uploaded ${files.length} CV(s)`,
+        description: 'CV uploaded successfully',
         variant: 'default',
       });
-      return response.data.data.cvs;
+
+      return [uploadedCV];
+
     } catch (error: any) {
-      console.error('Failed to upload CVs:', error);
-      throw new Error(error.response?.data?.message || 'Failed to upload CVs');
+      console.error('Failed to upload CV:', error);
+
+      let errorMessage = 'Failed to upload CV';
+
+      if (error.code === 'ERR_NETWORK') {
+        errorMessage = 'Network error. Please check your internet connection.';
+      } else if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Upload timeout. File might be too large or server is busy.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.errors) {
+        if (Array.isArray(error.response.data.errors)) {
+          errorMessage = error.response.data.errors.join(', ');
+        } else {
+          errorMessage = JSON.stringify(error.response.data.errors);
+        }
+      }
+
+      toast({
+        title: 'Upload Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+
+      throw new Error(errorMessage);
     }
   },
 
-  // Set primary CV - FIXED
-  setPrimaryCV: async (cvId: string): Promise<void> => {
+  // UPDATED: Upload single CV (convenience method)
+  uploadSingleCV: async (file: File, description?: string): Promise<CV> => {
+    const cvs = await candidateService.uploadCVs([file], description);
+    return cvs[0];
+  },
+
+  // Get all CVs
+  getAllCVs: async (): Promise<{ cvs: CV[]; count: number; primaryCV?: CV }> => {
     try {
-      const response = await api.patch(`/candidate/cv/${cvId}/primary`);
+      const response = await api.get<CVListResponse>('/candidate/cvs');
+
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to fetch CVs');
+      }
+
+      const processedCVs = response.data.data.cvs.map(processCVResponse);
+      const processedPrimaryCV = response.data.data.primaryCV ?
+        processCVResponse(response.data.data.primaryCV) : undefined;
+
+      return {
+        cvs: processedCVs,
+        count: processedCVs.length,
+        primaryCV: processedPrimaryCV
+      };
+    } catch (error: any) {
+      console.error('Failed to fetch CVs:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to load CVs';
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      throw new Error(errorMessage);
+    }
+  },
+
+  // Get single CV
+  getCV: async (cvId: string): Promise<CV> => {
+    try {
+      if (!isValidObjectId(cvId)) {
+        throw new Error('Invalid CV ID format');
+      }
+
+      const response = await api.get<{
+        success: boolean;
+        message?: string;
+        data: CV;
+      }>(`/candidate/cv/${cvId}`);
+
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to fetch CV');
+      }
+
+      return processCVResponse(response.data.data);
+    } catch (error: any) {
+      console.error('Failed to fetch CV:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to load CV';
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      throw new Error(errorMessage);
+    }
+  },
+
+  // UPDATED: View CV - opens file URL directly
+  viewCV: async (cvId: string): Promise<void> => {
+    try {
+      const cv = await candidateService.getCV(cvId);
+      const viewUrl = cv.fileUrl || cv.url;
+
+      if (!viewUrl) {
+        throw new Error('No view URL available');
+      }
+
+      // Ensure URL is absolute
+      let absoluteUrl = viewUrl;
+      if (viewUrl.startsWith('/')) {
+        // Make it absolute by adding the backend base URL
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+        absoluteUrl = `${backendUrl}${viewUrl}`;
+      }
+
+      window.open(absoluteUrl, '_blank', 'noopener,noreferrer');
+    } catch (error: any) {
+      console.error('Failed to view CV:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to view CV';
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      throw new Error(errorMessage);
+    }
+  },
+
+  // UPDATED: Download CV - triggers download via backend endpoint
+  downloadCV: async (cvId: string, filename?: string): Promise<void> => {
+    try {
+      const cv = await candidateService.getCV(cvId);
+      const downloadUrl = cv.downloadUrl;
+
+      if (!downloadUrl) {
+        throw new Error('No download URL available');
+      }
+
+      // Ensure URL is absolute
+      let absoluteUrl = downloadUrl;
+      if (downloadUrl.startsWith('/')) {
+        // Make it absolute by adding the backend base URL
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+        absoluteUrl = `${backendUrl}${downloadUrl}`;
+      }
+
+      // Create download link
+      const link = document.createElement('a');
+      link.href = absoluteUrl;
+      link.download = filename || cv.originalName || 'cv';
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.style.display = 'none';
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: 'Download Started',
+        description: `${cv.originalName || 'CV'} is downloading`,
+        variant: 'default',
+      });
+
+    } catch (error: any) {
+      console.error('Failed to download CV:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to download CV';
+      toast({
+        title: 'Download Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      throw new Error(errorMessage);
+    }
+  },
+
+  // UPDATED: Get CV download URL - returns the downloadUrl from CV object
+  getCVDownloadUrl: (cv: CV): string => {
+    if (!cv) return '';
+
+    // Return download URL from CV object
+    let downloadUrl = cv.downloadUrl || '';
+
+    // Make it absolute if it's relative
+    if (downloadUrl && downloadUrl.startsWith('/')) {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      downloadUrl = `${backendUrl}${downloadUrl}`;
+    }
+
+    return downloadUrl;
+  },
+
+  // UPDATED: Get CV preview URL - returns fileUrl for viewing
+  getCVPreviewUrl: (cv: CV): string => {
+    if (!cv) return '';
+
+    // Return file URL from CV object
+    let fileUrl = cv.fileUrl || cv.url || '';
+
+    // Make it absolute if it's relative
+    if (fileUrl && fileUrl.startsWith('/')) {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      fileUrl = `${backendUrl}${fileUrl}`;
+    }
+
+    return fileUrl;
+  },
+
+  // Set primary CV
+  setPrimaryCV: async (cvId: string): Promise<{ primaryCVId: string }> => {
+    try {
+      if (!isValidObjectId(cvId)) {
+        throw new Error('Invalid CV ID format');
+      }
+
+      const response = await api.patch<{
+        success: boolean;
+        message: string;
+        data: {
+          primaryCVId: string;
+        };
+      }>(`/candidate/cv/${cvId}/primary`);
 
       if (!response.data.success) {
         throw new Error(response.data.message || 'Failed to set primary CV');
       }
-      
+
       toast({
         title: 'Success',
         description: 'Primary CV updated successfully',
         variant: 'default',
       });
+
+      return response.data.data;
     } catch (error: any) {
       console.error('Failed to set primary CV:', error);
-      throw new Error(error.response?.data?.message || 'Failed to set primary CV');
+
+      let errorMessage = 'Failed to set primary CV';
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+
+      throw new Error(errorMessage);
     }
   },
 
-  // Delete CV - FIXED
-  deleteCV: async (cvId: string): Promise<void> => {
+  // Delete CV
+  deleteCV: async (cvId: string): Promise<{
+    deletedCVId: string;
+    newPrimaryCVId?: string;
+    remainingCVs: number;
+  }> => {
     try {
-      const response = await api.delete(`/candidate/cv/${cvId}`);
+      if (!isValidObjectId(cvId)) {
+        throw new Error('Invalid CV ID format');
+      }
+
+      const response = await api.delete<{
+        success: boolean;
+        message: string;
+        data: {
+          deletedCVId: string;
+          newPrimaryCVId?: string;
+          remainingCVs: number;
+        };
+      }>(`/candidate/cv/${cvId}`);
 
       if (!response.data.success) {
         throw new Error(response.data.message || 'Failed to delete CV');
       }
-      
+
       toast({
         title: 'Success',
         description: 'CV deleted successfully',
         variant: 'default',
       });
+
+      return response.data.data;
     } catch (error: any) {
       console.error('Failed to delete CV:', error);
-      throw new Error(error.response?.data?.message || 'Failed to delete CV');
+
+      let errorMessage = 'Failed to delete CV';
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.errors) {
+        errorMessage = error.response.data.errors.join(', ');
+      }
+
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+
+      throw new Error(errorMessage);
     }
   },
 
-  // Get CV file size - FIXED
+  // UPDATED: Get CV thumbnail URL - returns document icon since CVs are now local files
+  getCVThumbnailUrl: (cv: CV): string => {
+    if (!cv) return '/images/document-icon.png';
+
+    // For local storage CVs, we return a generic document icon
+    // You can customize this based on file extension if needed
+    return '/images/document-icon.png';
+  },
+
+  // UPDATED: Get formatted file size
   getCVFileSize: (cv: CV): string => {
-    if (!cv.size) return 'Unknown size';
-    
-    const bytes = cv.size;
-    if (bytes === 0) return '0 Bytes';
-
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  },
-
-  // Get CV download URL - FIXED
-  getCVDownloadUrl: (cv: CV): string => {
-    try {
-      if (!cv) return '';
-      
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-      const cleanBackendUrl = backendUrl.replace(/\/+$/, '');
-      
-      // Use filename for download URL
-      if (cv.filename) {
-        return `${cleanBackendUrl}/uploads/cv/${cv.filename}`;
-      }
-      
-      // Fallback to path
-      if (cv.path) {
-        return `${cleanBackendUrl}${cv.path.startsWith('/') ? cv.path : `/${cv.path}`}`;
-      }
-
-      return '';
-    } catch (error) {
-      console.error('Error generating CV download URL:', error);
-      return '';
+    if (cv.size) {
+      return formatFileSize(cv.size);
     }
+
+    return 'Unknown size';
   },
 
-  // Get jobs for candidate - FIXED
+  // UPDATED: Get file extension
+  getCVFileExtension: (cv: CV): string => {
+    if (cv.fileExtension) {
+      return cv.fileExtension.toUpperCase();
+    }
+
+    if (cv.originalName) {
+      return getFileExtension(cv.originalName);
+    }
+
+    if (cv.mimetype) {
+      const type = cv.mimetype.split('/').pop();
+      if (type) return type.toUpperCase();
+    }
+
+    return 'PDF';
+  },
+
+  // REMOVED: hasCloudinaryData - not needed for local storage
+  // REMOVED: getCloudinaryPublicId - not needed for local storage
+
+  // Get jobs for candidate
   getJobs: async (params?: JobFilters): Promise<JobsResponse> => {
     try {
       const response = await api.get<{
-        message: string; 
-        success: boolean; 
-        data: any[]; 
-        pagination: any 
+        message: string;
+        success: boolean;
+        data: any[];
+        pagination: any
       }>('/candidate/jobs', { params });
 
       if (!response.data.success) {
         throw new Error(response.data.message || 'Failed to fetch jobs');
       }
-      
+
       return {
         data: response.data.data,
         pagination: response.data.pagination
@@ -695,19 +752,19 @@ export const candidateService = {
     }
   },
 
-  // Save job - FIXED
+  // Save job
   saveJob: async (jobId: string): Promise<{ saved: boolean }> => {
     try {
       const response = await api.post<{
-        message: string; 
-        success: boolean; 
-        data: { saved: boolean } 
-      }>(`/job/${jobId}/save`);
+        message: string;
+        success: boolean;
+        data: { saved: boolean }
+      }>(`/candidate/job/${jobId}/save`);
 
       if (!response.data.success) {
         throw new Error(response.data.message || 'Failed to save job');
       }
-      
+
       return response.data.data;
     } catch (error: any) {
       console.error('Failed to save job:', error);
@@ -715,19 +772,19 @@ export const candidateService = {
     }
   },
 
-  // Unsave job - FIXED
+  // Unsave job
   unsaveJob: async (jobId: string): Promise<{ saved: boolean }> => {
     try {
       const response = await api.post<{
-        message: string; 
-        success: boolean; 
-        data: { saved: boolean } 
-      }>(`/job/${jobId}/unsave`);
+        message: string;
+        success: boolean;
+        data: { saved: boolean }
+      }>(`/candidate/job/${jobId}/unsave`);
 
       if (!response.data.success) {
         throw new Error(response.data.message || 'Failed to unsave job');
       }
-      
+
       return response.data.data;
     } catch (error: any) {
       console.error('Failed to unsave job:', error);
@@ -735,23 +792,94 @@ export const candidateService = {
     }
   },
 
-  // Get saved jobs - FIXED
+  // Get saved jobs
   getSavedJobs: async (): Promise<any[]> => {
     try {
       const response = await api.get<{
-        message: string; 
-        success: boolean; 
-        data: any[] 
+        message: string;
+        success: boolean;
+        data: any[]
       }>('/candidate/jobs/saved');
 
       if (!response.data.success) {
         throw new Error(response.data.message || 'Failed to fetch saved jobs');
       }
-      
+
       return response.data.data;
     } catch (error: any) {
       console.error('Failed to fetch saved jobs:', error);
       return [];
+    }
+  },
+
+  // Validate files before upload
+  validateCVFiles: (files: File[]): { valid: boolean; errors: string[] } => {
+    const errors: string[] = [];
+
+    if (!files || files.length === 0) {
+      errors.push('No files selected');
+      return { valid: false, errors };
+    }
+
+    // Check total number of files (now only 1 allowed at a time with localFileUpload)
+    if (files.length > 1) {
+      errors.push('Please upload one CV at a time');
+    }
+
+    // Validate each file
+    files.forEach((file, index) => {
+      const validation = validateCVFile(file);
+      if (!validation.valid && validation.error) {
+        errors.push(`File ${index + 1} (${file.name}): ${validation.error}`);
+      }
+    });
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  },
+
+  // UPDATED: Get CV metadata for display
+  getCVMetadata: (cv: CV): {
+    name: string;
+    size: string;
+    type: string;
+    uploaded: string;
+    isPrimary: boolean;
+    downloadCount: number;
+    viewCount: number;
+  } => {
+    return {
+      name: cv.originalName || 'Unknown',
+      size: candidateService.getCVFileSize(cv),
+      type: candidateService.getCVFileExtension(cv),
+      uploaded: new Date(cv.uploadedAt).toLocaleDateString(),
+      isPrimary: cv.isPrimary || false,
+      downloadCount: cv.downloadCount || 0,
+      viewCount: cv.viewCount || 0
+    };
+  },
+
+  // NEW: Helper to check if CV URL is valid
+  isCVUrlValid: (cv: CV): boolean => {
+    return !!(cv.downloadUrl || cv.fileUrl);
+  },
+
+  // NEW: Get CV icon based on file extension
+  getCVIcon: (cv: CV): string => {
+    const extension = cv.fileExtension?.toLowerCase() || '';
+
+    switch (extension) {
+      case 'pdf':
+        return '/images/pdf-icon.png';
+      case 'doc':
+      case 'docx':
+        return '/images/word-icon.png';
+      case 'txt':
+        return '/images/text-icon.png';
+      default:
+        return '/images/document-icon.png';
     }
   }
 };

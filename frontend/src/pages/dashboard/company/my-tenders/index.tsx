@@ -1,15 +1,15 @@
 // pages/dashboard/company/my-tenders/index.tsx
 import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { CompanyOwnerTenderList } from '@/components/tenders/ComapnyOwnerTenderList';
+import { CompanyOwnerTenderList } from '@/components/tenders/ComapanyOwnerTenderList';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/social/ui/Button';
-import { 
-  Plus, 
-  Filter, 
-  RefreshCw, 
-  Download, 
-  Grid3x3, 
+import {
+  Plus,
+  Filter,
+  RefreshCw,
+  Download,
+  Grid3x3,
   List,
   TrendingUp,
   FileText,
@@ -22,11 +22,11 @@ import {
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
 } from '@/components/ui/DropdownMenu';
 import { Input } from '@/components/ui/Input';
 import { cn } from '@/lib/utils';
@@ -36,7 +36,7 @@ import { useOwnedTenders } from '@/hooks/useTenders';
 export default function CompanyMyTendersPage() {
   const router = useRouter();
   const { toast } = useToast();
-  
+
   // State for filters
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -44,7 +44,7 @@ export default function CompanyMyTendersPage() {
   const [workflowFilter, setWorkflowFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [activeTab, setActiveTab] = useState<string>('all');
-  
+
   // Fetch owned tenders
   const { tenders, isLoading, refetch } = useOwnedTenders({
     page: 1,
@@ -56,7 +56,7 @@ export default function CompanyMyTendersPage() {
     // sortBy: 'createdAt',
     // sortOrder: 'desc',
   });
-  
+
   // Calculate statistics
   const calculateStats = () => {
     const total = tenders.length || 0;
@@ -70,26 +70,26 @@ export default function CompanyMyTendersPage() {
       const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
       return diffDays <= 7 && diffDays > 0;
     }).length;
-    
+
     const freelance = tenders.filter(t => t.tenderCategory === 'freelance').length;
     const professional = tenders.filter(t => t.tenderCategory === 'professional').length;
-    
+
     return { total, active, draft, totalApplications, endingSoon, freelance, professional };
   };
-  
+
   const stats = calculateStats();
-  
+
   // Handle tab change
   const handleTabChange = (value: string) => {
     setActiveTab(value);
     setStatusFilter(value === 'all' ? 'all' : value);
     refetch();
   };
-  
+
   const handleCreateNew = () => {
     router.push('/dashboard/company/my-tenders/create');
   };
-  
+
   const handleExport = () => {
     toast({
       title: 'Export Started',
@@ -97,7 +97,7 @@ export default function CompanyMyTendersPage() {
       variant: 'success',
     });
   };
-  
+
   const handleRefresh = () => {
     refetch();
     toast({
@@ -106,15 +106,15 @@ export default function CompanyMyTendersPage() {
       variant: 'default',
     });
   };
-  
+
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
   };
-  
+
   const handleSearchSubmit = () => {
     refetch();
   };
-  
+
   return (
     <DashboardLayout requiredRole="company">
       <div className="min-h-screen bg-gradient-to-b from-gray-50/50 to-white dark:from-gray-900/50 dark:to-gray-900">
@@ -135,7 +135,7 @@ export default function CompanyMyTendersPage() {
                   Manage and track all your created tenders in one place.
                 </p>
               </div>
-              
+
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                 {/* View Toggle */}
                 <div className="flex items-center border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-900">
@@ -156,7 +156,7 @@ export default function CompanyMyTendersPage() {
                     <List className="w-4 h-4" />
                   </Button>
                 </div>
-                
+
                 {/* Actions Dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -176,10 +176,10 @@ export default function CompanyMyTendersPage() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                
+
                 {/* Create New Button */}
-                <Button 
-                  onClick={handleCreateNew} 
+                <Button
+                  onClick={handleCreateNew}
                   className="gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white"
                 >
                   <Plus className="w-4 h-4" />
@@ -187,7 +187,7 @@ export default function CompanyMyTendersPage() {
                 </Button>
               </div>
             </div>
-            
+
             {/* Quick Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               <Card className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow">
@@ -213,7 +213,7 @@ export default function CompanyMyTendersPage() {
                   </div>
                 </CardContent>
               </Card>
-              
+
               <Card className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
@@ -232,7 +232,7 @@ export default function CompanyMyTendersPage() {
                   </div>
                 </CardContent>
               </Card>
-              
+
               <Card className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
@@ -251,7 +251,7 @@ export default function CompanyMyTendersPage() {
                   </div>
                 </CardContent>
               </Card>
-              
+
               <Card className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
@@ -271,7 +271,7 @@ export default function CompanyMyTendersPage() {
                 </CardContent>
               </Card>
             </div>
-            
+
             {/* Search and Filter Bar */}
             <div className="flex flex-col lg:flex-row gap-4 mb-6">
               <div className="relative flex-1">
@@ -284,7 +284,7 @@ export default function CompanyMyTendersPage() {
                   className="pl-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700"
                 />
               </div>
-              
+
               <div className="flex items-center gap-3">
                 <Button
                   variant="outline"
@@ -296,7 +296,7 @@ export default function CompanyMyTendersPage() {
                   <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
                   Refresh
                 </Button>
-                
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="gap-2">
@@ -311,7 +311,7 @@ export default function CompanyMyTendersPage() {
                         <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">
                           Category
                         </label>
-                        <select 
+                        <select
                           value={categoryFilter}
                           onChange={(e) => {
                             setCategoryFilter(e.target.value);
@@ -324,12 +324,12 @@ export default function CompanyMyTendersPage() {
                           <option value="professional">Professional</option>
                         </select>
                       </div>
-                      
+
                       <div>
                         <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">
                           Workflow
                         </label>
-                        <select 
+                        <select
                           value={workflowFilter}
                           onChange={(e) => {
                             setWorkflowFilter(e.target.value);
@@ -347,12 +347,12 @@ export default function CompanyMyTendersPage() {
                 </DropdownMenu>
               </div>
             </div>
-            
+
             {/* Tabs for quick filtering */}
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
               <TabsList className="bg-gray-100 dark:bg-gray-900 p-1 border border-gray-200 dark:border-gray-800">
-                <TabsTrigger 
-                  value="all" 
+                <TabsTrigger
+                  value="all"
                   className="data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-800"
                 >
                   All Tenders
@@ -360,8 +360,8 @@ export default function CompanyMyTendersPage() {
                     {stats.total}
                   </Badge>
                 </TabsTrigger>
-                <TabsTrigger 
-                  value="published" 
+                <TabsTrigger
+                  value="published"
                   className="data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-800"
                 >
                   Active
@@ -369,8 +369,8 @@ export default function CompanyMyTendersPage() {
                     {stats.active}
                   </Badge>
                 </TabsTrigger>
-                <TabsTrigger 
-                  value="draft" 
+                <TabsTrigger
+                  value="draft"
                   className="data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-800"
                 >
                   Draft
@@ -378,8 +378,8 @@ export default function CompanyMyTendersPage() {
                     {stats.draft}
                   </Badge>
                 </TabsTrigger>
-                <TabsTrigger 
-                  value="closed" 
+                <TabsTrigger
+                  value="closed"
                   className="data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-800"
                 >
                   Closed
@@ -391,7 +391,7 @@ export default function CompanyMyTendersPage() {
             </Tabs>
           </div>
         </div>
-        
+
         {/* Main Content */}
         <div className="max-w-7xl mx-auto px-6 py-8">
           {/* Tenders List */}
@@ -409,7 +409,7 @@ export default function CompanyMyTendersPage() {
             itemsPerPage={12}
             className="bg-transparent"
           />
-          
+
           {/* Empty State */}
           {!isLoading && tenders.length === 0 && (
             <Card className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 border-2 border-dashed border-gray-200 dark:border-gray-700 text-center p-12">
@@ -446,7 +446,7 @@ export default function CompanyMyTendersPage() {
               </CardContent>
             </Card>
           )}
-          
+
           {/* Loading State */}
           {isLoading && (
             <div className="text-center py-12">

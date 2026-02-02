@@ -55,7 +55,7 @@ export default function ResetPasswordPage() {
     // Get token and email from URL parameters
     const urlToken = router.query.token as string;
     const urlEmail = router.query.email as string;
-    
+
     if (urlToken && urlEmail) {
       setToken(urlToken);
       setUserEmail(decodeURIComponent(urlEmail));
@@ -92,7 +92,7 @@ export default function ResetPasswordPage() {
         title: 'Password Reset Successfully!',
         description: 'Your password has been reset successfully',
       });
-      
+
       // Redirect to login after 2 seconds
       setTimeout(() => {
         router.push('/login');
@@ -110,12 +110,12 @@ export default function ResetPasswordPage() {
 
   if (isSuccess) {
     return (
-      <div 
+      <div
         className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8"
         style={{ backgroundColor: colors.gray100 }}
       >
         <div className="max-w-md w-full space-y-8 text-center bg-white p-8 rounded-2xl shadow-lg">
-          <div 
+          <div
             className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
             style={{ backgroundColor: colors.teal + '20' }}
           >
@@ -126,8 +126,8 @@ export default function ResetPasswordPage() {
             Your password has been successfully reset. Redirecting to login...
           </p>
           <div className="mt-6">
-            <Link 
-              href="/login" 
+            <Link
+              href="/login"
               className="font-medium text-sm"
               style={{ color: colors.goldenMustard }}
             >
@@ -141,12 +141,12 @@ export default function ResetPasswordPage() {
 
   if (!isValidToken) {
     return (
-      <div 
+      <div
         className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8"
         style={{ backgroundColor: colors.gray100 }}
       >
         <div className="max-w-md w-full space-y-8 text-center bg-white p-8 rounded-2xl shadow-lg">
-          <div 
+          <div
             className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
             style={{ backgroundColor: colors.orange + '20' }}
           >
@@ -160,15 +160,15 @@ export default function ResetPasswordPage() {
             <Button
               onClick={() => router.push('/forgot-password')}
               className="w-full py-3 rounded-lg font-semibold"
-              style={{ 
+              style={{
                 backgroundColor: colors.goldenMustard,
                 color: colors.darkNavy
               }}
             >
               Request New Reset Link
             </Button>
-            <Link 
-              href="/login" 
+            <Link
+              href="/login"
               className="block font-medium text-sm"
               style={{ color: colors.goldenMustard }}
             >
@@ -181,13 +181,13 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div 
+    <div
       className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8"
       style={{ backgroundColor: colors.gray100 }}
     >
       <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-2xl shadow-lg">
         <div className="text-center">
-          <div 
+          <div
             className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
             style={{ backgroundColor: colors.blue + '20' }}
           >
@@ -270,7 +270,7 @@ export default function ResetPasswordPage() {
           <Button
             type="submit"
             className="w-full py-3 rounded-lg font-semibold transition-all duration-300"
-            style={{ 
+            style={{
               backgroundColor: colors.goldenMustard,
               color: colors.darkNavy
             }}
@@ -290,8 +290,8 @@ export default function ResetPasswordPage() {
         <div className="text-center pt-4 border-t" style={{ borderColor: colors.gray400 }}>
           <p className="text-sm" style={{ color: colors.gray800 }}>
             Remember your password?{' '}
-            <Link 
-              href="/login" 
+            <Link
+              href="/login"
               className="font-medium transition-colors"
               style={{ color: colors.goldenMustard }}
             >

@@ -25,16 +25,22 @@ const profileSchema = new mongoose.Schema({
     trim: true,
     maxlength: [100, 'Location cannot exceed 100 characters']
   },
-  phone: {
-    type: String,
-    trim: true,
-    validate: {
-      validator: function (v) {
-        return !v || /^[\+]?[1-9][\d]{0,15}$/.test(v);
-      },
-      message: 'Invalid phone number format'
-    }
-  },
+phone: {
+  type: String,
+  trim: true,
+  validate: {
+    validator: function (v) {
+      if (!v) return true; // Allow empty
+      
+      // Allow: +251977809831, 0977809831, 977809831, etc.
+      // Accepts: optional +, then digits, total length 8-15
+      const phoneRegex = /^\+?[0-9]{8,15}$/;
+      
+      return phoneRegex.test(v);
+    },
+    message: 'Invalid phone number format. Must be 8-15 digits, can start with 0 or +'
+  }
+},
   website: {
     type: String,
     trim: true,
@@ -45,7 +51,23 @@ const profileSchema = new mongoose.Schema({
       message: 'Invalid website URL'
     }
   },
+avatar: {
+  public_id: String,
+  secure_url: String,
+  width: Number,
+  height: Number,
+  bytes: Number,
+  uploaded_at: Date
+},
 
+cover: {
+  public_id: String,
+  secure_url: String,
+  width: Number,
+  height: Number,
+  bytes: Number,
+  uploaded_at: Date
+},
   // Social Links
   socialLinks: {
     linkedin: {
@@ -687,13 +709,12 @@ profileSchema.index({ 'profileCompletion.percentage': -1 });
 profileSchema.index({ lastActive: -1 });
 profileSchema.index({ headline: 'text', bio: 'text', 'roleSpecific.skills': 'text', location: 'text' });
 
-// Virtual for avatar and cover photo
-profileSchema.virtual('avatar').get(function () {
-  return this.user?.avatar || null;
+profileSchema.virtual('avatarUrl').get(function () {
+  return this.avatar?.secure_url || null;
 });
 
-profileSchema.virtual('coverPhoto').get(function () {
-  return this.user?.coverPhoto || null;
+profileSchema.virtual('coverUrl').get(function () {
+  return this.cover?.secure_url || null;
 });
 
 profileSchema.virtual('userInfo', {

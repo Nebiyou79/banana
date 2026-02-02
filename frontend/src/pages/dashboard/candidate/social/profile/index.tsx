@@ -21,7 +21,7 @@ import {
   TrendingUp,
   BarChart3
 } from 'lucide-react';
-import profileService, { Profile } from '@/services/profileService';
+import { profileService, Profile } from '@/services/profileService';
 import { roleProfileService } from '@/services/roleProfileService';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';

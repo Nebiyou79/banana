@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/components/tenders/organization/OrganizationOwnerTenderCard.tsx
 import React, { JSX } from 'react';
-import { 
-  Tender, 
-  TenderStatus, 
+import {
+  Tender,
+  TenderStatus,
   WorkflowType,
   TenderCategoryType,
   VisibilityType,
@@ -11,13 +11,13 @@ import {
   isTenderActive,
   calculateProgress
 } from '@/services/tenderService';
-import { 
-  Eye, 
-  Edit2, 
-  Users, 
-  Clock, 
-  Lock, 
-  Globe, 
+import {
+  Eye,
+  Edit2,
+  Users,
+  Clock,
+  Lock,
+  Globe,
   AlertCircle,
   FileText,
   Building2,
@@ -36,6 +36,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Progress } from '@/components/ui/Progress';
 import { useRouter } from 'next/router';
 import { cn } from '@/lib/utils';
+import { colors } from '@/utils/color';
 
 interface OrganizationOwnerTenderCardProps {
   tender: Tender;
@@ -49,14 +50,14 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
   className
 }) => {
   const router = useRouter();
-  
+
   // Check if tender can be edited (only draft or published open tenders)
-  const canEdit = tender.status === 'draft' || 
+  const canEdit = tender.status === 'draft' ||
     (tender.status === 'published' && tender.workflowType === 'open');
-  
+
   const isActive = isTenderActive(tender);
   const progress = calculateProgress(tender);
-  
+
   // Navigation paths
   const viewPath = `/dashboard/organization/tenders/${tender._id}`;
   const editPath = `/dashboard/organization/tenders/${tender._id}/edit`;
@@ -87,13 +88,13 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
   // Get status display
   const getStatusDisplay = (status: TenderStatus): { label: string; icon: JSX.Element; color: string } => {
     const statusConfig: Record<TenderStatus, { label: string; icon: JSX.Element; color: string }> = {
-      draft: { label: 'Draft', icon: <FileText className="w-3 h-3" />, color: 'bg-gray-500' },
-      published: { label: 'Active', icon: <Globe className="w-3 h-3" />, color: 'bg-green-500' },
-      locked: { label: 'Locked', icon: <Lock className="w-3 h-3" />, color: 'bg-blue-500' },
-      deadline_reached: { label: 'Deadline Reached', icon: <Clock className="w-3 h-3" />, color: 'bg-yellow-500' },
-      revealed: { label: 'Revealed', icon: <Eye className="w-3 h-3" />, color: 'bg-purple-500' },
-      closed: { label: 'Closed', icon: <FileCheck className="w-3 h-3" />, color: 'bg-indigo-500' },
-      cancelled: { label: 'Cancelled', icon: <AlertCircle className="w-3 h-3" />, color: 'bg-red-500' }
+      draft: { label: 'Draft', icon: <FileText className="w-3 h-3" />, color: colors.gray400 },
+      published: { label: 'Active', icon: <Globe className="w-3 h-3" />, color: colors.teal },
+      locked: { label: 'Locked', icon: <Lock className="w-3 h-3" />, color: colors.blue },
+      deadline_reached: { label: 'Deadline Reached', icon: <Clock className="w-3 h-3" />, color: colors.orange },
+      revealed: { label: 'Revealed', icon: <Eye className="w-3 h-3" />, color: '#9333ea' },
+      closed: { label: 'Closed', icon: <FileCheck className="w-3 h-3" />, color: '#4f46e5' },
+      cancelled: { label: 'Cancelled', icon: <AlertCircle className="w-3 h-3" />, color: '#ef4444' }
     };
     return statusConfig[status] || statusConfig.draft;
   };
@@ -111,7 +112,7 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
 
   // Get category color
   const getCategoryColor = (category: TenderCategoryType): string => {
-    return category === 'freelance' 
+    return category === 'freelance'
       ? 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:text-emerald-400 dark:bg-emerald-950/30 dark:border-emerald-800/50'
       : 'text-blue-600 bg-blue-50 border-blue-100 dark:text-blue-400 dark:bg-blue-950/30 dark:border-blue-800/50';
   };
@@ -145,13 +146,16 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
   return (
     <Card className={cn(
       "group relative overflow-hidden transition-all duration-300 hover:shadow-lg",
-      "bg-white dark:bg-gray-900",
-      "border border-gray-200 dark:border-gray-800",
+      "bg-bg-primary dark:bg-bg-surface",
+      "border border-border-secondary dark:border-border-primary",
       "hover:border-blue-300 dark:hover:border-blue-700",
       className
     )}>
       {/* Status indicator bar */}
-      <div className={`absolute top-0 left-0 w-1.5 h-full ${statusDisplay.color}`} />
+      <div
+        className="absolute top-0 left-0 w-1.5 h-full"
+        style={{ backgroundColor: statusDisplay.color }}
+      />
 
       {/* CPO Required Badge */}
       {isCPORequired && (
@@ -167,9 +171,9 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
         <div className="space-y-3">
           {/* Category, Status, and Reference */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Badge 
-                variant="outline" 
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                variant="outline"
                 className={cn(
                   "font-medium px-3 py-1 text-sm",
                   getCategoryColor(tender.tenderCategory)
@@ -177,12 +181,12 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
               >
                 {tender.tenderCategory === 'freelance' ? 'Freelance' : 'Professional'}
               </Badge>
-              
-              <Badge 
+
+              <Badge
                 variant="outline"
                 className={cn(
                   "px-3 py-1 text-sm",
-                  tender.workflowType === 'open' 
+                  tender.workflowType === 'open'
                     ? 'text-blue-600 bg-blue-50 border-blue-100 dark:text-blue-400 dark:bg-blue-950/30 dark:border-blue-800'
                     : 'text-purple-600 bg-purple-50 border-purple-100 dark:text-purple-400 dark:bg-purple-950/30 dark:border-purple-800'
                 )}
@@ -191,7 +195,7 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
               </Badge>
 
               {referenceNumber && (
-                <Badge 
+                <Badge
                   variant="outline"
                   className="text-blue-600 bg-blue-50 border-blue-100 dark:text-blue-400 dark:bg-blue-950/30 dark:border-blue-800"
                 >
@@ -202,22 +206,25 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
           </div>
 
           {/* Title */}
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white leading-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2">
+          <h3 className="text-lg font-semibold text-text-primary leading-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2">
             {tender.title}
           </h3>
 
           {/* Status and Visibility */}
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
             <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${statusDisplay.color}`} />
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <div
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: statusDisplay.color }}
+              />
+              <span className="text-sm font-medium text-text-primary">
                 {statusDisplay.label}
               </span>
             </div>
-            
+
             <div className="flex items-center gap-2">
               {visibilityDisplay.icon}
-              <span className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="text-sm text-text-secondary">
                 {visibilityDisplay.label}
               </span>
             </div>
@@ -227,14 +234,14 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
 
       <CardContent className="pb-4">
         {/* Description */}
-        <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 line-clamp-2">
+        <p className="text-sm text-text-secondary mb-4 line-clamp-2">
           {tender.description.substring(0, 120)}...
         </p>
 
         {/* Progress Bar for active tenders */}
         {isActive && tender.status === 'published' && (
-          <div className="mb-5">
-            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+          <div className="mb-4 sm:mb-5">
+            <div className="flex justify-between text-xs text-text-muted mb-1">
               <span>Progress</span>
               <span>{daysRemaining} days remaining</span>
             </div>
@@ -243,39 +250,39 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
         )}
 
         {/* Key Information Grid */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {/* Applications */}
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-gray-50 to-white dark:from-gray-800/50 dark:to-gray-900 border border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-bg-secondary to-bg-primary dark:from-bg-surface/50 dark:to-bg-primary border border-border-secondary">
             <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
               <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <div className="font-bold text-gray-900 dark:text-white text-lg">
+              <div className="font-bold text-text-primary text-lg">
                 {totalApplications}
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">
+              <div className="text-xs text-text-muted">
                 Applications
               </div>
             </div>
           </div>
 
           {/* Deadline */}
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-gray-50 to-white dark:from-gray-800/50 dark:to-gray-900 border border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-bg-secondary to-bg-primary dark:from-bg-surface/50 dark:to-bg-primary border border-border-secondary">
             <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
               <Clock className="w-5 h-5 text-red-600 dark:text-red-400" />
             </div>
             <div>
-              <div className="font-bold text-gray-900 dark:text-white text-lg">
+              <div className="font-bold text-text-primary text-lg">
                 {formatDeadline(tender.deadline)}
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">
+              <div className="text-xs text-text-muted">
                 Deadline
               </div>
             </div>
           </div>
 
           {/* Procurement Method or Type */}
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-gray-50 to-white dark:from-gray-800/50 dark:to-gray-900 border border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-bg-secondary to-bg-primary dark:from-bg-surface/50 dark:to-bg-primary border border-border-secondary">
             <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
               {isProfessional ? (
                 <Award className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
@@ -284,17 +291,17 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
               )}
             </div>
             <div>
-              <div className="font-bold text-gray-900 dark:text-white text-lg">
+              <div className="font-bold text-text-primary text-lg">
                 {isProfessional ? getProcurementMethodDisplay(procurementMethod) : 'Freelance'}
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">
+              <div className="text-xs text-text-muted">
                 {isProfessional ? 'Method' : 'Type'}
               </div>
             </div>
           </div>
 
           {/* Evaluation or Skills */}
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-gray-50 to-white dark:from-gray-800/50 dark:to-gray-900 border border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-bg-secondary to-bg-primary dark:from-bg-surface/50 dark:to-bg-primary border border-border-secondary">
             <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
               {isProfessional && evaluationMethod ? (
                 <BarChart3 className="w-5 h-5 text-purple-600 dark:text-purple-400" />
@@ -303,13 +310,13 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
               )}
             </div>
             <div>
-              <div className="font-bold text-gray-900 dark:text-white text-lg">
-                {isProfessional && evaluationMethod 
+              <div className="font-bold text-text-primary text-lg">
+                {isProfessional && evaluationMethod
                   ? getEvaluationMethodDisplay(evaluationMethod)
                   : `${tender.skillsRequired?.length || 0}`
                 }
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">
+              <div className="text-xs text-text-muted">
                 {isProfessional ? 'Evaluation' : 'Skills'}
               </div>
             </div>
@@ -318,12 +325,12 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
 
         {/* Professional-specific details */}
         {isProfessional && (
-          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-2">
+          <div className="mt-4 pt-4 border-t border-border-secondary space-y-2">
             {/* Minimum Experience */}
             {minimumExperience && (
               <div className="flex items-center gap-2 text-sm">
-                <Target className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-600 dark:text-gray-300">
+                <Target className="w-4 h-4 text-text-muted" />
+                <span className="text-text-secondary">
                   Min. Experience: {minimumExperience} years
                 </span>
               </div>
@@ -343,21 +350,21 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
       </CardContent>
 
       {showActions && (
-        <CardFooter className="pt-4 border-t border-gray-100 dark:border-gray-800">
-          <div className="flex w-full justify-between items-center">
-            <div className="text-xs text-gray-500 dark:text-gray-400">
+        <CardFooter className="pt-4 border-t border-border-secondary">
+          <div className="flex flex-col sm:flex-row w-full justify-between items-center gap-3">
+            <div className="text-xs text-text-muted">
               Created {new Date(tender.createdAt).toLocaleDateString()}
               {tender.updatedAt !== tender.createdAt && (
                 <span className="ml-2">• Updated {new Date(tender.updatedAt).toLocaleDateString()}</span>
               )}
             </div>
-            
+
             <div className="flex gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleViewDetails}
-                className="h-9 px-4 gap-2 border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                className="h-9 px-3 sm:px-4 gap-2 border-border-primary hover:bg-bg-secondary"
               >
                 <Eye className="w-4 h-4" />
                 View
@@ -368,7 +375,7 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
                   variant="default"
                   size="sm"
                   onClick={handleEdit}
-                  className="h-9 px-4 gap-2 bg-blue-600 hover:bg-blue-700"
+                  className="h-9 px-3 sm:px-4 gap-2 bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <Edit2 className="w-4 h-4" />
                   Edit
@@ -381,17 +388,17 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
                         variant="outline"
                         size="sm"
                         disabled
-                        className="h-9 px-4 gap-2 opacity-50 cursor-not-allowed"
+                        className="h-9 px-3 sm:px-4 gap-2 opacity-50 cursor-not-allowed"
                       >
                         <Edit2 className="w-4 h-4" />
                         Edit
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      <p className="text-sm max-w-xs">
-                        {tender.workflowType === 'closed' && tender.status === 'published' 
+                    <TooltipContent side="bottom" className="max-w-xs">
+                      <p className="text-sm">
+                        {tender.workflowType === 'closed' && tender.status === 'published'
                           ? 'Sealed bid tenders cannot be edited after publishing'
-                          : tender.status !== 'draft' 
+                          : tender.status !== 'draft'
                             ? 'Only draft tenders can be edited'
                             : 'Cannot edit this tender'
                         }
@@ -411,9 +418,9 @@ export const OrganizationOwnerTenderCard: React.FC<OrganizationOwnerTenderCardPr
 // Loading skeleton component
 export const OrganizationOwnerTenderCardSkeleton: React.FC = () => {
   return (
-    <Card className="overflow-hidden bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 animate-pulse">
+    <Card className="overflow-hidden bg-bg-primary dark:bg-bg-surface border border-border-secondary animate-pulse">
       <div className="absolute top-0 left-0 w-1.5 h-full bg-gray-300 dark:bg-gray-700" />
-      
+
       <CardHeader className="pb-3">
         <div className="space-y-2">
           <div className="flex gap-2">
@@ -431,7 +438,7 @@ export const OrganizationOwnerTenderCardSkeleton: React.FC = () => {
           <div className="h-3 w-5/6 bg-gray-200 dark:bg-gray-800 rounded" />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {[...Array(4)].map((_, i) => (
             <div key={i} className="flex items-center gap-3 p-3">
               <div className="w-10 h-10 bg-gray-200 dark:bg-gray-800 rounded-lg" />
@@ -444,8 +451,8 @@ export const OrganizationOwnerTenderCardSkeleton: React.FC = () => {
         </div>
       </CardContent>
 
-      <CardFooter className="pt-4 border-t border-gray-100 dark:border-gray-800">
-        <div className="flex w-full justify-between">
+      <CardFooter className="pt-4 border-t border-border-secondary">
+        <div className="flex flex-col sm:flex-row w-full justify-between gap-3">
           <div className="h-3 w-24 bg-gray-200 dark:bg-gray-800 rounded" />
           <div className="flex gap-2">
             <div className="h-9 w-20 bg-gray-200 dark:bg-gray-800 rounded" />

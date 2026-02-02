@@ -470,7 +470,7 @@ export default function CompanyProfilePage() {
             name: companyProfile.name,
             avatar: companyProfile.logoFullUrl || userProfile!.user.avatar,
         },
-        coverPhoto: companyProfile.bannerFullUrl || userProfile!.coverPhoto,
+        coverPhoto: companyProfile.bannerFullUrl || userProfile!.cover,
         headline: userProfile!.headline || companyProfile.description?.substring(0, 100) || 'Company Profile',
         location: companyProfile.address,
         website: companyProfile.website,

@@ -1,1120 +1,1031 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// pages/dashboard/freelancer/profile.tsx
+// app/dashboard/candidate/social/profile/page.tsx
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { FreelancerLayout } from '@/components/layout/FreelancerLayout';
-import { UserProfile, ProfileData, freelancerService } from '@/services/freelancerService';
-import CertificationsList from '@/components/freelancer/CertificationsList';
+import { useEffect, useState } from 'react';
+import { SocialDashboardLayout } from '@/components/social/layout/SocialDashboard';
+import { RoleThemeProvider } from '@/components/social/theme/RoleThemeProvider';
+import { ProfileHeader } from '@/components/profile/ProfileHeader';
+import { ProfileAboutSection } from '@/components/profile/ProfileAboutSection';
+import { ProfilePostsSection } from '@/components/profile/ProfilePostsSection';
+import { ProfileConnectionsSection } from '@/components/profile/ProfileConnectionsSection';
+import { ProfileSocialAnalytics } from '@/components/profile/ProfileSocialAnalytics';
+import { ProfileTabs, ProfileTabContent, TabTransitionWrapper } from '@/components/profile/ProfileTabs';
+import { FreelancerPortfolioDisplay } from '@/components/profile/FreelancePortfolioSection';
+import { Button } from '@/components/social/ui/Button';
+import { Card } from '@/components/social/ui/Card';
+import { Skeleton } from '@/components/ui/Skeleton';
 import {
-  CameraIcon,
-  PencilIcon,
-  MapPinIcon,
-  GlobeAltIcon,
-  PhoneIcon,
-  EnvelopeIcon,
-  CheckBadgeIcon,
-  StarIcon,
-  BriefcaseIcon,
-  AcademicCapIcon,
-  CurrencyDollarIcon,
-  UserCircleIcon,
-  LinkIcon,
-  CalendarIcon,
-  UserIcon
-} from '@heroicons/react/24/outline';
+  Briefcase,
+  DollarSign,
+  Award,
+  Globe,
+  MapPin,
+  Phone,
+  Calendar,
+  FileText,
+  Users,
+  BarChart3,
+  Mail,
+  Star,
+  TrendingUp,
+  Clock,
+  MessageSquare,
+  Loader2,
+  RefreshCw,
+  AlertCircle,
+  Edit3,
+  PlusCircle,
+  Sparkles
+} from 'lucide-react';
+import { profileService, Profile, CloudinaryImage, Experience, PortfolioProject, Education, Certification } from '@/services/profileService';
+import { roleProfileService } from '@/services/roleProfileService';
+import { freelancerService, UserProfile as FreelancerUserProfile, FreelancerStats } from '@/services/freelancerService';
+import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
+import ProfileInfoCard from '@/components/profile/ProfileInfoCard';
 
-// Define proper types for the form data
-interface ProfileFormData {
-  name: string;
-  bio?: string;
-  location?: string;
-  phone?: string;
-  website?: string;
-  dateOfBirth?: string;
-  gender?: 'male' | 'female' | 'other' | 'prefer-not-to-say';
-  skills: Array<{
-    name: string;
-    level: 'beginner' | 'intermediate' | 'expert';
-    yearsOfExperience: number;
-  }>;
-  socialLinks?: {
-    linkedin?: string;
-    github?: string;
-    tiktok?: string;
-    telegram?: string;
-    twitter?: string;
-  };
-  freelancerProfile?: {
-    headline?: string;
-    hourlyRate?: number;
-    availability?: 'available' | 'not-available' | 'part-time';
-    experienceLevel?: 'entry' | 'intermediate' | 'expert';
-    englishProficiency?: 'basic' | 'conversational' | 'fluent' | 'native';
-    timezone?: string;
-    specialization?: string[];
+// Define interface for enhanced profile
+interface EnhancedProfile extends Omit<Profile, 'roleSpecific'> {
+  roleSpecific: Omit<Profile['roleSpecific'], 'freelancerProfile'> & {
+    freelancerProfile?: {
+      hourlyRate?: number;
+      availability?: string;
+      experienceLevel?: string;
+      englishProficiency?: string;
+      timezone?: string;
+      specialization?: string[];
+      profileCompletion?: number;
+      totalEarnings?: number;
+      successRate?: number;
+      ratings?: {
+        average: number;
+        count: number;
+      };
+      profileViews?: number;
+    };
   };
 }
 
-// Helper function to calculate age from date of birth
-const calculateAge = (dateOfBirth: string): number => {
-  if (!dateOfBirth) return 0;
-
-  try {
-    const today = new Date();
-    const birthDate = new Date(dateOfBirth);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-
-    return age;
-  } catch (error) {
-    console.error('Error calculating age:', error);
-    return 0;
-  }
-};
-
-// Helper function to format date for input
-const formatDateForInput = (dateString: string | undefined): string => {
-  if (!dateString) return '';
-
-  try {
-    const date = new Date(dateString);
-    return date.toISOString().split('T')[0];
-  } catch (error) {
-    console.error('Error formatting date:', error);
-    return '';
-  }
-};
-
-const FreelancerProfile = () => {
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [certifications, setCertifications] = useState<any[]>([]);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [activeSection, setActiveSection] = useState('basic');
-  const [formData, setFormData] = useState<ProfileFormData>({
-    name: '',
-    bio: '',
-    location: '',
-    phone: '',
-    website: '',
-    dateOfBirth: '',
-    gender: 'prefer-not-to-say',
-    skills: [],
-    socialLinks: {
-      linkedin: '',
-      github: '',
-      tiktok: '',
-      telegram: '',
-      twitter: ''
-    },
-    freelancerProfile: {
-      headline: '',
-      hourlyRate: 0,
-      availability: 'available',
-      experienceLevel: 'intermediate',
-      englishProficiency: 'fluent',
-      timezone: '',
-      specialization: []
-    }
+export default function FreelancerProfilePage() {
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState('overview');
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [roleSpecificData, setRoleSpecificData] = useState<any>(null);
+  const [freelancerProfile, setFreelancerProfile] = useState<FreelancerUserProfile | null>(null);
+  const [freelancerStats, setFreelancerStats] = useState<FreelancerStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState({
+    avatar: false,
+    cover: false
   });
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    loadProfile();
+    fetchFreelancerData();
   }, []);
 
-  const loadProfile = async () => {
+  const fetchFreelancerData = async () => {
     try {
-      setIsLoading(true);
-      const profileData = await freelancerService.getProfile();
+      setLoading(true);
+      setError(null);
 
-      // Load certifications
-      let certificationsData: React.SetStateAction<any[]> = [];
+      // Fetch from all three services
+      const [
+        profileData,
+        roleSpecificResponse,
+        freelancerData
+      ] = await Promise.allSettled([
+        profileService.getProfile(),
+        roleProfileService.getFreelancerProfile(),
+        freelancerService.getProfile()
+      ]);
+
+      // Handle profile service response
+      if (profileData.status === 'fulfilled') {
+        setProfile(profileData.value);
+      } else {
+        console.warn('Profile service failed, using safe profile:', profileData.reason);
+        const safeProfile = profileService.createSafeProfile();
+        setProfile(safeProfile);
+      }
+
+      // Handle role-specific service response
+      if (roleSpecificResponse.status === 'fulfilled') {
+        setRoleSpecificData(roleSpecificResponse.value);
+      } else {
+        console.warn('Role profile service failed:', roleSpecificResponse.reason);
+        setRoleSpecificData(null);
+      }
+
+      // Handle freelancer service response
+      if (freelancerData.status === 'fulfilled') {
+        setFreelancerProfile(freelancerData.value);
+      } else {
+        console.warn('Freelancer service failed:', freelancerData.reason);
+        setFreelancerProfile(null);
+      }
+
+      // Try to get freelancer stats
       try {
-        certificationsData = await freelancerService.getCertifications();
-        setCertifications(certificationsData);
-      } catch (error) {
-        console.warn('Certifications not available yet');
-        certificationsData = [];
+        const stats = await freelancerService.getFreelancerStats();
+        setFreelancerStats(stats);
+      } catch (statsError: any) {
+        console.warn('Stats service error, using mock stats:', statsError);
+        setFreelancerStats({
+          profileStrength: 85,
+          jobSuccessScore: 94,
+          onTimeDelivery: 96,
+          responseRate: 98,
+          totalEarnings: 125000,
+          totalJobs: 47,
+          activeProposals: 3,
+          profileViews: 1248,
+          clientReviews: 32,
+          averageRating: 4.8
+        });
       }
 
-      // ✅ FIX: Merge certifications into profile data
-      const profileWithCertifications = {
-        ...profileData,
-        certifications: certificationsData
-      };
+    } catch (err: any) {
+      console.error('Failed to fetch freelancer data:', err);
+      const errorMessage = err.message || 'Failed to load profile data';
+      setError(errorMessage);
+      toast.error(errorMessage);
 
-      setProfile(profileWithCertifications);
-
-      const freelancerProfile = profileData.freelancerProfile;
-
-      // FIX: Clean bio field if it contains interface code
-      let cleanBio = profileData.bio || '';
-      if (cleanBio.includes('interface ProfileData') || cleanBio.includes('export interface')) {
-        cleanBio = ''; // Reset bio if it contains code
-      }
-
-      setFormData({
-        name: profileData.name,
-        bio: cleanBio, // Use cleaned bio
-        location: profileData.location || '',
-        phone: profileData.phone || '',
-        website: profileData.website || '',
-        dateOfBirth: profileData.dateOfBirth ? formatDateForInput(profileData.dateOfBirth) : '',
-        gender: profileData.gender || 'prefer-not-to-say',
-        skills: profileData.skills,
-        socialLinks: {
-          linkedin: profileData.socialLinks?.linkedin || '',
-          github: profileData.socialLinks?.github || '',
-          tiktok: profileData.socialLinks?.tiktok || '',
-          telegram: profileData.socialLinks?.telegram || '',
-          twitter: profileData.socialLinks?.twitter || ''
-        },
-        freelancerProfile: {
-          headline: freelancerProfile?.headline || '',
-          hourlyRate: freelancerProfile?.hourlyRate || 0,
-          availability: (freelancerProfile?.availability as 'available' | 'not-available' | 'part-time') || 'available',
-          experienceLevel: (freelancerProfile?.experienceLevel as 'entry' | 'intermediate' | 'expert') || 'intermediate',
-          englishProficiency: (freelancerProfile?.englishProficiency as 'basic' | 'conversational' | 'fluent' | 'native') || 'fluent',
-          timezone: freelancerProfile?.timezone || '',
-          specialization: freelancerProfile?.specialization || []
-        }
-      });
-    } catch (error) {
-      console.error('Failed to load profile:', error);
+      // Set minimal data for rendering
+      const safeProfile = profileService.createSafeProfile();
+      setProfile(safeProfile);
+      setRoleSpecificData(null);
+      setFreelancerProfile(null);
     } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // FreelancerProfile.tsx - UPDATED handleSave function
-  const handleSave = async () => {
-    try {
-      setIsSaving(true);
-
-      // Format date for backend
-      const formattedDateOfBirth = formData.dateOfBirth
-        ? new Date(formData.dateOfBirth).toISOString()
-        : undefined;
-
-      const saveData: ProfileData = {
-        name: formData.name,
-        bio: formData.bio,
-        location: formData.location,
-        phone: formData.phone,
-        website: formData.website,
-        dateOfBirth: formattedDateOfBirth,
-        gender: formData.gender,
-        skills: formData.skills,
-        socialLinks: formData.socialLinks,
-        freelancerProfile: {
-          headline: formData.freelancerProfile?.headline,
-          hourlyRate: formData.freelancerProfile?.hourlyRate,
-          availability: formData.freelancerProfile?.availability,
-          experienceLevel: formData.freelancerProfile?.experienceLevel,
-          englishProficiency: formData.freelancerProfile?.englishProficiency,
-          timezone: formData.freelancerProfile?.timezone,
-          specialization: formData.freelancerProfile?.specialization
-        }
-      };
-
-      console.log('💾 Saving profile data:', saveData);
-
-      const response = await freelancerService.updateProfile(saveData);
-
-      console.log('✅ Profile saved successfully:', response);
-
-      setProfile(response.profile);
-      setIsEditing(false);
-    } catch (error: any) {
-      console.error('❌ Failed to update profile:', error);
-    } finally {
-      setIsSaving(false);
+      setLoading(false);
     }
   };
 
   const handleAvatarUpload = async (file: File) => {
     try {
-      await freelancerService.uploadAvatar(file);
-      await loadProfile();
-    } catch (error) {
-      console.error('Failed to upload avatar:', error);
+      setIsUploading(prev => ({ ...prev, avatar: true }));
+      const validation = profileService.validateAvatarFile(file);
+      if (!validation.valid) {
+        toast.error(validation.error || 'Invalid file');
+        return;
+      }
+
+      const result = await profileService.uploadAvatar(file);
+      setRefreshKey(prev => prev + 1);
+      toast.success('Profile picture updated successfully!');
+
+      // Refresh profile data
+      await fetchFreelancerData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to upload profile picture');
+      console.error('Avatar upload error:', error);
+    } finally {
+      setIsUploading(prev => ({ ...prev, avatar: false }));
     }
   };
 
-  const handleCertificationsUpdate = async (updatedCertifications: any[]) => {
-    setCertifications(updatedCertifications);
-    // Reload profile to get updated completion score
-    await loadProfile();
-  };
+  const handleCoverUpload = async (file: File) => {
+    try {
+      setIsUploading(prev => ({ ...prev, cover: true }));
+      const validation = profileService.validateCoverFile(file);
+      if (!validation.valid) {
+        toast.error(validation.error || 'Invalid file');
+        return;
+      }
 
-  const handleInputChange = (field: string, value: any) => {
-    if (field.startsWith('freelancerProfile.')) {
-      const profileField = field.replace('freelancerProfile.', '');
-      setFormData(prev => ({
-        ...prev,
-        freelancerProfile: {
-          ...prev.freelancerProfile!,
-          [profileField]: value
-        }
-      }));
-    } else if (field.startsWith('socialLinks.')) {
-      const socialField = field.replace('socialLinks.', '');
-      setFormData(prev => ({
-        ...prev,
-        socialLinks: {
-          ...prev.socialLinks!,
-          [socialField]: value
-        }
-      }));
-    } else {
-      setFormData(prev => ({ ...prev, [field]: value }));
+      const result = await profileService.uploadCoverPhoto(file);
+      setRefreshKey(prev => prev + 1);
+      toast.success('Cover photo updated successfully!');
+
+      // Refresh profile data
+      await fetchFreelancerData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to upload cover photo');
+      console.error('Cover upload error:', error);
+    } finally {
+      setIsUploading(prev => ({ ...prev, cover: false }));
     }
   };
 
-  const handleAvailabilityChange = (value: string) => {
-    if (value === 'available' || value === 'not-available' || value === 'part-time') {
-      handleInputChange('freelancerProfile.availability', value);
-    }
+  const handleEditProfile = () => {
+    window.location.href = '/dashboard/candidate/social/profile/edit';
   };
 
-  const handleExperienceLevelChange = (value: string) => {
-    if (value === 'entry' || value === 'intermediate' || value === 'expert') {
-      handleInputChange('freelancerProfile.experienceLevel', value);
-    }
+  const handleFollow = (isFollowing: boolean) => {
+    console.log('Follow status changed:', isFollowing);
+    // Implement follow logic here
   };
 
-  const handleEnglishProficiencyChange = (value: string) => {
-    if (value === 'basic' || value === 'conversational' || value === 'fluent' || value === 'native') {
-      handleInputChange('freelancerProfile.englishProficiency', value);
-    }
-  };
-
-  const addSkill = (skillName: string) => {
-    if (skillName.trim()) {
-      const newSkill = {
-        name: skillName.trim(),
-        level: 'intermediate' as const,
-        yearsOfExperience: 1
-      };
-      handleInputChange('skills', [...formData.skills, newSkill]);
-    }
-  };
-
-  const removeSkill = (index: number) => {
-    const newSkills = formData.skills.filter((_, i) => i !== index);
-    handleInputChange('skills', newSkills);
-  };
-
-  // Helper function to get social platform icon
-  const getSocialIcon = (platform: string) => {
-    switch (platform) {
-      case 'linkedin':
-        return '🔗';
-      case 'github':
-        return '💻';
-      case 'tiktok':
-        return '🎵';
-      case 'telegram':
-        return '📱';
-      case 'twitter':
-        return '🐦';
+  const handleAction = (action: string, data?: any) => {
+    switch (action) {
+      case 'edit_profile':
+        handleEditProfile();
+        break;
+      case 'share_profile':
+        // Handle share logic
+        console.log('Sharing profile:', profile);
+        break;
+      case 'add_portfolio':
+        window.location.href = '/dashboard/candidate/social/portfolio/create';
+        break;
       default:
-        return '🔗';
+        console.log('Action:', action, data);
     }
   };
 
-  // Helper function to get social platform name
-  const getSocialPlatformName = (platform: string) => {
-    switch (platform) {
-      case 'linkedin':
-        return 'LinkedIn';
-      case 'github':
-        return 'GitHub';
-      case 'tiktok':
-        return 'TikTok';
-      case 'telegram':
-        return 'Telegram';
-      case 'twitter':
-        return 'Twitter/X';
+  // Helper function to convert freelancer experience to profile experience
+  const convertToExperience = (exp: any): Experience => {
+    return {
+      _id: exp._id || Date.now().toString(),
+      company: exp.company || '',
+      position: exp.position || '',
+      location: exp.location || '',
+      employmentType: exp.employmentType || 'full-time',
+      startDate: exp.startDate || new Date().toISOString(),
+      endDate: exp.endDate,
+      current: exp.current || false,
+      description: exp.description || '',
+      skills: Array.isArray(exp.skills) ? exp.skills : [],
+      achievements: Array.isArray(exp.achievements) ? exp.achievements : []
+    };
+  };
+
+  // Helper function to convert freelancer portfolio to profile portfolio
+  const convertToPortfolioProject = (item: any): PortfolioProject => {
+    return {
+      _id: item._id || Date.now().toString(),
+      title: item.title || '',
+      description: item.description || '',
+      mediaUrl: item.mediaUrl,
+      mediaUrls: Array.isArray(item.mediaUrls) ? item.mediaUrls :
+        (item.mediaUrl ? [item.mediaUrl] : []),
+      projectUrl: item.projectUrl,
+      category: item.category,
+      technologies: Array.isArray(item.technologies) ? item.technologies : [],
+      budget: item.budget,
+      budgetType: item.budgetType,
+      duration: item.duration,
+      client: item.client,
+      completionDate: item.completionDate,
+      teamSize: item.teamSize,
+      role: item.role,
+      featured: item.featured || false,
+      visibility: item.visibility || 'public',
+      createdAt: item.createdAt || new Date().toISOString(),
+      updatedAt: item.updatedAt || new Date().toISOString()
+    };
+  };
+
+  // Helper function to convert freelancer education to profile education
+  const convertToEducation = (edu: any): Education => {
+    return {
+      _id: edu._id || Date.now().toString(),
+      institution: edu.institution || '',
+      degree: edu.degree || '',
+      field: edu.field || '',
+      startDate: edu.startDate || new Date().toISOString(),
+      endDate: edu.endDate,
+      current: edu.current || false,
+      description: edu.description || '',
+      grade: edu.grade
+    };
+  };
+
+  // Helper function to convert freelancer certification to profile certification
+  const convertToCertification = (cert: any): Certification => {
+    return {
+      _id: cert._id || Date.now().toString(),
+      name: cert.name || '',
+      issuer: cert.issuer || '',
+      issueDate: cert.issueDate || new Date().toISOString(),
+      expiryDate: cert.expiryDate,
+      credentialId: cert.credentialId,
+      credentialUrl: cert.credentialUrl,
+      description: cert.description
+    };
+  };
+
+  const getEnhancedProfile = (): EnhancedProfile => {
+    if (!profile) return profileService.createSafeProfile() as EnhancedProfile;
+
+    // Convert freelancer data to profile format
+    const freelancerSkills = freelancerProfile?.skills?.map(skill =>
+      typeof skill === 'string' ? skill : skill.name
+    ) || [];
+
+    const roleSpecificSkills = roleSpecificData?.skills || [];
+    const profileSkills = profile.roleSpecific.skills || [];
+
+    // Combine skills from all sources
+    const combinedSkills = [...new Set([
+      ...freelancerSkills,
+      ...roleSpecificSkills,
+      ...profileSkills
+    ])];
+
+    // Convert experience from all sources
+    const freelancerExp = freelancerProfile?.experience?.map(convertToExperience) || [];
+    const roleSpecificExp = (roleSpecificData?.experience || []).map(convertToExperience);
+    const profileExp = profile.roleSpecific.experience || [];
+    const combinedExperience = [...freelancerExp, ...roleSpecificExp, ...profileExp];
+
+    // Convert education from all sources
+    const freelancerEdu = freelancerProfile?.education?.map(convertToEducation) || [];
+    const roleSpecificEdu = (roleSpecificData?.education || []).map(convertToEducation);
+    const profileEdu = profile.roleSpecific.education || [];
+    const combinedEducation = [...freelancerEdu, ...roleSpecificEdu, ...profileEdu];
+
+    // Convert certifications from all sources
+    const freelancerCerts = freelancerProfile?.certifications?.map(convertToCertification) || [];
+    const roleSpecificCerts = (roleSpecificData?.certifications || []).map(convertToCertification);
+    const profileCerts = profile.roleSpecific.certifications || [];
+    const combinedCertifications = [...freelancerCerts, ...roleSpecificCerts, ...profileCerts];
+
+    // Convert portfolio from all sources
+    const freelancerPortfolio = freelancerProfile?.portfolio?.map(convertToPortfolioProject) || [];
+    const roleSpecificPortfolio = (roleSpecificData?.portfolio || []).map(convertToPortfolioProject);
+    const profilePortfolio = profile.roleSpecific.portfolio || [];
+    const combinedPortfolio = [...freelancerPortfolio, ...roleSpecificPortfolio, ...profilePortfolio];
+
+    return {
+      ...profile,
+      headline: freelancerProfile?.freelancerProfile?.headline ||
+        roleSpecificData?.headline ||
+        profile.headline,
+      bio: freelancerProfile?.bio ||
+        roleSpecificData?.bio ||
+        profile.bio,
+      location: freelancerProfile?.location ||
+        roleSpecificData?.location ||
+        profile.location,
+      phone: freelancerProfile?.phone ||
+        roleSpecificData?.phone ||
+        profile.phone,
+      website: freelancerProfile?.website ||
+        roleSpecificData?.website ||
+        profile.website,
+      roleSpecific: {
+        ...profile.roleSpecific,
+        skills: combinedSkills,
+        education: combinedEducation,
+        experience: combinedExperience,
+        certifications: combinedCertifications,
+        portfolio: combinedPortfolio,
+        companyInfo: profile.roleSpecific.companyInfo,
+        freelancerProfile: freelancerProfile?.freelancerProfile ? {
+          hourlyRate: freelancerProfile.freelancerProfile.hourlyRate,
+          availability: freelancerProfile.freelancerProfile.availability,
+          experienceLevel: freelancerProfile.freelancerProfile.experienceLevel,
+          englishProficiency: freelancerProfile.freelancerProfile.englishProficiency,
+          timezone: freelancerProfile.freelancerProfile.timezone,
+          specialization: freelancerProfile.freelancerProfile.specialization,
+          profileCompletion: freelancerProfile.freelancerProfile.profileCompletion,
+          totalEarnings: freelancerProfile.freelancerProfile.totalEarnings,
+          successRate: freelancerProfile.freelancerProfile.successRate,
+          ratings: freelancerProfile.freelancerProfile.ratings,
+          profileViews: freelancerProfile.freelancerProfile.profileViews
+        } : undefined
+      }
+    } as EnhancedProfile;
+  };
+
+  const getFreelancerSpecificData = () => {
+    const fp = freelancerProfile?.freelancerProfile;
+
+    return {
+      hourlyRate: fp?.hourlyRate ? `$${fp.hourlyRate}/hr` : 'Not specified',
+      availability: fp?.availability?.replace('-', ' ') || 'Not specified',
+      experienceLevel: fp?.experienceLevel ?
+        fp.experienceLevel.charAt(0).toUpperCase() +
+        fp.experienceLevel.slice(1) : 'Not specified',
+      englishProficiency: fp?.englishProficiency ?
+        fp.englishProficiency.charAt(0).toUpperCase() +
+        fp.englishProficiency.slice(1) : 'Not specified',
+      timezone: fp?.timezone || 'Not specified',
+      specialization: fp?.specialization || []
+    };
+  };
+
+  const calculateAge = (dateOfBirth?: string): number | null => {
+    if (!dateOfBirth) return null;
+    try {
+      const birthDate = new Date(dateOfBirth);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      return age;
+    } catch {
+      return null;
+    }
+  };
+
+  const getGenderLabel = (gender?: string): string => {
+    const labels: Record<string, string> = {
+      'male': 'Male',
+      'female': 'Female',
+      'other': 'Other',
+      'prefer-not-to-say': 'Prefer not to say'
+    };
+    return gender ? labels[gender] || gender : 'Not specified';
+  };
+
+  const getOptimizedAvatarUrl = (profile: Profile | null): string => {
+    if (!profile) return profileService.getPlaceholderAvatar('User');
+
+    if (profile.avatar?.secure_url) {
+      return profileService.getOptimizedAvatarUrl(profile.avatar, 'large');
+    }
+    return profile.user.avatar || profileService.getPlaceholderAvatar(profile.user.name);
+  };
+
+  const getOptimizedCoverUrl = (profile: Profile | null): string => {
+    if (!profile) return '';
+
+    if (profile.cover?.secure_url) {
+      return profileService.getOptimizedCoverUrl(profile.cover);
+    }
+    return '';
+  };
+
+  const renderTabContent = () => {
+    const enhancedProfile = getEnhancedProfile();
+    const freelancerData = getFreelancerSpecificData();
+    const age = calculateAge(enhancedProfile.user.dateOfBirth || freelancerProfile?.dateOfBirth);
+    const isOwnProfile = true;
+
+    switch (activeTab) {
+      case 'overview':
+        return (
+          <div className="space-y-8">
+            {/* Profile Info Section */}
+            <ProfileInfoCard
+              profile={enhancedProfile}
+              variant="glass"
+              showActions={true}
+              showStats={true}
+              showAnalytics={false}
+              isOwnProfile={isOwnProfile}
+              onFollowChange={handleFollow}
+            />
+
+            {/* Freelancer Stats */}
+            {freelancerStats && (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                {[
+                  { label: 'Job Success', value: `${freelancerStats.jobSuccessScore}%`, icon: <TrendingUp className="w-4 h-4" />, color: 'from-green-500 to-emerald-500' },
+                  { label: 'On Time', value: `${freelancerStats.onTimeDelivery}%`, icon: <Clock className="w-4 h-4" />, color: 'from-blue-500 to-cyan-500' },
+                  { label: 'Response Rate', value: `${freelancerStats.responseRate}%`, icon: <MessageSquare className="w-4 h-4" />, color: 'from-purple-500 to-pink-500' },
+                  { label: 'Total Earnings', value: `$${freelancerStats.totalEarnings.toLocaleString()}`, icon: <DollarSign className="w-4 h-4" />, color: 'from-amber-500 to-orange-500' },
+                  { label: 'Rating', value: freelancerStats.averageRating.toFixed(1), icon: <Star className="w-4 h-4" />, color: 'from-red-500 to-rose-500' },
+                ].map((stat, index) => (
+                  <Card key={index} className="backdrop-blur-lg bg-white p-4 text-center border border-gray-200 hover:scale-105 transition-transform duration-300">
+                    <div className={`inline-flex items-center justify-center w-10 h-10 rounded-full mb-2 bg-gradient-to-br ${stat.color}`}>
+                      {stat.icon}
+                    </div>
+                    <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
+                    <div className="text-xs text-gray-600">{stat.label}</div>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {/* Freelancer Details */}
+            <Card className="backdrop-blur-xl bg-gradient-to-b from-white to-gray-100 border border-gray-200 rounded-3xl p-8">
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500">
+                    <Briefcase className="w-6 h-6 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900">
+                    Freelancer Details
+                  </h3>
+                </div>
+                <Button variant="premium" onClick={handleEditProfile}>
+                  <Edit3 className="w-4 h-4 mr-2" />
+                  Edit Profile
+                </Button>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Professional Info */}
+                <div className="space-y-4">
+                  <h4 className="font-bold text-gray-900 text-lg mb-4">Professional Information</h4>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-gray-100">
+                        <Briefcase className="w-4 h-4 text-gray-600" />
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600">Headline</div>
+                        <div className="font-medium text-gray-900">
+                          {enhancedProfile.headline || 'No headline set'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-gray-100">
+                        <DollarSign className="w-4 h-4 text-gray-600" />
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600">Hourly Rate</div>
+                        <div className="font-medium text-gray-900">
+                          {freelancerData.hourlyRate}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-gray-100">
+                        <Clock className="w-4 h-4 text-gray-600" />
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600">Availability</div>
+                        <div className="font-medium text-gray-900">
+                          {freelancerData.availability}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-gray-100">
+                        <Award className="w-4 h-4 text-gray-600" />
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600">Experience Level</div>
+                        <div className="font-medium text-gray-900">
+                          {freelancerData.experienceLevel}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Personal Info */}
+                <div className="space-y-4">
+                  <h4 className="font-bold text-gray-900 text-lg mb-4">Personal Information</h4>
+                  <div className="space-y-3">
+                    {enhancedProfile.location && (
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-gray-100">
+                          <MapPin className="w-4 h-4 text-gray-600" />
+                        </div>
+                        <div>
+                          <div className="text-sm text-gray-600">Location</div>
+                          <div className="font-medium text-gray-900">{enhancedProfile.location}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {age !== null && (
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-gray-100">
+                          <Calendar className="w-4 h-4 text-gray-600" />
+                        </div>
+                        <div>
+                          <div className="text-sm text-gray-600">Age</div>
+                          <div className="font-medium text-gray-900">{age} years</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {freelancerProfile?.gender && (
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-gray-100">
+                          <Users className="w-4 h-4 text-gray-600" />
+                        </div>
+                        <div>
+                          <div className="text-sm text-gray-600">Gender</div>
+                          <div className="font-medium text-gray-900">{getGenderLabel(freelancerProfile.gender)}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {enhancedProfile.phone && (
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-gray-100">
+                          <Phone className="w-4 h-4 text-gray-600" />
+                        </div>
+                        <div>
+                          <div className="text-sm text-gray-600">Phone</div>
+                          <div className="font-medium text-gray-900">{enhancedProfile.phone}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Skills */}
+              {enhancedProfile.roleSpecific.skills.length > 0 && (
+                <div className="mt-8 pt-8 border-t border-gray-200">
+                  <h4 className="font-bold text-gray-900 text-lg mb-4">Skills & Expertise</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {enhancedProfile.roleSpecific.skills.slice(0, 10).map((skill, index) => (
+                      <span
+                        key={index}
+                        className="px-4 py-2 backdrop-blur-md bg-amber-100 text-amber-800 rounded-xl text-sm border border-amber-200 hover:border-amber-500 hover:scale-105 transition-all duration-300"
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                    {enhancedProfile.roleSpecific.skills.length > 10 && (
+                      <span className="px-4 py-2 backdrop-blur-md bg-amber-100 text-amber-800 rounded-xl text-sm border border-amber-200">
+                        +{enhancedProfile.roleSpecific.skills.length - 10} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            {/* Portfolio Preview */}
+            {enhancedProfile.roleSpecific.portfolio.length > 0 && (
+              <div className="mt-8">
+                <FreelancerPortfolioDisplay
+                  portfolioItems={enhancedProfile.roleSpecific.portfolio.slice(0, 6)}
+                  freelancerName={enhancedProfile.user.name}
+                  showFullList={false}
+                  showStats={true}
+                />
+              </div>
+            )}
+
+            {/* Posts Preview */}
+            {profile?.user?._id && (
+              <Card className="backdrop-blur-xl bg-gradient-to-b from-white to-gray-100 border border-gray-200 rounded-3xl p-8">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500">
+                      <FileText className="w-6 h-6 text-white" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-gray-900">Recent Posts</h3>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => setActiveTab('posts')}
+                    className="group"
+                  >
+                    View All
+                    <TrendingUp className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                  </Button>
+                </div>
+
+                <ProfilePostsSection
+                  userId={profile.user._id}
+                  isOwnProfile={isOwnProfile}
+                  currentUserId={user?.id}
+                  limit={3}
+                  showLoadMore={false}
+                  variant="compact"
+                />
+              </Card>
+            )}
+          </div>
+        );
+
+      case 'about':
+        return <ProfileAboutSection profile={getEnhancedProfile()} />;
+
+      case 'posts':
+        return profile?.user?._id ? (
+          <div className="space-y-8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500">
+                  <FileText className="w-6 h-6 text-white" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900">Your Posts</h2>
+              </div>
+              <Button
+                onClick={() => window.location.href = '/create-post'}
+                variant="premium"
+              >
+                <Sparkles className="w-4 h-4 mr-2" />
+                Create Post
+              </Button>
+            </div>
+
+            <ProfilePostsSection
+              userId={profile.user._id}
+              isOwnProfile={true}
+              currentUserId={user?.id}
+              limit={10}
+              showLoadMore={true}
+            />
+          </div>
+        ) : null;
+
+      case 'network':
+        return profile?.user?._id ? (
+          <div className="space-y-8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500">
+                  <Users className="w-6 h-6 text-white" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900">Your Network</h2>
+              </div>
+            </div>
+
+            <ProfileConnectionsSection
+              userId={profile.user._id}
+              isOwnProfile={true}
+            />
+          </div>
+        ) : null;
+
+      case 'portfolio':
+        const enhancedProfileForPortfolio = getEnhancedProfile();
+        return (
+          <div className="space-y-8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500">
+                  <Briefcase className="w-6 h-6 text-white" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900">Portfolio</h2>
+              </div>
+              <Button
+                onClick={() => window.location.href = '/dashboard/candidate/social/portfolio/create'}
+                variant="premium"
+                className="bg-gradient-to-r from-amber-500 to-orange-500"
+              >
+                <PlusCircle className="w-4 h-4 mr-2" />
+                Add Project
+              </Button>
+            </div>
+
+            <FreelancerPortfolioDisplay
+              portfolioItems={enhancedProfileForPortfolio.roleSpecific.portfolio}
+              freelancerName={enhancedProfileForPortfolio.user.name}
+              showFullList={true}
+              showStats={true}
+            />
+          </div>
+        );
+
+      case 'analytics':
+        return (
+          <div className="space-y-8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500">
+                  <BarChart3 className="w-6 h-6 text-white" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900">Analytics</h2>
+              </div>
+            </div>
+
+            <ProfileSocialAnalytics
+              stats={profile?.socialStats}
+              variant="glass"
+              showTrends={true}
+              timeRange="monthly"
+            />
+
+            {freelancerStats && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="backdrop-blur-lg bg-white rounded-2xl p-6 border border-gray-200">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-3 rounded-lg bg-gradient-to-br from-green-500 to-emerald-500">
+                      <TrendingUp className="w-5 h-5 text-white" />
+                    </div>
+                    <h4 className="font-bold text-gray-900">Job Success Rate</h4>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="text-3xl font-bold text-gray-900">{freelancerStats.jobSuccessScore}%</div>
+                    <div className="text-sm text-gray-600">Completed successfully</div>
+                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-green-500 to-emerald-500" style={{ width: `${freelancerStats.jobSuccessScore}%` }} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="backdrop-blur-lg bg-white rounded-2xl p-6 border border-gray-200">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-3 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500">
+                      <Clock className="w-5 h-5 text-white" />
+                    </div>
+                    <h4 className="font-bold text-gray-900">On-Time Delivery</h4>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="text-3xl font-bold text-gray-900">{freelancerStats.onTimeDelivery}%</div>
+                    <div className="text-sm text-gray-600">Projects delivered on time</div>
+                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-500" style={{ width: `${freelancerStats.onTimeDelivery}%` }} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="backdrop-blur-lg bg-white rounded-2xl p-6 border border-gray-200">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-3 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500">
+                      <DollarSign className="w-5 h-5 text-white" />
+                    </div>
+                    <h4 className="font-bold text-gray-900">Total Earnings</h4>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="text-3xl font-bold text-gray-900">${freelancerStats.totalEarnings.toLocaleString()}</div>
+                    <div className="text-sm text-gray-600">Total revenue earned</div>
+                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 w-3/4" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+
       default:
-        return platform;
+        const defaultProfile = getEnhancedProfile();
+        return (
+          <ProfileTabContent
+            activeTab={activeTab}
+            userRole="freelancer"
+            profileType="freelancer"
+            isOwnProfile={true}
+            isPremium={profile?.premium?.isPremium || false}
+            profileData={defaultProfile}
+            socialStats={profile?.socialStats}
+          />
+        );
     }
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
-      <FreelancerLayout>
-        <div className="flex items-center justify-center min-h-96">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-        </div>
-      </FreelancerLayout>
+      <SocialDashboardLayout requiredRole="freelancer">
+        <RoleThemeProvider>
+          <div className="space-y-8">
+            {/* Header Skeleton */}
+            <div className="relative rounded-3xl overflow-hidden backdrop-blur-xl bg-gradient-to-b from-white to-gray-100 border border-gray-200 shadow-2xl">
+              <Skeleton className="h-72 bg-gray-200 animate-pulse" />
+              <div className="relative px-8 pb-8 -mt-12">
+                <div className="relative -top-12 left-8">
+                  <Skeleton className="w-36 h-36 rounded-full bg-gray-300 animate-pulse" />
+                </div>
+                <div className="mt-12 backdrop-blur-xl bg-white rounded-2xl p-6">
+                  <Skeleton className="h-8 bg-gray-200 rounded animate-pulse w-1/4 mb-4" />
+                  <Skeleton className="h-4 bg-gray-200 rounded animate-pulse w-1/2" />
+                </div>
+              </div>
+            </div>
+
+            {/* Content Skeleton */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 space-y-6">
+                {[...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-64 backdrop-blur-xl bg-gradient-to-b from-white to-gray-100 rounded-3xl p-8 border border-gray-200 animate-pulse" />
+                ))}
+              </div>
+            </div>
+          </div>
+        </RoleThemeProvider>
+      </SocialDashboardLayout>
+    );
+  }
+
+  if (error && !profile) {
+    return (
+      <SocialDashboardLayout requiredRole="freelancer">
+        <RoleThemeProvider>
+          <div className="text-center py-12">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-red-500 to-pink-500 flex items-center justify-center mx-auto mb-6">
+              <AlertCircle className="w-10 h-10 text-white" />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-3">Failed to Load Profile</h3>
+            <p className="text-gray-600 mb-6">{error}</p>
+            <Button
+              onClick={fetchFreelancerData}
+              variant="premium"
+              className="backdrop-blur-lg border-gray-300"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Try Again
+            </Button>
+          </div>
+        </RoleThemeProvider>
+      </SocialDashboardLayout>
     );
   }
 
   if (!profile) {
     return (
-      <FreelancerLayout>
-        <div className="flex items-center justify-center min-h-96">
-          <div className="text-center">
-            <div className="text-primary text-6xl mb-4">⚠️</div>
-            <h2 className="text-2xl font-bold text-foreground mb-2">
-              Profile Not Found
-            </h2>
-            <p className="text-muted-foreground">Unable to load your profile. Please try again.</p>
-          </div>
-        </div>
-      </FreelancerLayout>
+      <SocialDashboardLayout requiredRole="freelancer">
+        <RoleThemeProvider>
+          <Card className="backdrop-blur-xl bg-gradient-to-b from-white to-gray-100 border border-gray-200 rounded-3xl p-8 text-center">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center mx-auto mb-6">
+              <Briefcase className="w-10 h-10 text-white" />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-3">Complete Your Freelancer Profile</h3>
+            <p className="text-gray-600 max-w-md mx-auto mb-8">
+              Set up your freelancer profile to showcase your skills, portfolio, and start attracting clients.
+            </p>
+            <Button
+              onClick={handleEditProfile}
+              variant="premium"
+              className="bg-gradient-to-r from-amber-500 to-orange-500"
+            >
+              <PlusCircle className="w-4 h-4 mr-2" />
+              Complete Profile
+            </Button>
+          </Card>
+        </RoleThemeProvider>
+      </SocialDashboardLayout>
     );
   }
 
-  const age = formData.dateOfBirth ? calculateAge(formData.dateOfBirth) : null;
+  const isOwnProfile = true;
+  const enhancedProfile = getEnhancedProfile();
+  const avatarUrl = getOptimizedAvatarUrl(profile);
+  const coverUrl = getOptimizedCoverUrl(profile);
+
+  const getAvatarWithCacheBust = () => {
+    if (!avatarUrl) return profileService.getPlaceholderAvatar(profile.user.name);
+    const separator = avatarUrl.includes('?') ? '&' : '?';
+    return `${avatarUrl}${separator}_t=${refreshKey}`;
+  };
+
+  const getCoverWithCacheBust = () => {
+    if (!coverUrl) return '';
+    const separator = coverUrl.includes('?') ? '&' : '?';
+    return `${coverUrl}${separator}_t=${refreshKey}`;
+  };
 
   return (
-    <FreelancerLayout>
-      <div className="min-h-screen bg-background">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground py-8">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-center space-x-6">
-                <div className="relative">
-                  <div className="w-24 h-24 rounded-full bg-primary-foreground/20 flex items-center justify-center overflow-hidden border-2 border-primary-foreground shadow-xl">
-                    {profile.avatar ? (
-                      <img
-                        src={profile.avatar}
-                        alt={profile.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <UserCircleIcon className="w-12 h-12 text-primary-foreground" />
-                    )}
-                  </div>
-                  {isEditing && (
-                    <label className="absolute bottom-0 right-0 bg-primary-foreground text-primary p-2 rounded-full shadow-lg cursor-pointer hover:bg-primary-foreground/90 transition-colors">
-                      <CameraIcon className="w-4 h-4" />
-                      <input
-                        type="file"
-                        className="hidden"
-                        accept="image/*"
-                        onChange={(e) => e.target.files?.[0] && handleAvatarUpload(e.target.files[0])}
-                      />
-                    </label>
-                  )}
-                </div>
+    <SocialDashboardLayout requiredRole="freelancer">
+      <RoleThemeProvider>
+        <div className="space-y-8">
+          {/* Profile Header */}
+          <ProfileHeader
+            profile={enhancedProfile}
+            isOwnProfile={isOwnProfile}
+            onFollow={handleFollow}
+            onRefresh={fetchFreelancerData}
+            onEditProfile={handleEditProfile}
+            onAvatarUpload={handleAvatarUpload}
+            onCoverUpload={handleCoverUpload}
+          />
 
-                <div>
-                  <h1 className="text-3xl font-bold">{profile.name}</h1>
-                  {profile.freelancerProfile?.headline && (
-                    <p className="text-primary-foreground/80 text-lg mt-1">
-                      {profile.freelancerProfile.headline}
-                    </p>
-                  )}
+          {/* Profile Tabs */}
+          <ProfileTabs
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            userRole="freelancer"
+            profileType="freelancer"
+            variant="glass"
+            showIcons={true}
+            isOwnProfile={isOwnProfile}
+            isPremium={profile?.premium?.isPremium || false}
+            stats={{
+              posts: profile?.socialStats?.postCount || 0,
+              connections: profile?.socialStats?.connectionCount || 0,
+              followers: profile?.socialStats?.followerCount || 0,
+              following: profile?.socialStats?.followingCount || 0,
+              portfolio: enhancedProfile.roleSpecific.portfolio.length,
+              profileViews: profile?.socialStats?.profileViews || 0,
+              applications: 0,
+              messages: 0,
+              achievements: 0,
+              products: 0
+            }}
+          />
 
-                  <div className="flex items-center space-x-4 mt-3">
-                    {profile.verificationStatus === 'full' && (
-                      <div className="flex items-center bg-primary-foreground/20 px-3 py-1 rounded-full text-sm font-medium">
-                        <CheckBadgeIcon className="w-4 h-4 mr-1" />
-                        Verified
-                      </div>
-                    )}
-                    <div className="flex items-center">
-                      <StarIcon className="w-4 h-4 mr-1 text-amber-300" />
-                      {profile.freelancerProfile?.ratings?.average.toFixed(1) || '0.0'}
-                      <span className="text-primary-foreground/80 ml-1">
-                        ({profile.freelancerProfile?.ratings?.count || 0} reviews)
-                      </span>
-                    </div>
-                    {/* Age display */}
-                    {age && (
-                      <div className="flex items-center bg-primary-foreground/20 px-3 py-1 rounded-full text-sm font-medium">
-                        <CalendarIcon className="w-4 h-4 mr-1" />
-                        {age} years old
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+          {/* Tab Content with Transition */}
+          <TabTransitionWrapper activeTab={activeTab}>
+            {renderTabContent()}
+          </TabTransitionWrapper>
 
-              <div className="mt-6 lg:mt-0">
-                <button
-                  onClick={() => isEditing ? setIsEditing(false) : setIsEditing(true)}
-                  className="flex items-center px-6 py-3 bg-primary-foreground text-primary rounded-xl font-semibold hover:bg-primary-foreground/90 transition-all duration-200 shadow-lg"
-                >
-                  <PencilIcon className="w-5 h-5 mr-2" />
-                  {isEditing ? 'Cancel Editing' : 'Edit Profile'}
-                </button>
-              </div>
+          {/* Action Buttons */}
+          {isOwnProfile && (
+            <div className="fixed bottom-8 right-8 z-50 flex flex-col gap-3">
+              <Button
+                onClick={() => window.location.href = '/dashboard/candidate/social/portfolio/create'}
+                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 shadow-xl hover:shadow-2xl transition-all duration-300 group"
+                size="lg"
+              >
+                <PlusCircle className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
+                Add Portfolio
+              </Button>
+              <Button
+                onClick={handleEditProfile}
+                variant="premium"
+                className="backdrop-blur-lg border-white shadow-xl hover:shadow-2xl transition-all duration-300 group"
+                size="lg"
+              >
+                <Edit3 className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform" />
+                Edit Profile
+              </Button>
             </div>
-          </div>
+          )}
         </div>
-
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 -mt-8">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            {/* Sidebar Navigation */}
-            <div className="lg:col-span-1">
-              <div className="bg-card rounded-2xl shadow-sm border border-border p-6 sticky top-8">
-                <nav className="space-y-2">
-                  {[
-                    { id: 'basic', name: 'Basic Information', icon: UserCircleIcon },
-                    { id: 'professional', name: 'Professional Details', icon: BriefcaseIcon },
-                    { id: 'skills', name: 'Skills & Expertise', icon: StarIcon },
-                    { id: 'certifications', name: 'Certifications', icon: AcademicCapIcon },
-                    { id: 'social', name: 'Social Links', icon: LinkIcon },
-                    { id: 'contact', name: 'Contact Info', icon: EnvelopeIcon }
-                  ].map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => setActiveSection(item.id)}
-                      className={`w-full flex items-center px-4 py-3 rounded-xl text-left transition-all duration-200 ${activeSection === item.id
-                          ? 'bg-primary/10 text-primary border border-primary/20'
-                          : 'text-muted-foreground hover:bg-accent'
-                        }`}
-                    >
-                      <item.icon className={`w-5 h-5 mr-3 ${activeSection === item.id ? 'text-primary' : 'text-muted-foreground'
-                        }`} />
-                      <span className="font-medium">{item.name}</span>
-                    </button>
-                  ))}
-                </nav>
-
-                {/* Contact Info Preview */}
-                <div className="mt-8 pt-6 border-t border-border">
-                  <h4 className="font-semibold text-foreground mb-4">Contact Information</h4>
-                  <div className="space-y-3">
-                    {profile.email && (
-                      <div className="flex items-center text-muted-foreground">
-                        <EnvelopeIcon className="w-4 h-4 mr-3 text-primary" />
-                        <span className="text-sm">{profile.email}</span>
-                      </div>
-                    )}
-                    {profile.location && (
-                      <div className="flex items-center text-muted-foreground">
-                        <MapPinIcon className="w-4 h-4 mr-3 text-primary" />
-                        <span className="text-sm">{profile.location}</span>
-                      </div>
-                    )}
-                    {profile.phone && (
-                      <div className="flex items-center text-muted-foreground">
-                        <PhoneIcon className="w-4 h-4 mr-3 text-primary" />
-                        <span className="text-sm">{profile.phone}</span>
-                      </div>
-                    )}
-                    {profile.website && (
-                      <div className="flex items-center text-muted-foreground">
-                        <GlobeAltIcon className="w-4 h-4 mr-3 text-primary" />
-                        <a href={profile.website} className="text-sm text-primary hover:text-primary/80">
-                          Visit Website
-                        </a>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Age and Gender Preview */}
-                  {(age || profile.gender) && (
-                    <div className="mt-6 pt-6 border-t border-border">
-                      <h4 className="font-semibold text-foreground mb-4">Personal Details</h4>
-                      <div className="space-y-2">
-                        {age && (
-                          <div className="flex items-center text-muted-foreground">
-                            <CalendarIcon className="w-4 h-4 mr-3 text-primary" />
-                            <span className="text-sm">{age} years old</span>
-                          </div>
-                        )}
-                        {profile.gender && profile.gender !== 'prefer-not-to-say' && (
-                          <div className="flex items-center text-muted-foreground">
-                            <UserIcon className="w-4 h-4 mr-3 text-primary" />
-                            <span className="text-sm capitalize">{profile.gender}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Social Links Preview */}
-                  {profile.socialLinks && Object.values(profile.socialLinks).some(link => link) && (
-                    <div className="mt-6 pt-6 border-t border-border">
-                      <h4 className="font-semibold text-foreground mb-4">Social Profiles</h4>
-                      <div className="space-y-2">
-                        {Object.entries(profile.socialLinks).map(([platform, url]) =>
-                          url && (
-                            <div key={platform} className="flex items-center text-muted-foreground">
-                              <span className="w-4 h-4 mr-3">{getSocialIcon(platform)}</span>
-                              <a
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-sm text-primary hover:text-primary/80"
-                              >
-                                {getSocialPlatformName(platform)}
-                              </a>
-                            </div>
-                          )
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Main Content */}
-            <div className="lg:col-span-3">
-              <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
-                {/* Form Content */}
-                <div className="p-8">
-                  {/* Basic Information */}
-                  {activeSection === 'basic' && (
-                    <div className="space-y-8">
-                      <div>
-                        <h3 className="text-2xl font-bold text-foreground mb-6 flex items-center">
-                          <UserCircleIcon className="w-6 h-6 mr-3 text-primary" />
-                          Basic Information
-                        </h3>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div>
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Full Name *
-                            </label>
-                            <input
-                              type="text"
-                              value={formData.name}
-                              onChange={(e) => handleInputChange('name', e.target.value)}
-                              disabled={!isEditing}
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Professional Headline
-                            </label>
-                            <input
-                              type="text"
-                              value={formData.freelancerProfile?.headline}
-                              onChange={(e) => handleInputChange('freelancerProfile.headline', e.target.value)}
-                              disabled={!isEditing}
-                              placeholder="e.g., Senior UI/UX Designer & Frontend Developer"
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
-                            />
-                          </div>
-
-                          {/* Date of Birth Field */}
-                          <div>
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Date of Birth
-                            </label>
-                            <div className="space-y-2">
-                              <input
-                                type="date"
-                                value={formData.dateOfBirth}
-                                onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
-                                disabled={!isEditing}
-                                max={new Date().toISOString().split('T')[0]}
-                                className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
-                              />
-                              {age && (
-                                <div className="text-sm text-muted-foreground flex items-center">
-                                  <CalendarIcon className="w-4 h-4 mr-2" />
-                                  Age: {age} years old
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Gender Field */}
-                          <div>
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Gender
-                            </label>
-                            <select
-                              value={formData.gender}
-                              onChange={(e) => handleInputChange('gender', e.target.value)}
-                              disabled={!isEditing}
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
-                            >
-                              <option value="male">Male</option>
-                              <option value="female">Female</option>
-                              <option value="other">Other</option>
-                              <option value="prefer-not-to-say">Prefer not to say</option>
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Location
-                            </label>
-                            <input
-                              type="text"
-                              value={formData.location}
-                              onChange={(e) => handleInputChange('location', e.target.value)}
-                              disabled={!isEditing}
-                              placeholder="City, Country"
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Phone Number
-                            </label>
-                            <input
-                              type="tel"
-                              value={formData.phone}
-                              onChange={(e) => handleInputChange('phone', e.target.value)}
-                              disabled={!isEditing}
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
-                            />
-                          </div>
-
-                          <div className="md:col-span-2">
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Professional Bio
-                            </label>
-                            <textarea
-                              value={formData.bio}
-                              onChange={(e) => handleInputChange('bio', e.target.value)}
-                              disabled={!isEditing}
-                              rows={6}
-                              placeholder="Tell clients about yourself, your experience, and what you specialize in. A great bio helps you stand out and attract the right projects..."
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
-                            />
-                            <div className="text-sm text-muted-foreground mt-2">
-                              {formData.bio?.length || 0}/2000 characters
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Professional Details */}
-                  {activeSection === 'professional' && (
-                    <div className="space-y-8">
-                      <div>
-                        <h3 className="text-2xl font-bold text-foreground mb-6 flex items-center">
-                          <BriefcaseIcon className="w-6 h-6 mr-3 text-primary" />
-                          Professional Details
-                        </h3>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div>
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Hourly Rate ($)
-                            </label>
-                            <div className="relative">
-                              <CurrencyDollarIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                              <input
-                                type="number"
-                                value={formData.freelancerProfile?.hourlyRate}
-                                onChange={(e) => handleInputChange('freelancerProfile.hourlyRate', Number(e.target.value))}
-                                disabled={!isEditing}
-                                className="w-full pl-10 pr-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
-                              />
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Experience Level
-                            </label>
-                            <select
-                              value={formData.freelancerProfile?.experienceLevel}
-                              onChange={(e) => handleExperienceLevelChange(e.target.value)}
-                              disabled={!isEditing}
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
-                            >
-                              <option value="entry">Entry Level (0-2 years)</option>
-                              <option value="intermediate">Intermediate (2-5 years)</option>
-                              <option value="expert">Expert (5+ years)</option>
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Availability
-                            </label>
-                            <select
-                              value={formData.freelancerProfile?.availability}
-                              onChange={(e) => handleAvailabilityChange(e.target.value)}
-                              disabled={!isEditing}
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
-                            >
-                              <option value="available">Available (Full-time)</option>
-                              <option value="part-time">Part Time</option>
-                              <option value="not-available">Not Available</option>
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              English Proficiency
-                            </label>
-                            <select
-                              value={formData.freelancerProfile?.englishProficiency}
-                              onChange={(e) => handleEnglishProficiencyChange(e.target.value)}
-                              disabled={!isEditing}
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
-                            >
-                              <option value="basic">Basic</option>
-                              <option value="conversational">Conversational</option>
-                              <option value="fluent">Fluent</option>
-                              <option value="native">Native/Bilingual</option>
-                            </select>
-                          </div>
-
-                          <div className="md:col-span-2">
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Timezone
-                            </label>
-                            <select
-                              value={formData.freelancerProfile?.timezone}
-                              onChange={(e) => handleInputChange('freelancerProfile.timezone', e.target.value)}
-                              disabled={!isEditing}
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
-                            >
-                              <option value="">Select your timezone</option>
-                              <option value="EST">Eastern Time (EST)</option>
-                              <option value="CST">Central Time (CST)</option>
-                              <option value="PST">Pacific Time (PST)</option>
-                              <option value="GMT">Greenwich Mean Time (GMT)</option>
-                              <option value="CET">Central European Time (CET)</option>
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Skills & Expertise */}
-                  {activeSection === 'skills' && (
-                    <div className="space-y-8">
-                      <div>
-                        <h3 className="text-2xl font-bold text-foreground mb-6 flex items-center">
-                          <StarIcon className="w-6 h-6 mr-3 text-primary" />
-                          Skills & Expertise
-                        </h3>
-
-                        <div className="mb-6">
-                          <label className="block text-sm font-semibold text-foreground mb-3">
-                            Your Skills ({formData.skills.length} added)
-                          </label>
-
-                          <div className="flex flex-wrap gap-3 mb-4">
-                            {formData.skills.map((skill, index) => (
-                              <div
-                                key={index}
-                                className="bg-primary/10 text-primary px-4 py-2 rounded-xl text-sm font-semibold border border-primary/20 flex items-center group"
-                              >
-                                {skill.name}
-                                {isEditing && (
-                                  <button
-                                    onClick={() => removeSkill(index)}
-                                    className="ml-2 text-primary hover:text-primary/80 transition-colors"
-                                  >
-                                    ×
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-
-                            {formData.skills.length === 0 && (
-                              <div className="text-muted-foreground italic">
-                                No skills added yet. Add your first skill to get started.
-                              </div>
-                            )}
-                          </div>
-
-                          {isEditing && (
-                            <div className="flex gap-3">
-                              <input
-                                type="text"
-                                placeholder="Add a skill (e.g., React, UI/UX Design, Python)"
-                                className="flex-1 px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-foreground placeholder:text-muted-foreground"
-                                onKeyPress={(e) => {
-                                  if (e.key === 'Enter') {
-                                    const target = e.target as HTMLInputElement;
-                                    addSkill(target.value);
-                                    target.value = '';
-                                  }
-                                }}
-                              />
-                              <button
-                                onClick={() => {
-                                  const input = document.querySelector('input[placeholder*="Add a skill"]') as HTMLInputElement;
-                                  if (input?.value) {
-                                    addSkill(input.value);
-                                    input.value = '';
-                                  }
-                                }}
-                                className="px-6 py-3 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors font-semibold"
-                              >
-                                Add Skill
-                              </button>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="bg-primary/10 rounded-xl p-6 border border-primary/20">
-                          <h4 className="font-semibold text-foreground mb-2 flex items-center">
-                            <StarIcon className="w-5 h-5 mr-2 text-primary" />
-                            Pro Tip
-                          </h4>
-                          <p className="text-foreground/80 text-sm">
-                            Add relevant skills that match your expertise. Clients often search for freelancers with specific skills.
-                            Include both technical and soft skills for better visibility.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Certifications */}
-                  {activeSection === 'certifications' && (
-                    <div className="space-y-8">
-                      <div>
-                        <h3 className="text-2xl font-bold text-foreground mb-6 flex items-center">
-                          <AcademicCapIcon className="w-6 h-6 mr-3 text-primary" />
-                          Professional Certifications
-                        </h3>
-
-                        <CertificationsList
-                          certifications={certifications}
-                          onCertificationsUpdate={handleCertificationsUpdate}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Social Links Section */}
-                  {activeSection === 'social' && (
-                    <div className="space-y-8">
-                      <div>
-                        <h3 className="text-2xl font-bold text-foreground mb-6 flex items-center">
-                          <LinkIcon className="w-6 h-6 mr-3 text-primary" />
-                          Social Links
-                        </h3>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div>
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              LinkedIn URL
-                            </label>
-                            <input
-                              type="url"
-                              value={formData.socialLinks?.linkedin || ''}
-                              onChange={(e) => handleInputChange('socialLinks.linkedin', e.target.value)}
-                              disabled={!isEditing}
-                              placeholder="https://linkedin.com/in/yourprofile"
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
-                            />
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Format: https://linkedin.com/in/username
-                            </p>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              GitHub URL
-                            </label>
-                            <input
-                              type="url"
-                              value={formData.socialLinks?.github || ''}
-                              onChange={(e) => handleInputChange('socialLinks.github', e.target.value)}
-                              disabled={!isEditing}
-                              placeholder="https://github.com/yourusername"
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
-                            />
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Format: https://github.com/username
-                            </p>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              TikTok URL
-                            </label>
-                            <input
-                              type="url"
-                              value={formData.socialLinks?.tiktok || ''}
-                              onChange={(e) => handleInputChange('socialLinks.tiktok', e.target.value)}
-                              disabled={!isEditing}
-                              placeholder="https://tiktok.com/@yourusername"
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
-                            />
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Format: https://tiktok.com/@username
-                            </p>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Telegram URL
-                            </label>
-                            <input
-                              type="url"
-                              value={formData.socialLinks?.telegram || ''}
-                              onChange={(e) => handleInputChange('socialLinks.telegram', e.target.value)}
-                              disabled={!isEditing}
-                              placeholder="https://t.me/yourusername"
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
-                            />
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Format: https://t.me/username
-                            </p>
-                          </div>
-
-                          <div className="md:col-span-2">
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Twitter/X URL
-                            </label>
-                            <input
-                              type="url"
-                              value={formData.socialLinks?.twitter || ''}
-                              onChange={(e) => handleInputChange('socialLinks.twitter', e.target.value)}
-                              disabled={!isEditing}
-                              placeholder="https://twitter.com/yourusername or https://x.com/yourusername"
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
-                            />
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Format: https://twitter.com/username or https://x.com/username
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mt-6 bg-primary/10 rounded-xl p-6 border border-primary/20">
-                          <h4 className="font-semibold text-foreground mb-2 flex items-center">
-                            <LinkIcon className="w-5 h-5 mr-2 text-primary" />
-                            Pro Tip
-                          </h4>
-                          <p className="text-foreground/80 text-sm">
-                            Add your social profiles to help clients learn more about your work and professional background.
-                            Make sure your profiles are professional and up-to-date. Adding multiple social links improves your profile completeness.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Contact Information */}
-                  {activeSection === 'contact' && (
-                    <div className="space-y-8">
-                      <div>
-                        <h3 className="text-2xl font-bold text-foreground mb-6 flex items-center">
-                          <EnvelopeIcon className="w-6 h-6 mr-3 text-primary" />
-                          Contact Information
-                        </h3>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div className="md:col-span-2">
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Email Address
-                            </label>
-                            <div className="flex items-center px-4 py-3 bg-muted rounded-xl border border-input">
-                              <EnvelopeIcon className="w-5 h-5 text-muted-foreground mr-3" />
-                              <span className="text-muted-foreground">{profile.email}</span>
-                              <div className="ml-auto bg-primary/10 text-primary px-2 py-1 rounded text-xs font-medium">
-                                Primary
-                              </div>
-                            </div>
-                            <p className="text-sm text-muted-foreground mt-2">
-                              Your email address is used for account notifications and cannot be changed here.
-                            </p>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Phone Number
-                            </label>
-                            <input
-                              type="tel"
-                              value={formData.phone}
-                              onChange={(e) => handleInputChange('phone', e.target.value)}
-                              disabled={!isEditing}
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Website
-                            </label>
-                            <input
-                              type="url"
-                              value={formData.website}
-                              onChange={(e) => handleInputChange('website', e.target.value)}
-                              disabled={!isEditing}
-                              placeholder="https://yourportfolio.com"
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
-                            />
-                          </div>
-
-                          <div className="md:col-span-2">
-                            <label className="block text-sm font-semibold text-foreground mb-3">
-                              Location
-                            </label>
-                            <input
-                              type="text"
-                              value={formData.location}
-                              onChange={(e) => handleInputChange('location', e.target.value)}
-                              disabled={!isEditing}
-                              placeholder="City, Country"
-                              className="w-full px-4 py-3 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-muted transition-colors text-foreground placeholder:text-muted-foreground"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Save Button */}
-                {isEditing && (
-                  <div className="px-8 py-6 border-t border-border bg-muted/30">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Make sure to save your changes before leaving this page.
-                        </p>
-                      </div>
-                      <div className="flex space-x-4">
-                        <button
-                          onClick={() => setIsEditing(false)}
-                          className="px-6 py-3 bg-muted text-muted-foreground rounded-xl hover:bg-muted/80 transition-all duration-200 font-semibold"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleSave}
-                          disabled={isSaving}
-                          className="px-8 py-3 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-all duration-200 font-semibold disabled:opacity-50 shadow-lg hover:shadow-xl"
-                        >
-                          {isSaving ? (
-                            <div className="flex items-center">
-                              <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2"></div>
-                              Saving Changes...
-                            </div>
-                          ) : (
-                            'Save All Changes'
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </FreelancerLayout>
+      </RoleThemeProvider>
+    </SocialDashboardLayout>
   );
-};
-
-export default FreelancerProfile;
+}

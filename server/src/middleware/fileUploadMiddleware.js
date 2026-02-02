@@ -1,43 +1,19 @@
-// middleware/fileUploadMiddleware.js
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-let uuidv4;
+const { uploadConfig } = require('../config/uploads');
+const { v4: uuidv4 } = require('uuid');
 
-// Import uuid properly
-const initializeUUID = async () => {
-  const uuidModule = await import('uuid');
-  uuidv4 = uuidModule.v4;
-};
-
-// Ensure upload directories exist with proper permissions
-const createUploadDirs = () => {
-  const uploadDirs = {
-    portfolio: path.join(process.cwd(), 'public', 'uploads', 'portfolio'),
-    avatars: path.join(process.cwd(), 'public', 'uploads', 'avatars'),
-    'cover-photos': path.join(process.cwd(), 'public', 'uploads', 'cover-photos'),
-    'post-media': path.join(process.cwd(), 'public', 'uploads', 'post-media')
-  };
-
-  Object.entries(uploadDirs).forEach(([key, dirPath]) => {
-    if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true, mode: 0o755 });
-      console.log(`✅ Created upload directory: ${dirPath}`);
-    }
-  });
-
-  return uploadDirs;
-};
-
-const uploadDirs = createUploadDirs();
-
-// Initialize UUID
-initializeUUID().catch(console.error);
+/**
+ * FILE UPLOAD MIDDLEWARE
+ * For portfolio, avatar, cover photo, and post media uploads
+ */
 
 // Portfolio upload configuration
 const portfolioStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadDirs.portfolio);
+    const uploadPath = uploadConfig.getPath('portfolio');
+    cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
     const uniqueId = uuidv4();
@@ -78,7 +54,8 @@ const uploadPortfolio = multer({
 // Avatar upload configuration
 const avatarStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadDirs.avatars);
+    const uploadPath = uploadConfig.getPath('avatars');
+    cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
     const uniqueId = uuidv4();
@@ -115,7 +92,8 @@ const uploadAvatar = multer({
 // Cover photo upload configuration
 const coverPhotoStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadDirs['cover-photos']);
+    const uploadPath = uploadConfig.getPath('cover-photos');
+    cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
     const uniqueId = uuidv4();
@@ -152,7 +130,8 @@ const uploadCoverPhoto = multer({
 // Post media upload configuration
 const postMediaStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadDirs['post-media']);
+    const uploadPath = uploadConfig.getPath('post-media');
+    cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
     const uniqueId = uuidv4();
@@ -224,23 +203,20 @@ const handleUploadError = (err, req, res, next) => {
   next(err);
 };
 
-// Utility function to get file URL
+// Utility function to get file URL using centralized config
 const getFileUrl = (filename, type = 'portfolio') => {
-  const isProduction = process.env.NODE_ENV === 'production';
-  const baseUrl = isProduction 
-    ? 'https://getbananalink.com' 
-    : 'http://localhost:4000';
-  return `${baseUrl}/uploads/${type}/${filename}`;
+  return uploadConfig.getUrl(filename, type);
 };
 
-// Utility to delete file
-const deleteFile = (filePath) => {
-  const fullPath = path.join(process.cwd(), 'public', 'uploads', filePath);
-  if (fs.existsSync(fullPath)) {
-    fs.unlinkSync(fullPath);
-    return true;
-  }
-  return false;
+// Utility to delete file using centralized config
+const deleteFile = (filename, type = 'portfolio') => {
+  return uploadConfig.deleteFile(filename, type);
+};
+
+// Process uploaded file info
+const processFileInfo = (file, type = 'portfolio') => {
+  if (!file) return null;
+  return uploadConfig.generateFileInfo(file, type);
 };
 
 module.exports = {
@@ -250,5 +226,6 @@ module.exports = {
   uploadPostMedia,
   handleUploadError,
   getFileUrl,
-  deleteFile
+  deleteFile,
+  processFileInfo
 };

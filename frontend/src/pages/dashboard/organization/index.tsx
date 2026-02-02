@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import {
   Briefcase,
   Users,
@@ -81,8 +82,10 @@ interface OrganizationDashboardStats {
 const OrganizationDashboard: React.FC = () => {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState('overview');
   const [organizationData, setOrganizationData] = useState<Organization | null>(null);
+  const [shouldRedirectToProfile, setShouldRedirectToProfile] = useState(false);
 
   const { verificationData, loading: verificationLoading } = useVerification();
 
@@ -97,12 +100,21 @@ const OrganizationDashboard: React.FC = () => {
       try {
         const org = await organizationService.getMyOrganization();
         return org;
-      } catch (error) {
+      } catch (error: any) {
         console.error('[OrganizationDashboard] Profile API Error:', error);
-        return null;
+
+        // Check if error is about missing profile
+        if (error.message?.includes('Organization profile not found') ||
+          error.response?.data?.message?.includes('Organization profile not found')) {
+          // Set flag to redirect
+          setShouldRedirectToProfile(true);
+          return null;
+        }
+        throw error;
       }
     },
     enabled: isAuthenticated && user?.role === 'organization',
+    retry: false, // Don't retry if profile is missing
   });
 
   // Fetch organization jobs
@@ -117,12 +129,19 @@ const OrganizationDashboard: React.FC = () => {
       try {
         const response = await jobService.getOrganizationJobs();
         return response;
-      } catch (error) {
+      } catch (error: any) {
         console.error('[OrganizationDashboard] Jobs API Error:', error);
+
+        // Check if it's a profile not found error
+        if (error.message?.includes('Organization profile not found') ||
+          error.response?.data?.message?.includes('Organization profile not found')) {
+          setShouldRedirectToProfile(true);
+          return { data: [] };
+        }
         throw error;
       }
     },
-    enabled: isAuthenticated && user?.role === 'organization',
+    enabled: isAuthenticated && user?.role === 'organization' && !shouldRedirectToProfile,
   });
 
   // Fetch organization tenders
@@ -139,15 +158,34 @@ const OrganizationDashboard: React.FC = () => {
         return tenders;
       } catch (error: any) {
         console.error('[OrganizationDashboard] Tenders API Error:', error);
+
+        // Check if it's a profile not found error
+        if (error.message?.includes('Organization profile not found') ||
+          error.response?.data?.message?.includes('Organization profile not found')) {
+          setShouldRedirectToProfile(true);
+          return [];
+        }
         return [];
       }
     },
-    enabled: isAuthenticated && user?.role === 'organization',
+    enabled: isAuthenticated && user?.role === 'organization' && !shouldRedirectToProfile,
   });
+
+  // Handle redirect to profile page
+  useEffect(() => {
+    if (shouldRedirectToProfile) {
+      toast({
+        title: 'Profile Required',
+        description: 'Please complete your organization profile to continue.',
+        variant: 'destructive',
+      });
+      router.push('/dashboard/organization/profile');
+    }
+  }, [shouldRedirectToProfile, router, toast]);
 
   // Handle errors
   useEffect(() => {
-    if (orgError) {
+    if (orgError && !orgError.message?.includes('Organization profile not found')) {
       toast({
         title: 'Failed to Load Profile',
         description: 'Unable to load organization profile.',
@@ -157,7 +195,7 @@ const OrganizationDashboard: React.FC = () => {
   }, [orgError, toast]);
 
   useEffect(() => {
-    if (jobsError) {
+    if (jobsError && !jobsError.message?.includes('Organization profile not found')) {
       toast({
         title: 'Failed to Load Jobs',
         description: 'Unable to load job postings.',
@@ -167,7 +205,7 @@ const OrganizationDashboard: React.FC = () => {
   }, [jobsError, toast]);
 
   useEffect(() => {
-    if (tendersError) {
+    if (tendersError && !tendersError.message?.includes('Organization profile not found')) {
       toast({
         title: 'Failed to Load Tenders',
         description: 'Unable to load tenders.',
@@ -432,6 +470,20 @@ const OrganizationDashboard: React.FC = () => {
           <div className="text-center">
             <LoadingSpinner size="lg" />
             <p className="mt-4 text-gray-600 dark:text-gray-300">Loading your dashboard...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Show loading during redirect
+  if (shouldRedirectToProfile) {
+    return (
+      <DashboardLayout requiredRole="organization">
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <LoadingSpinner size="lg" />
+            <p className="mt-4 text-gray-600 dark:text-gray-300">Redirecting to profile setup...</p>
           </div>
         </div>
       </DashboardLayout>

@@ -4,9 +4,9 @@ import { useRouter } from 'next/router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { 
-  Eye, EyeOff, Loader2, Briefcase, ArrowRight, 
-  CheckCircle, Shield, Zap
+import {
+  Eye, EyeOff, Loader2, Briefcase, ArrowRight,
+  CheckCircle, Shield, Zap, User, Mail, Lock, Check
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -31,7 +31,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import OTPVerification from '@/components/auth/OTPVerification';
 import { SleekButton } from '@/components/ui/SleekButton';
-import { colorClasses } from '@/utils/color';
+import { colorClasses, colors } from '@/utils/color';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -55,6 +55,7 @@ export default function RegisterPage() {
   const [isHovered, setIsHovered] = useState(false);
   const [requiresVerification, setRequiresVerification] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const router = useRouter();
   const { register: registerUser, isLoading } = useAuth();
   const { toast } = useToast();
@@ -66,7 +67,7 @@ export default function RegisterPage() {
       email: '',
       password: '',
       confirmPassword: '',
-      role: undefined, // Don't auto-select any role
+      role: undefined,
     },
   });
 
@@ -81,7 +82,6 @@ export default function RegisterPage() {
 
   const onSubmit = async (values: RegisterFormValues) => {
     try {
-      // Validate that role is selected
       if (!values.role) {
         toast({
           title: 'Role Required',
@@ -92,8 +92,7 @@ export default function RegisterPage() {
       }
 
       const result = await registerUser(values);
-      
-      // Check if OTP verification is required
+
       if (result.data?.requiresVerification) {
         setVerificationEmail(values.email);
         setRequiresVerification(true);
@@ -118,8 +117,7 @@ export default function RegisterPage() {
 
     } catch (error: any) {
       console.error('Registration error:', error);
-      
-      // Handle specific error cases with toast
+
       if (error.message.includes('already exists')) {
         toast({
           title: 'Account Exists',
@@ -127,7 +125,6 @@ export default function RegisterPage() {
           variant: 'destructive',
         });
       } else if (error.message.includes('verification')) {
-        // This should be handled by the success case above, but just in case
         setVerificationEmail(form.getValues('email'));
         setRequiresVerification(true);
         toast({
@@ -152,9 +149,9 @@ export default function RegisterPage() {
 
   if (requiresVerification) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
-        <OTPVerification 
-          email={verificationEmail} 
+      <div className={`min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 ${colorClasses.bg.gray100} dark:${colorClasses.bg.darkNavy}`}>
+        <OTPVerification
+          email={verificationEmail}
           onBack={() => setRequiresVerification(false)}
         />
       </div>
@@ -162,12 +159,12 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className={`min-h-screen flex ${colorClasses.bg.gray100} dark:${colorClasses.bg.darkNavy}`}>
       {/* Left Side - Brand Showcase */}
       <div className={`hidden lg:flex lg:w-1/2 relative overflow-hidden ${colorClasses.bg.darkNavy}`}>
         <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:60px_60px]"></div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
-        
+
         <div className="relative z-10 flex flex-col justify-between items-center px-16 py-12">
           {/* Logo */}
           <div className="pl-12 flex items-center space-x-3">
@@ -183,19 +180,21 @@ export default function RegisterPage() {
           </div>
 
           {/* Content */}
-          <div className=" flex-1 flex pl-16 flex-col justify-center items-center text-center">
+          <div className="flex-1 flex pl-16 flex-col justify-center items-center text-center">
             <div className="mb-12">
-              <div className="inline-flex items-center bg-white/10 backdrop-blur-sm rounded-full px-4 py-2 mb-6 border border-white/20 shadow-sm">
-                <Zap className="w-4 h-4 mr-2 text-yellow-300" />
-                <span className="text-white text-sm font-medium">Fastest growing platform</span>
+              <div className={`inline-flex items-center backdrop-blur-sm rounded-full px-4 py-2 mb-6 border shadow-sm ${colorClasses.bg.darkNavy} ${colorClasses.border.gold}`}>
+                <Zap className="w-4 h-4 mr-2" style={{ color: colors.gold }} />
+                <span className={`text-sm font-medium ${colorClasses.text.white}`}>
+                  Fastest growing platform
+                </span>
               </div>
-              <h1 className="text-5xl font-bold text-white mb-6 leading-tight">
+              <h1 className={`text-5xl font-bold mb-6 leading-tight ${colorClasses.text.white}`}>
                 Launch Your <br />
-                <span className="bg-gradient-to-r from-cyan-400 to-yellow-300 bg-clip-text text-transparent">
+                <span className={colorClasses.text.gold}>
                   Career Journey
                 </span>
               </h1>
-              <p className="text-xl text-blue-100 mb-12 max-w-md leading-relaxed font-light">
+              <p className={`text-xl mb-12 max-w-md leading-relaxed font-light ${colorClasses.text.gray400}`}>
                 Join professionals who are shaping the future of work
               </p>
             </div>
@@ -203,32 +202,40 @@ export default function RegisterPage() {
             {/* Benefits */}
             <div className="space-y-6 mb-12 max-w-md">
               {[
-                { icon: CheckCircle, text: 'Empowering You To Work, Win and Shine', color: 'text-yellow-300' },
-                { icon: CheckCircle, text: 'Global network of companies', color: 'text-yellow-300' },
-                { icon: CheckCircle, text: 'Personalized career coaching', color: 'text-yellow-300' },
-                { icon: CheckCircle, text: 'Skill development resources', color: 'text-yellow-300' }
+                { icon: CheckCircle, text: 'Empowering You To Work, Win and Shine' },
+                { icon: CheckCircle, text: 'Global network of companies' },
+                { icon: CheckCircle, text: 'Personalized career coaching' },
+                { icon: CheckCircle, text: 'Skill development resources' }
               ].map((benefit, index) => (
                 <div key={index} className="flex items-center space-x-4 group">
-                  <benefit.icon className={`w-6 h-6 ${benefit.color} flex-shrink-0 group-hover:scale-110 transition-transform`} />
-                  <span className="text-lg text-white group-hover:text-yellow-200 transition-colors font-medium">{benefit.text}</span>
+                  <benefit.icon className={`w-6 h-6 ${colorClasses.text.gold} flex-shrink-0 group-hover:scale-110 transition-transform`} />
+                  <span className={`text-lg group-hover:${colorClasses.text.gold} transition-colors font-medium ${colorClasses.text.white}`}>
+                    {benefit.text}
+                  </span>
                 </div>
               ))}
             </div>
 
             {/* Security Badge */}
-            <div className="flex items-center space-x-2 bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 shadow-sm">
-              <Shield className="w-5 h-5 text-emerald-400" />
-              <span className="text-sm text-emerald-300 font-medium">Your data is always secure</span>
+            <div className={`flex items-center space-x-2 backdrop-blur-sm rounded-2xl p-4 border shadow-sm ${colorClasses.bg.darkNavy} ${colorClasses.border.teal}`}>
+              <Shield className="w-5 h-5" style={{ color: colors.teal }} />
+              <span className={`text-sm font-medium ${colorClasses.text.teal}`}>
+                Your data is always secure
+              </span>
             </div>
           </div>
 
           {/* Footer */}
           <div className="w-full">
             <div className="flex pt-9 justify-between items-center text-sm">
-              <p className="text-blue-300">© 2024 Banana. All rights reserved.</p>
+              <p className={colorClasses.text.gray400}>© 2024 Banana. All rights reserved.</p>
               <div className="flex space-x-4">
-                <span className="text-blue-300 hover:text-white cursor-pointer transition-colors font-medium">Privacy</span>
-                <span className="text-blue-300 hover:text-white cursor-pointer transition-colors font-medium">Terms</span>
+                <span className={`${colorClasses.text.gray400} hover:${colorClasses.text.white} cursor-pointer transition-colors font-medium`}>
+                  Privacy
+                </span>
+                <span className={`${colorClasses.text.gray400} hover:${colorClasses.text.white} cursor-pointer transition-colors font-medium`}>
+                  Terms
+                </span>
               </div>
             </div>
           </div>
@@ -238,9 +245,9 @@ export default function RegisterPage() {
       {/* Right Side - Register Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center px-4 sm:px-6 lg:px-16 py-12">
         <div className="w-full max-w-md">
-          {/* Mobile Logo - Improved to match desktop layout */}
+          {/* Mobile Logo */}
           <div className="lg:hidden flex justify-center items-center mt-4 mb-10">
-            <div 
+            <div
               className={`
                 rounded-2xl 
                 px-6 py-5 
@@ -250,16 +257,19 @@ export default function RegisterPage() {
                 flex items-center space-x-4
                 ${colorClasses.bg.white} 
                 ${colorClasses.border.gray100}
+                dark:${colorClasses.bg.darkNavy}
+                dark:${colorClasses.border.gray700}
               `}
             >
               {/* Logo Container */}
-              <div 
+              <div
                 className={`
                   w-16 h-16 
                   rounded-xl 
                   flex items-center justify-center 
                   shadow-md 
                   ${colorClasses.bg.white}
+                  dark:${colorClasses.bg.darkNavy}
                 `}
               >
                 <Image
@@ -273,7 +283,7 @@ export default function RegisterPage() {
 
               {/* Brand Text */}
               <div className="flex flex-col">
-                <span className={`text-2xl font-bold ${colorClasses.text.darkNavy}`}>
+                <span className={`text-2xl font-bold ${colorClasses.text.darkNavy} dark:${colorClasses.text.white}`}>
                   Banana
                 </span>
                 <span className={`text-sm font-medium ${colorClasses.text.gray400}`}>
@@ -283,12 +293,20 @@ export default function RegisterPage() {
             </div>
           </div>
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-3">Join Banana</h1>
-            <p className="text-gray-600 font-medium">Create your account and unlock new opportunities</p>
+            <h1 className={`text-3xl font-bold mb-3 ${colorClasses.text.darkNavy} dark:${colorClasses.text.white}`}>
+              Join Banana
+            </h1>
+            <p className={`font-medium ${colorClasses.text.gray800} dark:${colorClasses.text.gray300}`}>
+              Create your account and unlock new opportunities
+            </p>
           </div>
 
           {/* Form Container */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-xl border border-gray-200">
+          <div className={`
+            rounded-2xl p-8 shadow-xl border backdrop-blur-sm
+            ${colorClasses.bg.white} ${colorClasses.border.gray100}
+            dark:${colorClasses.bg.darkNavy} dark:${colorClasses.border.gray700}
+          `}>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 <FormField
@@ -296,15 +314,26 @@ export default function RegisterPage() {
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="font-semibold text-gray-900">Full Name</FormLabel>
+                      <FormLabel className={`font-semibold ${colorClasses.text.darkNavy} dark:${colorClasses.text.white}`}>
+                        Full Name
+                      </FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                            <User className={`w-5 h-5 ${colorClasses.text.gray400}`} />
                           </div>
                           <Input
                             placeholder="Enter your full name"
                             disabled={isLoading}
-                            className="pl-12 pr-4 py-3 h-12 rounded-xl border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200/50 transition-all duration-200 text-base bg-white/50 backdrop-blur-sm"
+                            className={`
+                              pl-12 pr-4 py-3 h-12 rounded-xl transition-all duration-200 
+                              text-base backdrop-blur-sm
+                              ${colorClasses.border.gray400} ${colorClasses.bg.white}
+                              dark:${colorClasses.border.gray700} dark:${colorClasses.bg.darkNavy}
+                              dark:${colorClasses.text.white}
+                              focus:${colorClasses.border.goldenMustard}
+                              dark:focus:${colorClasses.border.gold}
+                            `}
                             {...field}
                           />
                         </div>
@@ -319,17 +348,28 @@ export default function RegisterPage() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="font-semibold text-gray-900">Email Address</FormLabel>
+                      <FormLabel className={`font-semibold ${colorClasses.text.darkNavy} dark:${colorClasses.text.white}`}>
+                        Email Address
+                      </FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                            <Mail className={`w-5 h-5 ${colorClasses.text.gray400}`} />
                           </div>
                           <Input
                             placeholder="Enter your email address"
                             type="email"
                             autoComplete="email"
                             disabled={isLoading}
-                            className="pl-12 pr-4 py-3 h-12 rounded-xl border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200/50 transition-all duration-200 text-base bg-white/50 backdrop-blur-sm"
+                            className={`
+                              pl-12 pr-4 py-3 h-12 rounded-xl transition-all duration-200 
+                              text-base backdrop-blur-sm
+                              ${colorClasses.border.gray400} ${colorClasses.bg.white}
+                              dark:${colorClasses.border.gray700} dark:${colorClasses.bg.darkNavy}
+                              dark:${colorClasses.text.white}
+                              focus:${colorClasses.border.goldenMustard}
+                              dark:focus:${colorClasses.border.gold}
+                            `}
                             {...field}
                           />
                         </div>
@@ -344,17 +384,28 @@ export default function RegisterPage() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="font-semibold text-gray-900">Password</FormLabel>
+                      <FormLabel className={`font-semibold ${colorClasses.text.darkNavy} dark:${colorClasses.text.white}`}>
+                        Password
+                      </FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                            <Lock className={`w-5 h-5 ${colorClasses.text.gray400}`} />
                           </div>
                           <Input
                             placeholder="Create a strong password"
                             type={showPassword ? 'text' : 'password'}
                             autoComplete="new-password"
                             disabled={isLoading}
-                            className="pl-12 pr-12 py-3 h-12 rounded-xl border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200/50 transition-all duration-200 text-base bg-white/50 backdrop-blur-sm"
+                            className={`
+                              pl-12 pr-12 py-3 h-12 rounded-xl transition-all duration-200 
+                              text-base backdrop-blur-sm
+                              ${colorClasses.border.gray400} ${colorClasses.bg.white}
+                              dark:${colorClasses.border.gray700} dark:${colorClasses.bg.darkNavy}
+                              dark:${colorClasses.text.white}
+                              focus:${colorClasses.border.goldenMustard}
+                              dark:focus:${colorClasses.border.gold}
+                            `}
                             {...field}
                             onChange={(e) => {
                               field.onChange(e);
@@ -363,13 +414,13 @@ export default function RegisterPage() {
                           />
                           <button
                             type="button"
-                            className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-500 hover:text-gray-700 transition-colors"
+                            className="absolute inset-y-0 right-0 pr-4 flex items-center transition-colors"
                             onClick={() => setShowPassword(!showPassword)}
                           >
                             {showPassword ? (
-                              <EyeOff className="h-5 w-5" />
+                              <EyeOff className={`h-5 w-5 ${colorClasses.text.gray400}`} />
                             ) : (
-                              <Eye className="h-5 w-5" />
+                              <Eye className={`h-5 w-5 ${colorClasses.text.gray400}`} />
                             )}
                           </button>
                         </div>
@@ -380,23 +431,22 @@ export default function RegisterPage() {
                             {[1, 2, 3, 4].map((i) => (
                               <div
                                 key={i}
-                                className={`h-2 flex-1 rounded-full ${
-                                  i <= passwordStrength 
-                                    ? passwordStrength === 1 ? 'bg-red-400' 
-                                      : passwordStrength === 2 ? 'bg-orange-400' 
-                                      : passwordStrength === 3 ? 'bg-yellow-400' 
-                                      : 'bg-green-400'
-                                    : 'bg-gray-200'
-                                }`}
+                                className={`h-2 flex-1 rounded-full ${i <= passwordStrength
+                                    ? passwordStrength === 1 ? 'bg-red-400'
+                                      : passwordStrength === 2 ? 'bg-orange-400'
+                                        : passwordStrength === 3 ? 'bg-yellow-400'
+                                          : 'bg-green-400'
+                                    : `${colorClasses.bg.gray400} dark:${colorClasses.bg.gray800}`
+                                  }`}
                               />
                             ))}
                           </div>
-                          <p className="text-xs text-gray-600 font-medium">
-                            {passwordStrength === 0 ? 'Very weak' 
-                              : passwordStrength === 1 ? 'Weak' 
-                              : passwordStrength === 2 ? 'Fair' 
-                              : passwordStrength === 3 ? 'Good' 
-                              : 'Strong'}
+                          <p className={`text-xs font-medium ${colorClasses.text.gray800} dark:${colorClasses.text.gray300}`}>
+                            {passwordStrength === 0 ? 'Very weak'
+                              : passwordStrength === 1 ? 'Weak'
+                                : passwordStrength === 2 ? 'Fair'
+                                  : passwordStrength === 3 ? 'Good'
+                                    : 'Strong'}
                           </p>
                         </div>
                       )}
@@ -410,28 +460,39 @@ export default function RegisterPage() {
                   name="confirmPassword"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="font-semibold text-gray-900">Confirm Password</FormLabel>
+                      <FormLabel className={`font-semibold ${colorClasses.text.darkNavy} dark:${colorClasses.text.white}`}>
+                        Confirm Password
+                      </FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                            <Lock className={`w-5 h-5 ${colorClasses.text.gray400}`} />
                           </div>
                           <Input
                             placeholder="Confirm your password"
                             type={showConfirmPassword ? 'text' : 'password'}
                             autoComplete="new-password"
                             disabled={isLoading}
-                            className="pl-12 pr-12 py-3 h-12 rounded-xl border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200/50 transition-all duration-200 text-base bg-white/50 backdrop-blur-sm"
+                            className={`
+                              pl-12 pr-12 py-3 h-12 rounded-xl transition-all duration-200 
+                              text-base backdrop-blur-sm
+                              ${colorClasses.border.gray400} ${colorClasses.bg.white}
+                              dark:${colorClasses.border.gray700} dark:${colorClasses.bg.darkNavy}
+                              dark:${colorClasses.text.white}
+                              focus:${colorClasses.border.goldenMustard}
+                              dark:focus:${colorClasses.border.gold}
+                            `}
                             {...field}
                           />
                           <button
                             type="button"
-                            className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-500 hover:text-gray-700 transition-colors"
+                            className="absolute inset-y-0 right-0 pr-4 flex items-center transition-colors"
                             onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                           >
                             {showConfirmPassword ? (
-                              <EyeOff className="h-5 w-5" />
+                              <EyeOff className={`h-5 w-5 ${colorClasses.text.gray400}`} />
                             ) : (
-                              <Eye className="h-5 w-5" />
+                              <Eye className={`h-5 w-5 ${colorClasses.text.gray400}`} />
                             )}
                           </button>
                         </div>
@@ -446,31 +507,54 @@ export default function RegisterPage() {
                   name="role"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="font-semibold text-gray-900">
+                      <FormLabel className={`font-semibold ${colorClasses.text.darkNavy} dark:${colorClasses.text.white}`}>
                         I want to be a... <span className="text-red-500">*</span>
                       </FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
-                              <Briefcase className="h-5 w-5 text-gray-500" />
+                            <div className="absolute left-3 top-1/2 transform -translate-y-1/2 z-10">
+                              <Briefcase className={`h-5 w-5 ${colorClasses.text.gray400}`} />
                             </div>
-                            <SelectTrigger className="pl-12 pr-4 py-3 h-12 rounded-xl border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200/50 text-base bg-white/50 backdrop-blur-sm">
+                            <SelectTrigger className={`
+                              pl-12 pr-4 py-3 h-12 rounded-xl text-base backdrop-blur-sm
+                              ${colorClasses.border.gray400} ${colorClasses.bg.white}
+                              dark:${colorClasses.border.gray700} dark:${colorClasses.bg.darkNavy}
+                              dark:${colorClasses.text.white}
+                              focus:${colorClasses.border.goldenMustard}
+                              dark:focus:${colorClasses.border.gold}
+                            `}>
                               <SelectValue placeholder="Choose Your Role" />
                             </SelectTrigger>
                           </div>
                         </FormControl>
-                        <SelectContent className="bg-white border border-gray-200 rounded-xl shadow-lg">
-                          <SelectItem value="candidate" className="text-base py-3 hover:bg-blue-50 focus:bg-blue-50">
+                        <SelectContent className={`
+                          border rounded-xl shadow-lg
+                          ${colorClasses.bg.white} ${colorClasses.border.gray400}
+                          dark:${colorClasses.bg.darkNavy} dark:${colorClasses.border.gray700}
+                        `}>
+                          <SelectItem value="candidate" className={`
+                            text-base py-3 hover:${colorClasses.bg.gray100} focus:${colorClasses.bg.gray100}
+                            dark:hover:${colorClasses.bg.gray800} dark:focus:${colorClasses.bg.gray800}
+                          `}>
                             Candidate
                           </SelectItem>
-                          <SelectItem value="freelancer" className="text-base py-3 hover:bg-blue-50 focus:bg-blue-50">
+                          <SelectItem value="freelancer" className={`
+                            text-base py-3 hover:${colorClasses.bg.gray100} focus:${colorClasses.bg.gray100}
+                            dark:hover:${colorClasses.bg.gray800} dark:focus:${colorClasses.bg.gray800}
+                          `}>
                             Freelancer
                           </SelectItem>
-                          <SelectItem value="company" className="text-base py-3 hover:bg-blue-50 focus:bg-blue-50">
-                            Company 
+                          <SelectItem value="company" className={`
+                            text-base py-3 hover:${colorClasses.bg.gray100} focus:${colorClasses.bg.gray100}
+                            dark:hover:${colorClasses.bg.gray800} dark:focus:${colorClasses.bg.gray800}
+                          `}>
+                            Company
                           </SelectItem>
-                          <SelectItem value="organization" className="text-base py-3 hover:bg-blue-50 focus:bg-blue-50">
+                          <SelectItem value="organization" className={`
+                            text-base py-3 hover:${colorClasses.bg.gray100} focus:${colorClasses.bg.gray100}
+                            dark:hover:${colorClasses.bg.gray800} dark:focus:${colorClasses.bg.gray800}
+                          `}>
                             Organization
                           </SelectItem>
                         </SelectContent>
@@ -481,27 +565,47 @@ export default function RegisterPage() {
                 />
 
                 <div className="flex items-start space-x-3">
-                  <input
-                    type="checkbox"
-                    id="terms"
-                    className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 flex-shrink-0"
-                    required
-                  />
-                  <label htmlFor="terms" className="text-gray-700 text-sm font-medium">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      id="terms"
+                      checked={acceptedTerms}
+                      onChange={(e) => setAcceptedTerms(e.target.checked)}
+                      className="sr-only"
+                      required
+                    />
+                    <div className={`
+                      w-4 h-4 rounded border flex items-center justify-center transition-all duration-200 mt-1
+                      ${acceptedTerms ? `${colorClasses.bg.goldenMustard} ${colorClasses.border.goldenMustard}` : `${colorClasses.border.gray400} ${colorClasses.bg.white}`}
+                      dark:${colorClasses.border.gray700} dark:${colorClasses.bg.darkNavy}
+                    `}>
+                      {acceptedTerms && (
+                        <Check className="w-3 h-3 text-white" />
+                      )}
+                    </div>
+                  </div>
+                  <label htmlFor="terms" className={`text-sm font-medium ${colorClasses.text.gray800} dark:${colorClasses.text.gray300}`}>
                     I agree to the{' '}
-                    <Link href="/terms" className="text-blue-600 hover:text-blue-800 font-semibold">
+                    <Link href="/terms" className={`font-semibold ${colorClasses.text.blue} hover:${colorClasses.text.darkNavy}`}>
                       Terms of Service
                     </Link>{' '}
                     and{' '}
-                    <Link href="/privacy" className="text-blue-600 hover:text-blue-800 font-semibold">
+                    <Link href="/privacy" className={`font-semibold ${colorClasses.text.blue} hover:${colorClasses.text.darkNavy}`}>
                       Privacy Policy
                     </Link>
                   </label>
                 </div>
 
-                <SleekButton 
-                  type="submit" 
-                  className="w-full h-12 rounded-xl text-base font-semibold bg-gradient-to-r from-blue-600 to-purple-600 text-white transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-[1.02] transform"
+                <SleekButton
+                  type="submit"
+                  className={`
+                    w-full h-12 rounded-xl text-base font-semibold 
+                    transition-all duration-300 shadow-lg hover:shadow-xl 
+                    hover:scale-[1.02] transform
+                    ${colorClasses.bg.goldenMustard} 
+                    hover:${colorClasses.bg.gold}
+                    ${colorClasses.text.white}
+                  `}
                   disabled={isLoading}
                   onMouseEnter={() => setIsHovered(true)}
                   onMouseLeave={() => setIsHovered(false)}
@@ -523,11 +627,11 @@ export default function RegisterPage() {
           </div>
 
           <div className="mt-8 text-center">
-            <p className="text-gray-600 font-medium">
+            <p className={`font-medium ${colorClasses.text.gray800} dark:${colorClasses.text.gray300}`}>
               Already have an account?{' '}
               <Link
                 href="/login"
-                className="font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                className={`font-semibold transition-colors ${colorClasses.text.goldenMustard} hover:${colorClasses.text.gold}`}
               >
                 Sign in
               </Link>
@@ -536,7 +640,7 @@ export default function RegisterPage() {
 
           {/* Mobile Footer */}
           <div className="lg:hidden mt-12 text-center">
-            <p className="text-sm text-gray-500 font-medium">
+            <p className={`text-sm font-medium ${colorClasses.text.gray400}`}>
               © 2024 Banana. All rights reserved.
             </p>
           </div>

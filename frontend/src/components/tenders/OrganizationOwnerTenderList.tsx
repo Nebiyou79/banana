@@ -5,12 +5,12 @@ import { OrganizationOwnerTenderCard, OrganizationOwnerTenderCardSkeleton } from
 import { useOwnedTenders } from '@/hooks/useTenders';
 import { Button } from '@/components/social/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from '@/components/ui/Select';
 import {
   DropdownMenu,
@@ -94,23 +94,18 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
 
   const viewMode = externalViewMode || internalViewMode;
 
-  const { 
-    tenders, 
-    pagination, 
-    isLoading, 
-    error, 
-    refetch 
+  const {
+    tenders,
+    pagination,
+    isLoading,
+    error,
+    refetch
   } = useOwnedTenders({
     page: initialFilters.page || 1,
     limit: initialFilters.limit || 12,
     status: statusFilter !== 'all' ? statusFilter : undefined,
     tenderCategory: categoryFilter !== 'all' ? categoryFilter : undefined,
     workflowType: workflowFilter !== 'all' ? workflowFilter : undefined,
-    // procurementMethod: procurementFilter !== 'all' ? procurementFilter : undefined,
-    // cpoRequired: cpoFilter !== 'all' ? cpoFilter === 'true' : undefined,
-    // search: searchQuery || undefined,
-    // sortBy,
-    // sortOrder,
   });
 
   // Calculate stats
@@ -121,8 +116,8 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
     const totalApplications = tenders.reduce((sum, t) => sum + (t.metadata?.totalApplications || 0), 0);
     const freelance = tenders.filter(t => t.tenderCategory === 'freelance').length;
     const professional = tenders.filter(t => t.tenderCategory === 'professional').length;
-    const cpoRequired = tenders.filter(t => 
-      t.tenderCategory === 'professional' && 
+    const cpoRequired = tenders.filter(t =>
+      t.tenderCategory === 'professional' &&
       t.professionalSpecific?.cpoRequired
     ).length;
     const sealedBid = tenders.filter(t => t.workflowType === 'closed').length;
@@ -231,32 +226,32 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
   };
 
   const EmptyState = () => (
-    <Card className="col-span-full bg-white dark:bg-gray-900 border-2 border-dashed border-gray-200 dark:border-gray-800">
-      <div className="flex flex-col items-center justify-center py-16 px-4">
-        <div className="w-20 h-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-6">
-          <Building2 className="w-10 h-10 text-gray-400 dark:text-gray-500" />
+    <Card className="col-span-full bg-bg-primary dark:bg-bg-surface rounded-xl border-2 border-dashed border-border-secondary">
+      <div className="flex flex-col items-center justify-center py-12 px-4 sm:py-16 sm:px-6">
+        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-bg-secondary dark:bg-bg-surface flex items-center justify-center mb-6">
+          <Building2 className="w-10 h-10 sm:w-12 sm:h-12 text-text-muted" />
         </div>
-        <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3">
+        <h3 className="text-xl sm:text-2xl font-semibold text-text-primary mb-3 text-center">
           {activeFilters.size > 0 || searchQuery ? 'No Matching Tenders' : 'No Tenders Yet'}
         </h3>
-        <p className="text-gray-500 dark:text-gray-400 text-center mb-8 max-w-md">
+        <p className="text-text-muted text-center mb-8 max-w-md">
           {activeFilters.size > 0 || searchQuery
             ? 'No tenders match your current filters. Try adjusting your search criteria.'
             : 'Start by creating your first tender for institutional procurement.'}
         </p>
-        <div className="flex gap-4">
+        <div className="flex flex-col sm:flex-row gap-4">
           {(activeFilters.size > 0 || searchQuery) && (
-            <Button 
-              onClick={clearAllFilters} 
+            <Button
+              onClick={clearAllFilters}
               variant="outline"
               className="px-6"
             >
               Clear All Filters
             </Button>
           )}
-          <Button 
+          <Button
             onClick={handleCreateNew}
-            className="px-6 gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+            className="px-6 gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 dark:from-blue-700 dark:to-blue-800 dark:hover:from-blue-600 dark:hover:to-blue-700 text-white"
           >
             <Plus className="w-4 h-4" />
             Create First Tender
@@ -267,20 +262,20 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
   );
 
   return (
-    <div className={cn("space-y-8", className)}>
+    <div className={cn("space-y-6 sm:space-y-8", className)}>
       {/* Header */}
       {showHeader && (
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6">
           <div className="space-y-2">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">
               Organization Tenders
             </h1>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-text-secondary text-sm sm:text-base">
               Manage institutional procurement processes
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto">
             <Button
               variant="outline"
               size="sm"
@@ -313,28 +308,29 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Button 
-              onClick={handleCreateNew} 
-              className="gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+            <Button
+              onClick={handleCreateNew}
+              className="gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 dark:from-blue-700 dark:to-blue-800 dark:hover:from-blue-600 dark:hover:to-blue-700 text-white"
             >
               <Plus className="w-4 h-4" />
-              New Tender
+              <span className="hidden sm:inline">New Tender</span>
+              <span className="sm:hidden">New</span>
             </Button>
           </div>
         </div>
       )}
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow">
-          <div className="p-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <Card className="bg-gradient-to-br from-bg-primary to-bg-secondary dark:from-bg-surface dark:to-bg-primary border border-border-secondary shadow-sm hover:shadow-md transition-shadow">
+          <div className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Tenders</p>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
+                <p className="text-sm font-medium text-text-secondary">Total Tenders</p>
+                <p className="text-2xl sm:text-3xl font-bold text-text-primary mt-2">
                   {stats.total}
                 </p>
-                <div className="flex gap-2 mt-3">
+                <div className="flex flex-wrap gap-2 mt-3">
                   <Badge variant="outline" className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300">
                     {stats.freelance} Freelance
                   </Badge>
@@ -343,65 +339,65 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
                   </Badge>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                <Building2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                <Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
           </div>
         </Card>
 
-        <Card className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow">
-          <div className="p-6">
+        <Card className="bg-gradient-to-br from-bg-primary to-bg-secondary dark:from-bg-surface dark:to-bg-primary border border-border-secondary shadow-sm hover:shadow-md transition-shadow">
+          <div className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Tenders</p>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
+                <p className="text-sm font-medium text-text-secondary">Active Tenders</p>
+                <p className="text-2xl sm:text-3xl font-bold text-text-primary mt-2">
                   {stats.published}
                 </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">
+                <p className="text-sm text-text-muted mt-3">
                   {stats.endingSoon} ending soon
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 dark:text-green-400" />
               </div>
             </div>
           </div>
         </Card>
 
-        <Card className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow">
-          <div className="p-6">
+        <Card className="bg-gradient-to-br from-bg-primary to-bg-secondary dark:from-bg-surface dark:to-bg-primary border border-border-secondary shadow-sm hover:shadow-md transition-shadow">
+          <div className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Applications</p>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
+                <p className="text-sm font-medium text-text-secondary">Total Applications</p>
+                <p className="text-2xl sm:text-3xl font-bold text-text-primary mt-2">
                   {stats.totalApplications}
                 </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">
+                <p className="text-sm text-text-muted mt-3">
                   Across all tenders
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                <Users className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                <Users className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 dark:text-purple-400" />
               </div>
             </div>
           </div>
         </Card>
 
-        <Card className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow">
-          <div className="p-6">
+        <Card className="bg-gradient-to-br from-bg-primary to-bg-secondary dark:from-bg-surface dark:to-bg-primary border border-border-secondary shadow-sm hover:shadow-md transition-shadow">
+          <div className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">CPO Required</p>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
+                <p className="text-sm font-medium text-text-secondary">CPO Required</p>
+                <p className="text-2xl sm:text-3xl font-bold text-text-primary mt-2">
                   {stats.cpoRequired}
                 </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">
+                <p className="text-sm text-text-muted mt-3">
                   Professional tenders
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                <Shield className="w-6 h-6 text-red-600 dark:text-red-400" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-red-600 dark:text-red-400" />
               </div>
             </div>
           </div>
@@ -409,30 +405,30 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
       </div>
 
       {/* Main Content Area */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
-        <div className="p-6 border-b border-gray-200 dark:border-gray-800">
+      <div className="bg-bg-primary dark:bg-bg-surface rounded-xl border border-border-secondary shadow-sm">
+        <div className="p-4 sm:p-6 border-b border-border-secondary">
           <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-              <TabsList className="bg-gray-100 dark:bg-gray-800 p-1">
-                <TabsTrigger value="all" className="data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-900">
+              <TabsList className="bg-bg-secondary dark:bg-bg-surface p-1">
+                <TabsTrigger value="all" className="data-[state=active]:bg-bg-primary data-[state=active]:shadow-sm">
                   All Tenders
                   <Badge variant="secondary" className="ml-2">
                     {stats.total}
                   </Badge>
                 </TabsTrigger>
-                <TabsTrigger value="published" className="data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-900">
+                <TabsTrigger value="published" className="data-[state=active]:bg-bg-primary data-[state=active]:shadow-sm">
                   Active
                   <Badge variant="secondary" className="ml-2">
                     {stats.published}
                   </Badge>
                 </TabsTrigger>
-                <TabsTrigger value="draft" className="data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-900">
+                <TabsTrigger value="draft" className="data-[state=active]:bg-bg-primary data-[state=active]:shadow-sm">
                   Draft
                   <Badge variant="secondary" className="ml-2">
                     {stats.draft}
                   </Badge>
                 </TabsTrigger>
-                <TabsTrigger value="closed" className="data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-900">
+                <TabsTrigger value="closed" className="data-[state=active]:bg-bg-primary data-[state=active]:shadow-sm">
                   Closed
                   <Badge variant="secondary" className="ml-2">
                     {tenders.filter(t => ['closed', 'cancelled'].includes(t.status)).length}
@@ -442,7 +438,7 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
 
               {!externalViewMode && (
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-900">
+                  <div className="flex items-center border border-border-primary rounded-lg overflow-hidden bg-bg-secondary">
                     <Button
                       variant={internalViewMode === 'grid' ? 'secondary' : 'ghost'}
                       size="sm"
@@ -468,22 +464,22 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
               <div className="space-y-4">
                 <div className="flex flex-col lg:flex-row gap-4">
                   <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text-muted" />
                     <Input
                       placeholder="Search by title, reference number, or description..."
                       value={searchQuery}
                       onChange={handleSearch}
                       onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
-                      className="pl-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700"
+                      className="pl-10 bg-bg-primary border-border-primary"
                     />
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="sm" className="gap-2">
                           <SortAsc className="w-4 h-4" />
-                          Sort
+                          <span className="hidden sm:inline">Sort</span>
                           <ChevronDown className="w-4 h-4" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -497,7 +493,7 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
                               setSortBy(option.value);
                               refetch();
                             }}
-                            className={sortBy === option.value ? "bg-gray-100 dark:bg-gray-800" : ""}
+                            className={sortBy === option.value ? "bg-bg-secondary dark:bg-bg-surface" : ""}
                           >
                             {option.label}
                           </DropdownMenuItem>
@@ -509,7 +505,7 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
                       <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="sm" className="gap-2">
                           <Filter className="w-4 h-4" />
-                          Filters
+                          <span className="hidden sm:inline">Filters</span>
                           {activeFilters.size > 0 && (
                             <Badge className="ml-1 h-5 w-5 p-0 flex items-center justify-center">
                               {activeFilters.size}
@@ -522,7 +518,7 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
                         <DropdownMenuSeparator />
                         <div className="p-2 space-y-3">
                           <div>
-                            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">
+                            <label className="text-xs font-medium text-text-muted mb-1 block">
                               Category
                             </label>
                             <Select value={categoryFilter} onValueChange={(v) => handleFilterChange('category', v)}>
@@ -538,7 +534,7 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
                           </div>
 
                           <div>
-                            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">
+                            <label className="text-xs font-medium text-text-muted mb-1 block">
                               Procurement Method
                             </label>
                             <Select value={procurementFilter} onValueChange={(v) => handleFilterChange('procurement', v)}>
@@ -556,7 +552,7 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
                           </div>
 
                           <div>
-                            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">
+                            <label className="text-xs font-medium text-text-muted mb-1 block">
                               CPO Requirement
                             </label>
                             <Select value={cpoFilter} onValueChange={(v) => handleFilterChange('cpo', v)}>
@@ -586,23 +582,23 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
 
                 {activeFilters.size > 0 && (
                   <div className="flex flex-wrap gap-2 items-center">
-                    <span className="text-sm text-gray-500 dark:text-gray-400">Active filters:</span>
+                    <span className="text-sm text-text-muted">Active filters:</span>
                     {Array.from(activeFilters).map(filter => {
                       const [type, value] = filter.split(':');
-                      const displayValue = type === 'cpo' 
+                      const displayValue = type === 'cpo'
                         ? (value === 'true' ? 'CPO Required' : 'No CPO')
                         : value.replace('_', ' ');
-                      
+
                       return (
                         <Badge
                           key={filter}
                           variant="secondary"
-                          className="flex items-center gap-1.5 py-1 bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                          className="flex items-center gap-1.5 py-1 bg-bg-secondary text-text-primary dark:bg-bg-surface dark:text-text-secondary"
                         >
                           {displayValue}
                           <button
                             onClick={() => removeFilter(filter)}
-                            className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                            className="text-text-muted hover:text-text-primary dark:hover:text-text-secondary"
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -625,17 +621,17 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
         </div>
 
         {/* Content Area */}
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           {error && (
             <Card className="mb-6 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">
               <div className="flex flex-col items-center justify-center py-8 px-4">
                 <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
                   <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-red-900 dark:text-red-100 mb-2">
+                <h3 className="text-lg font-semibold text-text-error dark:text-text-error mb-2">
                   Error Loading Tenders
                 </h3>
-                <p className="text-gray-500 dark:text-gray-400 text-center mb-4">
+                <p className="text-text-muted text-center mb-4">
                   {error.message}
                 </p>
                 <Button onClick={() => refetch()} variant="outline" className="gap-2">
@@ -648,7 +644,7 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
 
           {isLoading ? (
             <div className={cn(
-              "grid gap-6",
+              "grid gap-4 sm:gap-6",
               viewMode === 'grid' ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"
             )}>
               {[...Array(initialFilters.limit || 12)].map((_, i) => (
@@ -660,7 +656,7 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
           ) : (
             <>
               <div className={cn(
-                "grid gap-6",
+                "grid gap-4 sm:gap-6",
                 viewMode === 'grid' ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"
               )}>
                 {tenders.map((tender) => (
@@ -673,16 +669,16 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
               </div>
 
               {pagination.pages > 1 && (
-                <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-800">
+                <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-border-secondary">
                   <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                    <div className="text-sm text-text-muted">
                       Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} tenders
                     </div>
-                    
+
                     <Pagination>
                       <PaginationContent>
                         <PaginationItem>
-                          <PaginationPrevious 
+                          <PaginationPrevious
                             onClick={() => {
                               if (pagination.page > 1) {
                                 // Handle page change
@@ -697,9 +693,9 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
                             pagination.pages - 4,
                             pagination.page - 2
                           )) + i;
-                          
+
                           if (pageNum > pagination.pages) return null;
-                          
+
                           return (
                             <PaginationItem key={pageNum}>
                               <PaginationLink
@@ -733,7 +729,7 @@ export const OrganizationOwnerTenderList: React.FC<OrganizationOwnerTenderListPr
                         )}
 
                         <PaginationItem>
-                          <PaginationNext 
+                          <PaginationNext
                             onClick={() => {
                               if (pagination.page < pagination.pages) {
                                 // Handle page change

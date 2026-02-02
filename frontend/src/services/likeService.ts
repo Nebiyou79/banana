@@ -11,27 +11,30 @@ export interface User {
   headline?: string;
 }
 
-export interface Reaction {
+export interface Interaction {
   _id: string;
   user: User;
   targetType: 'Post' | 'Comment';
   targetId: string;
-  reaction: ReactionType;
-  reactionEmoji: string;
-  reactionLabel: string;
+  interactionType: 'reaction' | 'dislike';
+  value: ReactionType | DislikeType;
+  emoji: string;
+  label: string;
+  isDisliked?: boolean;
   createdAt: string;
   updatedAt: string;
+  reaction?: ReactionType;
+  dislike?: DislikeType;
 }
 
 export type ReactionType =
   | 'like'
-  | 'love'
-  | 'laugh'
-  | 'wow'
-  | 'sad'
-  | 'angry'
+  | 'heart'
   | 'celebrate'
-  | 'support';
+  | 'percent_100'
+  | 'clap';
+
+export type DislikeType = 'dislike';
 
 export interface ReactionStats {
   total: number;
@@ -45,58 +48,146 @@ export interface ReactionStats {
   }>;
 }
 
+export interface DislikeStats {
+  total: number;
+  hasDislikes: boolean;
+  breakdown: Array<{
+    dislike: DislikeType;
+    count: number;
+    emoji: string;
+    label: string;
+  }>;
+}
+
+export interface InteractionStats {
+  reactions: ReactionStats;
+  dislikes: DislikeStats;
+  totalInteractions: number;
+  hasInteractions: boolean;
+}
+
 export interface AddReactionResponse {
   success: boolean;
   data: {
-    reaction: Reaction;
-    stats: ReactionStats;
+    interaction: Interaction;
+    stats: InteractionStats;
   };
   message?: string;
   code?: string;
 }
 
-export interface RemoveReactionResponse {
+export interface AddDislikeResponse {
+  success: boolean;
+  data: {
+    interaction: Interaction;
+    stats: InteractionStats;
+  };
+  message?: string;
+  code?: string;
+}
+
+export interface RemoveInteractionResponse {
   code: string;
   success: boolean;
   data: {
-    removedReaction: {
-      reaction: ReactionType;
-      reactedAt: string;
-    };
-    stats: ReactionStats;
+    removedCount: number;
+    removedType?: 'reaction' | 'dislike';
+    removedValue?: string;
+    stats: InteractionStats;
   };
   message?: string;
+}
+
+export interface UpdateReactionResponse {
+  success: boolean;
+  data: {
+    previousReaction: ReactionType;
+    updatedReaction: ReactionType;
+    interaction: Interaction;
+    stats: InteractionStats;
+  };
+  message?: string;
+  code?: string;
+}
+
+export interface ToggleInteractionResponse {
+  success: boolean;
+  data: {
+    previousInteraction: Interaction;
+    newInteraction: Interaction;
+    stats: InteractionStats;
+  };
+  message?: string;
+  code?: string;
 }
 
 export interface ReactionsResponse {
   success: boolean;
   data: {
-    reactions: Reaction[];
+    reactions: Interaction[];
     pagination: {
       page: number;
       limit: number;
       total: number;
       pages: number;
     };
-    stats: ReactionStats;
-    userReaction: {
-      reaction: ReactionType;
-      reactionEmoji: string;
-      reactionLabel: string;
+    stats: InteractionStats;
+    userInteraction: {
+      interactionType: 'reaction' | 'dislike';
+      value: ReactionType | DislikeType;
+      emoji: string;
       reactedAt: string;
+      isDisliked: boolean;
     } | null;
   };
 }
 
-export interface BulkReactionStatus {
+export interface DislikesResponse {
   success: boolean;
   data: {
-    reactions: {
+    dislikes: Interaction[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+    };
+    stats: InteractionStats;
+    userInteraction: {
+      interactionType: 'reaction' | 'dislike';
+      value: ReactionType | DislikeType;
+      emoji: string;
+      reactedAt: string;
+      isDisliked: boolean;
+    } | null;
+  };
+}
+
+export interface InteractionResponse {
+  success: boolean;
+  data: {
+    hasInteraction: boolean;
+    interaction: {
+      interactionType: 'reaction' | 'dislike';
+      value: ReactionType | DislikeType;
+      emoji: string;
+      label: string;
+      reactedAt: string;
+      isDisliked: boolean;
+    } | null;
+  };
+}
+
+export interface BulkInteractionStatus {
+  success: boolean;
+  data: {
+    interactions: {
       [targetId: string]: {
-        reaction: ReactionType;
-        reactionEmoji: string;
-        reactionLabel: string;
+        interactionType: 'reaction' | 'dislike';
+        value: ReactionType | DislikeType;
+        emoji: string;
         reactedAt: string;
+        isDisliked: boolean;
       };
     };
     totalQueried: number;
@@ -107,17 +198,25 @@ export interface BulkReactionStatus {
 // Reaction configuration
 export const REACTION_TYPES: Record<ReactionType, { emoji: string; label: string }> = {
   like: { emoji: '👍', label: 'Like' },
-  love: { emoji: '❤️', label: 'Love' },
-  laugh: { emoji: '😂', label: 'Laugh' },
-  wow: { emoji: '😮', label: 'Wow' },
-  sad: { emoji: '😢', label: 'Sad' },
-  angry: { emoji: '😠', label: 'Angry' },
+  heart: { emoji: '❤️', label: 'Heart' },
   celebrate: { emoji: '🎉', label: 'Celebrate' },
-  support: { emoji: '🤝', label: 'Support' }
+  percent_100: { emoji: '💯', label: '100%' },
+  clap: { emoji: '👏', label: 'Clap' }
+};
+
+// Dislike configuration
+export const DISLIKE_TYPES: Record<DislikeType, { emoji: string; label: string }> = {
+  dislike: { emoji: '👎', label: 'Dislike' }
+};
+
+// All interaction types
+export const INTERACTION_TYPES = {
+  ...REACTION_TYPES,
+  ...DISLIKE_TYPES
 };
 
 const handleApiError = (error: any, defaultMessage: string): never => {
-  console.error('🔴 Like Service Error:', {
+  console.error('🔴 Interaction Service Error:', {
     status: error.response?.status,
     data: error.response?.data,
     message: error.message,
@@ -139,7 +238,7 @@ export const likeService = {
       reaction?: ReactionType;
       targetType?: 'Post' | 'Comment';
     } = {}
-  ): Promise<{ reaction: Reaction; stats: ReactionStats }> => {
+  ): Promise<{ interaction: Interaction; stats: InteractionStats }> => {
     try {
       if (!targetId || targetId === 'undefined' || targetId === 'null') {
         throw new Error('INVALID_TARGET_ID: Valid target ID is required');
@@ -164,29 +263,60 @@ export const likeService = {
     }
   },
 
-  // Remove reaction from a target
-  removeReaction: async (
+  // Add dislike to a target
+  addDislike: async (
     targetId: string,
     targetType: 'Post' | 'Comment' = 'Post'
-  ): Promise<{ removedReaction: { reaction: ReactionType; reactedAt: string }; stats: ReactionStats }> => {
+  ): Promise<{ interaction: Interaction; stats: InteractionStats }> => {
+    try {
+      if (!targetId || targetId === 'undefined' || targetId === 'null') {
+        throw new Error('INVALID_TARGET_ID: Valid target ID is required');
+      }
+
+      const response = await api.post<AddDislikeResponse>(
+        `/likes/${targetId}/dislike`,
+        { targetType }
+      );
+
+      if (!response.data.success) {
+        throw new Error(response.data.code || 'FAILED_TO_ADD_DISLIKE');
+      }
+
+      handleSuccess(response.data.message || 'Dislike added successfully');
+      return response.data.data;
+    } catch (error: any) {
+      return handleApiError(error, 'Failed to add dislike') as never;
+    }
+  },
+
+  // Remove interaction (both reaction and dislike) from a target
+  removeInteraction: async (
+    targetId: string,
+    targetType: 'Post' | 'Comment' = 'Post'
+  ): Promise<{
+    removedCount: number;
+    removedType?: 'reaction' | 'dislike';
+    removedValue?: string;
+    stats: InteractionStats
+  }> => {
     try {
       if (!targetId) {
         throw new Error('INVALID_TARGET_ID: Valid target ID is required');
       }
 
-      const response = await api.delete<RemoveReactionResponse>(
-        `/likes/${targetId}/react`,
+      const response = await api.delete<RemoveInteractionResponse>(
+        `/likes/${targetId}/interact`,
         { data: { targetType } }
       );
 
       if (!response.data.success) {
-        throw new Error(response.data.code || 'FAILED_TO_REMOVE_REACTION');
+        throw new Error(response.data.code || 'FAILED_TO_REMOVE_INTERACTION');
       }
 
-      handleSuccess(response.data.message || 'Reaction removed successfully');
+      handleSuccess(response.data.message || 'Interaction removed successfully');
       return response.data.data;
     } catch (error: any) {
-      return handleApiError(error, 'Failed to remove reaction') as never;
+      return handleApiError(error, 'Failed to remove interaction') as never;
     }
   },
 
@@ -197,9 +327,14 @@ export const likeService = {
       reaction: ReactionType;
       targetType?: 'Post' | 'Comment';
     }
-  ): Promise<{ previousReaction: ReactionType; updatedReaction: Reaction; stats: ReactionStats }> => {
+  ): Promise<{
+    previousReaction: ReactionType;
+    updatedReaction: ReactionType;
+    interaction: Interaction;
+    stats: InteractionStats
+  }> => {
     try {
-      const response = await api.put<AddReactionResponse>(
+      const response = await api.put<UpdateReactionResponse>(
         `/likes/${targetId}/react`,
         {
           reaction: data.reaction,
@@ -212,128 +347,39 @@ export const likeService = {
       }
 
       handleSuccess(response.data.message || 'Reaction updated successfully');
-      return response.data.data as any;
+      return response.data.data;
     } catch (error: any) {
       return handleApiError(error, 'Failed to update reaction') as never;
     }
   },
 
-  // // Get reactions for a target
-  // getTargetReactions: async (
-  //   targetId: string, 
-  //   params?: {
-  //     page?: number;
-  //     limit?: number;
-  //     reaction?: ReactionType;
-  //     targetType?: 'Post' | 'Comment';
-  //     sortBy?: string;
-  //     sortOrder?: 'asc' | 'desc';
-  //   }
-  // ): Promise<ReactionsResponse['data']> => {
-  //   try {
-  //     const response = await api.get<ReactionsResponse>(
-  //       `/likes/${targetId}/reactions`, 
-  //       { params }
-  //     );
-  //     return response.data.data;
-  //   } catch (error: any) {
-  //     return handleApiError(error, 'Failed to fetch reactions') as never;
-  //   }
-  // },
-
-  // Get reaction statistics
-  getReactionStats: async (
-    targetId: string,
-    targetType: 'Post' | 'Comment' = 'Post'
-  ): Promise<ReactionStats> => {
-    try {
-      const response = await api.get<{ success: boolean; data: ReactionStats }>(
-        `/likes/${targetId}/reactions/stats`,
-        { params: { targetType } }
-      );
-      return response.data.data;
-    } catch (error: any) {
-      console.error('Failed to get reaction stats:', error);
-      return {
-        total: 0,
-        hasReactions: false,
-        breakdown: []
-      };
-    }
-  },
-
-  // Get bulk reaction status for multiple targets
-  getBulkReactionStatus: async (
-    targetIds: string[],
-    targetType: 'Post' | 'Comment' = 'Post'
-  ): Promise<BulkReactionStatus['data']> => {
-    try {
-      const response = await api.post<BulkReactionStatus>('/likes/bulk/status', {
-        targetType,
-        targetIds
-      });
-      return response.data.data;
-    } catch (error: any) {
-      console.error('Failed to get bulk reaction status:', error);
-      return {
-        reactions: {},
-        totalQueried: targetIds.length,
-        totalFound: 0
-      };
-    }
-  },
-
-  // services/likeService.ts
-
-  // Update the getUserReaction function to handle errors better:
-  getUserReaction: async (
+  // Toggle between reaction and dislike
+  toggleInteraction: async (
     targetId: string,
     targetType: 'Post' | 'Comment' = 'Post'
   ): Promise<{
-    reaction: ReactionType;
-    reactionEmoji: string;
-    reactionLabel: string;
-    reactedAt: string;
-  } | null> => {
+    previousInteraction: Interaction;
+    newInteraction: Interaction;
+    stats: InteractionStats;
+  }> => {
     try {
-      // Check if we have a valid targetId first
-      if (!targetId || targetId.trim() === '') {
-        console.warn('Invalid targetId provided to getUserReaction');
-        return null;
+      const response = await api.post<ToggleInteractionResponse>(
+        `/likes/${targetId}/toggle`,
+        { targetType }
+      );
+
+      if (!response.data.success) {
+        throw new Error(response.data.code || 'FAILED_TO_TOGGLE_INTERACTION');
       }
 
-      // Add a timeout to prevent hanging requests
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-
-      const reactions = await likeService.getTargetReactions(targetId, {
-        targetType,
-        limit: 1,
-        page: 1
-      });
-
-      clearTimeout(timeoutId);
-      return reactions.userReaction;
+      handleSuccess(response.data.message || 'Interaction toggled successfully');
+      return response.data.data;
     } catch (error: any) {
-      // Don't throw error, just log and return null
-      console.warn(`Failed to get user reaction for ${targetType} ${targetId}:`, error.message || error);
-
-      // Check for specific error types
-      if (error.message?.includes('INVALID_TARGET_ID') ||
-        error.message?.includes('FETCH_REACTIONS_ERROR') ||
-        error.message?.includes('404') ||
-        error.message?.includes('AbortError')) {
-        // These are expected errors, return null silently
-        return null;
-      }
-
-      // For unexpected errors, still return null but log
-      console.error('Unexpected error in getUserReaction:', error);
-      return null;
+      return handleApiError(error, 'Failed to toggle interaction') as never;
     }
   },
 
-  // Also, update the getTargetReactions function to not throw for 404 errors:
+  // Get reactions for a target
   getTargetReactions: async (
     targetId: string,
     params?: {
@@ -364,11 +410,20 @@ export const likeService = {
             pages: 0
           },
           stats: {
-            total: 0,
-            hasReactions: false,
-            breakdown: []
+            reactions: {
+              total: 0,
+              hasReactions: false,
+              breakdown: []
+            },
+            dislikes: {
+              total: 0,
+              hasDislikes: false,
+              breakdown: []
+            },
+            totalInteractions: 0,
+            hasInteractions: false
           },
-          userReaction: null
+          userInteraction: null
         };
       }
 
@@ -376,6 +431,181 @@ export const likeService = {
       return handleApiError(error, 'Failed to fetch reactions') as never;
     }
   },
+
+  // Get dislikes for a target
+  getTargetDislikes: async (
+    targetId: string,
+    params?: {
+      page?: number;
+      limit?: number;
+      targetType?: 'Post' | 'Comment';
+      sortBy?: string;
+      sortOrder?: 'asc' | 'desc';
+    }
+  ): Promise<DislikesResponse['data']> => {
+    try {
+      const response = await api.get<DislikesResponse>(
+        `/likes/${targetId}/dislikes`,
+        { params }
+      );
+      return response.data.data;
+    } catch (error: any) {
+      // Check if it's a 404 (not found) error
+      if (error.response?.status === 404) {
+        console.log(`No dislikes found for target ${targetId}, returning empty data`);
+        return {
+          dislikes: [],
+          pagination: {
+            page: params?.page || 1,
+            limit: params?.limit || 10,
+            total: 0,
+            pages: 0
+          },
+          stats: {
+            reactions: {
+              total: 0,
+              hasReactions: false,
+              breakdown: []
+            },
+            dislikes: {
+              total: 0,
+              hasDislikes: false,
+              breakdown: []
+            },
+            totalInteractions: 0,
+            hasInteractions: false
+          },
+          userInteraction: null
+        };
+      }
+
+      // For other errors, use the handleApiError
+      return handleApiError(error, 'Failed to fetch dislikes') as never;
+    }
+  },
+
+  // Get interaction statistics
+  getInteractionStats: async (
+    targetId: string,
+    targetType: 'Post' | 'Comment' = 'Post'
+  ): Promise<InteractionStats> => {
+    try {
+      const response = await api.get<{ success: boolean; data: InteractionStats }>(
+        `/likes/${targetId}/stats`,
+        { params: { targetType } }
+      );
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Failed to get interaction stats:', error);
+      return {
+        reactions: {
+          total: 0,
+          hasReactions: false,
+          breakdown: []
+        },
+        dislikes: {
+          total: 0,
+          hasDislikes: false,
+          breakdown: []
+        },
+        totalInteractions: 0,
+        hasInteractions: false
+      };
+    }
+  },
+
+  // Get bulk interaction status for multiple targets
+  getBulkInteractionStatus: async (
+    targetIds: string[],
+    targetType: 'Post' | 'Comment' = 'Post'
+  ): Promise<BulkInteractionStatus['data']> => {
+    try {
+      const response = await api.post<BulkInteractionStatus>('/likes/bulk/status', {
+        targetType,
+        targetIds
+      });
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Failed to get bulk interaction status:', error);
+      return {
+        interactions: {},
+        totalQueried: targetIds.length,
+        totalFound: 0
+      };
+    }
+  },
+
+  // Get user's specific interaction with a target
+getUserInteraction: async (
+  targetId: string,
+  targetType: 'Post' | 'Comment' = 'Post'
+): Promise<{
+  hasInteraction: boolean;
+  interaction: {
+    interactionType: 'reaction' | 'dislike';
+    value: ReactionType | DislikeType;
+    emoji: string;
+    label: string;
+    reactedAt: string;
+    isDisliked: boolean;
+  } | null;
+}> => {
+  try {
+    // Check if we have a valid targetId first
+    if (!targetId || targetId.trim() === '') {
+      console.warn('Invalid targetId provided to getUserInteraction');
+      return { hasInteraction: false, interaction: null };
+    }
+
+    // Add a timeout to prevent hanging requests
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+    const response = await api.get<InteractionResponse>(
+      `/likes/${targetId}/user-interaction`,
+      {
+        params: { targetType },
+        signal: controller.signal
+      }
+    );
+
+    clearTimeout(timeoutId);
+
+    if (!response.data.success) {
+      return { hasInteraction: false, interaction: null };
+    }
+
+    const data = response.data.data;
+    return {
+      hasInteraction: data.hasInteraction,
+      interaction: data.interaction ? {
+        ...data.interaction,
+        isDisliked: data.interaction.interactionType === 'dislike'
+      } : null
+    };
+  } catch (error: any) {
+    // Don't throw error, just log and return null
+    // Check for abort error specifically
+    if (error.name === 'AbortError' || error.code === 'ERR_CANCELED' || error.message?.includes('canceled')) {
+      console.log(`Request cancelled for ${targetType} ${targetId}`);
+      return { hasInteraction: false, interaction: null };
+    }
+
+    console.warn(`Failed to get user interaction for ${targetType} ${targetId}:`, error.message || error);
+
+    // Check for specific error types
+    if (error.message?.includes('INVALID_TARGET_ID') ||
+      error.message?.includes('FETCH_USER_INTERACTION_ERROR') ||
+      error.message?.includes('404')) {
+      // These are expected errors, return empty
+      return { hasInteraction: false, interaction: null };
+    }
+
+    // For unexpected errors, still return empty but log
+    console.error('Unexpected error in getUserInteraction:', error);
+    return { hasInteraction: false, interaction: null };
+  }
+},
 
   // Helper functions
   getReactionEmoji: (reaction: ReactionType): string => {
@@ -386,6 +616,28 @@ export const likeService = {
     return REACTION_TYPES[reaction]?.label || 'Like';
   },
 
+  getDislikeEmoji: (): string => {
+    return DISLIKE_TYPES.dislike.emoji;
+  },
+
+  getDislikeLabel: (): string => {
+    return DISLIKE_TYPES.dislike.label;
+  },
+
+  getEmojiForValue: (value: ReactionType | DislikeType): string => {
+    if (value === 'dislike') {
+      return DISLIKE_TYPES.dislike.emoji;
+    }
+    return REACTION_TYPES[value as ReactionType]?.emoji || '👍';
+  },
+
+  getLabelForValue: (value: ReactionType | DislikeType): string => {
+    if (value === 'dislike') {
+      return DISLIKE_TYPES.dislike.label;
+    }
+    return REACTION_TYPES[value as ReactionType]?.label || 'Like';
+  },
+
   getAllReactionTypes: (): Array<{ type: ReactionType; emoji: string; label: string }> => {
     return Object.entries(REACTION_TYPES).map(([type, config]) => ({
       type: type as ReactionType,
@@ -394,16 +646,221 @@ export const likeService = {
     }));
   },
 
+  getAllInteractionTypes: (): Array<{
+    type: ReactionType | DislikeType;
+    interactionType: 'reaction' | 'dislike';
+    emoji: string;
+    label: string;
+  }> => {
+    const reactions = Object.entries(REACTION_TYPES).map(([type, config]) => ({
+      type: type as ReactionType,
+      interactionType: 'reaction' as const,
+      emoji: config.emoji,
+      label: config.label
+    }));
+
+    const dislikes = Object.entries(DISLIKE_TYPES).map(([type, config]) => ({
+      type: type as DislikeType,
+      interactionType: 'dislike' as const,
+      emoji: config.emoji,
+      label: config.label
+    }));
+
+    return [...reactions, ...dislikes];
+  },
+
   // Utility to format reaction count
-  formatReactionCount: (stats: ReactionStats): string => {
-    if (stats.total === 0) return '';
-    if (stats.total === 1) {
-      const mainReaction = stats.breakdown[0];
-      return `${mainReaction.emoji} ${mainReaction.label}`;
+  formatReactionCount: (stats: InteractionStats): string => {
+    const totalReactions = stats.reactions.total;
+    if (totalReactions === 0) return '';
+
+    if (totalReactions === 1) {
+      const mainReaction = stats.reactions.breakdown[0];
+      if (mainReaction) {
+        return `${mainReaction.emoji} ${mainReaction.label}`;
+      }
     }
 
-    const topReactions = stats.breakdown.slice(0, 3);
+    const topReactions = stats.reactions.breakdown.slice(0, 3);
     const emojis = topReactions.map(r => r.emoji).join('');
-    return `${emojis} ${stats.total}`;
+    return `${emojis} ${totalReactions}`;
+  },
+
+  // Utility to format dislike count
+  formatDislikeCount: (stats: InteractionStats): string => {
+    const totalDislikes = stats.dislikes.total;
+    if (totalDislikes === 0) return '';
+
+    return `${DISLIKE_TYPES.dislike.emoji} ${totalDislikes}`;
+  },
+
+  // Utility to get the main interaction (reaction with highest count)
+  getMainInteraction: (stats: InteractionStats): { type: 'reaction' | 'dislike'; value: string; emoji: string } | null => {
+    if (!stats.hasInteractions) return null;
+
+    const topReaction = stats.reactions.breakdown[0];
+    const hasDislikes = stats.dislikes.total > 0;
+
+    if (topReaction && topReaction.count >= stats.dislikes.total) {
+      return {
+        type: 'reaction',
+        value: topReaction.reaction,
+        emoji: topReaction.emoji
+      };
+    } else if (hasDislikes) {
+      return {
+        type: 'dislike',
+        value: 'dislike',
+        emoji: DISLIKE_TYPES.dislike.emoji
+      };
+    }
+
+    return null;
+  },
+
+  // Check if user has liked (any reaction) the target
+  hasUserReacted: async (targetId: string, targetType: 'Post' | 'Comment' = 'Post'): Promise<boolean> => {
+    try {
+      const result = await likeService.getUserInteraction(targetId, targetType);
+      return result.hasInteraction && result.interaction?.interactionType === 'reaction';
+    } catch (error) {
+      console.error('Error checking user reaction:', error);
+      return false;
+    }
+  },
+
+  // Check if user has disliked the target
+  hasUserDisliked: async (targetId: string, targetType: 'Post' | 'Comment' = 'Post'): Promise<boolean> => {
+    try {
+      const result = await likeService.getUserInteraction(targetId, targetType);
+      return result.hasInteraction && result.interaction?.interactionType === 'dislike';
+    } catch (error) {
+      console.error('Error checking user dislike:', error);
+      return false;
+    }
+  },
+
+  // Quick reaction function (like/dislike with default reaction)
+  quickReact: async (
+    targetId: string,
+    targetType: 'Post' | 'Comment' = 'Post'
+  ): Promise<{ interaction: Interaction; stats: InteractionStats }> => {
+    try {
+      // Check current interaction
+      const current = await likeService.getUserInteraction(targetId, targetType);
+
+      if (current.hasInteraction) {
+        if (current.interaction?.interactionType === 'reaction') {
+          // Already has a reaction, remove it
+          const result = await likeService.removeInteraction(targetId, targetType);
+          return {
+            interaction: null as any,
+            stats: result.stats
+          };
+        } else {
+          // Has a dislike, change to like reaction (toggle)
+          const toggleResult = await likeService.toggleInteraction(targetId, targetType);
+          return {
+            interaction: toggleResult.newInteraction,
+            stats: toggleResult.stats
+          };
+        }
+      } else {
+        // No interaction, add like
+        return likeService.addReaction(targetId, { reaction: 'like', targetType });
+      }
+    } catch (error) {
+      return handleApiError(error, 'Failed to quick react') as never;
+    }
+  },
+
+  // Quick dislike function
+  quickDislike: async (
+    targetId: string,
+    targetType: 'Post' | 'Comment' = 'Post'
+  ): Promise<{ interaction: Interaction; stats: InteractionStats }> => {
+    try {
+      // Check current interaction
+      const current = await likeService.getUserInteraction(targetId, targetType);
+
+      if (current.hasInteraction) {
+        if (current.interaction?.interactionType === 'dislike') {
+          // Already has a dislike, remove it
+          const result = await likeService.removeInteraction(targetId, targetType);
+          return {
+            interaction: null as any,
+            stats: result.stats
+          };
+        } else {
+          // Has a reaction, change to dislike (toggle)
+          const toggleResult = await likeService.toggleInteraction(targetId, targetType);
+          return {
+            interaction: toggleResult.newInteraction,
+            stats: toggleResult.stats
+          };
+        }
+      } else {
+        // No interaction, add dislike
+        return likeService.addDislike(targetId, targetType);
+      }
+    } catch (error) {
+      return handleApiError(error, 'Failed to quick dislike') as never;
+    }
+  },
+
+  // Check if user has any interaction
+  hasUserInteracted: async (targetId: string, targetType: 'Post' | 'Comment' = 'Post'): Promise<boolean> => {
+    try {
+      const result = await likeService.getUserInteraction(targetId, targetType);
+      return result.hasInteraction;
+    } catch (error) {
+      console.error('Error checking user interaction:', error);
+      return false;
+    }
+  },
+
+  // Get user's current reaction type (if any)
+  getUserReactionType: async (targetId: string, targetType: 'Post' | 'Comment' = 'Post'): Promise<ReactionType | null> => {
+    try {
+      const result = await likeService.getUserInteraction(targetId, targetType);
+      if (result.hasInteraction && result.interaction?.interactionType === 'reaction') {
+        return result.interaction.value as ReactionType;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting user reaction type:', error);
+      return null;
+    }
+  },
+
+  // Determine next action based on current state
+  getNextAction: async (
+    targetId: string,
+    targetType: 'Post' | 'Comment' = 'Post'
+  ): Promise<{
+    action: 'add_reaction' | 'add_dislike' | 'remove_interaction' | 'toggle';
+    currentState: 'none' | 'reaction' | 'dislike';
+  }> => {
+    try {
+      const current = await likeService.getUserInteraction(targetId, targetType);
+
+      if (!current.hasInteraction) {
+        return { action: 'add_reaction', currentState: 'none' };
+      }
+
+      if (current.interaction?.interactionType === 'reaction') {
+        return { action: 'add_dislike', currentState: 'reaction' };
+      } else {
+        return { action: 'add_reaction', currentState: 'dislike' };
+      }
+    } catch (error) {
+      console.error('Error getting next action:', error);
+      return { action: 'add_reaction', currentState: 'none' };
+    }
   }
 };
+
+// Export constants for direct use
+export const REACTION_CONSTANTS = REACTION_TYPES;
+export const DISLIKE_CONSTANTS = DISLIKE_TYPES;
+export const INTERACTION_CONSTANTS = INTERACTION_TYPES;

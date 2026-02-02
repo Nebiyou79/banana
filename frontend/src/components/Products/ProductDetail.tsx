@@ -1,8 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/router';
 import { cn } from '@/lib/utils';
-import { Product, Company, productService } from '@/services/productService';
-import { Badge } from '@/components/ui/Badge';
+import { Product, productService, productToast } from '@/services/productService';
+import { profileService, CloudinaryImage } from '@/services/profileService';
+import { colors, getTheme } from '@/utils/color';
+import { Badge } from '@/components/social/ui/Badge';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/social/ui/Button';
 import {
@@ -19,285 +23,271 @@ import {
   Edit3,
   MoreVertical,
   Trash2,
-  Copy
+  Copy,
+  Tag,
+  Package,
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  Bookmark,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/DropdownMenu';
-import ConfirmationModal from '@/components/ui/ConfirmationModal';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/social/ui/Alert-Dialog';
+import { Separator } from '@/components/ui/Separator';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/Tooltip';
+import { EntityAvatar } from '@/components/layout/EntityAvatar';
 
-interface ProfileDetailsProps {
-  product: Product;
-  company?: Company;
+interface ProductDetailProps {
+  productId: string;
   currentUser?: any;
   className?: string;
+  theme?: 'light' | 'dark';
+  loading?: boolean;
   onBack?: () => void;
-  onEdit?: (product: Product) => void;
-  onDelete?: (product: Product) => void;
-  onDuplicate?: (product: Product) => void;
-  onStatusChange?: (product: Product, status: Product['status']) => void;
 }
 
-/**
- * EnhancedGallery
- * - supports images and videos (if item.type === 'video')
- * - zoom-on-hover (desktop)
- * - basic pinch-to-zoom (mobile/touch)
- * - fullscreen lightbox with keyboard navigation
- * - thumbnail slider with scroll-snap and active indicator
- * - wider gallery layout
- */
-const EnhancedGallery: React.FC<{
+// Helper to get optimized avatar URL
+const getOptimizedAvatarUrl = (avatar: string | CloudinaryImage | undefined, company?: any): string => {
+  if (!avatar && company?.logoUrl) {
+    return profileService.getOptimizedAvatarUrl(company.logoUrl, 'medium');
+  }
+
+  if (typeof avatar === 'string') {
+    return profileService.getOptimizedAvatarUrl(avatar, 'medium');
+  }
+
+  if (avatar && typeof avatar === 'object' && 'secure_url' in avatar) {
+    return profileService.getOptimizedAvatarUrl(avatar, 'medium');
+  }
+
+  return profileService.getPlaceholderAvatar(company?.name || 'Company');
+};
+
+// Enhanced Gallery Component (Shared)
+const ProductGallery: React.FC<{
   product: Product;
   currentIndex: number;
   onIndexChange: (i: number) => void;
-}> = ({ product, currentIndex, onIndexChange }) => {
-  const items = product.images ?? [];
-  const current = items[currentIndex] ?? null;
-  const galleryRef = useRef<HTMLDivElement | null>(null);
-  const thumbStripRef = useRef<HTMLDivElement | null>(null);
+  loading?: boolean;
+  theme?: 'light' | 'dark';
+}> = ({ product, currentIndex, onIndexChange, loading, theme = 'light' }) => {
+  const currentTheme = getTheme(theme);
   const [isZoomed, setIsZoomed] = useState(false);
-  const [zoomOrigin, setZoomOrigin] = useState({ x: 50, y: 50 }); // percent
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const imageContainerRef = useRef<HTMLDivElement>(null);
 
-  // Touch/pinch state
-  const pinchStateRef = useRef<{
-    initialDistance?: number;
-    lastScale: number;
-  }>({ lastScale: 1 });
+  // Product images
+  const items = product.images || [];
+  const current = items[currentIndex];
 
-  useEffect(() => {
-    // scroll active thumbnail into view
-    const thumbs = thumbStripRef.current;
-    if (!thumbs) return;
-    const active = thumbs.querySelector<HTMLElement>(`[data-thumb-index="${currentIndex}"]`);
-    if (active) {
-      active.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  // Get optimized Cloudinary image URL
+  const getOptimizedImageUrl = (image: any, size: 'large' | 'thumbnail' | 'fullscreen' = 'large') => {
+    if (!image?.secure_url && !image?.url) return '/images/product-placeholder.jpg';
+
+    const imageUrl = image.secure_url || image.url;
+    const options = {
+      large: { width: 800, height: 600, crop: 'fill', quality: 'auto:best' },
+      thumbnail: { width: 100, height: 75, crop: 'fill', quality: 'auto:good' },
+      fullscreen: { width: 1200, height: 900, crop: 'fill', quality: 'auto:best' }
+    }[size];
+
+    return productService.getImageUrl(imageUrl, options);
+  };
+
+  // Handle vertical scroll
+  const scrollToImage = (index: number) => {
+    if (imageContainerRef.current) {
+      const imageElement = imageContainerRef.current.children[index] as HTMLElement;
+      if (imageElement) {
+        imageElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
     }
-  }, [currentIndex]);
+  };
 
+  // Keyboard navigation for fullscreen
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (!fullscreenOpen) return;
       if (e.key === 'ArrowRight') onIndexChange((currentIndex + 1) % Math.max(items.length, 1));
       if (e.key === 'ArrowLeft') onIndexChange((currentIndex - 1 + items.length) % Math.max(items.length, 1));
       if (e.key === 'Escape') setFullscreenOpen(false);
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [fullscreenOpen, currentIndex, items.length, onIndexChange]);
 
-  // pointer move for desktop zoom origin
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!galleryRef.current) return;
-    const rect = galleryRef.current.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    setZoomOrigin({ x, y });
+  const handleThumbnailClick = (index: number) => {
+    onIndexChange(index);
+    scrollToImage(index);
   };
 
-  // touch handlers for pinch-to-zoom
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
-      const d = distance(e.touches[0], e.touches[1]);
-      pinchStateRef.current.initialDistance = d;
-      pinchStateRef.current.lastScale = 1;
-    }
-  };
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length === 2 && pinchStateRef.current.initialDistance) {
-      const d = distance(e.touches[0], e.touches[1]);
-      const scale = d / (pinchStateRef.current.initialDistance || d);
-      pinchStateRef.current.lastScale = Math.min(Math.max(scale, 1), 3); // clamp 1..3
-      setIsZoomed(pinchStateRef.current.lastScale > 1.02);
-      // set origin to midpoint
-      const rect = galleryRef.current?.getBoundingClientRect();
-      if (rect) {
-        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-        const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-        const x = ((midX - rect.left) / rect.width) * 100;
-        const y = ((midY - rect.top) / rect.height) * 100;
-        setZoomOrigin({ x, y });
-      }
-    }
-  };
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    // reset if fingers lifted
-    if (e.touches.length < 2) {
-      pinchStateRef.current.initialDistance = undefined;
-      pinchStateRef.current.lastScale = 1;
-      // keep zoom state off; user can open fullscreen for zooming
-      setTimeout(() => setIsZoomed(false), 150);
-    }
-  };
-
-  function distance(a: Touch, b: Touch) {
-    return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-  }
-
-  const isVideo = (item: any) => item?.type === 'video' || /\.mp4|\.webm|youtube\.com|vimeo\.com/.test(item?.url ?? '');
-
-  // Main image display with proper sizing
-  const renderMainImage = () => {
-    if (!current) {
-      return (
-        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
-          <div className="text-center text-gray-500">
-            <div className="w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center mx-auto mb-2">
-              <Eye className="h-8 w-8 text-gray-400" />
-            </div>
-            <p className="text-sm font-medium">No Image Available</p>
-          </div>
-        </div>
-      );
-    }
-
-    if (isVideo(current)) {
-      return (
-        <div className="w-full h-full flex items-center justify-center bg-black">
-          <div className="text-white text-center">
-            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span className="text-2xl">▶</span>
-            </div>
-            <p className="text-sm">Video Content</p>
-          </div>
-        </div>
-      );
-    }
-
+  if (loading) {
     return (
-      <motion.img
-        key={current.url}
-        src={productService.getImageUrl(current.url)}
-        alt={current.altText ?? product.name}
-        className={cn(
-          "w-full h-full object-contain transition-all duration-500",
-          isZoomed && "scale-150 cursor-zoom-out"
-        )}
-        style={{
-          transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%`
-        }}
-        draggable={false}
-      />
+      <div className="space-y-4">
+        <Card className="overflow-hidden">
+          <CardContent className="p-0">
+            <div className="relative w-full aspect-[4/3] sm:aspect-[16/10] animate-pulse"
+              style={{ backgroundColor: currentTheme.bg.gray100 }} />
+          </CardContent>
+        </Card>
+        <div className="flex gap-2 overflow-x-auto px-2 py-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="w-24 h-20 sm:w-32 sm:h-24 rounded-lg flex-shrink-0 animate-pulse"
+              style={{ backgroundColor: currentTheme.bg.gray100 }} />
+          ))}
+        </div>
+      </div>
     );
-  };
+  }
 
   return (
     <>
       <div className="space-y-4">
-        <Card className="overflow-hidden rounded-3xl shadow-2xl border-2 border-gray-100">
+        {/* Main Image Container */}
+        <Card className="overflow-hidden"
+          style={{ borderColor: currentTheme.border.gray100 }}>
           <CardContent className="p-0">
             <div
-              ref={galleryRef}
-              className="relative bg-gray-100 w-full aspect-[4/3] sm:aspect-[16/10] rounded-2xl overflow-hidden touch-none cursor-zoom-in"
-              onPointerMove={handlePointerMove}
-              onPointerLeave={() => setIsZoomed(false)}
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
-              onClick={() => setIsZoomed(!isZoomed)}
+              ref={imageContainerRef}
+              className={cn(
+                "relative w-full aspect-[4/3] sm:aspect-[16/10] overflow-y-auto",
+                "scrollbar-hide"
+              )}
+              style={{ backgroundColor: currentTheme.bg.gray100 }}
             >
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={currentIndex + '-' + (current?.url ?? '')}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 1.05 }}
-                  transition={{ duration: 0.3 }}
-                  className="w-full h-full"
-                >
-                  {renderMainImage()}
-                </motion.div>
-              </AnimatePresence>
-
-              {/* Controls */}
-              {items.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    aria-label="Previous"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onIndexChange((currentIndex - 1 + items.length) % items.length);
-                    }}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-sm border-2 border-gray-200 shadow-lg rounded-full p-3 hover:scale-105 transition-transform z-10"
-                  >
-                    <ChevronLeft className="h-6 w-6" />
-                  </button>
-
-                  <button
-                    type="button"
-                    aria-label="Next"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onIndexChange((currentIndex + 1) % items.length);
-                    }}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-sm border-2 border-gray-200 shadow-lg rounded-full p-3 hover:scale-105 transition-transform z-10"
-                  >
-                    <ChevronRight className="h-6 w-6" />
-                  </button>
-
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/80 text-white text-sm px-4 py-2 rounded-full shadow-lg tracking-wide border border-white/20">
-                    {currentIndex + 1} / {items.length}
+              {/* Vertical Image Stack */}
+              <div className="flex flex-col">
+                {items.length > 0 ? (
+                  items.map((image, index) => (
+                    <div
+                      key={image.public_id || index}
+                      className={cn(
+                        "flex-shrink-0 w-full h-full",
+                        index === currentIndex ? "opacity-100" : "opacity-0 absolute inset-0 pointer-events-none"
+                      )}
+                    >
+                      <AnimatePresence mode="wait">
+                        <motion.img
+                          key={currentIndex}
+                          src={getOptimizedImageUrl(image, 'large')}
+                          alt={image.altText || `${product.name} - Image ${index + 1}`}
+                          className="w-full h-full object-contain"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.3 }}
+                          loading={index === 0 ? "eager" : "lazy"}
+                        />
+                      </AnimatePresence>
+                    </div>
+                  ))
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center">
+                    <div className="w-20 h-20 rounded-full bg-opacity-20 flex items-center justify-center mb-4"
+                      style={{ backgroundColor: currentTheme.bg.gray400 }}>
+                      <Package className={cn("h-10 w-10")} style={{ color: currentTheme.text.gray400 }} />
+                    </div>
+                    <p className={cn("font-medium")} style={{ color: currentTheme.text.gray400 }}>
+                      No Image Available
+                    </p>
                   </div>
-                </>
+                )}
+              </div>
+
+              {/* Fullscreen Toggle */}
+              {items.length > 0 && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                          "absolute top-3 right-3",
+                          "bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow",
+                          "hover:bg-white dark:hover:bg-gray-800 hover:scale-105 transition-transform"
+                        )}
+                        style={{ borderColor: currentTheme.border.gray100 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFullscreenOpen(true);
+                        }}
+                        aria-label="Open fullscreen"
+                      >
+                        <Maximize className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Fullscreen
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
 
-              {/* Fullscreen toggle */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setFullscreenOpen(true);
-                }}
-                className="absolute top-4 right-4 bg-white/90 backdrop-blur-md p-3 rounded-xl shadow hover:scale-105 transition border-2 border-gray-200 z-10"
-                aria-label="Open fullscreen"
-                title="Open fullscreen"
-              >
-                <Maximize className="h-5 w-5" />
-              </button>
+              {/* Image Counter */}
+              {items.length > 1 && (
+                <div className={cn(
+                  "absolute bottom-3 left-1/2 -translate-x-1/2",
+                  "bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm text-sm px-4 py-2 rounded-full shadow-lg"
+                )}
+                  style={{ color: currentTheme.text.gray800 }}>
+                  {currentIndex + 1} / {items.length}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Thumbnail strip (scroll-snap) */}
+        {/* Thumbnail Strip */}
         {items.length > 1 && (
           <div
-            ref={thumbStripRef}
-            className="flex gap-4 overflow-x-auto snap-x snap-mandatory px-2 py-3 -mx-2"
+            className="flex gap-2 overflow-x-auto snap-x snap-mandatory px-2 py-3 -mx-2 scrollbar-hide"
             role="tablist"
             aria-label="Product thumbnails"
           >
-            {items.map((it, i) => (
+            {items.map((item, index) => (
               <button
-                key={i}
-                data-thumb-index={i}
-                onClick={() => onIndexChange(i)}
+                key={item.public_id || index}
+                onClick={() => handleThumbnailClick(index)}
                 className={cn(
-                  'snap-start flex-shrink-0 w-24 h-20 sm:w-32 sm:h-24 rounded-xl overflow-hidden border-2 transition-all bg-white',
-                  i === currentIndex
-                    ? 'border-blue-600 ring-4 ring-blue-200 shadow-lg scale-105'
-                    : 'border-gray-300 hover:border-gray-400 hover:shadow-md'
+                  'snap-start flex-shrink-0 w-20 h-16 sm:w-24 sm:h-20 rounded-lg overflow-hidden border-2 transition-all',
+                  'hover:border-goldenMustard/50 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
+                  index === currentIndex
+                    ? 'border-goldenMustard ring-2 ring-goldenMustard/20 shadow-lg'
+                    : 'hover:shadow'
                 )}
-                aria-current={i === currentIndex}
-                title={`View image ${i + 1}`}
+                style={{
+                  backgroundColor: currentTheme.bg.white,
+                  borderColor: index === currentIndex ? colors.goldenMustard : currentTheme.border.gray100
+                }}
+                aria-current={index === currentIndex}
+                title={`View image ${index + 1}`}
                 role="tab"
               >
-                {isVideo(it) ? (
-                  <div className="w-full h-full bg-black flex items-center justify-center text-white text-sm">
-                    <span className="text-lg">▶</span>
-                  </div>
-                ) : (
-                  <img
-                    src={productService.getImageUrl(it.url)}
-                    alt={it.altText ?? `${product.name} ${i + 1}`}
-                    className="w-full h-full object-cover object-center"
-                    draggable={false}
-                  />
-                )}
+                <img
+                  src={getOptimizedImageUrl(item, 'thumbnail')}
+                  alt={item.altText || `${product.name} ${index + 1}`}
+                  className="w-full h-full object-cover object-center"
+                  draggable={false}
+                  loading="lazy"
+                />
               </button>
             ))}
           </div>
@@ -311,63 +301,65 @@ const EnhancedGallery: React.FC<{
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[1000] bg-black/95 flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex items-center justify-center p-4"
             aria-modal="true"
             role="dialog"
             aria-label="Image viewer"
+            onClick={() => setFullscreenOpen(false)}
           >
-            <div className="absolute top-6 right-6 z-[1010] flex gap-2">
-              <button
+            <div className="absolute top-4 right-4 z-10">
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => setFullscreenOpen(false)}
-                className="bg-white/20 hover:bg-white/30 rounded-full p-3 transition-colors border border-white/30"
+                className="bg-white/20 hover:bg-white/40 border border-white/30"
                 aria-label="Close"
               >
-                <X className="h-6 w-6 text-white" />
-              </button>
+                <X className="h-5 w-5 text-white" />
+              </Button>
             </div>
 
-            <div className="w-full max-w-6xl max-h-[90vh] relative">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 z-[1010]">
-                <button
-                  onClick={() => onIndexChange((currentIndex - 1 + items.length) % items.length)}
-                  className="bg-white/20 hover:bg-white/30 rounded-full p-4 transition-colors border border-white/30"
-                  aria-label="Previous fullscreen"
-                >
-                  <ChevronLeft className="h-7 w-7 text-white" />
-                </button>
-              </div>
+            <div className="relative w-full max-w-6xl max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+              {/* Navigation Arrows */}
+              {items.length > 1 && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-white/20 hover:bg-white/40 border border-white/30"
+                    onClick={() => onIndexChange((currentIndex - 1 + items.length) % items.length)}
+                    aria-label="Previous image"
+                  >
+                    <ChevronLeft className="h-6 w-6 text-white" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-white/20 hover:bg-white/40 border border-white/30"
+                    onClick={() => onIndexChange((currentIndex + 1) % items.length)}
+                    aria-label="Next image"
+                  >
+                    <ChevronRight className="h-6 w-6 text-white" />
+                  </Button>
+                </>
+              )}
 
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 z-[1010]">
-                <button
-                  onClick={() => onIndexChange((currentIndex + 1) % items.length)}
-                  className="bg-white/20 hover:bg-white/30 rounded-full p-4 transition-colors border border-white/30"
-                  aria-label="Next fullscreen"
-                >
-                  <ChevronRight className="h-7 w-7 text-white" />
-                </button>
-              </div>
-
-              {/* Fullscreen content */}
+              {/* Main Image */}
               <div className="w-full h-full flex items-center justify-center p-8">
-                {current && !isVideo(current) ? (
+                {current && (
                   <img
-                    src={productService.getImageUrl(current.url)}
-                    alt={current.altText ?? product.name}
+                    src={getOptimizedImageUrl(current, 'fullscreen')}
+                    alt={current.altText || product.name}
                     className="max-w-full max-h-full object-contain rounded-lg"
                   />
-                ) : (
-                  <div className="text-white text-center">
-                    <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <span className="text-3xl">▶</span>
-                    </div>
-                    <p className="text-lg">Video Content</p>
-                  </div>
                 )}
               </div>
 
-              {/* caption / index */}
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/90 text-lg font-medium bg-black/50 px-4 py-2 rounded-full backdrop-blur-sm">
-                {current?.altText ?? `${currentIndex + 1} / ${items.length}`}
+              {/* Caption */}
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-sm text-white px-4 py-2 rounded-full">
+                <span className="text-sm font-medium">
+                  {current?.altText || `${currentIndex + 1} / ${items.length}`}
+                </span>
               </div>
             </div>
           </motion.div>
@@ -377,26 +369,31 @@ const EnhancedGallery: React.FC<{
   );
 };
 
-export const ProductDetails: React.FC<ProfileDetailsProps> = ({
-  product,
-  company,
+export const ProductDetail: React.FC<ProductDetailProps> = ({
+  productId,
   currentUser,
   className,
+  theme = 'light',
+  loading: externalLoading = false,
   onBack,
-  onEdit,
-  onDelete,
-  onDuplicate,
-  onStatusChange,
 }) => {
+  const router = useRouter();
+  const currentTheme = getTheme(theme);
+
+  // State
+  const [product, setProduct] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [isLiked, setIsLiked] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
+  const [loadingRelated, setLoadingRelated] = useState(false);
 
-  const canManage = productService.canManageProduct(product, currentUser);
-  const stockStatus = productService.getStockStatus(product.inventory);
-  const formattedPrice = productService.formatPrice(product.price);
+  // Check if user can manage this product
+  const canManage = product && currentUser && productService.canManageProduct(product, currentUser);
 
+  // Format helpers
   const formatDate = (dateString: string) =>
     new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -404,274 +401,637 @@ export const ProductDetails: React.FC<ProfileDetailsProps> = ({
       day: 'numeric',
     });
 
+  // Fetch product data
+  useEffect(() => {
+    const fetchProduct = async () => {
+      if (!productId) return;
+
+      setLoading(true);
+      try {
+        const productData = await productService.getProduct(productId);
+        setProduct(productData);
+
+        // Fetch related products if product exists
+        if (productData) {
+          fetchRelatedProducts(productData._id);
+        }
+      } catch (error) {
+        productToast.error('Failed to load product');
+        console.error('Product fetch error:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProduct();
+  }, [productId]);
+
+  // Fetch related products
+  const fetchRelatedProducts = async (id: string) => {
+    setLoadingRelated(true);
+    try {
+      const related = await productService.getRelatedProducts(id, 4);
+      setRelatedProducts(related);
+    } catch (error) {
+      console.error('Failed to fetch related products:', error);
+    } finally {
+      setLoadingRelated(false);
+    }
+  };
+
+  // Handlers
   const handleDelete = async () => {
+    if (!product || !canManage) return;
+
     setIsDeleting(true);
     try {
-      await onDelete?.(product);
-      setDeleteModalOpen(false);
+      await productService.deleteProduct(product._id);
+      productToast.success('Product deleted successfully');
+
+      // Navigate back or to products list
+      if (canManage) {
+        router.push('/dashboard/company/products');
+      } else {
+        router.push('/dashboard/products');
+      }
     } catch (error) {
-      console.error('Failed to delete product:', error);
+      productToast.error('Failed to delete product');
+      console.error('Delete error:', error);
     } finally {
       setIsDeleting(false);
+      setDeleteModalOpen(false);
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      productToast.success('Link copied to clipboard!');
+    } catch (error) {
+      productToast.error('Failed to copy link');
     }
   };
 
   const handleDuplicate = () => {
-    onDuplicate?.(product);
+    if (!product) return;
+    // Navigate to create product with pre-filled data
+    router.push({
+      pathname: '/dashboard/company/products/create',
+      query: { duplicateFrom: product._id }
+    });
   };
 
-  const handleStatusChange = (status: Product['status']) => {
-    onStatusChange?.(product, status);
+  const handleStatusChange = async (status: Product['status']) => {
+    if (!product) return;
+
+    try {
+      const updatedProduct = await productService.updateProductStatus(product._id, status);
+      setProduct(updatedProduct);
+      productToast.success(`Product status updated to ${status}`);
+    } catch (error) {
+      productToast.error('Failed to update status');
+    }
   };
 
-  return (
-    <div className={cn('min-h-screen bg-transparent', className)}>
-      {/* Delete Confirmation Modal */}
-      <ConfirmationModal
-        isOpen={deleteModalOpen}
-        onClose={() => !isDeleting && setDeleteModalOpen(false)}
-        onConfirm={handleDelete}
-        title="Delete Product"
-        message={`Are you sure you want to delete "${product.name}"? This action cannot be undone and all product data will be permanently removed.`}
-        confirmText="Delete Product"
-        variant="danger"
-        isLoading={isDeleting}
-      />
+  // Get company info
+  const company = product?.companyId && typeof product.companyId === 'object'
+    ? product.companyId
+    : null;
 
-      {/* Top row: back + actions */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            onClick={onBack}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 border-2 border-gray-300 hover:border-gray-400 font-bold"
-          >
-            <ArrowLeft className="h-4 w-4" />
+  // Get company avatar URL
+  const companyAvatarUrl = getOptimizedAvatarUrl(company?.logoUrl, company);
+
+  // Stock status and formatted price
+  const stockStatus = product ? productService.getStockStatus(product.inventory) : null;
+  const formattedPrice = product ? productService.formatPrice(product.price) : '';
+
+  // Show loading state
+  const isLoading = loading || externalLoading;
+
+  if (isLoading) {
+    return (
+      <div className={cn("min-h-screen", className)} style={{ backgroundColor: currentTheme.bg.white }}>
+        <div className="container mx-auto px-4 py-8">
+          <div className="mb-6">
+            <div className="h-10 w-48 animate-pulse" style={{ backgroundColor: currentTheme.bg.gray100 }} />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="aspect-[4/3] rounded-xl animate-pulse" style={{ backgroundColor: currentTheme.bg.gray100 }} />
+            <div className="space-y-6">
+              <div className="h-8 w-3/4 animate-pulse" style={{ backgroundColor: currentTheme.bg.gray100 }} />
+              <div className="h-6 w-1/2 animate-pulse" style={{ backgroundColor: currentTheme.bg.gray100 }} />
+              <div className="h-24 w-full animate-pulse" style={{ backgroundColor: currentTheme.bg.gray100 }} />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!product) {
+    return (
+      <div className={cn("min-h-screen flex items-center justify-center", className)}
+        style={{ backgroundColor: currentTheme.bg.white }}>
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-4" style={{ color: currentTheme.text.primary }}>
+            Product Not Found
+          </h2>
+          <Button onClick={onBack} variant="outline">
+            <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Products
           </Button>
-          <div className="hidden sm:flex items-center gap-3 text-sm text-gray-500">
-            <span className="flex items-center gap-1">
-              <Eye className="h-4 w-4" /> {product.views} views
-            </span>
-            <span className="flex items-center gap-1">
-              <Calendar className="h-4 w-4" />
-              {formatDate(product.createdAt)}
-            </span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("min-h-screen", className)} style={{ backgroundColor: currentTheme.bg.white }}>
+      {/* Delete Confirmation Modal */}
+      <AlertDialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Product</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{product.name}"? This action cannot be undone and all product data will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              {isDeleting ? "Deleting..." : "Delete Product"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <div className="container mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              onClick={onBack || (() => router.back())}
+              className="gap-2"
+              style={{
+                borderColor: currentTheme.border.gray100,
+                color: currentTheme.text.gray800
+              }}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Products
+            </Button>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="flex items-center gap-1" style={{ color: currentTheme.text.gray400 }}>
+                <Eye className="h-4 w-4" /> {product.views} views
+              </span>
+              <Separator orientation="vertical" className="h-4" style={{ backgroundColor: currentTheme.bg.gray100 }} />
+              <span className="flex items-center gap-1" style={{ color: currentTheme.text.gray400 }}>
+                <Calendar className="h-4 w-4" />
+                {formatDate(product.createdAt)}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Conditional Action Buttons */}
+            {canManage ? (
+              // OWNER VIEW ACTIONS
+              <>
+                <Button
+                  onClick={() => router.push(`/dashboard/company/products/${product._id}/edit`)}
+                  className="gap-2"
+                  style={{
+                    backgroundColor: colors.goldenMustard,
+                    color: colors.white
+                  }}
+                >
+                  <Edit3 className="h-4 w-4" />
+                  Edit
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" style={{ borderColor: currentTheme.border.gray100 }}>
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem onClick={handleDuplicate} className="gap-2 cursor-pointer">
+                      <Copy className="h-4 w-4" />
+                      Duplicate Product
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <div className="px-2 py-1.5 text-xs font-medium" style={{ color: currentTheme.text.gray400 }}>
+                      Change Status
+                    </div>
+                    {product.status !== 'active' && (
+                      <DropdownMenuItem
+                        onClick={() => handleStatusChange('active')}
+                        className="gap-2 cursor-pointer"
+                      >
+                        <CheckCircle className="h-4 w-4" style={{ color: currentTheme.text.success }} />
+                        Set Active
+                      </DropdownMenuItem>
+                    )}
+                    {product.status !== 'inactive' && (
+                      <DropdownMenuItem
+                        onClick={() => handleStatusChange('inactive')}
+                        className="gap-2 cursor-pointer"
+                      >
+                        <Clock className="h-4 w-4" style={{ color: currentTheme.text.gray400 }} />
+                        Set Inactive
+                      </DropdownMenuItem>
+                    )}
+                    {product.status !== 'draft' && (
+                      <DropdownMenuItem
+                        onClick={() => handleStatusChange('draft')}
+                        className="gap-2 cursor-pointer"
+                      >
+                        <AlertCircle className="h-4 w-4" style={{ color: currentTheme.text.warning }} />
+                        Set Draft
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => setDeleteModalOpen(true)}
+                      className="gap-2 cursor-pointer"
+                      style={{ color: currentTheme.text.error }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete Product
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            ) : (
+              // PUBLIC VIEW ACTIONS
+              <>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setIsSaved(!isSaved)}
+                        className={isSaved ? "border-red-500 text-red-500 hover:text-red-600" : ""}
+                        style={{ borderColor: currentTheme.border.gray100 }}
+                      >
+                        {isSaved ? (
+                          <Heart className="h-4 w-4 fill-red-500" />
+                        ) : (
+                          <Bookmark className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {isSaved ? 'Remove from saved' : 'Save for later'}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={handleShare}
+                        style={{ borderColor: currentTheme.border.gray100 }}
+                      >
+                        <Share2 className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Share product
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsLiked(!isLiked)}
-            className="flex items-center gap-2 text-gray-600 hover:text-red-600 border-2 border-gray-300 font-bold"
-          >
-            <Heart
-              className={cn(
-                'h-4 w-4 transition-colors',
-                isLiked ? 'fill-red-500 text-red-500' : 'text-gray-600'
-              )}
-            />
-            <span className="sr-only">Save</span>
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() =>
-              navigator.clipboard?.writeText(window.location.href)
-            }
-            className="flex items-center gap-2 text-gray-600 hover:text-blue-600 border-2 border-gray-300 font-bold"
-          >
-            <Share2 className="h-4 w-4" />
-            <span className="sr-only">Share</span>
-          </Button>
-
-          {canManage && onEdit && (
-            <Button 
-              onClick={() => onEdit(product)}
-              className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold border-2 border-gray-200 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]"
-            >
-              <Edit3 className="h-4 w-4 mr-2" />
-              Edit Product
-            </Button>
-          )}
-
-          {canManage && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  className="border-2 border-gray-300 hover:border-gray-400 font-bold"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent 
-                align="end" 
-                className="bg-white border-2 border-gray-200 rounded-xl shadow-[8px_8px_0px_0px_rgba(0,0,0,0.2)] min-w-[200px] p-2"
-              >
-                <DropdownMenuItem 
-                  onClick={handleDuplicate}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg font-bold hover:bg-blue-50 cursor-pointer"
-                >
-                  <Copy className="h-4 w-4" />
-                  Duplicate Product
-                </DropdownMenuItem>
-                
-                {/* Status Options */}
-                {product.status !== 'active' && (
-                  <DropdownMenuItem 
-                    onClick={() => handleStatusChange('active')}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg font-bold hover:bg-green-50 cursor-pointer"
-                  >
-                    <div className="h-2 w-2 bg-green-500 rounded-full" />
-                    Set Active
-                  </DropdownMenuItem>
-                )}
-                {product.status !== 'inactive' && (
-                  <DropdownMenuItem 
-                    onClick={() => handleStatusChange('inactive')}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg font-bold hover:bg-gray-50 cursor-pointer"
-                  >
-                    <div className="h-2 w-2 bg-gray-500 rounded-full" />
-                    Set Inactive
-                  </DropdownMenuItem>
-                )}
-                {product.status !== 'draft' && (
-                  <DropdownMenuItem 
-                    onClick={() => handleStatusChange('draft')}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg font-bold hover:bg-yellow-50 cursor-pointer"
-                  >
-                    <div className="h-2 w-2 bg-yellow-500 rounded-full" />
-                    Set Draft
-                  </DropdownMenuItem>
-                )}
-                
-                <DropdownMenuItem 
-                  onClick={() => setDeleteModalOpen(true)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg font-bold hover:bg-red-50 text-red-600 cursor-pointer"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete Product
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* LEFT: Enhanced gallery */}
-        <EnhancedGallery
-          product={product}
-          currentIndex={currentImageIndex}
-          onIndexChange={setCurrentImageIndex}
-        />
-
-        {/* RIGHT: Product info */}
-        <div className="space-y-6">
+        {/* Main Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Gallery Section */}
           <div>
-            <div className="flex items-center gap-3 mb-4">
+            <ProductGallery
+              product={product}
+              currentIndex={currentImageIndex}
+              onIndexChange={setCurrentImageIndex}
+              theme={theme}
+            />
+          </div>
+
+          {/* Product Info Section */}
+          <div className="space-y-6">
+            {/* Status Badges */}
+            <div className="flex flex-wrap gap-2">
               {product.featured && (
-                <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 text-white border-2 border-gray-200 font-bold flex items-center">
-                  <Star className="h-3 w-3 mr-1 fill-current" /> Featured
+                <Badge variant="default" className="gap-1"
+                  style={{
+                    backgroundColor: colors.goldenMustard,
+                    color: colors.white
+                  }}>
+                  <Star className="h-3 w-3 fill-current" />
+                  Featured
                 </Badge>
               )}
-
               <Badge
+                variant="outline"
                 className={cn(
-                  'border-2 font-bold',
-                  product.status === 'active' && 'bg-gradient-to-r from-green-500 to-emerald-500 text-white border-green-600',
-                  product.status === 'inactive' && 'bg-gradient-to-r from-gray-500 to-gray-600 text-white border-gray-600',
-                  product.status === 'draft' && 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white border-yellow-600'
+                  product.status === 'active' && 'border-green-500',
+                  product.status === 'inactive' && 'border-gray-500',
+                  product.status === 'draft' && 'border-amber-500'
                 )}
+                style={{
+                  color: product.status === 'active' ? currentTheme.text.success :
+                    product.status === 'inactive' ? currentTheme.text.gray400 :
+                      currentTheme.text.warning
+                }}
               >
                 {product.status}
               </Badge>
-            </div>
-
-            <h1 className="text-3xl sm:text-4xl font-extrabold leading-tight text-gray-900 mb-3">
-              {product.name}
-            </h1>
-
-            <p className="text-2xl sm:text-3xl font-black text-gray-900 mb-4">
-              {formattedPrice}
-            </p>
-
-            <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
-              <div className="inline-flex items-center gap-2">
-                <span
-                  className="inline-block h-3 w-3 rounded-full"
-                  style={{ backgroundColor: stockStatus.color }}
-                />
-                <span className="font-bold">{stockStatus.text}</span>
-              </div>
-
-              {product.inventory?.trackQuantity && (
-                <div className="text-sm font-bold text-gray-600">
-                  {product.inventory.quantity} in stock
-                </div>
+              {stockStatus && (
+                <Badge
+                  variant="outline"
+                  className="gap-1"
+                  style={{
+                    borderColor: stockStatus.color,
+                    color: stockStatus.color
+                  }}
+                >
+                  <div
+                    className="h-2 w-2 rounded-full"
+                    style={{ backgroundColor: stockStatus.color }}
+                  />
+                  {stockStatus.text}
+                </Badge>
               )}
             </div>
 
-            {/* short description */}
-            {product.shortDescription && (
-              <p className="text-gray-700 leading-relaxed mb-6 text-lg font-medium">{product.shortDescription}</p>
-            )}
-          </div>
+            {/* Product Title */}
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight" style={{ color: currentTheme.text.gray800 }}>
+              {product.name}
+            </h1>
 
-          {/* Stock & quantity card */}
-          <Card className="shadow-sm border-2 border-gray-200 bg-gradient-to-br from-white to-gray-50">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
+            {/* Company Info */}
+            {company && (
+              <div className="flex items-center gap-3">
+                <EntityAvatar
+                  name={company.name}
+                  avatar={companyAvatarUrl}
+                  size="md"
+                  themeMode={theme}
+                />
                 <div>
-                  <p className="text-sm font-bold text-gray-600">Availability</p>
-                  <p className="text-xl font-black text-gray-900 mt-1">{stockStatus.text}</p>
-                </div>
-                {product.inventory?.trackQuantity && (
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-gray-600">Stock Level</p>
-                    <p className="text-xl font-black text-gray-900">{product.inventory.quantity} units</p>
+                  <div className="flex items-center gap-2">
+                    {canManage ? (
+                      <span className="font-medium" style={{ color: currentTheme.text.gray800 }}>
+                        {company.name}
+                      </span>
+                    ) : (
+                      <Link href={`/companies/${company._id}`} className="font-medium hover:underline"
+                        style={{ color: currentTheme.text.blue }}>
+                        {company.name}
+                      </Link>
+                    )}
+                    {company.verified && (
+                      <Badge variant="outline" size="sm"
+                        style={{
+                          borderColor: colors.blue,
+                          color: currentTheme.text.blue
+                        }}>
+                        Verified
+                      </Badge>
+                    )}
                   </div>
+                  {company.industry && (
+                    <p className="text-sm" style={{ color: currentTheme.text.gray400 }}>
+                      {company.industry}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Price */}
+            <div className="space-y-2">
+              <div className="text-3xl sm:text-4xl font-bold" style={{ color: currentTheme.text.gray800 }}>
+                {formattedPrice}
+                {product.price.unit && product.price.unit !== 'unit' && (
+                  <span className="text-lg font-normal" style={{ color: currentTheme.text.gray400 }}>
+                    / {product.price.unit}
+                  </span>
                 )}
+              </div>
+              {product.inventory.trackQuantity && (
+                <p className="text-sm" style={{ color: currentTheme.text.gray400 }}>
+                  {product.inventory.quantity} units available
+                  {product.inventory.quantity <= product.inventory.lowStockAlert && (
+                    <span className="font-medium ml-1" style={{ color: currentTheme.text.warning }}>
+                      (Low stock)
+                    </span>
+                  )}
+                </p>
+              )}
+            </div>
+
+            {/* Short Description */}
+            {product.shortDescription && (
+              <Card style={{ borderColor: currentTheme.border.gray100 }}>
+                <CardContent className="pt-6">
+                  <h3 className="font-semibold text-lg mb-2" style={{ color: currentTheme.text.gray800 }}>
+                    Overview
+                  </h3>
+                  <p className="leading-relaxed" style={{ color: currentTheme.text.gray400 }}>
+                    {product.shortDescription}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Tags */}
+            {product.tags.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium" style={{ color: currentTheme.text.gray800 }}>
+                  <Tag className="h-4 w-4" />
+                  Tags
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {product.tags.map((tag, index) => (
+                    <Badge
+                      key={index}
+                      variant="secondary"
+                      className="font-normal transition-colors"
+                      style={{
+                        backgroundColor: currentTheme.bg.gray100,
+                        color: currentTheme.text.gray400
+                      }}
+                    >
+                      #{tag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* SKU & Category */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Card style={{ borderColor: currentTheme.border.gray100 }}>
+                <CardContent className="pt-6">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-sm font-medium" style={{ color: currentTheme.text.gray400 }}>
+                      <Package className="h-4 w-4" />
+                      SKU
+                    </div>
+                    <p className="font-medium" style={{ color: currentTheme.text.gray800 }}>
+                      {product.sku || 'N/A'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card style={{ borderColor: currentTheme.border.gray100 }}>
+                <CardContent className="pt-6">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-sm font-medium" style={{ color: currentTheme.text.gray400 }}>
+                      <Tag className="h-4 w-4" />
+                      Category
+                    </div>
+                    <p className="font-medium" style={{ color: currentTheme.text.gray800 }}>
+                      {product.category}
+                      {product.subcategory && ` › ${product.subcategory}`}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+
+        {/* Description & Specifications */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+          {/* Description */}
+          <Card style={{ borderColor: currentTheme.border.gray100 }}>
+            <CardContent className="pt-6">
+              <h3 className="text-xl font-bold mb-4" style={{ color: currentTheme.text.gray800 }}>
+                Product Description
+              </h3>
+              <div className="prose prose-gray dark:prose-invert max-w-none">
+                <p className="whitespace-pre-line leading-relaxed" style={{ color: currentTheme.text.gray400 }}>
+                  {product.description}
+                </p>
               </div>
             </CardContent>
           </Card>
+
+          {/* Specifications */}
+          {product.specifications?.length > 0 && (
+            <Card style={{ borderColor: currentTheme.border.gray100 }}>
+              <CardContent className="pt-6">
+                <h3 className="text-xl font-bold mb-4" style={{ color: currentTheme.text.gray800 }}>
+                  Specifications
+                </h3>
+                <div className="space-y-3">
+                  {product.specifications.map((spec, index) => (
+                    <div key={index} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-3 border-b last:border-0"
+                      style={{ borderColor: currentTheme.border.gray100 }}>
+                      <span className="font-medium text-sm sm:text-base" style={{ color: currentTheme.text.gray800 }}>
+                        {spec.key}
+                      </span>
+                      <span className="text-sm sm:text-base text-right" style={{ color: currentTheme.text.gray400 }}>
+                        {spec.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
-      </div>
 
-      {/* Description + Specs */}
-      <div className=" gap-6 mt-8">
-        <Card className="border-2 border-gray-200 bg-gradient-to-br from-white to-gray-50">
-          <CardContent className="p-6">
-            <h3 className="text-2xl font-black text-gray-900 mb-4">Description</h3>
-            <p className="text-gray-700 leading-relaxed whitespace-pre-line text-lg">
-              {product.description}
-            </p>
-          </CardContent>
-        </Card>
+        {/* Related Products Section */}
+        {relatedProducts.length > 0 && (
+          <div className="mt-12">
+            <h2 className="text-2xl font-bold mb-6" style={{ color: currentTheme.text.gray800 }}>
+              Related Products
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {relatedProducts.map((relatedProduct) => {
+                const relatedCompany = typeof relatedProduct.companyId === 'object' ? relatedProduct.companyId : null;
+                const relatedCompanyAvatarUrl = getOptimizedAvatarUrl(relatedCompany?.logoUrl, relatedCompany);
 
-        {product.specifications?.length > 0 && (
-          <Card className="border-2 border-gray-200 bg-gradient-to-br from-white to-gray-50">
-            <CardContent className="p-6">
-              <h3 className="text-2xl font-black text-gray-900 mb-4">Specifications</h3>
-              <dl className="grid grid-cols-1 gap-y-4">
-                {product.specifications.map((spec, i) => (
-                  <div key={i} className="flex justify-between items-center p-3 border-2 border-gray-200 rounded-xl bg-white">
-                    <dt className="font-bold text-gray-800 text-lg">{spec.key}</dt>
-                    <dd className="text-gray-600 font-medium text-lg">{spec.value}</dd>
+                return (
+                  <div key={relatedProduct._id} className="bg-white rounded-xl border p-4 hover:shadow-lg transition-shadow"
+                    style={{ borderColor: currentTheme.border.gray100 }}>
+                    <div className="aspect-square mb-3 rounded-lg overflow-hidden bg-gray-100">
+                      {relatedProduct.images?.[0] && (
+                        <img
+                          src={productService.getImageUrl(relatedProduct.images[0].secure_url, {
+                            width: 200,
+                            height: 200,
+                            crop: 'fill'
+                          })}
+                          alt={relatedProduct.name}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <EntityAvatar
+                        name={relatedCompany?.name || 'Company'}
+                        avatar={relatedCompanyAvatarUrl}
+                        size="xs"
+                        themeMode={theme}
+                      />
+                      <span className="text-xs font-medium truncate" style={{ color: currentTheme.text.gray400 }}>
+                        {relatedCompany?.name || 'Company'}
+                      </span>
+                    </div>
+                    <h3 className="font-semibold mb-1 line-clamp-1" style={{ color: currentTheme.text.gray800 }}>
+                      {relatedProduct.name}
+                    </h3>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold" style={{ color: colors.goldenMustard }}>
+                        {productService.formatPrice(relatedProduct.price)}
+                      </span>
+                      <Link href={`/dashboard/products/${relatedProduct._id}`}>
+                        <Button size="sm" variant="outline">
+                          View
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
-                ))}
-              </dl>
-            </CardContent>
-          </Card>
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
     </div>
   );
 };
 
-export default ProductDetails;
+// Helper CSS for hiding scrollbars
+const scrollbarHideCSS = `
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+`;
+
+// Add the CSS to document head
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.textContent = scrollbarHideCSS;
+  document.head.appendChild(style);
+}
+
+export default ProductDetail;

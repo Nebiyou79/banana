@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // components/CompanyApplicationDetails.tsx - PREMIUM UI WITH BOTTOM ACTIONS
 import React, { useState, useEffect } from 'react';
-import { 
-  Application, 
+import {
+  Application,
   applicationService
 } from '@/services/applicationService';
 import { StatusManager } from './StatusManager';
@@ -34,6 +34,10 @@ import {
   Target,
   Star
 } from 'lucide-react';
+
+// Import the new attachment system
+import { ApplicationAttachments, NormalizedAttachment } from '@/components/applications/ApplicationAttachments';
+import { AttachmentList } from '@/components/applications/AttachmentList';
 
 interface CompanyApplicationDetailsProps {
   applicationId: string;
@@ -70,7 +74,7 @@ export const CompanyApplicationDetails: React.FC<CompanyApplicationDetailsProps>
       }
 
       setIsLoading(true);
-      
+
       let response;
       if (viewType === 'company') {
         response = await applicationService.getCompanyApplicationDetails(applicationId);
@@ -79,12 +83,12 @@ export const CompanyApplicationDetails: React.FC<CompanyApplicationDetailsProps>
       } else {
         response = await applicationService.getApplicationDetails(applicationId, viewType);
       }
-      
+
       setApplication(response.data.application);
-      
+
     } catch (error: any) {
       console.error('❌ Failed to load application:', error);
-      
+
       if (error.message.includes('Not authorized') || error.message.includes('403')) {
         toast({
           title: 'Access Denied',
@@ -92,7 +96,7 @@ export const CompanyApplicationDetails: React.FC<CompanyApplicationDetailsProps>
           variant: 'destructive',
           duration: 5000,
         });
-        
+
         setTimeout(() => {
           if (onBack) onBack();
         }, 3000);
@@ -125,75 +129,12 @@ export const CompanyApplicationDetails: React.FC<CompanyApplicationDetailsProps>
     });
   };
 
-  const handleDownloadFile = async (file: any, type: 'cv' | 'references' | 'experience' | 'applications') => {
-    try {
-      const plainFile = applicationService.convertMongooseDocToPlainObject(file);
-      await applicationService.downloadFile(plainFile, type);
-      
-      toast({
-        title: 'Download Started',
-        description: 'File download has been initiated',
-        variant: 'default',
-      });
-    } catch (error: any) {
-      console.error('Download error:', error);
-      toast({
-        title: 'Download Failed',
-        description: error.message || 'Failed to download file',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleViewFile = async (file: any, type: 'cv' | 'references' | 'experience' | 'applications') => {
-    try {
-      const plainFile = applicationService.convertMongooseDocToPlainObject(file);
-      await applicationService.viewFile(plainFile, type);
-    } catch (error: any) {
-      console.error('View error:', error);
-      toast({
-        title: 'View Failed',
-        description: error.message || 'Failed to view file',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleDownloadAllDocuments = async () => {
-    try {
-      const allDocuments = getAllDocuments();
-      let downloadedCount = 0;
-
-      for (const doc of allDocuments) {
-        try {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          await handleDownloadFile(doc.file, doc.downloadType);
-          downloadedCount++;
-        } catch (error) {
-          console.error(`Failed to download ${doc.name}:`, error);
-        }
-      }
-
-      toast({
-        title: 'Downloads Complete',
-        description: `Successfully downloaded ${downloadedCount} out of ${allDocuments.length} files`,
-        variant: downloadedCount === allDocuments.length ? 'default' : 'destructive',
-      });
-    } catch (error: any) {
-      toast({
-        title: 'Download Failed',
-        description: error.message || 'Failed to download all documents',
-        variant: 'destructive',
-      });
-    }
-  };
-
   // Premium Glass Card Component
-  const GlassCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ 
-    children, 
-    className = '' 
+  const GlassCard: React.FC<{ children: React.ReactNode; className?: string }> = ({
+    children,
+    className = ''
   }) => (
-    <div 
+    <div
       className={`rounded-2xl border border-white/30 bg-white/20 backdrop-blur-xl shadow-2xl shadow-black/5 ${className}`}
       style={{
         background: 'rgba(255, 255, 255, 0.15)',
@@ -207,8 +148,8 @@ export const CompanyApplicationDetails: React.FC<CompanyApplicationDetailsProps>
   );
 
   // Premium Badge Component
-  const PremiumBadge: React.FC<{ 
-    children: React.ReactNode; 
+  const PremiumBadge: React.FC<{
+    children: React.ReactNode;
     variant?: 'default' | 'gold' | 'platinum';
   }> = ({ children, variant = 'default' }) => {
     const variants = {
@@ -267,109 +208,6 @@ export const CompanyApplicationDetails: React.FC<CompanyApplicationDetailsProps>
     });
   };
 
-  // Enhanced document organization with proper download types
-  const getAllDocuments = () => {
-    if (!application) return [];
-    
-    const documents: Array<{
-      id: string;
-      name: string;
-      file: any;
-      type: 'cv' | 'reference' | 'experience' | 'portfolio' | 'other';
-      downloadType: 'cv' | 'references' | 'experience' | 'applications';
-      category: string;
-      description: string;
-      icon: React.ReactNode;
-      color: string;
-      canView: boolean;
-    }> = [];
-
-    // Add CVs
-    application.selectedCVs.forEach((cv, index) => {
-      const plainCV = applicationService.convertMongooseDocToPlainObject(cv);
-      documents.push({
-        id: `cv-${index}-${plainCV._id || index}`,
-        name: cv.originalName || cv.filename || `CV-${index + 1}`,
-        file: plainCV,
-        type: 'cv',
-        downloadType: 'cv',
-        category: 'Curriculum Vitae',
-        description: 'Candidate\'s resume/CV',
-        icon: <FileText className="h-5 w-5" />,
-        color: 'blue',
-        canView: applicationService.canViewInline(plainCV)
-      });
-    });
-
-    // Add reference documents - ONLY if they have actual uploaded files
-    if (application.references) {
-      application.references.forEach((ref, index) => {
-        if (ref.document && ref.providedAsDocument) {
-          const plainDoc = applicationService.convertMongooseDocToPlainObject(ref.document);
-          documents.push({
-            id: `ref-${index}-${plainDoc._id || index}`,
-            name: ref.document.originalName || `Reference from ${ref.name}`,
-            file: plainDoc,
-            type: 'reference',
-            downloadType: 'references',
-            category: 'Professional References',
-            description: `Reference letter from ${ref.name}`,
-            icon: <Users className="h-5 w-5" />,
-            color: 'purple',
-            canView: applicationService.canViewInline(plainDoc)
-          });
-        }
-      });
-    }
-
-    // Add experience documents - ONLY if they have actual uploaded files
-    if (application.workExperience) {
-      application.workExperience.forEach((exp, index) => {
-        if (exp.document && exp.providedAsDocument) {
-          const plainDoc = applicationService.convertMongooseDocToPlainObject(exp.document);
-          documents.push({
-            id: `exp-${index}-${plainDoc._id || index}`,
-            name: exp.document.originalName || `Experience at ${exp.company}`,
-            file: plainDoc,
-            type: 'experience',
-            downloadType: 'experience',
-            category: 'Work Experience',
-            description: `Work experience at ${exp.company}`,
-            icon: <Briefcase className="h-5 w-5" />,
-            color: 'green',
-            canView: applicationService.canViewInline(plainDoc)
-          });
-        }
-      });
-    }
-
-    // Add all other attachments
-    const allAttachments = applicationService.getAllAttachments(application);
-    allAttachments.forEach((attachment, index) => {
-      const plainAttachment = applicationService.convertMongooseDocToPlainObject(attachment);
-      const isAlreadyIncluded = documents.some(doc => 
-        doc.file._id === attachment._id || doc.file.filename === attachment.filename
-      );
-      
-      if (!isAlreadyIncluded) {
-        documents.push({
-          id: `att-${index}-${plainAttachment._id || index}`,
-          name: attachment.originalName || attachment.filename || `Document-${index + 1}`,
-          file: plainAttachment,
-          type: 'other',
-          downloadType: 'applications',
-          category: 'Additional Documents',
-          description: 'Supporting document',
-          icon: <File className="h-5 w-5" />,
-          color: 'gray',
-          canView: applicationService.canViewInline(plainAttachment)
-        });
-      }
-    });
-
-    return documents;
-  };
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/20 flex items-center justify-center p-4">
@@ -394,8 +232,8 @@ export const CompanyApplicationDetails: React.FC<CompanyApplicationDetailsProps>
             The application you`re looking for doesn`t exist or may have been removed.
           </p>
           {onBack && (
-            <Button 
-              onClick={onBack} 
+            <Button
+              onClick={onBack}
               className="bg-white/30 backdrop-blur-sm border-white/40 text-gray-700 hover:bg-white/50"
             >
               <ArrowLeft className="h-5 w-5 mr-3" />
@@ -408,11 +246,8 @@ export const CompanyApplicationDetails: React.FC<CompanyApplicationDetailsProps>
   }
 
   const formattedApplication = applicationService.formatApplication(application);
-  const allDocuments = getAllDocuments();
-  const hasAdditionalDocuments = allDocuments.length > application.selectedCVs.length;
-
-  const ownerInfo = application.job.jobType === 'organization' 
-    ? application.job.organization 
+  const ownerInfo = application.job.jobType === 'organization'
+    ? application.job.organization
     : application.job.company;
 
   const isOrganization = viewType === 'organization';
@@ -424,36 +259,36 @@ export const CompanyApplicationDetails: React.FC<CompanyApplicationDetailsProps>
         <div className="space-y-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="grid grid-cols-5 w-full bg-white/30 backdrop-blur-sm p-1 rounded-xl border border-white/40">
-              <TabsTrigger 
-                value="overview" 
+              <TabsTrigger
+                value="overview"
                 className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg py-3 transition-all"
               >
                 <User className="h-4 w-4" />
                 Overview
               </TabsTrigger>
-              <TabsTrigger 
-                value="documents" 
+              <TabsTrigger
+                value="documents"
                 className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg py-3 transition-all"
               >
                 <FolderOpen className="h-4 w-4" />
-                Documents ({allDocuments.length})
+                Documents
               </TabsTrigger>
-              <TabsTrigger 
-                value="experience" 
+              <TabsTrigger
+                value="experience"
                 className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg py-3 transition-all"
               >
                 <Briefcase className="h-4 w-4" />
                 Experience
               </TabsTrigger>
-              <TabsTrigger 
-                value="references" 
+              <TabsTrigger
+                value="references"
                 className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg py-3 transition-all"
               >
                 <Users className="h-4 w-4" />
                 References
               </TabsTrigger>
-              <TabsTrigger 
-                value="status" 
+              <TabsTrigger
+                value="status"
                 className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg py-3 transition-all"
               >
                 <Star className="h-4 w-4" />
@@ -560,102 +395,71 @@ export const CompanyApplicationDetails: React.FC<CompanyApplicationDetailsProps>
 
             {/* Documents Tab */}
             <TabsContent value="documents" className="space-y-6 animate-in fade-in duration-300">
-              {/* Document Summary */}
-              <GlassCard className="p-6 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-blue-400/30">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 rounded-xl bg-blue-500/20 border border-blue-400/30">
-                      <FolderOpen className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900">
-                        Document Summary
-                      </h3>
-                      <p className="text-gray-700">
-                        {allDocuments.length} total document(s) submitted by candidate
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-gray-600">
-                      Breakdown
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {application.selectedCVs.length} CV(s) • {allDocuments.length - application.selectedCVs.length} supporting document(s)
-                    </p>
-                  </div>
-                </div>
-              </GlassCard>
-
-              {/* All Documents */}
-              <GlassCard className="p-8">
-                <div className="space-y-4">
-                  {allDocuments.length > 0 ? (
-                    allDocuments.map((doc) => {
-                      const colorClasses = {
-                        blue: 'bg-blue-500/20 text-blue-600 border-blue-400/30',
-                        purple: 'bg-purple-500/20 text-purple-600 border-purple-400/30',
-                        green: 'bg-green-500/20 text-green-600 border-green-400/30',
-                        gray: 'bg-gray-500/20 text-gray-600 border-gray-400/30'
-                      }[doc.color];
-
-                      return (
-                        <div key={doc.id} className="flex items-center justify-between p-6 rounded-xl bg-white/30 backdrop-blur-sm border border-white/40 hover:bg-white/40 transition-all duration-200 group">
-                          <div className="flex items-center gap-4 flex-1">
-                            <div className={`p-3 rounded-xl border ${colorClasses}`}>
-                              {doc.icon}
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
-                                {doc.name}
-                              </p>
-                              <div className="flex items-center gap-4 mt-2">
-                                <PremiumBadge>
-                                  {doc.category}
-                                </PremiumBadge>
-                                <p className="text-sm text-gray-500">
-                                  {applicationService.getFileSize(doc.file)}
+              <ApplicationAttachments application={application}>
+                  {(attachments, handlers) => {
+                    const cvCount = attachments.filter((a: { category: string; }) => a.category === 'CV').length;
+                    const otherCount = (attachments.length ?? 0) - cvCount;
+                    const handleDownloadAll = () => {
+                      // normalize handler to a no-arg function for buttons / AttachmentList
+                      (handlers.onDownloadAll as unknown as () => void)?.();
+                    };
+  
+                    return (
+                      <>
+                        {/* Document Summary */}
+                        <GlassCard className="p-6 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-blue-400/30">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <div className="p-3 rounded-xl bg-blue-500/20 border border-blue-400/30">
+                                <FolderOpen className="h-6 w-6 text-blue-600" />
+                              </div>
+                              <div>
+                                <h3 className="text-lg font-bold text-gray-900">
+                                  Document Summary
+                                </h3>
+                                <p className="text-gray-700">
+                                  {attachments.length} total document(s) submitted by candidate
                                 </p>
-                                <p className="text-sm text-gray-400">
-                                  {doc.description}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleDownloadAll}
+                                disabled={(attachments.length ?? 0) === 0}
+                                className="bg-gradient-to-r from-amber-400 to-yellow-400 text-amber-900 border-amber-300 hover:from-amber-500 hover:to-yellow-500"
+                              >
+                                <DownloadCloud className="h-4 w-4 mr-2" />
+                                Download All
+                              </Button>
+                              <div className="text-right">
+                                <p className="text-sm font-medium text-gray-600">
+                                  Breakdown
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {cvCount} CV(s) • {otherCount} supporting document(s)
                                 </p>
                               </div>
                             </div>
                           </div>
-                          <div className="flex gap-2">
-                            {doc.canView && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleViewFile(doc.file, doc.downloadType)}
-                                className="bg-white/50 backdrop-blur-sm border-white/60 text-gray-700 hover:bg-white/70"
-                              >
-                                <EyeIcon className="h-4 w-4" />
-                                View
-                              </Button>
-                            )}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDownloadFile(doc.file, doc.downloadType)}
-                              className="bg-gradient-to-r from-amber-400 to-yellow-400 text-amber-900 border-amber-300 hover:from-amber-500 hover:to-yellow-500"
-                            >
-                              <DownloadCloud className="h-4 w-4" />
-                              Download
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="text-center py-12">
-                      <FileText className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-500 text-lg font-medium">No documents submitted</p>
-                      <p className="text-gray-400">The candidate hasn`t uploaded any documents yet.</p>
-                    </div>
-                  )}
-                </div>
-              </GlassCard>
+                        </GlassCard>
+  
+                        {/* All Documents */}
+                        <AttachmentList
+                          attachments={attachments}
+                          onView={handlers.onView}
+                          onDownload={handlers.onDownload}
+                          onDownloadAll={handleDownloadAll}
+                          showDownloadAll={false} // Already shown in summary
+                          title="All Documents"
+                          description="All files submitted by the candidate"
+                          emptyMessage="No documents submitted"
+                        />
+                      </>
+                    );
+                  }}
+                </ApplicationAttachments>
             </TabsContent>
 
             {/* Experience Tab */}
@@ -682,50 +486,76 @@ export const CompanyApplicationDetails: React.FC<CompanyApplicationDetailsProps>
                               </p>
                             )}
                           </div>
-                          {/* Only show download button if there's an actual uploaded file */}
+                          {/* File actions moved to ApplicationAttachments */}
                           {exp.document && exp.providedAsDocument && (
-                            <div className="flex gap-2">
-                              {applicationService.canViewInline(exp.document) && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleViewFile(exp.document, 'experience')}
-                                  className="bg-white/50 backdrop-blur-sm border-white/60 text-gray-700 hover:bg-white/70"
-                                >
-                                  <EyeIcon className="h-4 w-4" />
-                                  View
-                                </Button>
-                              )}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDownloadFile(exp.document, 'experience')}
-                                className="bg-gradient-to-r from-amber-400 to-yellow-400 text-amber-900 border-amber-300 hover:from-amber-500 hover:to-yellow-500"
-                              >
-                                <DownloadCloud className="h-4 w-4" />
-                                Download
-                              </Button>
-                            </div>
+                            <ApplicationAttachments application={application}>
+                              {(attachments: any[], handlers: { onView: (arg0: any) => void; onDownload: (arg0: any) => void; }) => {
+                                const expAttachment = attachments.find((a: { category: string; description: string | string[]; }) =>
+                                  a.category === 'Experience' &&
+                                  a.description.includes(exp.company || '')
+                                );
+
+                                if (!expAttachment) return null;
+
+                                return (
+                                  <div className="flex gap-2">
+                                    {expAttachment.canView && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handlers.onView(expAttachment)}
+                                        className="bg-white/50 backdrop-blur-sm border-white/60 text-gray-700 hover:bg-white/70"
+                                      >
+                                        <EyeIcon className="h-4 w-4" />
+                                        View
+                                      </Button>
+                                    )}
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handlers.onDownload(expAttachment)}
+                                      className="bg-gradient-to-r from-amber-400 to-yellow-400 text-amber-900 border-amber-300 hover:from-amber-500 hover:to-yellow-500"
+                                    >
+                                      <DownloadCloud className="h-4 w-4" />
+                                      Download
+                                    </Button>
+                                  </div>
+                                );
+                              }}
+                            </ApplicationAttachments>
                           )}
                         </div>
-                        
+
                         {/* Show document info if there's an actual uploaded file */}
                         {exp.document && exp.providedAsDocument && (
-                          <div className="mt-4 p-4 bg-green-500/10 rounded-xl border border-green-400/30">
-                            <div className="flex items-center gap-3">
-                              <FileText className="h-5 w-5 text-green-600" />
-                              <div>
-                                <p className="font-medium text-green-900">
-                                  {exp.document.originalName || 'Experience Document'}
-                                </p>
-                                <p className="text-sm text-green-700">
-                                  {applicationService.getFileSize(exp.document)}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
+                          <ApplicationAttachments application={application}>
+                            {(attachments: any[]) => {
+                              const expAttachment = attachments.find((a: { category: string; description: string | string[]; }) =>
+                                a.category === 'Experience' &&
+                                a.description.includes(exp.company || '')
+                              );
+
+                              if (!expAttachment) return null;
+
+                              return (
+                                <div className="mt-4 p-4 bg-green-500/10 rounded-xl border border-green-400/30">
+                                  <div className="flex items-center gap-3">
+                                    <FileText className="h-5 w-5 text-green-600" />
+                                    <div>
+                                      <p className="font-medium text-green-900">
+                                        {expAttachment.name}
+                                      </p>
+                                      <p className="text-sm text-green-700">
+                                        {expAttachment.sizeLabel}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }}
+                          </ApplicationAttachments>
                         )}
-                        
+
                         {exp.skills && exp.skills.length > 0 && (
                           <div className="flex flex-wrap gap-2 mt-4">
                             {exp.skills.map((skill, skillIndex) => (
@@ -763,7 +593,7 @@ export const CompanyApplicationDetails: React.FC<CompanyApplicationDetailsProps>
                                 <strong className="text-gray-700">Relationship:</strong> {ref.relationship}
                               </div>
                               <div>
-                                <strong className="text-gray-700">Contact Allowed:</strong> 
+                                <strong className="text-gray-700">Contact Allowed:</strong>
                                 <span className={`ml-2 font-medium ${ref.allowsContact ? 'text-emerald-400' : 'text-rose-400'}`}>
                                   {ref.allowsContact ? 'Yes' : 'No'}
                                 </span>
@@ -787,48 +617,74 @@ export const CompanyApplicationDetails: React.FC<CompanyApplicationDetailsProps>
                               </p>
                             )}
                           </div>
-                          {/* Only show download button if there's an actual uploaded file */}
+                          {/* File actions moved to ApplicationAttachments */}
                           {ref.document && ref.providedAsDocument && (
-                            <div className="flex gap-2">
-                              {applicationService.canViewInline(ref.document) && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleViewFile(ref.document, 'references')}
-                                  className="bg-white/50 backdrop-blur-sm border-white/60 text-gray-700 hover:bg-white/70"
-                                >
-                                  <EyeIcon className="h-4 w-4" />
-                                  View
-                                </Button>
-                              )}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDownloadFile(ref.document, 'references')}
-                                className="bg-gradient-to-r from-amber-400 to-yellow-400 text-amber-900 border-amber-300 hover:from-amber-500 hover:to-yellow-500"
-                              >
-                                <DownloadCloud className="h-4 w-4" />
-                                Download
-                              </Button>
-                            </div>
+                            <ApplicationAttachments application={application}>
+                              {(attachments: any[], handlers: { onView: (arg0: any) => void; onDownload: (arg0: any) => void; }) => {
+                                const refAttachment = attachments.find((a: { category: string; description: string | string[]; }) =>
+                                  a.category === 'Reference' &&
+                                  a.description.includes(ref.name || '')
+                                );
+
+                                if (!refAttachment) return null;
+
+                                return (
+                                  <div className="flex gap-2">
+                                    {refAttachment.canView && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handlers.onView(refAttachment)}
+                                        className="bg-white/50 backdrop-blur-sm border-white/60 text-gray-700 hover:bg-white/70"
+                                      >
+                                        <EyeIcon className="h-4 w-4" />
+                                        View
+                                      </Button>
+                                    )}
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handlers.onDownload(refAttachment)}
+                                      className="bg-gradient-to-r from-amber-400 to-yellow-400 text-amber-900 border-amber-300 hover:from-amber-500 hover:to-yellow-500"
+                                    >
+                                      <DownloadCloud className="h-4 w-4" />
+                                      Download
+                                    </Button>
+                                  </div>
+                                );
+                              }}
+                            </ApplicationAttachments>
                           )}
                         </div>
-                        
+
                         {/* Show document info if there's an actual uploaded file */}
                         {ref.document && ref.providedAsDocument && (
-                          <div className="mt-4 p-4 bg-purple-500/10 rounded-xl border border-purple-400/30">
-                            <div className="flex items-center gap-3">
-                              <FileText className="h-5 w-5 text-purple-600" />
-                              <div>
-                                <p className="font-medium text-purple-900">
-                                  {ref.document.originalName || 'Reference Document'}
-                                </p>
-                                <p className="text-sm text-purple-700">
-                                  {applicationService.getFileSize(ref.document)}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
+                          <ApplicationAttachments application={application}>
+                            {(attachments: any[]) => {
+                              const refAttachment = attachments.find((a: { category: string; description: string | string[]; }) =>
+                                a.category === 'Reference' &&
+                                a.description.includes(ref.name || '')
+                              );
+
+                              if (!refAttachment) return null;
+
+                              return (
+                                <div className="mt-4 p-4 bg-purple-500/10 rounded-xl border border-purple-400/30">
+                                  <div className="flex items-center gap-3">
+                                    <FileText className="h-5 w-5 text-purple-600" />
+                                    <div>
+                                      <p className="font-medium text-purple-900">
+                                        {refAttachment.name}
+                                      </p>
+                                      <p className="text-sm text-purple-700">
+                                        {refAttachment.sizeLabel}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }}
+                          </ApplicationAttachments>
                         )}
                       </div>
                     ))
@@ -855,82 +711,89 @@ export const CompanyApplicationDetails: React.FC<CompanyApplicationDetailsProps>
           </Tabs>
 
           {/* Quick Actions & Application Details - MOVED TO BOTTOM */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Quick Actions */}
-            <GlassCard className="p-6 bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border-amber-400/30">
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <Target className="h-5 w-5 text-amber-600" />
-                  <h3 className="font-semibold text-gray-900">Quick Actions</h3>
-                </div>
-                <div className="space-y-3">
-                  {application.selectedCVs.length > 0 && (
-                    <Button 
-                      variant="outline" 
-                      className="w-full justify-start bg-white/50 backdrop-blur-sm border-white/60 text-gray-700 hover:bg-white/70"
-                      onClick={() => {
-                        const firstCV = application.selectedCVs[0];
-                        if (firstCV) {
-                          handleDownloadFile(firstCV, 'cv');
-                        }
-                      }}
-                    >
-                      <DownloadCloud className="h-4 w-4 mr-2" />
-                      Download CV
-                    </Button>
-                  )}
-                  {hasAdditionalDocuments && (
-                    <Button 
-                      variant="outline" 
-                      className="w-full justify-start bg-white/50 backdrop-blur-sm border-white/60 text-gray-700 hover:bg-white/70"
-                      onClick={handleDownloadAllDocuments}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download All Documents
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </GlassCard>
+          <ApplicationAttachments application={application}>
+            {(attachments, handlers) => {
+              const cvCount = attachments.filter((a: { category: string; }) => a.category === 'CV').length;
+              const firstCV = attachments.find((a: { category: string; }) => a.category === 'CV');
+              const handleDownloadAll = () => {
+                (handlers.onDownloadAll as unknown as () => void)?.();
+              };
 
-            {/* Application Details */}
-            <GlassCard className="p-6">
-              <div className="space-y-4">
-                <h3 className="font-semibold text-gray-900 mb-4">Application Details</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center p-3 rounded-xl bg-white/30">
-                    <span className="text-gray-600">Application ID:</span>
-                    <span className="font-mono text-gray-900 bg-white/50 px-2 py-1 rounded border border-white/60">{application._id.slice(-8)}</span>
-                  </div>
-                  <div className="flex justify-between items-center p-3 rounded-xl bg-white/30">
-                    <span className="text-gray-600">Submitted:</span>
-                    <span className="text-gray-900 font-medium">{formatDate(application.createdAt)}</span>
-                  </div>
-                  <div className="flex justify-between items-center p-3 rounded-xl bg-white/30">
-                    <span className="text-gray-600">Last Updated:</span>
-                    <span className="text-gray-900 font-medium">{formatDate(application.updatedAt)}</span>
-                  </div>
-                  <div className="flex justify-between items-center p-3 rounded-xl bg-white/30">
-                    <span className="text-gray-600">Total Documents:</span>
-                    <span className="text-gray-900 font-medium bg-white/50 px-2 py-1 rounded border border-white/60">
-                      {allDocuments.length}
-                    </span>
-                  </div>
-                  {ownerInfo?.verified && (
-                    <div className="flex justify-between items-center p-3 rounded-xl bg-emerald-500/10 border border-emerald-400/30">
-                      <span className="text-emerald-700">
-                        {isOrganization ? 'Organization' : 'Company'} Status:
-                      </span>
-                      <PremiumBadge variant="gold">
-                        <Shield className="h-3 w-3 mr-1" />
-                        Verified
-                      </PremiumBadge>
+              return (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Quick Actions */}
+                  <GlassCard className="p-6 bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border-amber-400/30">
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Target className="h-5 w-5 text-amber-600" />
+                        <h3 className="font-semibold text-gray-900">Quick Actions</h3>
+                      </div>
+                      <div className="space-y-3">
+                        {firstCV && (
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start bg-white/50 backdrop-blur-sm border-white/60 text-gray-700 hover:bg-white/70"
+                            onClick={() => handlers.onDownload(firstCV)}
+                          >
+                            <DownloadCloud className="h-4 w-4 mr-2" />
+                            Download CV
+                          </Button>
+                        )}
+                        {(attachments.length ?? 0) > 0 && (
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start bg-white/50 backdrop-blur-sm border-white/60 text-gray-700 hover:bg-white/70"
+                            onClick={handleDownloadAll}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Download All Documents
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  )}
+                  </GlassCard>
+
+                  {/* Application Details */}
+                  <GlassCard className="p-6">
+                    <div className="space-y-4">
+                      <h3 className="font-semibold text-gray-900 mb-4">Application Details</h3>
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center p-3 rounded-xl bg-white/30">
+                          <span className="text-gray-600">Application ID:</span>
+                          <span className="font-mono text-gray-900 bg-white/50 px-2 py-1 rounded border border-white/60">{application._id.slice(-8)}</span>
+                        </div>
+                        <div className="flex justify-between items-center p-3 rounded-xl bg-white/30">
+                          <span className="text-gray-600">Submitted:</span>
+                          <span className="text-gray-900 font-medium">{formatDate(application.createdAt)}</span>
+                        </div>
+                        <div className="flex justify-between items-center p-3 rounded-xl bg-white/30">
+                          <span className="text-gray-600">Last Updated:</span>
+                          <span className="text-gray-900 font-medium">{formatDate(application.updatedAt)}</span>
+                        </div>
+                        <div className="flex justify-between items-center p-3 rounded-xl bg-white/30">
+                          <span className="text-gray-600">Total Documents:</span>
+                          <span className="text-gray-900 font-medium bg-white/50 px-2 py-1 rounded border border-white/60">
+                            {attachments.length}
+                          </span>
+                        </div>
+                        {ownerInfo?.verified && (
+                          <div className="flex justify-between items-center p-3 rounded-xl bg-emerald-500/10 border border-emerald-400/30">
+                            <span className="text-emerald-700">
+                              {isOrganization ? 'Organization' : 'Company'} Status:
+                            </span>
+                            <PremiumBadge variant="gold">
+                              <Shield className="h-3 w-3 mr-1" />
+                              Verified
+                            </PremiumBadge>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </GlassCard>
                 </div>
-              </div>
-            </GlassCard>
-          </div>
+              );
+            }}
+          </ApplicationAttachments>
         </div>
       </div>
     </div>

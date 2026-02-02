@@ -3,30 +3,28 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const sharp = require('sharp');
+const { uploadConfig } = require('../config/uploads');
 
-// Configure storage - FIXED to use proper directory structure
+/**
+ * MAIN UPLOAD MIDDLEWARE
+ * For general uploads (avatars, covers, general media)
+ */
+
+// Configure storage using centralized config
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // Always use public/uploads as base directory
-    const baseDir = path.join(process.cwd(), 'public', 'uploads');
+    let uploadType = 'general';
     
-    let uploadPath = baseDir;
-    
-    // Create subdirectories based on file type
+    // Determine upload type based on fieldname
     if (file.fieldname === 'avatar') {
-      uploadPath = path.join(baseDir, 'avatars');
+      uploadType = 'avatars';
     } else if (file.fieldname === 'coverPhoto') {
-      uploadPath = path.join(baseDir, 'covers');
+      uploadType = 'covers';
     } else if (file.fieldname === 'media') {
-      uploadPath = path.join(baseDir, 'general');
+      uploadType = 'general';
     }
-
-    // Create directory if it doesn't exist
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-      console.log(`✅ Created upload directory: ${uploadPath}`);
-    }
-
+    
+    const uploadPath = uploadConfig.getPath(uploadType);
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
@@ -126,12 +124,7 @@ const generateThumbnail = async (file, width = 300, height = 300) => {
       return null;
     }
 
-    // Ensure thumbnails directory exists
-    const thumbnailsDir = path.join(process.cwd(), 'public', 'uploads', 'thumbnails');
-    if (!fs.existsSync(thumbnailsDir)) {
-      fs.mkdirSync(thumbnailsDir, { recursive: true });
-    }
-
+    const thumbnailsDir = uploadConfig.getPath('thumbnails');
     const fileName = path.basename(file.filename);
     const thumbnailPath = path.join('thumbnails', fileName);
     const fullThumbnailPath = path.join(thumbnailsDir, fileName);
@@ -162,12 +155,7 @@ const generateThumbnails = async (file, sizes = [
       return [];
     }
 
-    // Ensure thumbnails directory exists
-    const thumbnailsDir = path.join(process.cwd(), 'public', 'uploads', 'thumbnails');
-    if (!fs.existsSync(thumbnailsDir)) {
-      fs.mkdirSync(thumbnailsDir, { recursive: true });
-    }
-
+    const thumbnailsDir = uploadConfig.getPath('thumbnails');
     const thumbnails = [];
     const baseFileName = path.basename(file.filename, path.extname(file.filename));
 
@@ -187,7 +175,7 @@ const generateThumbnails = async (file, sizes = [
       thumbnails.push({
         path: thumbnailPath,
         fullPath: fullThumbnailPath,
-        url: `/uploads/${thumbnailPath}`,
+        url: uploadConfig.getUrl(thumbnailFileName, 'thumbnails'),
         width: size.width,
         height: size.height,
         suffix: size.suffix
@@ -201,28 +189,19 @@ const generateThumbnails = async (file, sizes = [
   }
 };
 
-// Helper function to get the correct base URL
-const getBaseUrl = () => {
-  const isProduction = process.env.NODE_ENV === 'production';
-  
-  // First check environment variables
-  if (process.env.APP_URL) {
-    return process.env.APP_URL;
-  }
-  
-  if (process.env.BACKEND_URL) {
-    return process.env.BACKEND_URL;
-  }
-  
-  // Fallback to hardcoded URLs
-  return isProduction ? 'https://getbananalink.com' : 'http://localhost:4000';
-};
-
-// Enhanced file upload function - FIXED for production
+// Enhanced file upload function using centralized config
 const uploadToCloudinary = async (file, folder = 'general') => {
   try {
     if (!file) {
       throw new Error('No file provided');
+    }
+
+    // Determine file type
+    let fileType = 'general';
+    if (file.fieldname === 'avatar') {
+      fileType = 'avatars';
+    } else if (file.fieldname === 'coverPhoto') {
+      fileType = 'covers';
     }
 
     // Generate thumbnails for images
@@ -233,27 +212,12 @@ const uploadToCloudinary = async (file, folder = 'general') => {
       thumbnails = await generateThumbnails(file);
       if (thumbnails.length > 0) {
         // Use medium size as default thumbnail
-        thumbnailUrl = `/uploads/${thumbnails[1].path}`;
+        thumbnailUrl = thumbnails[1].url;
       }
     }
 
-    // Get correct base URL
-    const baseUrl = getBaseUrl();
-    
-    // Determine the relative path for the file
-    let relativePath = '';
-    let fileType = 'general';
-    
-    if (file.fieldname === 'avatar') {
-      relativePath = `avatars/${file.filename}`;
-      fileType = 'avatars';
-    } else if (file.fieldname === 'coverPhoto') {
-      relativePath = `covers/${file.filename}`;
-      fileType = 'covers';
-    } else {
-      relativePath = `general/${file.filename}`;
-      fileType = 'general';
-    }
+    // Generate file info using centralized config
+    const fileInfo = uploadConfig.generateFileInfo(file, fileType);
 
     // Get image metadata if it's an image
     let metadata = {};
@@ -262,37 +226,13 @@ const uploadToCloudinary = async (file, folder = 'general') => {
     }
 
     return {
-      // Full URL for frontend use
-      url: `${baseUrl}/uploads/${relativePath}`,
-      
-      // Relative path for database storage (more flexible)
-      path: `/uploads/${relativePath}`,
-      
+      ...fileInfo,
       // Thumbnail URLs
-      thumbnail: thumbnailUrl ? `${baseUrl}${thumbnailUrl}` : null,
-      
+      thumbnail: thumbnailUrl,
       // All thumbnails
-      thumbnails: thumbnails.map(thumb => ({
-        url: `${baseUrl}/uploads/${thumb.path}`,
-        path: `/uploads/${thumb.path}`,
-        width: thumb.width,
-        height: thumb.height,
-        suffix: thumb.suffix
-      })),
-      
-      // File information
-      filename: file.filename,
-      originalname: file.originalname,
-      mimetype: file.mimetype,
-      size: file.size,
-      fieldname: file.fieldname,
-      encoding: file.encoding,
+      thumbnails: thumbnails,
+      // Image metadata
       metadata,
-      uploadedAt: new Date().toISOString(),
-      
-      // Additional info for debugging
-      baseUrl: baseUrl,
-      fileType: fileType
     };
   } catch (error) {
     console.error('File upload error:', error);
@@ -400,18 +340,12 @@ const validateFileSize = (maxSizeInMB = 5) => {
 const cleanupUploadedFiles = async (req) => {
   try {
     if (req.file) {
-      if (fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-        console.log(`🗑️ Cleaned up file: ${req.file.path}`);
-      }
+      uploadConfig.deleteFile(req.file.filename, getFileTypeFromFieldname(req.file.fieldname));
     }
 
     if (req.files && Array.isArray(req.files)) {
       for (const file of req.files) {
-        if (fs.existsSync(file.path)) {
-          fs.unlinkSync(file.path);
-          console.log(`🗑️ Cleaned up file: ${file.path}`);
-        }
+        uploadConfig.deleteFile(file.filename, getFileTypeFromFieldname(file.fieldname));
       }
     }
   } catch (error) {
@@ -419,10 +353,16 @@ const cleanupUploadedFiles = async (req) => {
   }
 };
 
-// Helper function to generate file URL (use this in your controllers)
+// Helper to determine file type from fieldname
+const getFileTypeFromFieldname = (fieldname) => {
+  if (fieldname === 'avatar') return 'avatars';
+  if (fieldname === 'coverPhoto') return 'covers';
+  return 'general';
+};
+
+// Helper function to generate file URL using centralized config
 const generateFileUrl = (filename, type = 'general') => {
-  const baseUrl = getBaseUrl();
-  return `${baseUrl}/uploads/${type}/${filename}`;
+  return uploadConfig.getUrl(filename, type);
 };
 
 module.exports = {
@@ -439,6 +379,7 @@ module.exports = {
   validateFileType,
   validateFileSize,
   cleanupUploadedFiles,
-  generateFileUrl, // Export the helper function
-  getBaseUrl // Export for use in other files
+  generateFileUrl,
+  // Export uploadConfig for convenience
+  uploadConfig
 };

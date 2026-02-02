@@ -2,18 +2,124 @@ const Post = require('../models/Post');
 const Follow = require('../models/Follow');
 const Like = require('../models/Like');
 const Comment = require('../models/Comment');
-const { uploadToCloudinary, processImageMetadata } = require('../middleware/upload');
+const Save = require('../models/Save');
 
-// Create new post with professional media handling
+// =====================
+// HELPER FUNCTIONS
+// =====================
+
+// Helper to batch fetch user interactions and saves
+const fetchUserEngagementForPosts = async (userId, postIds) => {
+  try {
+    const [userLikes, userSaves] = await Promise.all([
+      Like.find({
+        user: userId,
+        targetType: 'Post',
+        targetId: { $in: postIds }
+      }),
+      Save.find({
+        user: userId,
+        targetType: 'Post',
+        targetId: { $in: postIds }
+      })
+    ]);
+
+    return {
+      userLikes,
+      userSaves
+    };
+  } catch (error) {
+    console.error('Error fetching user engagement:', error);
+    return { userLikes: [], userSaves: [] };
+  }
+};
+
+// Helper to merge engagement data into posts
+const mergeEngagementData = (posts, userLikes, userSaves, userId) => {
+  return posts.map(post => {
+    const postObj = post.toObject ? post.toObject() : post;
+
+    // Find user's interaction
+    const userLike = userLikes.find(like => {
+      if (!like.targetId || !post._id) return false;
+
+      if (like.targetId.equals && post._id.equals) {
+        return like.targetId.equals(post._id);
+      }
+      return like.targetId.toString() === post._id.toString();
+    });
+
+    // Find if post is saved
+    const isSaved = userSaves.some(save => {
+      if (!save.targetId || !post._id) return false;
+
+      if (save.targetId.equals && post._id.equals) {
+        return save.targetId.equals(post._id);
+      }
+      return save.targetId.toString() === post._id.toString();
+    });
+
+    // Determine engagement state based on interaction type
+    let userReaction = null;
+    let userDisliked = false;
+
+    if (userLike) {
+      if (userLike.interactionType === 'reaction') {
+        userReaction = userLike.reaction;
+        userDisliked = false;
+      } else if (userLike.interactionType === 'dislike') {
+        userReaction = null;
+        userDisliked = true;
+      }
+    }
+
+    // Ensure stats exist
+    const stats = postObj.stats || {
+      likes: 0,
+      dislikes: 0,
+      comments: 0,
+      shares: 0,
+      views: 0,
+      saves: 0
+    };
+
+    return {
+      ...postObj,
+      stats: {
+        likes: stats.likes || 0,
+        dislikes: stats.dislikes || 0,
+        comments: stats.comments || 0,
+        shares: stats.shares || 0,
+        views: stats.views || 0,
+        saves: stats.saves || 0
+      },
+      userReaction,
+      userDisliked,
+      isSaved,
+      canEdit: postObj.author && (
+        (postObj.author._id && postObj.author._id.equals && postObj.author._id.equals(userId)) ||
+        postObj.author._id === userId ||
+        userId === postObj.author
+      ),
+      canDelete: postObj.author && (
+        (postObj.author._id && postObj.author._id.equals && postObj.author._id.equals(userId)) ||
+        postObj.author._id === userId ||
+        userId === postObj.author
+      )
+    };
+  });
+};
+
+// =====================
+// CONTROLLER FUNCTIONS
+// =====================
+
+// Create new post with Cloudinary media handling - UPDATED
 exports.createPost = async (req, res) => {
   try {
     const {
       content,
       type = 'text',
-      media = [],
-      linkPreview,
-      poll,
-      job,
       visibility = 'public',
       allowComments = true,
       allowSharing = true,
@@ -23,65 +129,132 @@ exports.createPost = async (req, res) => {
     } = req.body;
 
     // Validate content or media requirement
-    if (!content && (!req.files || req.files.length === 0)) {
+    if (!content && !req.cloudinaryMedia && !req.cloudinaryMedia?.media) {
       return res.status(400).json({
         success: false,
-        message: 'Post must contain either content or media'
+        message: 'Post must contain either content or media',
+        code: 'CONTENT_REQUIRED'
       });
     }
 
-    // Process file uploads with enhanced metadata
     let processedMedia = [];
-
-    // Parse existing media if provided as string
-    if (media && typeof media === 'string') {
-      try {
-        processedMedia = JSON.parse(media);
-      } catch (parseError) {
-        console.error('Failed to parse media:', parseError);
-        processedMedia = [];
-      }
-    } else if (Array.isArray(media)) {
-      processedMedia = [...media];
-    }
-
-    if (req.files && req.files.length > 0) {
-      const uploadPromises = req.files.map(async (file) => {
-        const uploadResult = await uploadToCloudinary(file, 'posts');
-
-        // Get additional metadata for images
-        let dimensions = {};
-        if (file.mimetype.startsWith('image/')) {
-          dimensions = await processImageMetadata(file);
-        }
-
-        return {
-          url: uploadResult.url,
-          type: file.mimetype.startsWith('image/') ? 'image' :
-            file.mimetype.startsWith('video/') ? 'video' : 'document',
-          thumbnail: uploadResult.thumbnail,
-          description: '',
-          order: processedMedia.length,
-          filename: uploadResult.public_id,
-          originalName: file.originalname,
-          size: file.size,
-          mimeType: file.mimetype,
-          dimensions: dimensions
-        };
-      });
-
-      const uploadResults = await Promise.all(uploadPromises);
-      processedMedia = [...processedMedia, ...uploadResults];
-    }
-
-    // Determine post type
     let postType = type;
-    if (processedMedia.length > 0) {
-      const hasVideo = processedMedia.some(m => m.type === 'video');
-      const hasImage = processedMedia.some(m => m.type === 'image');
 
-      if (hasVideo) postType = 'video';
-      else if (hasImage) postType = 'image';
+    // Helper function to generate proper thumbnail URL
+    const generateProperThumbnailUrl = (mediaItem) => {
+      // If thumbnailUrl is provided and valid, use it
+      if (mediaItem.thumbnailUrl && !mediaItem.thumbnailUrl.includes('.mp4.jpg')) {
+        return mediaItem.thumbnailUrl;
+      }
+
+      // For videos, generate proper Cloudinary video thumbnail
+      if (mediaItem.type === 'video' && mediaItem.cloudinary?.secure_url) {
+        const videoUrl = mediaItem.cloudinary.secure_url;
+        // Cloudinary video thumbnail transformation - no .jpg extension
+        if (videoUrl.includes('/upload/')) {
+          // Use proper video thumbnail transformation
+          return videoUrl.replace('/upload/', '/upload/w_600,h_400,c_fill/');
+        }
+        return videoUrl;
+      }
+
+      // For images, use the secure_url with transformation
+      if (mediaItem.type === 'image' && mediaItem.cloudinary?.secure_url) {
+        const imageUrl = mediaItem.cloudinary.secure_url;
+        if (imageUrl.includes('/upload/')) {
+          return imageUrl.replace('/upload/', '/upload/w_600,h_400,c_fill/');
+        }
+        return imageUrl;
+      }
+
+      // Fallback
+      return mediaItem.thumbnailUrl || mediaItem.cloudinary?.secure_url || '';
+    };
+
+    // Process Cloudinary media if available
+    if (req.cloudinaryMedia?.media) {
+      // Handle single media upload
+      if (!Array.isArray(req.cloudinaryMedia.media)) {
+        const mediaItem = req.cloudinaryMedia.media;
+
+        const formattedMedia = {
+          type: mediaItem.type,
+          public_id: mediaItem.cloudinary.public_id,
+          secure_url: mediaItem.cloudinary.secure_url,
+          resource_type: mediaItem.cloudinary.resource_type,
+          format: mediaItem.cloudinary.format,
+          bytes: mediaItem.cloudinary.bytes,
+          width: mediaItem.cloudinary.width,
+          height: mediaItem.cloudinary.height,
+          duration: mediaItem.cloudinary.duration,
+          created_at: mediaItem.cloudinary.created_at,
+          tags: mediaItem.cloudinary.tags || [],
+          // Backward compatibility fields
+          url: mediaItem.cloudinary.secure_url,
+          thumbnail: generateProperThumbnailUrl(mediaItem), // FIXED: Use helper function
+          originalName: mediaItem.originalName,
+          size: mediaItem.size,
+          mimeType: mediaItem.mimetype,
+          description: req.body.mediaDescription || '',
+          order: 0
+        };
+
+        processedMedia.push(formattedMedia);
+
+        // Determine post type based on media
+        if (mediaItem.type === 'video') {
+          postType = 'video';
+        } else if (mediaItem.type === 'image') {
+          postType = 'image';
+        }
+      }
+      // Handle multiple media upload
+      else if (Array.isArray(req.cloudinaryMedia.media)) {
+        processedMedia = req.cloudinaryMedia.media.map((mediaItem, index) => {
+          // Skip failed uploads
+          if (mediaItem.success === false) {
+            return null;
+          }
+
+          return {
+            type: mediaItem.type,
+            public_id: mediaItem.cloudinary.public_id,
+            secure_url: mediaItem.cloudinary.secure_url,
+            resource_type: mediaItem.cloudinary.resource_type,
+            format: mediaItem.cloudinary.format,
+            bytes: mediaItem.cloudinary.bytes,
+            width: mediaItem.cloudinary.width,
+            height: mediaItem.cloudinary.height,
+            duration: mediaItem.cloudinary.duration,
+            created_at: mediaItem.cloudinary.created_at,
+            tags: mediaItem.cloudinary.tags || [],
+            // Backward compatibility fields
+            url: mediaItem.cloudinary.secure_url,
+            thumbnail: generateProperThumbnailUrl(mediaItem), // FIXED: Use helper function
+            originalName: mediaItem.originalName,
+            size: mediaItem.size,
+            mimeType: mediaItem.mimetype,
+            description: req.body.mediaDescription || '',
+            order: index
+          };
+        }).filter(item => item !== null);
+
+        // Determine post type based on media
+        const hasVideo = processedMedia.some(m => m.type === 'video');
+        const hasImage = processedMedia.some(m => m.type === 'image');
+
+        if (hasVideo) postType = 'video';
+        else if (hasImage) postType = 'image';
+      }
+    }
+
+    // Validate that we have at least content or media
+    if (!content && processedMedia.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Post must contain either content or media',
+        code: 'CONTENT_REQUIRED'
+      });
     }
 
     const post = new Post({
@@ -90,13 +263,10 @@ exports.createPost = async (req, res) => {
       content: content || '',
       type: postType,
       media: processedMedia,
-      linkPreview,
-      poll,
-      job,
       visibility,
       allowComments,
       allowSharing,
-      location,
+      location: location ? JSON.parse(location) : null,
       expiresAt,
       pinned
     });
@@ -114,13 +284,16 @@ exports.createPost = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'Post created successfully',
-      data: post
+      data: post,
+      code: 'POST_CREATED'
     });
   } catch (error) {
     console.error('Create post error:', error);
+
     res.status(500).json({
       success: false,
       message: 'Error creating post',
+      code: 'POST_CREATION_ERROR',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -208,26 +381,14 @@ exports.getFeedPosts = async (req, res) => {
 
     console.log('📨 Found posts:', posts.length);
 
-    // Get like status for current user
+    // Get post IDs for batch fetching
     const postIds = posts.map(post => post._id);
-    const userLikes = await Like.find({
-      user: req.user.userId,
-      targetType: 'Post',
-      targetId: { $in: postIds }
-    });
 
-    const postsWithEngagement = posts.map(post => {
-      const postObj = post.toObject();
-      const userLike = userLikes.find(like => like.targetId.equals(post._id));
+    // Batch fetch user interactions and saves
+    const { userLikes, userSaves } = await fetchUserEngagementForPosts(req.user.userId, postIds);
 
-      return {
-        ...postObj,
-        userReaction: userLike ? userLike.reaction : null,
-        hasLiked: !!userLike,
-        canEdit: post.author._id.equals(req.user.userId) || req.user.role === 'admin',
-        canDelete: post.author._id.equals(req.user.userId) || req.user.role === 'admin'
-      };
-    });
+    // Merge engagement data
+    const postsWithEngagement = mergeEngagementData(posts, userLikes, userSaves, req.user.userId);
 
     const total = await Post.countDocuments(query);
 
@@ -241,6 +402,7 @@ exports.getFeedPosts = async (req, res) => {
     res.json({
       success: true,
       data: postsWithEngagement,
+      code: 'FEED_RETRIEVED',
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -252,7 +414,8 @@ exports.getFeedPosts = async (req, res) => {
     console.error('❌ Get feed posts error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching feed posts'
+      message: 'Error fetching feed posts',
+      code: 'FEED_ERROR'
     });
   }
 };
@@ -272,7 +435,8 @@ exports.getPost = async (req, res) => {
     if (!post) {
       return res.status(404).json({
         success: false,
-        message: 'Post not found'
+        message: 'Post not found',
+        code: 'POST_NOT_FOUND'
       });
     }
 
@@ -280,7 +444,8 @@ exports.getPost = async (req, res) => {
     if (post.status !== 'active' && !(req.user && (post.author._id.equals(req.user.userId) || req.user.role === 'admin'))) {
       return res.status(404).json({
         success: false,
-        message: 'Post not found'
+        message: 'Post not found',
+        code: 'POST_NOT_FOUND'
       });
     }
 
@@ -290,7 +455,8 @@ exports.getPost = async (req, res) => {
         if (post.visibility === 'private') {
           return res.status(403).json({
             success: false,
-            message: 'This post is private'
+            message: 'This post is private',
+            code: 'POST_PRIVATE'
           });
         } else if (post.visibility === 'connections') {
           const isConnected = await Follow.findOne({
@@ -301,51 +467,95 @@ exports.getPost = async (req, res) => {
           if (!isConnected) {
             return res.status(403).json({
               success: false,
-              message: 'This post is only visible to connections'
+              message: 'This post is only visible to connections',
+              code: 'CONNECTION_REQUIRED'
             });
           }
         }
       }
     }
 
-    // Increment view count for authenticated users
+    // Increment view count for authenticated users (atomic update)
     if (req.user) {
-      post.stats.views += 1;
-      await post.save();
+      await Post.findByIdAndUpdate(
+        id,
+        { $inc: { 'stats.views': 1 } }
+      );
+      // Update the post object with incremented view count
+      post.stats.views = (post.stats.views || 0) + 1;
     }
 
-    // Get user's like status if authenticated
-    let userLike = null;
-    if (req.user) {
-      userLike = await Like.findOne({
+    // Get user's interaction and save status
+    const [userLike, userSave] = await Promise.all([
+      Like.findOne({
         user: req.user.userId,
         targetType: 'Post',
         targetId: post._id
-      });
+      }),
+      Save.findOne({
+        user: req.user.userId,
+        targetType: 'Post',
+        targetId: post._id
+      })
+    ]);
+
+    // Determine engagement state
+    let userReaction = null;
+    let userDisliked = false;
+
+    if (userLike) {
+      if (userLike.interactionType === 'reaction') {
+        userReaction = userLike.reaction;
+        userDisliked = false;
+      } else if (userLike.interactionType === 'dislike') {
+        userReaction = null;
+        userDisliked = true;
+      }
     }
+
+    // Ensure stats exist
+    const stats = post.stats || {
+      likes: 0,
+      dislikes: 0,
+      comments: 0,
+      shares: 0,
+      views: 0,
+      saves: 0
+    };
 
     const postWithEngagement = {
       ...post.toObject(),
-      userReaction: userLike ? userLike.reaction : null,
-      hasLiked: !!userLike,
+      stats: {
+        likes: stats.likes || 0,
+        dislikes: stats.dislikes || 0,
+        comments: stats.comments || 0,
+        shares: stats.shares || 0,
+        views: stats.views || 0,
+        saves: stats.saves || 0
+      },
+      userReaction,
+      userDisliked,
+      isSaved: !!userSave,
       canEdit: req.user && (post.author._id.equals(req.user.userId) || req.user.role === 'admin'),
       canDelete: req.user && (post.author._id.equals(req.user.userId) || req.user.role === 'admin')
     };
 
     res.json({
       success: true,
-      data: postWithEngagement
+      data: postWithEngagement,
+      code: 'POST_RETRIEVED'
     });
   } catch (error) {
     console.error('Get post error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching post'
+      message: 'Error fetching post',
+      code: 'POST_FETCH_ERROR'
     });
   }
 };
 
-// Professional post update with media handling - COMPLETELY FIXED VERSION
+// Professional post update with Cloudinary media handling - UPDATED VERSION
 exports.updatePost = async (req, res) => {
   try {
     const { id } = req.params;
@@ -353,9 +563,10 @@ exports.updatePost = async (req, res) => {
     console.log('📨 Received update request:', {
       id,
       bodyKeys: Object.keys(req.body),
-      filesCount: req.files?.length || 0,
-      hasMedia: !!req.body.media,
-      mediaType: typeof req.body.media
+      cloudinaryMedia: !!req.cloudinaryMedia,
+      cloudinaryMediaCount: Array.isArray(req.cloudinaryMedia?.media) ? req.cloudinaryMedia.media.length :
+        req.cloudinaryMedia?.media ? 1 : 0,
+      timestamp: new Date().toISOString()
     });
 
     const post = await Post.findById(id);
@@ -363,7 +574,8 @@ exports.updatePost = async (req, res) => {
     if (!post) {
       return res.status(404).json({
         success: false,
-        message: 'Post not found'
+        message: 'Post not found',
+        code: 'POST_NOT_FOUND'
       });
     }
 
@@ -371,9 +583,40 @@ exports.updatePost = async (req, res) => {
     if (!post.author.equals(req.user.userId) && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
-        message: 'You can only edit your own posts'
+        message: 'You can only edit your own posts',
+        code: 'EDIT_PERMISSION_DENIED'
       });
     }
+
+    // Helper function to generate proper thumbnail URL
+    const generateProperThumbnailUrl = (mediaItem) => {
+      // If thumbnailUrl is provided and valid, use it
+      if (mediaItem.thumbnailUrl && !mediaItem.thumbnailUrl.includes('.mp4.jpg')) {
+        return mediaItem.thumbnailUrl;
+      }
+
+      // For videos, generate proper Cloudinary video thumbnail
+      if (mediaItem.type === 'video' && mediaItem.cloudinary?.secure_url) {
+        const videoUrl = mediaItem.cloudinary.secure_url;
+        // Cloudinary video thumbnail transformation - no .jpg extension
+        if (videoUrl.includes('/upload/')) {
+          return videoUrl.replace('/upload/', '/upload/w_600,h_400,c_fill/');
+        }
+        return videoUrl;
+      }
+
+      // For images, use the secure_url with transformation
+      if (mediaItem.type === 'image' && mediaItem.cloudinary?.secure_url) {
+        const imageUrl = mediaItem.cloudinary.secure_url;
+        if (imageUrl.includes('/upload/')) {
+          return imageUrl.replace('/upload/', '/upload/w_600,h_400,c_fill/');
+        }
+        return imageUrl;
+      }
+
+      // Fallback
+      return mediaItem.thumbnailUrl || mediaItem.cloudinary?.secure_url || '';
+    };
 
     // Start with existing post data
     let updateData = {
@@ -381,33 +624,71 @@ exports.updatePost = async (req, res) => {
       visibility: req.body.visibility !== undefined ? req.body.visibility : post.visibility,
       allowComments: req.body.allowComments !== undefined ? req.body.allowComments : post.allowComments,
       allowSharing: req.body.allowSharing !== undefined ? req.body.allowSharing : post.allowSharing,
-      pinned: req.body.pinned !== undefined ? req.body.pinned : post.pinned
+      pinned: req.body.pinned !== undefined ? req.body.pinned : post.pinned,
+      lastEditedAt: new Date()
     };
 
-    // Handle media removal first
     let finalMedia = [...post.media];
+    let mediaToDelete = [];
 
-    if (req.body.mediaToRemove) {
-      let mediaToRemove = [];
+    console.log('📊 Initial media state:', {
+      existingCount: post.media.length,
+      finalMediaCount: finalMedia.length
+    });
+
+    // FIX 1: Handle media removal - Fixed array mutation issues
+    if (req.body.mediaToRemove && finalMedia.length > 0) {
       try {
+        let mediaToRemove = [];
         if (typeof req.body.mediaToRemove === 'string') {
           mediaToRemove = JSON.parse(req.body.mediaToRemove);
         } else if (Array.isArray(req.body.mediaToRemove)) {
           mediaToRemove = req.body.mediaToRemove;
         }
-        console.log('🗑️ Removing media:', mediaToRemove);
 
-        finalMedia = finalMedia.filter(mediaItem =>
-          !mediaToRemove.includes(mediaItem.url) &&
-          !mediaToRemove.includes(mediaItem._id?.toString())
-        );
+        console.log('🗑️ Processing media removal:', {
+          requestCount: mediaToRemove.length,
+          currentMediaCount: finalMedia.length,
+          mediaIds: mediaToRemove
+        });
+
+        // Create a new array instead of modifying in-place to avoid index issues
+        const remainingMedia = [];
+        const toDelete = [];
+
+        finalMedia.forEach((mediaItem) => {
+          const shouldRemove =
+            mediaToRemove.includes(mediaItem.public_id) ||
+            mediaToRemove.includes(mediaItem._id?.toString()) ||
+            mediaToRemove.includes(mediaItem.url) ||
+            mediaToRemove.includes(mediaItem.secure_url);
+
+          if (shouldRemove) {
+            if (mediaItem.public_id) {
+              toDelete.push(mediaItem.public_id);
+            }
+            console.log(`🗑️ Marked for removal: ${mediaItem.public_id || mediaItem._id}`);
+          } else {
+            remainingMedia.push(mediaItem);
+          }
+        });
+
+        finalMedia = remainingMedia;
+        mediaToDelete = [...mediaToDelete, ...toDelete];
+
+        console.log('✅ Media removal complete:', {
+          removedCount: toDelete.length,
+          remainingCount: finalMedia.length
+        });
+
       } catch (error) {
         console.error('❌ Failed to parse mediaToRemove:', error);
+        // Don't fail the entire update if media removal parsing fails
       }
     }
 
-    // Handle existing media updates
-    if (req.body.media) {
+    // FIX 2: Handle existing media updates (reordering, descriptions)
+    if (req.body.media && finalMedia.length > 0) {
       try {
         let updatedMedia = [];
         if (typeof req.body.media === 'string') {
@@ -416,62 +697,120 @@ exports.updatePost = async (req, res) => {
           updatedMedia = req.body.media;
         }
 
-        console.log('🔄 Processing media updates:', updatedMedia.length);
+        console.log('🔄 Processing media updates:', {
+          updateCount: updatedMedia.length,
+          currentMediaCount: finalMedia.length
+        });
 
-        // Merge existing media with updates, preserving order
-        const existingMediaMap = new Map();
-        finalMedia.forEach(item => {
-          if (item._id) {
-            existingMediaMap.set(item._id.toString(), item);
+        // Create a map for quick lookup
+        const mediaMap = new Map();
+        finalMedia.forEach((item, index) => {
+          const key = item._id?.toString() || item.public_id;
+          if (key) {
+            mediaMap.set(key, { item, index });
           }
         });
 
-        // Apply updates to existing media
+        // Update existing media items (descriptions, order)
         updatedMedia.forEach(updatedItem => {
-          if (updatedItem._id && existingMediaMap.has(updatedItem._id)) {
-            // Update existing media item
-            const existingItem = existingMediaMap.get(updatedItem._id);
-            Object.assign(existingItem, updatedItem);
-          } else if (!updatedItem._id) {
-            // This is new media from client (shouldn't happen in updates, but handle it)
-            finalMedia.push(updatedItem);
+          const key = updatedItem._id || updatedItem.public_id;
+          if (key && mediaMap.has(key)) {
+            const { index } = mediaMap.get(key);
+
+            // Update existing item
+            if (updatedItem.description !== undefined) {
+              finalMedia[index].description = updatedItem.description;
+            }
+            if (updatedItem.order !== undefined) {
+              finalMedia[index].order = updatedItem.order;
+            }
+
+            console.log(`🔄 Updated media: ${key}`, {
+              description: updatedItem.description !== undefined,
+              order: updatedItem.order !== undefined
+            });
+          } else {
+            console.log(`⚠️ Media not found for update: ${key}`);
           }
         });
+
+        // Sort by order if specified
+        const hasOrderUpdates = updatedMedia.some(item => item.order !== undefined);
+        if (hasOrderUpdates) {
+          finalMedia.sort((a, b) => (a.order || 0) - (b.order || 0));
+          console.log('🔄 Sorted media by order');
+        }
 
       } catch (error) {
         console.error('❌ Failed to process media updates:', error);
+        // Don't fail the entire update if media update parsing fails
       }
     }
 
-    // Handle new file uploads
-    if (req.files && req.files.length > 0) {
-      console.log('📤 Uploading new media files:', req.files.length);
+    // FIX 3: Handle new Cloudinary media uploads
+    if (req.cloudinaryMedia?.media) {
+      console.log('📤 Processing new Cloudinary media uploads');
 
-      const uploadPromises = req.files.map(async (file, index) => {
-        const uploadResult = await uploadToCloudinary(file, 'posts');
+      let newMediaItems = [];
 
-        let dimensions = {};
-        if (file.mimetype.startsWith('image/')) {
-          dimensions = await processImageMetadata(file);
-        }
+      // Handle single upload
+      if (!Array.isArray(req.cloudinaryMedia.media)) {
+        const mediaItem = req.cloudinaryMedia.media;
 
-        return {
-          url: uploadResult.url,
-          type: file.mimetype.startsWith('image/') ? 'image' :
-            file.mimetype.startsWith('video/') ? 'video' : 'document',
-          thumbnail: uploadResult.thumbnail,
+        const formattedMedia = {
+          type: mediaItem.type,
+          public_id: mediaItem.cloudinary.public_id,
+          secure_url: mediaItem.cloudinary.secure_url,
+          resource_type: mediaItem.cloudinary.resource_type,
+          format: mediaItem.cloudinary.format,
+          bytes: mediaItem.cloudinary.bytes,
+          width: mediaItem.cloudinary.width,
+          height: mediaItem.cloudinary.height,
+          duration: mediaItem.cloudinary.duration,
+          created_at: mediaItem.cloudinary.created_at,
+          tags: mediaItem.cloudinary.tags || [],
+          // Backward compatibility fields
+          url: mediaItem.cloudinary.secure_url,
+          thumbnail: generateProperThumbnailUrl(mediaItem), // FIXED: Use helper function
+          originalName: mediaItem.originalName,
+          size: mediaItem.size,
+          mimeType: mediaItem.mimetype,
           description: req.body.mediaDescription || '',
-          order: finalMedia.length + index,
-          filename: uploadResult.public_id,
-          originalName: file.originalname,
-          size: file.size,
-          mimeType: file.mimetype,
-          dimensions: dimensions
+          order: finalMedia.length
         };
-      });
 
-      const uploadResults = await Promise.all(uploadPromises);
-      finalMedia = [...finalMedia, ...uploadResults];
+        newMediaItems.push(formattedMedia);
+      }
+      // Handle multiple uploads
+      else if (Array.isArray(req.cloudinaryMedia.media)) {
+        newMediaItems = req.cloudinaryMedia.media
+          .filter(mediaItem => mediaItem.success !== false) // Skip failed uploads
+          .map((mediaItem, index) => ({
+            type: mediaItem.type,
+            public_id: mediaItem.cloudinary.public_id,
+            secure_url: mediaItem.cloudinary.secure_url,
+            resource_type: mediaItem.cloudinary.resource_type,
+            format: mediaItem.cloudinary.format,
+            bytes: mediaItem.cloudinary.bytes,
+            width: mediaItem.cloudinary.width,
+            height: mediaItem.cloudinary.height,
+            duration: mediaItem.cloudinary.duration,
+            created_at: mediaItem.cloudinary.created_at,
+            tags: mediaItem.cloudinary.tags || [],
+            // Backward compatibility fields
+            url: mediaItem.cloudinary.secure_url,
+            thumbnail: generateProperThumbnailUrl(mediaItem), // FIXED: Use helper function
+            originalName: mediaItem.originalName,
+            size: mediaItem.size,
+            mimeType: mediaItem.mimetype,
+            description: req.body.mediaDescription || '',
+            order: finalMedia.length + index
+          }));
+      }
+
+      // Add new media to final array
+      finalMedia = [...finalMedia, ...newMediaItems];
+      console.log(`✅ Added ${newMediaItems.length} new media items`);
     }
 
     // Update media array and determine post type
@@ -483,7 +822,6 @@ exports.updatePost = async (req, res) => {
 
       if (hasVideo) updateData.type = 'video';
       else if (hasImage) updateData.type = 'image';
-      else updateData.type = 'document';
     } else if (!updateData.content || updateData.content.trim() === '') {
       updateData.type = 'text';
     } else {
@@ -493,17 +831,19 @@ exports.updatePost = async (req, res) => {
     console.log('🔄 Final update data:', {
       contentLength: updateData.content?.length,
       mediaCount: updateData.media.length,
-      type: updateData.type
+      type: updateData.type,
+      mediaToDeleteCount: mediaToDelete.length,
+      finalMediaIds: finalMedia.map(m => m.public_id || m._id).slice(0, 5) // Log first 5
     });
 
-    // Update the post
+    // Atomic update operation
     const updatedPost = await Post.findByIdAndUpdate(
       id,
       { $set: updateData },
       {
         new: true,
         runValidators: true,
-        context: 'query' // This helps with array validation
+        context: 'query'
       }
     )
       .populate('author', 'name avatar headline role verificationStatus company')
@@ -513,7 +853,34 @@ exports.updatePost = async (req, res) => {
     if (!updatedPost) {
       return res.status(404).json({
         success: false,
-        message: 'Post not found after update'
+        message: 'Post not found after update',
+        code: 'POST_NOT_FOUND'
+      });
+    }
+
+    // FIX 4: Staggered Cloudinary deletions after successful update
+    if (mediaToDelete.length > 0) {
+      console.log('🗑️ Scheduling Cloudinary deletions:', {
+        count: mediaToDelete.length,
+        ids: mediaToDelete.slice(0, 3) // Log first 3
+      });
+
+      const cloudinaryStorageService = require('../services/cloudinaryStorageService');
+
+      // Stagger deletions to avoid rate limits
+      mediaToDelete.forEach((publicId, index) => {
+        setTimeout(async () => {
+          try {
+            const result = await cloudinaryStorageService.deleteFile(publicId);
+            if (result.success) {
+              console.log(`✅ Deleted media from Cloudinary: ${publicId}`);
+            } else {
+              console.error(`❌ Failed to delete media from Cloudinary: ${publicId}`, result.error);
+            }
+          } catch (error) {
+            console.error(`❌ Error deleting media from Cloudinary: ${publicId}`, error);
+          }
+        }, index * 200); // 200ms delay between deletions
       });
     }
 
@@ -522,18 +889,21 @@ exports.updatePost = async (req, res) => {
     res.json({
       success: true,
       message: 'Post updated successfully',
-      data: updatedPost
+      data: updatedPost,
+      code: 'POST_UPDATED'
     });
   } catch (error) {
     console.error('Update post error:', error);
+
     res.status(500).json({
       success: false,
-      message: 'Error updating post: ' + error.message
+      message: 'Error updating post: ' + error.message,
+      code: 'POST_UPDATE_ERROR'
     });
   }
 };
 
-// Professional post deletion
+// Professional post deletion with Cloudinary cleanup
 exports.deletePost = async (req, res) => {
   try {
     const { id } = req.params;
@@ -544,7 +914,8 @@ exports.deletePost = async (req, res) => {
     if (!post) {
       return res.status(404).json({
         success: false,
-        message: 'Post not found'
+        message: 'Post not found',
+        code: 'POST_NOT_FOUND'
       });
     }
 
@@ -552,7 +923,30 @@ exports.deletePost = async (req, res) => {
     if (!post.author.equals(req.user.userId) && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
-        message: 'You can only delete your own posts'
+        message: 'You can only delete your own posts',
+        code: 'DELETE_PERMISSION_DENIED'
+      });
+    }
+
+    // Delete all media files from Cloudinary
+    if (post.media && Array.isArray(post.media)) {
+      const cloudinaryStorageService = require('../services/cloudinaryStorageService');
+
+      // Delete each media item asynchronously
+      post.media.forEach(mediaItem => {
+        if (mediaItem.public_id) {
+          cloudinaryStorageService.deleteFile(mediaItem.public_id)
+            .then(result => {
+              if (result.success) {
+                console.log(`✅ Deleted media from Cloudinary: ${mediaItem.public_id}`);
+              } else {
+                console.error(`❌ Failed to delete media from Cloudinary: ${mediaItem.public_id}`, result.error);
+              }
+            })
+            .catch(error => {
+              console.error(`❌ Error deleting media from Cloudinary: ${mediaItem.public_id}`, error);
+            });
+        }
       });
     }
 
@@ -562,6 +956,7 @@ exports.deletePost = async (req, res) => {
     } else {
       // Soft delete
       post.status = 'deleted';
+      post.deletedAt = new Date();
       await post.save();
     }
 
@@ -574,18 +969,20 @@ exports.deletePost = async (req, res) => {
 
     res.json({
       success: true,
-      message: permanent ? 'Post permanently deleted' : 'Post deleted successfully'
+      message: permanent ? 'Post permanently deleted' : 'Post deleted successfully',
+      code: permanent ? 'POST_PERMANENTLY_DELETED' : 'POST_DELETED'
     });
   } catch (error) {
     console.error('Delete post error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error deleting post'
+      message: 'Error deleting post',
+      code: 'POST_DELETE_ERROR'
     });
   }
 };
 
-// Get posts by specific profile with professional filtering - FIXED VERSION
+// Get posts by specific profile with professional filtering
 exports.getProfilePosts = async (req, res) => {
   try {
     const { profileId } = req.params;
@@ -633,7 +1030,8 @@ exports.getProfilePosts = async (req, res) => {
         if (!isFollowing) {
           return res.status(403).json({
             success: false,
-            message: 'This profile is private'
+            message: 'This profile is private',
+            code: 'PROFILE_PRIVATE'
           });
         }
 
@@ -657,26 +1055,14 @@ exports.getProfilePosts = async (req, res) => {
 
     console.log('📨 Found profile posts:', posts.length);
 
-    // Get like status for current user
+    // Get post IDs for batch fetching
     const postIds = posts.map(post => post._id);
-    const userLikes = await Like.find({
-      user: req.user.userId,
-      targetType: 'Post',
-      targetId: { $in: postIds }
-    });
 
-    const postsWithEngagement = posts.map(post => {
-      const postObj = post.toObject();
-      const userLike = userLikes.find(like => like.targetId.equals(post._id));
+    // Batch fetch user interactions and saves
+    const { userLikes, userSaves } = await fetchUserEngagementForPosts(req.user.userId, postIds);
 
-      return {
-        ...postObj,
-        userReaction: userLike ? userLike.reaction : null,
-        hasLiked: !!userLike,
-        canEdit: post.author._id.equals(req.user.userId) || req.user.role === 'admin',
-        canDelete: post.author._id.equals(req.user.userId) || req.user.role === 'admin'
-      };
-    });
+    // Merge engagement data
+    const postsWithEngagement = mergeEngagementData(posts, userLikes, userSaves, req.user.userId);
 
     const total = await Post.countDocuments(query);
 
@@ -690,6 +1076,7 @@ exports.getProfilePosts = async (req, res) => {
     res.json({
       success: true,
       data: postsWithEngagement,
+      code: 'PROFILE_POSTS_RETRIEVED',
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -701,7 +1088,8 @@ exports.getProfilePosts = async (req, res) => {
     console.error('❌ Get profile posts error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching profile posts'
+      message: 'Error fetching profile posts',
+      code: 'PROFILE_POSTS_ERROR'
     });
   }
 };
@@ -717,14 +1105,16 @@ exports.sharePost = async (req, res) => {
     if (!originalPost || originalPost.status !== 'active') {
       return res.status(404).json({
         success: false,
-        message: 'Original post not found'
+        message: 'Original post not found',
+        code: 'ORIGINAL_POST_NOT_FOUND'
       });
     }
 
     if (!originalPost.allowSharing) {
       return res.status(403).json({
         success: false,
-        message: 'This post cannot be shared'
+        message: 'This post cannot be shared',
+        code: 'SHARING_NOT_ALLOWED'
       });
     }
 
@@ -756,18 +1146,242 @@ exports.sharePost = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'Post shared successfully',
-      data: sharedPost
+      data: sharedPost,
+      code: 'POST_SHARED'
     });
   } catch (error) {
     console.error('Share post error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error sharing post'
+      message: 'Error sharing post',
+      code: 'SHARE_ERROR'
     });
   }
 };
 
-// Get user's own posts for professional dashboard - FIXED VERSION
+// Save a post
+exports.savePost = async (req, res) => {
+  try {
+    const { id: postId } = req.params;
+
+    const post = await Post.findById(postId);
+
+    if (!post || post.status !== 'active') {
+      return res.status(404).json({
+        success: false,
+        message: 'Post not found or unavailable',
+        code: 'POST_NOT_FOUND'
+      });
+    }
+
+    const existingSave = await Save.findOne({
+      user: req.user.userId,
+      targetId: postId,
+      targetType: 'Post'
+    });
+
+    if (existingSave) {
+      return res.status(200).json({
+        success: true,
+        message: 'Post already saved',
+        code: 'POST_ALREADY_SAVED'
+      });
+    }
+
+    await Save.create({
+      user: req.user.userId,
+      targetId: postId,
+      targetType: 'Post'
+    });
+
+    await Post.findByIdAndUpdate(postId, {
+      $inc: { 'stats.saves': 1 }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Post saved successfully',
+      code: 'POST_SAVED'
+    });
+
+  } catch (error) {
+    console.error('Save post error:', error);
+
+    if (error.code === 11000) {
+      return res.status(200).json({
+        success: true,
+        message: 'Post already saved',
+        code: 'POST_ALREADY_SAVED'
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: 'Error saving post',
+      code: 'SAVE_ERROR'
+    });
+  }
+};
+
+// Unsave a post
+exports.unsavePost = async (req, res) => {
+  try {
+    const { id: postId } = req.params;
+
+    const result = await Save.findOneAndDelete({
+      user: req.user.userId,
+      targetId: postId,
+      targetType: 'Post'
+    });
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: 'Post not found in saved items',
+        code: 'SAVE_NOT_FOUND'
+      });
+    }
+
+    await Post.findByIdAndUpdate(postId, {
+      $inc: { 'stats.saves': -1 }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Post unsaved successfully',
+      code: 'POST_UNSAVED'
+    });
+  } catch (error) {
+    console.error('Unsave post error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error unsaving post',
+      code: 'UNSAVE_ERROR'
+    });
+  }
+};
+
+// Get saved posts
+exports.getSavedPosts = async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (page - 1) * limit;
+
+    // Get saved post IDs
+    const saves = await Save.find({
+      user: req.user.userId,
+      targetType: 'Post'
+    })
+      .select('targetId')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const postIds = saves.map(save => save.targetId);
+
+    // Get posts with their save status
+    const posts = await Post.find({
+      _id: { $in: postIds },
+      status: 'active'
+    })
+      .populate('author', 'name avatar headline role verificationStatus company')
+      .populate('originalAuthor', 'name avatar headline')
+      .populate('sharedPost')
+      .sort({ createdAt: -1 });
+
+    // Get like status for current user
+    const userLikes = await Like.find({
+      user: req.user.userId,
+      targetType: 'Post',
+      targetId: { $in: postIds }
+    });
+
+    // Get save status for current user (all should be saved)
+    const userSaves = await Save.find({
+      user: req.user.userId,
+      targetType: 'Post',
+      targetId: { $in: postIds }
+    });
+
+    const postsWithEngagement = posts.map(post => {
+      const postObj = post.toObject();
+      const userLike = userLikes.find(like => like.targetId.equals(post._id));
+      const isSaved = userSaves.some(save => save.targetId.equals(post._id));
+
+      // Determine engagement state
+      let userReaction = null;
+      let userDisliked = false;
+
+      if (userLike) {
+        if (userLike.interactionType === 'reaction') {
+          userReaction = userLike.reaction;
+          userDisliked = false;
+        } else if (userLike.interactionType === 'dislike') {
+          userReaction = null;
+          userDisliked = true;
+        }
+      }
+
+      // Ensure stats exist
+      const stats = postObj.stats || {
+        likes: 0,
+        dislikes: 0,
+        comments: 0,
+        shares: 0,
+        views: 0,
+        saves: 0
+      };
+
+      return {
+        ...postObj,
+        stats: {
+          likes: stats.likes || 0,
+          dislikes: stats.dislikes || 0,
+          comments: stats.comments || 0,
+          shares: stats.shares || 0,
+          views: stats.views || 0,
+          saves: stats.saves || 0
+        },
+        userReaction,
+        userDisliked,
+        isSaved,
+        canEdit: post.author._id.equals(req.user.userId) || req.user.role === 'admin',
+        canDelete: post.author._id.equals(req.user.userId) || req.user.role === 'admin'
+      };
+    });
+
+    // Maintain original save order
+    const orderedPosts = saves.map(save =>
+      postsWithEngagement.find(post => post._id.equals(save.targetId))
+    ).filter(Boolean);
+
+    const total = await Save.countDocuments({
+      user: req.user.userId,
+      targetType: 'Post'
+    });
+
+    res.json({
+      success: true,
+      data: orderedPosts,
+      code: 'SAVED_POSTS_RETRIEVED',
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('❌ Get saved posts error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching saved posts',
+      code: 'SAVED_POSTS_ERROR'
+    });
+  }
+};
+
+// Get user's own posts for professional dashboard
 exports.getMyPosts = async (req, res) => {
   try {
     const { page = 1, limit = 20, type, status } = req.query;
@@ -808,26 +1422,14 @@ exports.getMyPosts = async (req, res) => {
 
     const total = await Post.countDocuments(query);
 
-    // Get like status for current user
+    // Get post IDs for batch fetching
     const postIds = posts.map(post => post._id);
-    const userLikes = await Like.find({
-      user: req.user.userId,
-      targetType: 'Post',
-      targetId: { $in: postIds }
-    });
 
-    const postsWithEngagement = posts.map(post => {
-      const postObj = post.toObject();
-      const userLike = userLikes.find(like => like.targetId.equals(post._id));
+    // Batch fetch user interactions and saves
+    const { userLikes, userSaves } = await fetchUserEngagementForPosts(req.user.userId, postIds);
 
-      return {
-        ...postObj,
-        userReaction: userLike ? userLike.reaction : null,
-        hasLiked: !!userLike,
-        canEdit: true, // User can always edit their own posts
-        canDelete: true // User can always delete their own posts
-      };
-    });
+    // Merge engagement data
+    const postsWithEngagement = mergeEngagementData(posts, userLikes, userSaves, req.user.userId);
 
     console.log('✅ My Posts response:', {
       success: true,
@@ -838,6 +1440,7 @@ exports.getMyPosts = async (req, res) => {
     res.json({
       success: true,
       data: postsWithEngagement,
+      code: 'MY_POSTS_RETRIEVED',
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -849,7 +1452,8 @@ exports.getMyPosts = async (req, res) => {
     console.error('❌ Get my posts error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching your posts'
+      message: 'Error fetching your posts',
+      code: 'MY_POSTS_ERROR'
     });
   }
 };

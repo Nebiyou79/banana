@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// components/ApplicationForm.tsx - MODERN REDESIGN
+// components/ApplicationForm.tsx - MODERN REDESIGN WITH REVIEW STEP (FIXED)
 import React, { useState, useEffect } from 'react';
 import {
   applicationService,
@@ -38,6 +38,8 @@ import {
   File,
   BookOpen,
   AlertCircle,
+  ClipboardCheck,
+  Edit,
 } from 'lucide-react';
 
 interface ApplicationFormProps {
@@ -59,10 +61,20 @@ interface FormData {
   userInfo?: UserInfo;
 }
 
-interface UploadedFiles {
-  referenceFiles: File[];
-  experienceFiles: File[];
-}
+// File validation constants
+const ALLOWED_FILE_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'text/plain'
+];
+
+const ALLOWED_FILE_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.txt'];
+const MAX_FILE_SIZE_MB = 15;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 export const ApplicationForm: React.FC<ApplicationFormProps> = ({
   jobId,
@@ -79,10 +91,12 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
   const [candidateProfile, setCandidateProfile] = useState<CandidateProfile | null>(null);
   const [cvs, setCvs] = useState<CV[]>([]);
   const [newSkill, setNewSkill] = useState('');
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFiles>({
-    referenceFiles: [],
-    experienceFiles: []
-  });
+
+  // File states - FIXED: Separate states for each file type
+  const [cvFile, setCvFile] = useState<File | null>(null);
+  const [referenceFiles, setReferenceFiles] = useState<File[]>([]);
+  const [experienceFiles, setExperienceFiles] = useState<File[]>([]);
+  const [selectedProfileCV, setSelectedProfileCV] = useState<CV | null>(null);
 
   const [formData, setFormData] = useState<FormData>({
     coverLetter: '',
@@ -100,26 +114,33 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
   });
 
   const steps = [
-    { 
-      number: 1, 
-      title: 'Profile', 
-      icon: User, 
-      description: 'Contact & CV',
+    {
+      number: 1,
+      title: 'Profile',
+      icon: User,
+      description: 'Contact & CV Selection',
       color: 'from-blue-500 to-cyan-500'
     },
-    { 
-      number: 2, 
-      title: 'Application', 
-      icon: BookOpen, 
+    {
+      number: 2,
+      title: 'Application',
+      icon: BookOpen,
       description: 'Cover Letter & Skills',
       color: 'from-emerald-500 to-green-500'
     },
-    { 
-      number: 3, 
-      title: 'Documents', 
-      icon: Briefcase, 
-      description: 'Experience & References',
+    {
+      number: 3,
+      title: 'Documents',
+      icon: Briefcase,
+      description: 'Files & Attachments',
       color: 'from-violet-500 to-purple-500'
+    },
+    {
+      number: 4,
+      title: 'Review',
+      icon: ClipboardCheck,
+      description: 'Review & Submit',
+      color: 'from-amber-500 to-orange-500'
     },
   ];
 
@@ -174,6 +195,7 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
               url: firstCV.url
             }]
           }));
+          setSelectedProfileCV(firstCV);
         }
       } catch (cvError) {
         console.error('CV loading error:', cvError);
@@ -212,6 +234,37 @@ Sincerely,
 ${profile.name}`;
   };
 
+  // File validation function
+  const validateFile = (file: File, type: 'cv' | 'reference' | 'experience'): { valid: boolean; error?: string } => {
+    // Check file type
+    if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+      const fileExtension = `.${file.name.toLowerCase().split('.').pop()}`;
+      if (!ALLOWED_FILE_EXTENSIONS.includes(fileExtension)) {
+        return {
+          valid: false,
+          error: `Invalid file type for ${type}. Allowed: ${ALLOWED_FILE_EXTENSIONS.join(', ')}`
+        };
+      }
+    }
+
+    // Check file size
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      return {
+        valid: false,
+        error: `File size must be less than ${MAX_FILE_SIZE_MB}MB`
+      };
+    }
+
+    if (file.size === 0) {
+      return {
+        valid: false,
+        error: 'File is empty'
+      };
+    }
+
+    return { valid: true };
+  };
+
   const handleContactInfoChange = (field: keyof ContactInfo, value: string) => {
     setFormData(prev => ({
       ...prev,
@@ -229,6 +282,7 @@ ${profile.name}`;
 
       if (selected) {
         if (!prev.selectedCVs.some(selectedCV => selectedCV.cvId === cvId)) {
+          setSelectedProfileCV(cv);
           return {
             ...prev,
             selectedCVs: [
@@ -243,6 +297,7 @@ ${profile.name}`;
           };
         }
       } else {
+        setSelectedProfileCV(null);
         return {
           ...prev,
           selectedCVs: prev.selectedCVs.filter(selectedCV => selectedCV.cvId !== cvId)
@@ -300,43 +355,6 @@ ${profile.name}`;
     setFormData(prev => {
       const updatedReferences = [...prev.references];
       updatedReferences.splice(index, 1);
-      
-      const newReferenceFiles = [...uploadedFiles.referenceFiles];
-      if (newReferenceFiles[index]) {
-        newReferenceFiles.splice(index, 1);
-        setUploadedFiles(prev => ({ ...prev, referenceFiles: newReferenceFiles }));
-      }
-      
-      return { ...prev, references: updatedReferences };
-    });
-  };
-
-  const handleReferenceFileUpload = (index: number, file: File) => {
-    const newReferenceFiles = [...uploadedFiles.referenceFiles];
-    newReferenceFiles[index] = file;
-    setUploadedFiles(prev => ({ ...prev, referenceFiles: newReferenceFiles }));
-
-    setFormData(prev => {
-      const updatedReferences = [...prev.references];
-      updatedReferences[index] = { 
-        ...updatedReferences[index], 
-        providedAsDocument: true
-      };
-      return { ...prev, references: updatedReferences };
-    });
-  };
-
-  const handleRemoveReferenceFile = (index: number) => {
-    const newReferenceFiles = [...uploadedFiles.referenceFiles];
-    newReferenceFiles.splice(index, 1);
-    setUploadedFiles(prev => ({ ...prev, referenceFiles: newReferenceFiles }));
-
-    setFormData(prev => {
-      const updatedReferences = [...prev.references];
-      updatedReferences[index] = { 
-        ...updatedReferences[index], 
-        providedAsDocument: false
-      };
       return { ...prev, references: updatedReferences };
     });
   };
@@ -371,88 +389,75 @@ ${profile.name}`;
     setFormData(prev => {
       const updatedExperience = [...prev.workExperience];
       updatedExperience.splice(index, 1);
-      
-      const newExperienceFiles = [...uploadedFiles.experienceFiles];
-      if (newExperienceFiles[index]) {
-        newExperienceFiles.splice(index, 1);
-        setUploadedFiles(prev => ({ ...prev, experienceFiles: newExperienceFiles }));
-      }
-      
       return { ...prev, workExperience: updatedExperience };
     });
   };
 
-  const handleExperienceFileUpload = (index: number, file: File) => {
-    const newExperienceFiles = [...uploadedFiles.experienceFiles];
-    newExperienceFiles[index] = file;
-    setUploadedFiles(prev => ({ ...prev, experienceFiles: newExperienceFiles }));
+  // CV file handling - SINGLE FILE REQUIRED
+  const handleCVFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-    setFormData(prev => {
-      const updatedExperience = [...prev.workExperience];
-      updatedExperience[index] = { 
-        ...updatedExperience[index], 
-        providedAsDocument: true
-      };
-      return { ...prev, workExperience: updatedExperience };
-    });
-  };
-
-  const handleRemoveExperienceFile = (index: number) => {
-    const newExperienceFiles = [...uploadedFiles.experienceFiles];
-    newExperienceFiles.splice(index, 1);
-    setUploadedFiles(prev => ({ ...prev, experienceFiles: newExperienceFiles }));
-
-    setFormData(prev => {
-      const updatedExperience = [...prev.workExperience];
-      updatedExperience[index] = { 
-        ...updatedExperience[index], 
-        providedAsDocument: false
-      };
-      return { ...prev, workExperience: updatedExperience };
-    });
-  };
-
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, callback: (file: File) => void) => {
-    const selectedFiles = Array.from(event.target.files || []);
-    
-    if (selectedFiles.length > 0) {
-      const file = selectedFiles[0];
-      
-      const allowedTypes = [
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'image/jpeg',
-        'image/jpg',
-        'image/png',
-        'text/plain'
-      ];
-      
-      const isValidType = allowedTypes.includes(file.type);
-      const isValidSize = file.size <= 15 * 1024 * 1024;
-
-      if (!isValidType) {
-        toast({
-          title: 'Invalid file type',
-          description: 'Please upload PDF, Word documents, or images',
-          variant: 'destructive'
-        });
-        return;
-      }
-
-      if (!isValidSize) {
-        toast({
-          title: 'File too large',
-          description: 'File size must be less than 15MB',
-          variant: 'destructive'
-        });
-        return;
-      }
-
-      callback(file);
+    const validation = validateFile(file, 'cv');
+    if (!validation.valid) {
       toast({
-        title: 'File Uploaded',
-        description: `${file.name} has been added successfully`,
+        title: 'Invalid CV File',
+        description: validation.error,
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setCvFile(file);
+
+    toast({
+      title: 'CV Uploaded',
+      description: `${file.name} has been added successfully`,
+      variant: 'default'
+    });
+
+    event.target.value = '';
+  };
+
+  const removeCVFile = () => {
+    setCvFile(null);
+    toast({
+      title: 'CV Removed',
+      description: 'CV file has been removed',
+      variant: 'default'
+    });
+  };
+
+  // Reference files handling - MULTIPLE FILES OPTIONAL
+  const handleReferenceFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    const validFiles: File[] = [];
+    const errors: string[] = [];
+
+    files.forEach(file => {
+      const validation = validateFile(file, 'reference');
+      if (validation.valid) {
+        validFiles.push(file);
+      } else if (validation.error) {
+        errors.push(`${file.name}: ${validation.error}`);
+      }
+    });
+
+    if (errors.length > 0) {
+      toast({
+        title: 'Invalid Reference Files',
+        description: errors.slice(0, 3).join(', ') + (errors.length > 3 ? `... and ${errors.length - 3} more` : ''),
+        variant: 'destructive'
+      });
+    }
+
+    if (validFiles.length > 0) {
+      setReferenceFiles(prev => [...prev, ...validFiles]);
+      toast({
+        title: 'Reference Files Uploaded',
+        description: `${validFiles.length} file(s) added successfully`,
         variant: 'default'
       });
     }
@@ -460,8 +465,92 @@ ${profile.name}`;
     event.target.value = '';
   };
 
+  const removeReferenceFile = (index: number) => {
+    setReferenceFiles(prev => prev.filter((_, i) => i !== index));
+    toast({
+      title: 'File Removed',
+      description: 'Reference file has been removed',
+      variant: 'default'
+    });
+  };
+
+  // Experience files handling - MULTIPLE FILES OPTIONAL
+  const handleExperienceFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    const validFiles: File[] = [];
+    const errors: string[] = [];
+
+    files.forEach(file => {
+      const validation = validateFile(file, 'experience');
+      if (validation.valid) {
+        validFiles.push(file);
+      } else if (validation.error) {
+        errors.push(`${file.name}: ${validation.error}`);
+      }
+    });
+
+    if (errors.length > 0) {
+      toast({
+        title: 'Invalid Experience Files',
+        description: errors.slice(0, 3).join(', ') + (errors.length > 3 ? `... and ${errors.length - 3} more` : ''),
+        variant: 'destructive'
+      });
+    }
+
+    if (validFiles.length > 0) {
+      setExperienceFiles(prev => [...prev, ...validFiles]);
+      toast({
+        title: 'Experience Files Uploaded',
+        description: `${validFiles.length} file(s) added successfully`,
+        variant: 'default'
+      });
+    }
+
+    event.target.value = '';
+  };
+
+  const removeExperienceFile = (index: number) => {
+    setExperienceFiles(prev => prev.filter((_, i) => i !== index));
+    toast({
+      title: 'File Removed',
+      description: 'Experience file has been removed',
+      variant: 'default'
+    });
+  };
+
+  // Helper function to get file size display
+  const getFileSize = (size: number): string => {
+    if (size === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(size) / Math.log(k));
+    return parseFloat((size / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  // Helper function to truncate filename
+  const truncateFilename = (filename: string, maxLength: number = 30): string => {
+    if (filename.length <= maxLength) return filename;
+    const extension = filename.split('.').pop();
+    const name = filename.substring(0, filename.lastIndexOf('.'));
+    const truncatedName = name.substring(0, maxLength - (extension?.length || 0) - 4) + '...';
+    return `${truncatedName}.${extension}`;
+  };
+
   const handleSubmit = async () => {
     try {
+      // Validate CV file upload (REQUIRED)
+      if (!cvFile) {
+        toast({
+          title: 'CV Upload Required',
+          description: 'You must upload a CV file to submit your application',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Validate other required fields
       const errors: string[] = [];
 
       if (!formData.contactInfo.email?.trim()) {
@@ -474,7 +563,7 @@ ${profile.name}`;
         errors.push('Location is required');
       }
       if (formData.selectedCVs.length === 0) {
-        errors.push('At least one CV must be selected');
+        errors.push('At least one CV must be selected from your profile');
       }
       if (!formData.coverLetter?.trim()) {
         errors.push('Cover letter is required');
@@ -496,13 +585,13 @@ ${profile.name}`;
       const applicationData: ApplyForJobData = {
         coverLetter: formData.coverLetter,
         skills: formData.skills,
-        references: formData.references.map((ref, index) => ({
+        references: formData.references.map(ref => ({
           ...ref,
-          providedAsDocument: uploadedFiles.referenceFiles[index] !== undefined
+          providedAsDocument: referenceFiles.length > 0
         })),
-        workExperience: formData.workExperience.map((exp, index) => ({
+        workExperience: formData.workExperience.map(exp => ({
           ...exp,
-          providedAsDocument: uploadedFiles.experienceFiles[index] !== undefined
+          providedAsDocument: experienceFiles.length > 0
         })),
         contactInfo: {
           email: formData.contactInfo.email,
@@ -514,15 +603,21 @@ ${profile.name}`;
         userInfo: formData.userInfo
       };
 
-      const allFiles: File[] = [
-        ...uploadedFiles.referenceFiles.filter(file => file !== undefined),
-        ...uploadedFiles.experienceFiles.filter(file => file !== undefined)
-      ];
+      console.log('📤 Submitting application with files:', {
+        cvFile: cvFile?.name,
+        referenceFiles: referenceFiles.length,
+        experienceFiles: experienceFiles.length
+      });
 
+      // Submit application with all files
       const response = await applicationService.applyForJob(
         jobId,
         applicationData,
-        allFiles
+        {
+          cvFile: cvFile, // REQUIRED - backend expects "cv" field
+          referenceFiles: referenceFiles, // Optional - backend expects "referencePdfs" field
+          experienceFiles: experienceFiles // Optional - backend expects "experiencePdfs" field
+        }
       );
 
       toast({
@@ -535,9 +630,9 @@ ${profile.name}`;
 
     } catch (error: any) {
       console.error('Application submission error:', error);
-      
+
       let errorMessage = error.message || 'Failed to submit application';
-      
+
       if (error.message.includes('already applied')) {
         errorMessage = 'You have already applied for this job';
       } else if (error.message.includes('no longer accepting')) {
@@ -547,7 +642,9 @@ ${profile.name}`;
       } else if (error.message.includes('Cover letter is required')) {
         errorMessage = 'Cover letter is required';
       } else if (error.message.includes('At least one CV must be selected')) {
-        errorMessage = 'Please select at least one CV';
+        errorMessage = 'Please select at least one CV from your profile';
+      } else if (error.message.includes('CV file is required')) {
+        errorMessage = 'CV file upload is required for application submission';
       }
 
       toast({
@@ -563,6 +660,7 @@ ${profile.name}`;
   };
 
   const nextStep = () => {
+    // Step 1 validation
     if (currentStep === 1) {
       if (!formData.contactInfo.email || !formData.contactInfo.phone || !formData.contactInfo.location) {
         toast({
@@ -575,17 +673,28 @@ ${profile.name}`;
       if (formData.selectedCVs.length === 0) {
         toast({
           title: 'CV Required',
-          description: 'Please select at least one CV to continue',
+          description: 'Please select at least one CV from your profile to continue',
           variant: 'destructive'
         });
         return;
       }
     }
 
+    // Step 2 validation
     if (currentStep === 2 && !formData.coverLetter.trim()) {
       toast({
         title: 'Cover Letter Required',
         description: 'Please write a cover letter to continue',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Step 3 validation - CV file upload is required
+    if (currentStep === 3 && !cvFile) {
+      toast({
+        title: 'CV Upload Required',
+        description: 'You must upload a CV file to continue',
         variant: 'destructive'
       });
       return;
@@ -602,13 +711,14 @@ ${profile.name}`;
     setCurrentStep(step);
   };
 
-  const getFileDisplayName = (file: File): string => {
-    return file.name.length > 30 ? `${file.name.substring(0, 30)}...` : file.name;
+  const truncateText = (text: string, length: number = 500): string => {
+    if (text.length <= length) return text;
+    return text.substring(0, length) + '...';
   };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-8">
+      <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 flex items-center justify-center p-8">
         <div className="text-center">
           <div className="w-16 h-16 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
           <h3 className="text-2xl font-semibold text-slate-900 mb-2">Preparing Your Application</h3>
@@ -621,13 +731,13 @@ ${profile.name}`;
   const isLastStep = currentStep === steps.length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-8 px-4">
+    <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 py-8 px-4">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mb-8">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-xl flex items-center justify-center">
+              <div className="w-12 h-12 bg-linear-to-br from-blue-600 to-cyan-600 rounded-xl flex items-center justify-center">
                 <FileText className="h-6 w-6 text-white" />
               </div>
               <div>
@@ -651,19 +761,18 @@ ${profile.name}`;
               const StepIcon = step.icon;
               const isCurrent = currentStep === step.number;
               const isCompleted = currentStep > step.number;
-              
+
               return (
                 <div key={step.number} className="flex items-center flex-1">
                   <div className="flex flex-col items-center relative z-10">
                     <button
                       onClick={() => goToStep(step.number)}
-                      className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 ${
-                        isCurrent 
-                          ? `bg-gradient-to-br ${step.color} text-white shadow-lg scale-110` 
-                          : isCompleted 
-                          ? 'bg-emerald-100 text-emerald-600 border-2 border-emerald-200' 
+                      className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 ${isCurrent
+                        ? `bg-linear-to-br ${step.color} text-white shadow-lg scale-110`
+                        : isCompleted
+                          ? 'bg-emerald-100 text-emerald-600 border-2 border-emerald-200'
                           : 'bg-slate-100 text-slate-400 border-2 border-slate-200'
-                      }`}
+                        }`}
                     >
                       {isCompleted ? (
                         <CheckCircle className="h-5 w-5" />
@@ -672,19 +781,17 @@ ${profile.name}`;
                       )}
                     </button>
                     <div className="mt-3 text-center">
-                      <p className={`text-sm font-medium ${
-                        isCurrent ? 'text-slate-900' : isCompleted ? 'text-emerald-700' : 'text-slate-500'
-                      }`}>
+                      <p className={`text-sm font-medium ${isCurrent ? 'text-slate-900' : isCompleted ? 'text-emerald-700' : 'text-slate-500'
+                        }`}>
                         {step.title}
                       </p>
                       <p className="text-xs text-slate-500 mt-1">{step.description}</p>
                     </div>
                   </div>
-                  
+
                   {index < steps.length - 1 && (
-                    <div className={`flex-1 h-0.5 mx-4 ${
-                      isCompleted ? 'bg-emerald-500' : 'bg-slate-200'
-                    }`} />
+                    <div className={`flex-1 h-0.5 mx-4 ${isCompleted ? 'bg-emerald-500' : 'bg-slate-200'
+                      }`} />
                   )}
                 </div>
               );
@@ -768,7 +875,7 @@ ${profile.name}`;
                     <div>
                       <CardTitle className="text-xl text-slate-900">Select Your Resume</CardTitle>
                       <CardDescription className="text-slate-600">
-                        Choose which resume to submit with your application
+                        Choose which resume to use from your profile
                       </CardDescription>
                     </div>
                   </div>
@@ -778,11 +885,10 @@ ${profile.name}`;
                     {cvs.length > 0 ? cvs.map((cv) => (
                       <div
                         key={cv._id}
-                        className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
-                          formData.selectedCVs.some(selected => selected.cvId === cv._id)
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-slate-200 bg-white hover:border-slate-300'
-                        }`}
+                        className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${formData.selectedCVs.some(selected => selected.cvId === cv._id)
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                          }`}
                       >
                         <div className="flex items-center space-x-4 flex-1">
                           <input
@@ -836,6 +942,19 @@ ${profile.name}`;
                       </div>
                     )}
                   </div>
+                  {formData.selectedCVs.length > 0 && (
+                    <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-sm text-blue-800">
+                        <span className="font-semibold">Note:</span> You`ve selected {formData.selectedCVs.length} CV(s) from your profile.
+                        In the next step, you`ll need to upload a CV file for this application.
+                        {selectedProfileCV && (
+                          <span className="block mt-1">
+                            Consider uploading `{selectedProfileCV.originalName}`` or a different CV.
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -952,10 +1071,96 @@ ${profile.name}`;
             </div>
           )}
 
-          {/* Step 3: Experience & References */}
+          {/* Step 3: Documents - FIXED with proper file upload sections */}
           {currentStep === 3 && (
             <div className="space-y-6">
-              {/* Work Experience */}
+              {/* CV Upload - REQUIRED */}
+              <Card className="border-slate-200 shadow-sm">
+                <CardHeader className="pb-4 border-b border-slate-100">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
+                      <FileText className="h-5 w-5 text-violet-600" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl text-slate-900">Upload Your CV *</CardTitle>
+                      <CardDescription className="text-slate-600">
+                        Upload a CV file for this application (Required)
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  {selectedProfileCV && !cvFile && (
+                    <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-sm text-blue-800">
+                        <span className="font-semibold">Note:</span> You selected `{selectedProfileCV.originalName}` from your profile.
+                        Please upload this or a different CV file.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* CV File Preview */}
+                  {cvFile ? (
+                    <div className="mb-6">
+                      <div className="flex items-center justify-between p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          <FileText className="h-5 w-5 text-emerald-600" />
+                          <div>
+                            <p className="font-medium text-slate-900">{truncateFilename(cvFile.name)}</p>
+                            <p className="text-sm text-slate-500">{getFileSize(cvFile.size)}</p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={removeCVFile}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <p className="text-sm text-emerald-600 mt-2 flex items-center">
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        CV file uploaded successfully
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mb-6 p-4 border-2 border-dashed border-slate-300 rounded-lg hover:border-slate-400 transition-colors">
+                      <p className="text-sm text-slate-500 mb-2">
+                        No CV file uploaded yet. This is required for submission.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* CV Upload Area */}
+                  <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 transition-colors">
+                    <Input
+                      type="file"
+                      onChange={handleCVFileUpload}
+                      className="hidden"
+                      id="cv-upload"
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt"
+                    />
+                    <Label htmlFor="cv-upload" className="cursor-pointer">
+                      <div className="flex flex-col items-center">
+                        <Upload className="h-8 w-8 text-slate-400 mb-3" />
+                        <p className="text-slate-700 font-medium mb-1">Upload Your CV</p>
+                        <p className="text-slate-500 text-sm mb-2">This file will be sent with your application</p>
+                        <p className="text-slate-400 text-xs">PDF, DOC, DOCX, Images • Max 15MB</p>
+                        <Button
+                          variant="outline"
+                          className="mt-3 border-slate-300 text-slate-700"
+                        >
+                          <Upload className="h-4 w-4 mr-2" />
+                          {cvFile ? 'Replace CV' : 'Select CV File'}
+                        </Button>
+                      </div>
+                    </Label>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Work Experience Forms */}
               <Card className="border-slate-200 shadow-sm">
                 <CardHeader className="pb-4 border-b border-slate-100">
                   <div className="flex items-center space-x-3">
@@ -965,7 +1170,7 @@ ${profile.name}`;
                     <div>
                       <CardTitle className="text-xl text-slate-900">Work Experience</CardTitle>
                       <CardDescription className="text-slate-600">
-                        Add your relevant work experience and supporting documents
+                        Add your relevant work experience
                       </CardDescription>
                     </div>
                   </div>
@@ -988,7 +1193,7 @@ ${profile.name}`;
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <Label className="text-sm font-medium text-slate-700 mb-2 block">
-                              Company *
+                              Company
                             </Label>
                             <Input
                               value={experience.company || ''}
@@ -998,7 +1203,7 @@ ${profile.name}`;
                           </div>
                           <div>
                             <Label className="text-sm font-medium text-slate-700 mb-2 block">
-                              Position *
+                              Position
                             </Label>
                             <Input
                               value={experience.position || ''}
@@ -1008,7 +1213,7 @@ ${profile.name}`;
                           </div>
                           <div>
                             <Label className="text-sm font-medium text-slate-700 mb-2 block">
-                              Start Date *
+                              Start Date
                             </Label>
                             <Input
                               type="month"
@@ -1046,52 +1251,6 @@ ${profile.name}`;
                             placeholder="Describe your responsibilities and achievements..."
                           />
                         </div>
-                        
-                        {/* Experience Document Upload */}
-                        <div className="mt-4">
-                          <Label className="text-sm font-medium text-slate-700 mb-2 block">
-                            Supporting Document (Optional)
-                          </Label>
-                          {uploadedFiles.experienceFiles[index] ? (
-                            <div className="flex items-center justify-between p-3 border border-emerald-200 bg-emerald-50 rounded-lg">
-                              <div className="flex items-center space-x-3">
-                                <FileText className="h-5 w-5 text-emerald-600" />
-                                <div>
-                                  <p className="font-medium text-slate-900">
-                                    {getFileDisplayName(uploadedFiles.experienceFiles[index])}
-                                  </p>
-                                  <p className="text-sm text-slate-500">
-                                    {applicationService.getFileSize({ size: uploadedFiles.experienceFiles[index].size } as any)}
-                                  </p>
-                                </div>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleRemoveExperienceFile(index)}
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:border-slate-400 transition-colors">
-                              <Input
-                                type="file"
-                                onChange={(e) => handleFileUpload(e, (file) => handleExperienceFileUpload(index, file))}
-                                className="hidden"
-                                id={`experience-file-${index}`}
-                              />
-                              <Label htmlFor={`experience-file-${index}`} className="cursor-pointer">
-                                <div className="flex flex-col items-center">
-                                  <Upload className="h-8 w-8 text-slate-400 mb-2" />
-                                  <p className="text-slate-600 font-medium">Upload supporting document</p>
-                                  <p className="text-sm text-slate-500">PDF, DOC, DOCX • Max 15MB</p>
-                                </div>
-                              </Label>
-                            </div>
-                          )}
-                        </div>
                       </div>
                     ))}
 
@@ -1103,6 +1262,74 @@ ${profile.name}`;
                       <Plus className="h-5 w-5 mr-2" />
                       Add Another Work Experience
                     </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Experience Documents Upload - OPTIONAL */}
+              <Card className="border-slate-200 shadow-sm">
+                <CardHeader className="pb-4 border-b border-slate-100">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
+                      <File className="h-5 w-5 text-violet-600" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl text-slate-900">Experience Documents (Optional)</CardTitle>
+                      <CardDescription className="text-slate-600">
+                        Upload supporting documents for your work experience
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="space-y-4">
+                    {/* Uploaded experience files */}
+                    {experienceFiles.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 border border-emerald-200 bg-emerald-50 rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          <FileText className="h-5 w-5 text-emerald-600" />
+                          <div>
+                            <p className="font-medium text-slate-900">{truncateFilename(file.name)}</p>
+                            <p className="text-sm text-slate-500">{getFileSize(file.size)}</p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeExperienceFile(index)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+
+                    {/* Upload area */}
+                    <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 transition-colors">
+                      <Input
+                        type="file"
+                        onChange={handleExperienceFileUpload}
+                        className="hidden"
+                        id="experience-files"
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt"
+                        multiple
+                      />
+                      <Label htmlFor="experience-files" className="cursor-pointer">
+                        <div className="flex flex-col items-center">
+                          <Upload className="h-8 w-8 text-slate-400 mb-3" />
+                          <p className="text-slate-700 font-medium mb-1">Upload Experience Documents</p>
+                          <p className="text-slate-500 text-sm mb-2">Supporting documents for your work experience</p>
+                          <p className="text-slate-400 text-xs">PDF, DOC, DOCX, Images • Max 15MB each</p>
+                          <Button
+                            variant="outline"
+                            className="mt-3 border-slate-300 text-slate-700"
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            Select Files
+                          </Button>
+                        </div>
+                      </Label>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1139,7 +1366,7 @@ ${profile.name}`;
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <Label className="text-sm font-medium text-slate-700 mb-2 block">Full Name *</Label>
+                            <Label className="text-sm font-medium text-slate-700 mb-2 block">Full Name</Label>
                             <Input
                               value={reference.name || ''}
                               onChange={(e) => handleReferenceChange(index, 'name', e.target.value)}
@@ -1147,7 +1374,7 @@ ${profile.name}`;
                             />
                           </div>
                           <div>
-                            <Label className="text-sm font-medium text-slate-700 mb-2 block">Position *</Label>
+                            <Label className="text-sm font-medium text-slate-700 mb-2 block">Position</Label>
                             <Input
                               value={reference.position || ''}
                               onChange={(e) => handleReferenceChange(index, 'position', e.target.value)}
@@ -1155,7 +1382,7 @@ ${profile.name}`;
                             />
                           </div>
                           <div>
-                            <Label className="text-sm font-medium text-slate-700 mb-2 block">Company *</Label>
+                            <Label className="text-sm font-medium text-slate-700 mb-2 block">Company</Label>
                             <Input
                               value={reference.company || ''}
                               onChange={(e) => handleReferenceChange(index, 'company', e.target.value)}
@@ -1163,7 +1390,7 @@ ${profile.name}`;
                             />
                           </div>
                           <div>
-                            <Label className="text-sm font-medium text-slate-700 mb-2 block">Relationship *</Label>
+                            <Label className="text-sm font-medium text-slate-700 mb-2 block">Relationship</Label>
                             <Input
                               value={reference.relationship || ''}
                               onChange={(e) => handleReferenceChange(index, 'relationship', e.target.value)}
@@ -1189,7 +1416,7 @@ ${profile.name}`;
                             />
                           </div>
                         </div>
-                        <div className="mt-4 space-y-3">
+                        <div className="mt-4">
                           <div className="flex items-center space-x-2">
                             <input
                               type="checkbox"
@@ -1198,52 +1425,6 @@ ${profile.name}`;
                               className="h-4 w-4 text-violet-600 rounded"
                             />
                             <Label className="text-sm text-slate-700 font-medium">This reference allows contact</Label>
-                          </div>
-
-                          {/* Reference Document Upload */}
-                          <div>
-                            <Label className="text-sm font-medium text-slate-700 mb-2 block">
-                              Reference Letter (Optional)
-                            </Label>
-                            {uploadedFiles.referenceFiles[index] ? (
-                              <div className="flex items-center justify-between p-3 border border-emerald-200 bg-emerald-50 rounded-lg">
-                                <div className="flex items-center space-x-3">
-                                  <FileText className="h-5 w-5 text-emerald-600" />
-                                  <div>
-                                    <p className="font-medium text-slate-900">
-                                      {getFileDisplayName(uploadedFiles.referenceFiles[index])}
-                                    </p>
-                                    <p className="text-sm text-slate-500">
-                                      {applicationService.getFileSize({ size: uploadedFiles.referenceFiles[index].size } as any)}
-                                    </p>
-                                  </div>
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleRemoveReferenceFile(index)}
-                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:border-slate-400 transition-colors">
-                                <Input
-                                  type="file"
-                                  onChange={(e) => handleFileUpload(e, (file) => handleReferenceFileUpload(index, file))}
-                                  className="hidden"
-                                  id={`reference-file-${index}`}
-                                />
-                                <Label htmlFor={`reference-file-${index}`} className="cursor-pointer">
-                                  <div className="flex flex-col items-center">
-                                    <Upload className="h-8 w-8 text-slate-400 mb-2" />
-                                    <p className="text-slate-600 font-medium">Upload reference letter</p>
-                                    <p className="text-sm text-slate-500">PDF, DOC, DOCX • Max 15MB</p>
-                                  </div>
-                                </Label>
-                              </div>
-                            )}
                           </div>
                         </div>
                       </div>
@@ -1261,34 +1442,424 @@ ${profile.name}`;
                 </CardContent>
               </Card>
 
+              {/* Reference Documents Upload - OPTIONAL */}
+              <Card className="border-slate-200 shadow-sm">
+                <CardHeader className="pb-4 border-b border-slate-100">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
+                      <File className="h-5 w-5 text-violet-600" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl text-slate-900">Reference Documents (Optional)</CardTitle>
+                      <CardDescription className="text-slate-600">
+                        Upload reference letters or recommendation letters
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="space-y-4">
+                    {/* Uploaded reference files */}
+                    {referenceFiles.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 border border-emerald-200 bg-emerald-50 rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          <FileText className="h-5 w-5 text-emerald-600" />
+                          <div>
+                            <p className="font-medium text-slate-900">{truncateFilename(file.name)}</p>
+                            <p className="text-sm text-slate-500">{getFileSize(file.size)}</p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeReferenceFile(index)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+
+                    {/* Upload area */}
+                    <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 transition-colors">
+                      <Input
+                        type="file"
+                        onChange={handleReferenceFileUpload}
+                        className="hidden"
+                        id="reference-files"
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt"
+                        multiple
+                      />
+                      <Label htmlFor="reference-files" className="cursor-pointer">
+                        <div className="flex flex-col items-center">
+                          <Upload className="h-8 w-8 text-slate-400 mb-3" />
+                          <p className="text-slate-700 font-medium mb-1">Upload Reference Documents</p>
+                          <p className="text-slate-500 text-sm mb-2">Reference letters or recommendation letters</p>
+                          <p className="text-slate-400 text-xs">PDF, DOC, DOCX, Images • Max 15MB each</p>
+                          <Button
+                            variant="outline"
+                            className="mt-3 border-slate-300 text-slate-700"
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            Select Files
+                          </Button>
+                        </div>
+                      </Label>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Step 4: Review Application */}
+          {currentStep === 4 && (
+            <div className="space-y-6">
               {/* Application Summary */}
-              <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-slate-50 to-slate-100">
+              <Card className="border-slate-200 shadow-sm">
+                <CardHeader className="pb-4 border-b border-slate-100">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+                      <ClipboardCheck className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl text-slate-900">Application Summary</CardTitle>
+                      <CardDescription className="text-slate-600">
+                        Review your application before submitting
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="space-y-8">
+                    {/* Contact Information Review */}
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-slate-900">Contact Information</h3>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => goToStep(1)}
+                          className="text-blue-600 hover:text-blue-700"
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-slate-50 p-4 rounded-lg">
+                          <p className="text-sm text-slate-500">Email</p>
+                          <p className="font-medium">{formData.contactInfo.email}</p>
+                        </div>
+                        <div className="bg-slate-50 p-4 rounded-lg">
+                          <p className="text-sm text-slate-500">Phone</p>
+                          <p className="font-medium">{formData.contactInfo.phone}</p>
+                        </div>
+                        <div className="bg-slate-50 p-4 rounded-lg">
+                          <p className="text-sm text-slate-500">Location</p>
+                          <p className="font-medium">{formData.contactInfo.location}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* CV Files Review */}
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-slate-900">CV Files</h3>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => goToStep(3)}
+                          className="text-blue-600 hover:text-blue-700"
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Selected Profile CVs */}
+                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                          <p className="text-sm text-slate-500">Profile CVs Selected</p>
+                          <p className="font-medium">{formData.selectedCVs.length} CV(s)</p>
+                          {formData.selectedCVs.length > 0 && (
+                            <div className="mt-2">
+                              {formData.selectedCVs.slice(0, 2).map((cv, index) => (
+                                <p key={index} className="text-xs text-slate-500 truncate">
+                                  • {cv.originalName}
+                                </p>
+                              ))}
+                              {formData.selectedCVs.length > 2 && (
+                                <p className="text-xs text-slate-500">
+                                  +{formData.selectedCVs.length - 2} more
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Uploaded CV File */}
+                        <div className={`p-4 rounded-lg border ${cvFile ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+                          <p className="text-sm text-slate-500">Uploaded CV File</p>
+                          {cvFile ? (
+                            <>
+                              <p className="font-medium">{truncateFilename(cvFile.name)}</p>
+                              <p className="text-xs text-slate-500 mt-1">{getFileSize(cvFile.size)}</p>
+                              <p className="text-xs text-emerald-600 mt-1 flex items-center">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Ready for submission
+                              </p>
+                            </>
+                          ) : (
+                            <p className="font-medium text-red-600">No CV file uploaded</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Uploaded Files Review */}
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-slate-900">Additional Files</h3>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => goToStep(3)}
+                          className="text-blue-600 hover:text-blue-700"
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Experience Files */}
+                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                          <p className="text-sm text-slate-500">Experience Documents</p>
+                          <p className="font-medium">{experienceFiles.length} file(s)</p>
+                          {experienceFiles.length > 0 && (
+                            <div className="mt-2">
+                              {experienceFiles.slice(0, 2).map((file, index) => (
+                                <p key={index} className="text-xs text-slate-500 truncate">
+                                  • {truncateFilename(file.name, 25)}
+                                </p>
+                              ))}
+                              {experienceFiles.length > 2 && (
+                                <p className="text-xs text-slate-500">
+                                  +{experienceFiles.length - 2} more
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Reference Files */}
+                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                          <p className="text-sm text-slate-500">Reference Documents</p>
+                          <p className="font-medium">{referenceFiles.length} file(s)</p>
+                          {referenceFiles.length > 0 && (
+                            <div className="mt-2">
+                              {referenceFiles.slice(0, 2).map((file, index) => (
+                                <p key={index} className="text-xs text-slate-500 truncate">
+                                  • {truncateFilename(file.name, 25)}
+                                </p>
+                              ))}
+                              {referenceFiles.length > 2 && (
+                                <p className="text-xs text-slate-500">
+                                  +{referenceFiles.length - 2} more
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Cover Letter Review */}
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-slate-900">Cover Letter Preview</h3>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => goToStep(2)}
+                          className="text-blue-600 hover:text-blue-700"
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
+                      </div>
+                      <div className="bg-slate-50 p-6 rounded-lg">
+                        <p className="text-sm text-slate-500 mb-2">First 500 characters:</p>
+                        <div className="text-slate-700 whitespace-pre-line">
+                          {truncateText(formData.coverLetter, 500)}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-2">
+                          Total length: {formData.coverLetter.length} characters
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Skills Review */}
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-slate-900">Skills</h3>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => goToStep(2)}
+                          className="text-blue-600 hover:text-blue-700"
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {formData.skills.map((skill, index) => (
+                          <Badge
+                            key={index}
+                            variant="secondary"
+                            className="bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1"
+                          >
+                            {skill}
+                          </Badge>
+                        ))}
+                        {formData.skills.length === 0 && (
+                          <p className="text-slate-500 italic">No skills added</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Work Experience Review */}
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-slate-900">Work Experience</h3>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => goToStep(3)}
+                          className="text-blue-600 hover:text-blue-700"
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
+                      </div>
+                      <div className="space-y-4">
+                        {formData.workExperience.map((exp, index) => (
+                          <div key={index} className="p-4 border border-slate-200 rounded-lg">
+                            <p className="font-medium text-slate-900">
+                              {exp.position} at {exp.company}
+                            </p>
+                            <p className="text-sm text-slate-600">
+                              {exp.startDate} - {exp.current ? 'Present' : exp.endDate}
+                            </p>
+                            {exp.description && (
+                              <p className="text-sm text-slate-700 mt-2">{exp.description}</p>
+                            )}
+                          </div>
+                        ))}
+                        {formData.workExperience.length === 0 && (
+                          <p className="text-slate-500 italic">No work experience added</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* References Review */}
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-slate-900">Professional References</h3>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => goToStep(3)}
+                          className="text-blue-600 hover:text-blue-700"
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {formData.references.map((ref, index) => (
+                          <div key={index} className="p-4 border border-slate-200 rounded-lg">
+                            <p className="font-medium text-slate-900">{ref.name}</p>
+                            <p className="text-sm text-slate-600">{ref.position} at {ref.company}</p>
+                            <p className="text-sm text-slate-500">Relationship: {ref.relationship}</p>
+                            <div className="flex items-center space-x-2 mt-2">
+                              <span className={`inline-block w-2 h-2 rounded-full ${ref.allowsContact ? 'bg-green-500' : 'bg-red-500'}`} />
+                              <span className="text-xs text-slate-500">
+                                {ref.allowsContact ? 'Allows contact' : 'Does not allow contact'}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                        {formData.references.length === 0 && (
+                          <p className="text-slate-500 italic col-span-2">No references added</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Final Submission */}
+              <Card className="border-slate-200 shadow-sm bg-linear-to-br from-amber-50 to-orange-50">
                 <CardHeader className="pb-4">
                   <CardTitle className="flex items-center space-x-3 text-slate-900">
-                    <CheckCircle className="h-6 w-6 text-emerald-600" />
-                    <span>Ready to Submit?</span>
+                    <Send className="h-6 w-6 text-amber-600" />
+                    <span>Ready to Submit</span>
                   </CardTitle>
                   <CardDescription className="text-slate-600">
-                    Review your application before submitting
+                    Review all information before final submission
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center mb-6">
                     <div className="bg-white p-4 rounded-lg border border-slate-200">
                       <div className="text-2xl font-bold text-blue-600">{formData.selectedCVs.length}</div>
-                      <div className="text-sm text-slate-600">Resumes</div>
+                      <div className="text-sm text-slate-600">Profile CVs</div>
                     </div>
                     <div className="bg-white p-4 rounded-lg border border-slate-200">
-                      <div className="text-2xl font-bold text-emerald-600">{formData.skills.length}</div>
-                      <div className="text-sm text-slate-600">Skills</div>
+                      <div className={`text-2xl font-bold ${cvFile ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {cvFile ? '✓' : '0'}
+                      </div>
+                      <div className="text-sm text-slate-600">Uploaded CV</div>
                     </div>
                     <div className="bg-white p-4 rounded-lg border border-slate-200">
-                      <div className="text-2xl font-bold text-violet-600">{formData.workExperience.length}</div>
-                      <div className="text-sm text-slate-600">Experiences</div>
+                      <div className="text-2xl font-bold text-violet-600">{experienceFiles.length}</div>
+                      <div className="text-sm text-slate-600">Experience Files</div>
                     </div>
                     <div className="bg-white p-4 rounded-lg border border-slate-200">
-                      <div className="text-2xl font-bold text-amber-600">{formData.references.length}</div>
-                      <div className="text-sm text-slate-600">References</div>
+                      <div className="text-2xl font-bold text-amber-600">{referenceFiles.length}</div>
+                      <div className="text-sm text-slate-600">Reference Files</div>
+                    </div>
+                  </div>
+
+                  {/* Validation Summary */}
+                  <div className="bg-white rounded-lg border border-slate-200 p-4">
+                    <h4 className="font-medium text-slate-900 mb-3">Application Checklist:</h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center">
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-3 ${formData.contactInfo.email && formData.contactInfo.phone && formData.contactInfo.location ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                          {formData.contactInfo.email && formData.contactInfo.phone && formData.contactInfo.location ? '✓' : '✗'}
+                        </div>
+                        <span className="text-sm">Contact information complete</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-3 ${formData.selectedCVs.length > 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                          {formData.selectedCVs.length > 0 ? '✓' : '✗'}
+                        </div>
+                        <span className="text-sm">CV selected from profile</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-3 ${cvFile ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                          {cvFile ? '✓' : '✗'}
+                        </div>
+                        <span className="text-sm">CV file uploaded (Required)</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-3 ${formData.coverLetter.trim().length > 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                          {formData.coverLetter.trim().length > 0 ? '✓' : '✗'}
+                        </div>
+                        <span className="text-sm">Cover letter provided</span>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -1321,7 +1892,7 @@ ${profile.name}`;
           {!isLastStep ? (
             <Button
               onClick={nextStep}
-              className="bg-gradient-to-br from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white"
+              className="bg-linear-to-br from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white"
             >
               Next
               <ChevronRight className="h-4 w-4 ml-2" />
@@ -1329,8 +1900,8 @@ ${profile.name}`;
           ) : (
             <Button
               onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="bg-gradient-to-br from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white"
+              disabled={isSubmitting || !cvFile}
+              className="bg-linear-to-br from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <>

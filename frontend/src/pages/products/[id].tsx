@@ -1,315 +1,632 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { GetServerSideProps } from 'next';
-import { motion } from 'framer-motion';
-import { productService, Product, Company } from '@/services/productService';
-import { ProductDetails } from '@/components/Products/ProductDetail';
-import { ProductCard } from '@/components/Products/ProductCard';
-import { Button } from '@/components/ui/Button';
+import { ProductDetail } from '@/components/Products/ProductDetail';
+import { EntityAvatar } from '@/components/layout/EntityAvatar';
+import { useAuth } from '@/hooks/useAuth';
+import { productService, Product } from '@/services/productService';
+import { colors, getTheme } from '@/utils/color';
+import { Button } from '@/components/social/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
+import { Badge } from '@/components/social/ui/Badge';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { toast } from '@/hooks/use-toast';
 import {
   ArrowLeft,
   Share2,
-  Heart,
-  Star,
-  Truck,
-  Shield,
-  ArrowRight,
-  Clock,
-  CheckCircle,
-  Users,
-  Eye,
+  Building,
   Package,
+  Star,
+  Eye,
+  MessageSquare,
+  ChevronRight,
+  ExternalLink,
+  Bookmark,
+  BookmarkCheck,
+  CheckCircle
 } from 'lucide-react';
-import { productToast } from '@/services/productService';
+import Link from 'next/link';
+import { companyService } from '@/services/companyService';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 
-interface ProductDetailsPageProps {
-  product: Product | null;
-  relatedProducts: Product[];
-  company?: Company | null;
-}
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.06 },
-  },
-};
-
-export default function ProductDetailsPage({ product, relatedProducts, company }: ProductDetailsPageProps) {
+export default function PublicProductDetailPage() {
   const router = useRouter();
-  const [isLiked, setIsLiked] = useState(false);
+  const { id } = router.query;
+  const { user } = useAuth();
+  const [product, setProduct] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isSaved, setIsSaved] = useState(false);
+  const [company, setCompany] = useState<any>(null);
+  const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
+  const [loadingRelated, setLoadingRelated] = useState(false);
+  const theme = getTheme('light');
 
-  if (!product) {
+  useEffect(() => {
+    const fetchProductData = async () => {
+      if (!id || typeof id !== 'string') return;
+
+      setLoading(true);
+      try {
+        // Fetch product
+        const productData = await productService.getProduct(id);
+        setProduct(productData);
+
+        // Extract company info
+        let companyData = null;
+        if (typeof productData.companyId === 'object' && productData.companyId) {
+          companyData = productData.companyId;
+          setCompany(companyData);
+        } else if (typeof productData.companyId === 'string') {
+          try {
+            companyData = await companyService.getCompany(productData.companyId);
+            setCompany(companyData);
+          } catch (error) {
+            console.error('Error fetching company:', error);
+          }
+        }
+
+        // Fetch related products
+        fetchRelatedProducts(productData._id);
+      } catch (error: any) {
+        console.error('Error fetching product:', error);
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to load product',
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProductData();
+  }, [id]);
+
+  const fetchRelatedProducts = async (productId: string) => {
+    setLoadingRelated(true);
+    try {
+      const related = await productService.getRelatedProducts(productId, 4);
+      setRelatedProducts(related);
+    } catch (error) {
+      console.error('Failed to fetch related products:', error);
+    } finally {
+      setLoadingRelated(false);
+    }
+  };
+
+  const handleSaveToggle = () => {
+    setIsSaved(!isSaved);
+    toast({
+      title: isSaved ? 'Removed from saved' : 'Saved to favorites',
+      description: isSaved 
+        ? 'Product removed from your saved items' 
+        : 'Product added to your favorites',
+      variant: 'default',
+    });
+  };
+
+  const handleShare = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast({
+        title: 'Link copied!',
+        description: 'Product link copied to clipboard',
+        variant: 'success',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to copy link',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleContactCompany = () => {
+    if (company) {
+      router.push(`/dashboard/messages/new?company=${company._id}&product=${product?._id}`);
+    } else {
+      toast({
+        title: 'Error',
+        description: 'Company information not available',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  if (loading) {
     return (
       <DashboardLayout>
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
-            <Card className="border border-gray-200 shadow-lg max-w-md mx-4">
-              <CardContent className="text-center py-12">
-                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Package className="h-8 w-8 text-red-600" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Breadcrumb Skeleton */}
+          <div className="mb-8">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-4 w-24" />
+              <ChevronRight className="h-4 w-4 text-gray-300" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+          </div>
+
+          {/* Header Skeleton */}
+          <div className="mb-8">
+            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <Skeleton className="h-16 w-16 rounded-full" />
+                <div>
+                  <Skeleton className="h-6 w-48 mb-2" />
+                  <Skeleton className="h-4 w-32" />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-3">Product Not Found</h2>
-                <p className="text-gray-600 mb-6">The product you&apos;re looking for doesn&apos;t exist or has been removed.</p>
-                <Button onClick={() => router.push('/products')} className="bg-blue-600 hover:bg-blue-700 text-white">Browse Products</Button>
-              </CardContent>
-            </Card>
-          </motion.div>
+              </div>
+              <div className="flex gap-2">
+                <Skeleton className="h-10 w-24" />
+                <Skeleton className="h-10 w-10" />
+                <Skeleton className="h-10 w-24" />
+              </div>
+            </div>
+          </div>
+
+          {/* Content Skeleton */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <Skeleton className="aspect-[4/3] rounded-xl" />
+              <div className="flex gap-2">
+                <Skeleton className="h-20 w-20 rounded-lg" />
+                <Skeleton className="h-20 w-20 rounded-lg" />
+                <Skeleton className="h-20 w-20 rounded-lg" />
+              </div>
+            </div>
+            <div className="space-y-6">
+              <Skeleton className="h-8 w-3/4" />
+              <Skeleton className="h-6 w-1/2" />
+              <Skeleton className="h-24 w-full" />
+              <div className="grid grid-cols-2 gap-4">
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
+              </div>
+            </div>
+          </div>
         </div>
       </DashboardLayout>
     );
   }
 
-  const handleBack = () => router.back();
+  if (!product) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center py-12">
+            <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <Package className="h-8 w-8 text-gray-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Product Not Found</h2>
+            <p className="text-gray-600 mb-6">The product you`re looking for doesn`t exist or has been removed.</p>
+            <Button onClick={() => router.push('/dashboard/products')}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Marketplace
+            </Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
-  const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: product.name,
-          text: product.shortDescription,
-          url: window.location.href,
-        });
-      } catch (error) {
-        console.log('Error sharing:', error);
-      }
-    } else {
-      navigator.clipboard?.writeText(window.location.href);
-      productToast.success('Link copied to clipboard!');
-    }
-  };
-
+  // Get product details
+  const stockStatus = productService.getStockStatus(product.inventory);
   const formattedPrice = productService.formatPrice(product.price);
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gray-50 py-6">
-        {/* Header */}
-        <motion.div className="bg-white border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between py-4">
-              <Button variant="ghost" onClick={handleBack} className="flex items-center gap-2 text-gray-600 hover:text-gray-900">
-                <ArrowLeft className="h-4 w-4" />
-                Back to Products
-              </Button>
-
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={handleShare} className="text-gray-600 hover:text-blue-600">
-                  <Share2 className="h-4 w-4 mr-2" />
-                  Share
-                </Button>
-
-                <Button variant="ghost" size="sm" onClick={() => setIsLiked(!isLiked)} className="text-gray-600 hover:text-red-600">
-                  <Heart className={`h-4 w-4 mr-2 transition-colors ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
-                  {isLiked ? 'Saved' : 'Save'}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Breadcrumb */}
-        <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 text-sm text-gray-600 flex items-center gap-2">
-          <button onClick={() => router.push('/products')} className="hover:text-blue-600 transition">Products</button>
-          <ArrowRight className="h-3 w-3" />
-          <button onClick={() => router.push(`/products?category=${product.category}`)} className="hover:text-blue-600 transition">
-            {product.category}
-          </button>
-          {product.subcategory && (
-            <>
-              <ArrowRight className="h-3 w-3" />
-              <span className="text-blue-600 font-medium">{product.subcategory}</span>
-            </>
-          )}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Breadcrumb Navigation */}
+        <nav className="mb-8">
+          <ol className="flex items-center gap-2 text-sm">
+            <li>
+              <Link 
+                href="/dashboard/products" 
+                className="text-gray-600 hover:text-gray-900 transition-colors"
+                style={{ color: theme.text.gray400 }}
+              >
+                Marketplace
+              </Link>
+            </li>
+            <li>
+              <ChevronRight className="h-4 w-4 text-gray-400" />
+            </li>
+            {product.category && (
+              <>
+                <li>
+                  <Link 
+                    href={`/dashboard/products?category=${encodeURIComponent(product.category)}`}
+                    className="text-gray-600 hover:text-gray-900 transition-colors"
+                    style={{ color: theme.text.gray400 }}
+                  >
+                    {product.category}
+                  </Link>
+                </li>
+                <li>
+                  <ChevronRight className="h-4 w-4 text-gray-400" />
+                </li>
+              </>
+            )}
+            <li className="font-medium truncate max-w-xs" style={{ color: theme.text.gray800 }}>
+              {product.name}
+            </li>
+          </ol>
         </nav>
 
-        {/* Page grid */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Main content */}
-            <div className="lg:col-span-2">
-              <motion.div initial="hidden" animate="visible" variants={containerVariants}>
-                <ProductDetails product={product} company={company ?? undefined} onBack={handleBack} className="bg-white rounded-lg border border-gray-200 shadow-sm p-6" />
-              </motion.div>
+        {/* Header with Company Info */}
+        <div className="mb-8">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+            <div className="flex items-start gap-4">
+              <Link href={`/dashboard/companies/${company?._id || ''}`}>
+                <EntityAvatar
+                  name={company?.name || 'Company'}
+                  avatar={company?.logoUrl}
+                  size="lg"
+                  className="hover:ring-2 hover:ring-goldenMustard/50 transition-all cursor-pointer"
+                />
+              </Link>
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <Link 
+                    href={`/dashboard/companies/${company?._id || ''}`}
+                    className="hover:underline"
+                  >
+                    <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: theme.text.gray800 }}>
+                      {company?.name || 'Company'}
+                      {company?.verified && (
+                        <Badge variant="outline" size="sm" className="border-blue-500 text-blue-700">
+                          Verified
+                        </Badge>
+                      )}
+                    </h2>
+                  </Link>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-4 text-sm">
+                  {company?.industry && (
+                    <div className="flex items-center gap-1" style={{ color: theme.text.gray400 }}>
+                      <Building className="h-4 w-4" />
+                      <span>{company.industry}</span>
+                    </div>
+                  )}
+                  {company?.website && (
+                    <a 
+                      href={company.website} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-blue-600 hover:underline"
+                      style={{ color: theme.text.blue }}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Website
+                    </a>
+                  )}
+                  <div className="flex items-center gap-1" style={{ color: theme.text.gray400 }}>
+                    <Star className="h-4 w-4" />
+                    <span>4.8 • 124 reviews</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Sidebar - no price/stock duplication here; contains company & stats */}
-            <div className="space-y-6">
-              {/* Seller / Info Card */}
-              {company && (
-                <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.12 }}>
-                  <Card className="border border-gray-200 shadow-sm">
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-4 mb-4">
-                        {company.logoUrl && (
-                          <div className="relative">
-                            <img src={productService.getImageUrl(company.logoUrl)} alt={company.name} className="h-12 w-12 rounded-lg object-cover border border-gray-200" />
-                            {company.verified && (
-                              <div className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                                <CheckCircle className="h-3 w-3 text-white" />
-                              </div>
-                            )}
-                          </div>
-                        )}
+            {/* Action Buttons - Public View */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                onClick={handleSaveToggle}
+                variant="outline"
+                className="gap-2"
+                style={{ borderColor: theme.border.gray100 }}
+              >
+                {isSaved ? (
+                  <>
+                    <BookmarkCheck className="h-4 w-4" style={{ color: colors.goldenMustard }} />
+                    Saved
+                  </>
+                ) : (
+                  <>
+                    <Bookmark className="h-4 w-4" />
+                    Save
+                  </>
+                )}
+              </Button>
+              
+              <Button
+                onClick={handleShare}
+                variant="outline"
+                size="icon"
+                style={{ borderColor: theme.border.gray100 }}
+                title="Share product"
+              >
+                <Share2 className="h-4 w-4" />
+              </Button>
 
-                        <div>
-                          <h4 className="font-semibold text-gray-900">{company.name}</h4>
-                          <p className="text-sm text-gray-600">{company.industry}</p>
-                        </div>
-                      </div>
-
-                      {company.description && <p className="text-sm text-gray-600 mb-4 line-clamp-3">{company.description}</p>}
-
-                      <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
-                        <div className="flex items-center gap-2">
-                          <Users className="h-4 w-4" />
-                          <span>Trusted Partner</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Eye className="h-4 w-4" />
-                          <span>Active Seller</span>
-                        </div>
-                      </div>
-
-                      <Button variant="outline" className="w-full border-gray-300 text-gray-700 hover:bg-gray-50">View All Products</Button>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              )}
-
-              {/* Info / Guarantees */}
-              <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.18 }}>
-                <Card className="border border-gray-200 shadow-sm">
-                  <CardContent className="p-6">
-                    <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                      <Star className="h-4 w-4 text-amber-500" /> Product Highlights
-                    </h4>
-
-                    <div className="space-y-3 text-sm text-gray-600">
-                      <div className="flex items-center gap-3">
-                        <Truck className="h-4 w-4 text-gray-500" />
-                        <span>Free shipping on orders over $50</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Shield className="h-4 w-4 text-gray-500" />
-                        <span>30-day money-back guarantee</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <CheckCircle className="h-4 w-4 text-gray-500" />
-                        <span>Verified quality assurance</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Clock className="h-4 w-4 text-gray-500" />
-                        <span>Usually ships within 24 hours</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-
-              {/* Product Stats (no duplication of price/stock) */}
-              <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.24 }}>
-                <Card className="border border-gray-200 shadow-sm">
-                  <CardContent className="p-6">
-                    <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                      <Star className="h-4 w-4 mr-2 text-amber-500" />
-                      Product Stats
-                    </h4>
-
-                    <div className="space-y-3 text-sm text-gray-600">
-                      <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                        <span>Total Views</span>
-                        <div className="flex items-center font-medium text-gray-900">
-                          <Eye className="h-4 w-4 mr-1" />
-                          {product.views}
-                        </div>
-                      </div>
-
-                      <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                        <span>Created</span>
-                        <div className="text-sm text-gray-700">{formatDate(product.createdAt)}</div>
-                      </div>
-
-                      <div className="flex justify-between items-center py-2">
-                        <span>Last Updated</span>
-                        <div className="text-sm text-gray-700">{formatDate(product.updatedAt)}</div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
+              <Button
+                onClick={handleContactCompany}
+                className="gap-2"
+                style={{
+                  backgroundColor: colors.goldenMustard,
+                  color: colors.white
+                }}
+              >
+                <MessageSquare className="h-4 w-4" />
+                Contact Company
+              </Button>
             </div>
           </div>
+        </div>
 
-          {/* Related Products */}
-          {relatedProducts && relatedProducts.length > 0 && (
-            <section className="mt-16">
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Related Products</h2>
-                  <p className="text-gray-600">Similar products you might like</p>
+        {/* Product Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <Card style={{ borderColor: theme.border.gray100 }}>
+            <CardContent className="pt-6">
+              <div className="space-y-2">
+                <div className="text-2xl font-bold" style={{ color: colors.goldenMustard }}>
+                  {formattedPrice}
                 </div>
-                <Button variant="ghost" onClick={() => router.push(`/products?category=${product.category}`)} className="text-blue-600 hover:text-blue-700 hover:bg-blue-50">
-                  View All
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
+                <div className="text-sm" style={{ color: theme.text.gray400 }}>
+                  {product.price.unit && product.price.unit !== 'unit' ? `Per ${product.price.unit}` : 'Price'}
+                </div>
               </div>
+            </CardContent>
+          </Card>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {relatedProducts.map((relatedProduct) => (
-                  <motion.div key={relatedProduct._id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28 }}>
-                    <ProductCard product={relatedProduct} onView={(p: { _id: any; }) => router.push(`/products/${p._id}`)} showActions={false} />
-                  </motion.div>
+          <Card style={{ borderColor: theme.border.gray100 }}>
+            <CardContent className="pt-6">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className={`text-2xl font-bold ${stockStatus?.className}`}>
+                    {stockStatus?.text}
+                  </div>
+                  {stockStatus && (
+                    <div className="h-2 w-2 rounded-full" style={{ backgroundColor: stockStatus.color }} />
+                  )}
+                </div>
+                <div className="text-sm" style={{ color: theme.text.gray400 }}>
+                  {product.inventory.trackQuantity 
+                    ? `${product.inventory.quantity} units available`
+                    : 'Unlimited stock'
+                  }
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card style={{ borderColor: theme.border.gray100 }}>
+            <CardContent className="pt-6">
+              <div className="space-y-2">
+                <div className="text-2xl font-bold flex items-center gap-2" style={{ color: theme.text.blue }}>
+                  <Eye className="h-5 w-5" />
+                  {product.views}
+                </div>
+                <div className="text-sm" style={{ color: theme.text.gray400 }}>
+                  Product views
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card style={{ borderColor: theme.border.gray100 }}>
+            <CardContent className="pt-6">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="text-2xl font-bold" style={{ color: theme.text.gray800 }}>
+                    {product.category}
+                  </div>
+                  <Badge variant="secondary" className="text-xs">
+                    {product.subcategory || 'General'}
+                  </Badge>
+                </div>
+                <div className="text-sm" style={{ color: theme.text.gray400 }}>
+                  Category
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Main Product Detail Component */}
+        <div
+          className="bg-white rounded-2xl shadow-sm border overflow-hidden"
+          style={{ borderColor: theme.border.gray100 }}
+        >
+          <ProductDetail
+            productId={product._id}
+            currentUser={user}
+            theme="light"
+            onBack={() => router.push('/dashboard/products')}
+          />
+        </div>
+
+        {/* Company Contact Card */}
+        {company && (
+          <Card className="mt-8" style={{ borderColor: theme.border.gray100 }}>
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="md:col-span-2">
+                  <h3 className="text-lg font-semibold mb-4" style={{ color: theme.text.gray800 }}>
+                    About the Company
+                  </h3>
+                  <p className="text-gray-600 mb-4">
+                    {company.description || `${company.name} is a trusted supplier on our marketplace.`}
+                  </p>
+                  <div className="flex flex-wrap gap-4">
+                    {company.industry && (
+                      <div className="flex items-center gap-2">
+                        <Building className="h-4 w-4 text-gray-400" />
+                        <span className="text-sm" style={{ color: theme.text.gray800 }}>
+                          {company.industry}
+                        </span>
+                      </div>
+                    )}
+                    {company.website && (
+                      <a 
+                        href={company.website} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-blue-600 hover:underline"
+                        style={{ color: theme.text.blue }}
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        <span className="text-sm">Visit Website</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-4">
+                  <Button
+                    onClick={handleContactCompany}
+                    className="w-full gap-2"
+                    style={{
+                      backgroundColor: colors.goldenMustard,
+                      color: colors.white
+                    }}
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                    Contact Seller
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2"
+                    style={{ borderColor: theme.border.gray100 }}
+                    onClick={() => router.push(`/dashboard/companies/${company._id}`)}
+                  >
+                    <Building className="h-4 w-4" />
+                    View Company Profile
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2"
+                    style={{ borderColor: theme.border.gray100 }}
+                    onClick={() => router.push(`/dashboard/products?company=${company._id}`)}
+                  >
+                    <Package className="h-4 w-4" />
+                    View All Products
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Related Products Section */}
+        {(relatedProducts.length > 0 || loadingRelated) && (
+          <div className="mt-12">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold" style={{ color: theme.text.gray800 }}>
+                Similar Products
+              </h2>
+              <Link 
+                href={`/dashboard/products?category=${encodeURIComponent(product.category)}`}
+                className="text-sm font-medium flex items-center gap-1 hover:underline"
+                style={{ color: theme.text.blue }}
+              >
+                View all in {product.category}
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            </div>
+
+            {loadingRelated ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[1, 2, 3, 4].map((i) => (
+                  <Card key={i} style={{ borderColor: theme.border.gray100 }}>
+                    <CardContent className="p-4">
+                      <Skeleton className="aspect-square rounded-lg mb-3" />
+                      <Skeleton className="h-5 w-3/4 mb-2" />
+                      <Skeleton className="h-4 w-1/2" />
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
-            </section>
-          )}
-        </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {relatedProducts.map((relatedProduct) => (
+                  <Link 
+                    key={relatedProduct._id} 
+                    href={`/dashboard/products/${relatedProduct._id}`}
+                    className="group"
+                  >
+                    <Card className="h-full hover:shadow-lg transition-shadow" style={{ borderColor: theme.border.gray100 }}>
+                      <CardContent className="p-4">
+                        <div className="aspect-square rounded-lg overflow-hidden bg-gray-100 mb-3">
+                          {relatedProduct.images?.[0] && (
+                            <img
+                              src={productService.getImageUrl(relatedProduct.images[0].secure_url, {
+                                width: 300,
+                                height: 300,
+                                crop: 'fill'
+                              })}
+                              alt={relatedProduct.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          )}
+                        </div>
+                        <h3 className="font-semibold mb-1 line-clamp-2 group-hover:text-goldenMustard transition-colors"
+                          style={{ color: theme.text.gray800 }}>
+                          {relatedProduct.name}
+                        </h3>
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold" style={{ color: colors.goldenMustard }}>
+                            {productService.formatPrice(relatedProduct.price)}
+                          </span>
+                          <div className="flex items-center gap-1 text-sm" style={{ color: theme.text.gray400 }}>
+                            <Eye className="h-3 w-3" />
+                            {relatedProduct.views}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Trust & Safety Section */}
+        <Card className="mt-8" style={{ borderColor: theme.border.gray100 }}>
+          <CardContent className="pt-6">
+            <h3 className="text-lg font-semibold mb-4" style={{ color: theme.text.gray800 }}>
+              Trust & Safety
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <h4 className="font-medium mb-1" style={{ color: theme.text.gray800 }}>Verified Company</h4>
+                  <p className="text-sm" style={{ color: theme.text.gray400 }}>
+                    All companies undergo verification process
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                  <MessageSquare className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <h4 className="font-medium mb-1" style={{ color: theme.text.gray800 }}>Secure Messaging</h4>
+                  <p className="text-sm" style={{ color: theme.text.gray400 }}>
+                    Communicate safely through our platform
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                  <Star className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <h4 className="font-medium mb-1" style={{ color: theme.text.gray800 }}>Customer Reviews</h4>
+                  <p className="text-sm" style={{ color: theme.text.gray400 }}>
+                    Read feedback from other buyers
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );
 }
-
-export const getServerSideProps: GetServerSideProps = async (context) => {
-  const { id } = context.params!;
-
-  try {
-    const [product, relatedProducts] = await Promise.all([
-      productService.getProduct(id as string),
-      productService.getRelatedProducts(id as string, 4),
-    ]);
-
-    let company: Company | undefined;
-    if (typeof product?.companyId === 'object') {
-      company = product.companyId as Company;
-    }
-
-    return {
-      props: {
-        product: product ?? null,
-        relatedProducts: relatedProducts ?? [],
-        company: company ?? null,
-      },
-    };
-  } catch (error) {
-    return {
-      props: {
-        product: null,
-        relatedProducts: [],
-        company: null,
-      },
-    };
-  }
-};

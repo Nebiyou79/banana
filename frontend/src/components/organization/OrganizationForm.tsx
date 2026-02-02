@@ -1,10 +1,10 @@
-// src/components/organization/OrganizationForm.tsx - UPDATED WITH PROFILE-SERVICE IMAGE HANDLING
-import { useState, useRef, useEffect } from 'react';
+// src/components/organization/OrganizationForm.tsx - UPDATED WITH CREATE/UPDATE LOGIC
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { OrganizationProfile } from '@/services/organizationService';
-import { profileService } from '@/services/profileService'; // ADDED PROFILE SERVICE
+import { profileService, CloudinaryImage } from '@/services/profileService';
 import {
   Form,
   FormControl,
@@ -17,11 +17,11 @@ import {
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Building2, Target, X, Upload, Trash2, ImageDown, Phone } from 'lucide-react';
+import { Building2, Target, X, Phone, Cloud, Check, Loader2, Plus, Save } from 'lucide-react';
 import Button from '../forms/Button';
 import { organizationService } from '@/services/organizationService';
-import { toast } from '@/hooks/use-toast';
-import { getFullImageUrl } from '@/utils/image-utils';
+import { toast } from 'sonner';
+import { AvatarUploader } from '@/components/profile/AvatarUploader';
 
 const organizationFormSchema = z.object({
   name: z.string().min(2, 'Organization name must be at least 2 characters'),
@@ -54,49 +54,40 @@ type OrganizationFormValues = z.infer<typeof organizationFormSchema>;
 
 interface OrganizationFormProps {
   organization?: OrganizationProfile | null;
-  onSubmit: (data: OrganizationFormValues & { logoFile?: File; bannerFile?: File }) => Promise<void>;
+  onSubmit: (data: OrganizationFormValues, isCreateMode: boolean) => Promise<void>;
   onCancel: () => void;
   loading?: boolean;
+  currentAvatar?: string | CloudinaryImage | null;
+  currentCover?: string | CloudinaryImage | null;
 }
 
 export default function OrganizationForm({
   organization,
   onSubmit,
   onCancel,
-  loading = false
+  loading = false,
+  currentAvatar,
+  currentCover
 }: OrganizationFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [bannerFile, setBannerFile] = useState<File | null>(null);
-  const [logoPreview, setLogoPreview] = useState<string>('');
-  const [bannerPreview, setBannerPreview] = useState<string>('');
-  const logoInputRef = useRef<HTMLInputElement>(null);
-  const bannerInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [avatarData, setAvatarData] = useState<CloudinaryImage | null>(null);
+  const [coverData, setCoverData] = useState<CloudinaryImage | null>(null);
+  const [isCreateMode, setIsCreateMode] = useState(!organization);
 
-  // Initialize previews from existing profile (not organization service)
+  // Initialize avatar and cover data from props
   useEffect(() => {
-    const initializeFromProfile = async () => {
-      try {
-        // Get user profile data to show existing avatar and cover photo
-        const userProfile = await profileService.getProfile();
+    if (currentAvatar && typeof currentAvatar !== 'string' && 'secure_url' in currentAvatar) {
+      setAvatarData(currentAvatar);
+    }
+    if (currentCover && typeof currentCover !== 'string' && 'secure_url' in currentCover) {
+      setCoverData(currentCover);
+    }
 
-        if (userProfile?.user?.avatar) {
-          const avatarUrl = getFullImageUrl(userProfile.user.avatar);
-          if (avatarUrl) setLogoPreview(avatarUrl);
-        }
-
-        if (userProfile?.user?.coverPhoto || userProfile?.coverPhoto) {
-          const coverUrl = getFullImageUrl(userProfile.user?.coverPhoto || userProfile.coverPhoto);
-          if (coverUrl) setBannerPreview(coverUrl);
-        }
-      } catch (error) {
-        console.error('Error loading profile for image previews:', error);
-        // Silently fail - users can still upload new images
-      }
-    };
-
-    initializeFromProfile();
-  }, []);
+    // Determine if we're in create or update mode
+    setIsCreateMode(!organization);
+  }, [currentAvatar, currentCover, organization]);
 
   const form = useForm<OrganizationFormValues>({
     resolver: zodResolver(organizationFormSchema),
@@ -114,188 +105,58 @@ export default function OrganizationForm({
     },
   });
 
-  const validateImageFile = (file: File, type: 'avatar' | 'banner'): boolean => {
+  const handleAvatarComplete = async (avatar: CloudinaryImage, thumbnailUrl?: string) => {
     try {
-      const MAX_FILE_SIZE = 5 * 1024 * 1024;
-      const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+      setAvatarUploading(true);
+      setAvatarData(avatar);
 
-      if (!ALLOWED_TYPES.includes(file.type)) {
-        toast({
-          title: 'Invalid file type',
-          description: 'Please select an image file (PNG, JPG, JPEG, WebP)',
-          variant: 'destructive',
-        });
-        return false;
-      }
-
-      if (file.size > MAX_FILE_SIZE) {
-        toast({
-          title: 'File too large',
-          description: `${type === 'avatar' ? 'Logo' : 'Banner'} must be less than 5MB`,
-          variant: 'destructive',
-        });
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      toast({
-        title: 'Validation Error',
-        description: 'Failed to validate image file',
-        variant: 'destructive',
+      toast.success('Organization logo uploaded successfully!', {
+        description: 'Logo is now stored securely in the cloud.',
+        icon: <Check className="w-5 h-5 text-green-500" />,
       });
-      return false;
+
+    } catch (error: any) {
+      console.error('Avatar upload error:', error);
+      toast.error('Failed to upload logo', {
+        description: error.message || 'Please try again',
+      });
+    } finally {
+      setAvatarUploading(false);
     }
   };
 
-  const createImagePreview = (file: File): string => {
+  const handleCoverComplete = async (cover: CloudinaryImage, thumbnailUrl?: string) => {
     try {
-      return URL.createObjectURL(file);
-    } catch (error) {
-      console.error('Failed to create image preview:', error);
-      toast({
-        title: 'Preview Error',
-        description: 'Failed to create image preview',
-        variant: 'destructive',
+      setCoverUploading(true);
+      setCoverData(cover);
+
+      toast.success('Organization banner uploaded successfully!', {
+        description: 'Banner is now stored securely in the cloud.',
+        icon: <Check className="w-5 h-5 text-green-500" />,
       });
-      return '';
+
+    } catch (error: any) {
+      console.error('Cover upload error:', error);
+      toast.error('Failed to upload banner', {
+        description: error.message || 'Please try again',
+      });
+    } finally {
+      setCoverUploading(false);
     }
   };
 
-  const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      if (!validateImageFile(file, 'avatar')) {
-        return;
-      }
-
-      setLogoFile(file);
-      const previewUrl = createImagePreview(file);
-      if (previewUrl) {
-        setLogoPreview(previewUrl);
-        toast({
-          title: 'Logo selected',
-          description: 'Logo ready for upload',
-          variant: 'success',
-        });
-      }
-    } catch (error) {
-      toast({
-        title: 'Upload Error',
-        description: 'Failed to process logo file',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleBannerChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      if (!validateImageFile(file, 'banner')) {
-        return;
-      }
-
-      setBannerFile(file);
-      const previewUrl = createImagePreview(file);
-      if (previewUrl) {
-        setBannerPreview(previewUrl);
-        toast({
-          title: 'Banner selected',
-          description: 'Banner ready for upload',
-          variant: 'success',
-        });
-      }
-    } catch (error) {
-      toast({
-        title: 'Upload Error',
-        description: 'Failed to process banner file',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const removeLogo = () => {
-    try {
-      if (logoPreview.startsWith('blob:')) {
-        URL.revokeObjectURL(logoPreview);
-      }
-      setLogoFile(null);
-      setLogoPreview('');
-      if (logoInputRef.current) {
-        logoInputRef.current.value = '';
-      }
-      toast({
-        title: 'Logo removed',
-        description: 'Logo has been cleared',
-        variant: 'warning',
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to remove logo',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const removeBanner = () => {
-    try {
-      if (bannerPreview.startsWith('blob:')) {
-        URL.revokeObjectURL(bannerPreview);
-      }
-      setBannerFile(null);
-      setBannerPreview('');
-      if (bannerInputRef.current) {
-        bannerInputRef.current.value = '';
-      }
-      toast({
-        title: 'Banner removed',
-        description: 'Banner has been cleared',
-        variant: 'warning',
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to remove banner',
-        variant: 'destructive',
-      });
-    }
+  const handleUploadError = (type: 'avatar' | 'cover', error: any) => {
+    console.error(`${type} upload error:`, error);
+    toast.error(`Failed to upload ${type === 'avatar' ? 'logo' : 'banner'}`, {
+      description: error.message || 'Please try again',
+    });
   };
 
   const handleSubmit = async (data: OrganizationFormValues) => {
     setIsSubmitting(true);
     try {
-      // First, handle image uploads through profileService if files exist
-      if (logoFile) {
-        try {
-          console.log('[OrganizationForm] Uploading logo to profile service...');
-          await profileService.uploadAvatar(logoFile);
-        } catch (error) {
-          console.error('[OrganizationForm] Logo upload failed:', error);
-          // Continue with organization data submission even if image upload fails
-        }
-      }
-
-      if (bannerFile) {
-        try {
-          console.log('[OrganizationForm] Uploading banner to profile service...');
-          await profileService.uploadCoverPhoto(bannerFile);
-        } catch (error) {
-          console.error('[OrganizationForm] Banner upload failed:', error);
-          // Continue with organization data submission even if image upload fails
-        }
-      }
-
-      // Then submit organization data (without image files since they're already uploaded)
-      await onSubmit({
-        ...data,
-        logoFile: undefined, // Don't pass file to organization service
-        bannerFile: undefined // Don't pass file to organization service
-      });
+      // Submit organization data (images are already uploaded to profile)
+      await onSubmit(data, isCreateMode);
 
     } catch (error) {
       console.error('Form submission error:', error);
@@ -305,48 +166,30 @@ export default function OrganizationForm({
   };
 
   const handleCancel = () => {
-    try {
-      // Cleanup blob URLs
-      if (logoPreview.startsWith('blob:')) {
-        URL.revokeObjectURL(logoPreview);
-      }
-      if (bannerPreview.startsWith('blob:')) {
-        URL.revokeObjectURL(bannerPreview);
-      }
-      onCancel();
-    } catch (error) {
-      console.error('Error canceling form:', error);
-    }
+    onCancel();
   };
-
-  // Cleanup blob URLs on unmount
-  useEffect(() => {
-    return () => {
-      if (logoPreview.startsWith('blob:')) {
-        URL.revokeObjectURL(logoPreview);
-      }
-      if (bannerPreview.startsWith('blob:')) {
-        URL.revokeObjectURL(bannerPreview);
-      }
-    };
-  }, [logoPreview, bannerPreview]);
 
   const organizationTypeOptions = organizationService.getOrganizationTypeOptions();
 
   return (
-    <Card>
+    <Card className="border-0 shadow-lg">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="text-2xl flex items-center gap-2">
-              <Building2 className="w-6 h-6" />
-              {organization ? 'Edit Organization Profile' : 'Create Organization Profile'}
+              <Building2 className="w-6 h-6 text-teal-600" />
+              {isCreateMode ? 'Create Organization Profile' : 'Edit Organization Profile'}
             </CardTitle>
             <CardDescription>
-              {organization ? 'Update your organization information' : 'Fill in your organization details to get started'}
+              {isCreateMode
+                ? 'Fill in your organization details to get started'
+                : 'Update your organization information'}
+              <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
+                {isCreateMode ? 'New Profile' : 'Existing Profile'}
+              </span>
             </CardDescription>
           </div>
-          <Button variant="ghost" size="md" onClick={handleCancel} disabled={isSubmitting}>
+          <Button variant="ghost" size="md" onClick={handleCancel} disabled={isSubmitting || avatarUploading || coverUploading}>
             <X className="w-4 h-4" />
           </Button>
         </div>
@@ -354,126 +197,53 @@ export default function OrganizationForm({
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
-            {/* Logo and Banner Upload Section - UPDATED */}
+            {/* Media Upload Section */}
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Logo Upload */}
-                <div className="space-y-4">
-                  <FormLabel>Organization Logo (Profile Avatar)</FormLabel>
-                  <div className="border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center hover:border-gray-400 transition-colors">
-                    {logoPreview ? (
-                      <div className="relative">
-                        <div className="w-32 h-32 rounded-xl overflow-hidden mx-auto">
-                          <img
-                            src={logoPreview}
-                            alt="Logo preview"
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          className="absolute -top-2 -right-2 w-6 h-6 p-0 rounded-full"
-                          onClick={removeLogo}
-                          disabled={isSubmitting}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto">
-                          <ImageDown className="w-6 h-6 text-gray-400" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">Upload Logo</p>
-                          <p className="text-xs text-gray-500">PNG, JPG up to 5MB</p>
-                          <p className="text-xs text-gray-400 mt-1">Stored as profile avatar</p>
-                        </div>
-                      </div>
-                    )}
-                    <input
-                      ref={logoInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleLogoChange}
-                      className="hidden"
-                      id="logo-upload"
-                      disabled={isSubmitting}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="mt-3"
-                      onClick={() => logoInputRef.current?.click()}
-                      disabled={isSubmitting}
-                    >
-                      <Upload className="w-4 h-4 mr-2" />
-                      {logoPreview ? 'Change Logo' : 'Select Logo'}
-                    </Button>
-                  </div>
+              <div className="p-4 bg-gradient-to-r from-teal-50 to-blue-50 rounded-xl border border-teal-100">
+                <div className="flex items-center gap-2 mb-4">
+                  <Cloud className="w-5 h-5 text-teal-600" />
+                  <h3 className="text-lg font-semibold text-gray-900">Cloud Storage Powered Media</h3>
                 </div>
+                <p className="text-sm text-gray-600 mb-4">
+                  Organization logo and banner are stored securely in cloud storage. Upload them here and they will automatically sync with your profile.
+                </p>
 
-                {/* Banner Upload */}
-                <div className="space-y-4">
-                  <FormLabel>Organization Banner (Profile Cover)</FormLabel>
-                  <div className="border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center hover:border-gray-400 transition-colors">
-                    {bannerPreview ? (
-                      <div className="relative">
-                        <div className="w-full h-24 rounded-lg overflow-hidden">
-                          <img
-                            src={bannerPreview}
-                            alt="Banner preview"
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          className="absolute -top-2 -right-2 w-6 h-6 p-0 rounded-full"
-                          onClick={removeBanner}
-                          disabled={isSubmitting}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto">
-                          <ImageDown className="w-6 h-6 text-gray-400" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">Upload Banner</p>
-                          <p className="text-xs text-gray-500">PNG, JPG up to 5MB</p>
-                          <p className="text-xs text-gray-400 mt-1">Stored as profile cover photo</p>
-                        </div>
-                      </div>
-                    )}
-                    <input
-                      ref={bannerInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleBannerChange}
-                      className="hidden"
-                      id="banner-upload"
-                      disabled={isSubmitting}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="mt-3"
-                      onClick={() => bannerInputRef.current?.click()}
-                      disabled={isSubmitting}
-                    >
-                      <Upload className="w-4 h-4 mr-2" />
-                      {bannerPreview ? 'Change Banner' : 'Select Banner'}
-                    </Button>
+                <AvatarUploader
+                  currentAvatar={currentAvatar}
+                  currentCover={currentCover}
+                  onAvatarComplete={handleAvatarComplete}
+                  onCoverComplete={handleCoverComplete}
+                  onError={handleUploadError}
+                  size="md"
+                  type="both"
+                  showHelperText={true}
+                  maxFileSize={{
+                    avatar: 5,
+                    cover: 10
+                  }}
+                  allowedTypes={['image/jpeg', 'image/jpg', 'image/png', 'image/webp']}
+                  aspectRatio={{
+                    avatar: '1:1',
+                    cover: '16:9'
+                  }}
+                />
+
+                {/* Upload Status */}
+                {(avatarUploading || coverUploading) && (
+                  <div className="mt-4 p-3 bg-teal-50 rounded-lg border border-teal-200">
+                    <div className="flex items-center gap-2 text-teal-700 text-sm">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>
+                        {avatarUploading && coverUploading
+                          ? 'Uploading logo and banner...'
+                          : avatarUploading
+                            ? 'Uploading logo...'
+                            : 'Uploading banner...'
+                        }
+                      </span>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 
@@ -486,7 +256,11 @@ export default function OrganizationForm({
                   <FormItem>
                     <FormLabel>Organization Name *</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter organization name" {...field} disabled={isSubmitting} />
+                      <Input
+                        placeholder="Enter organization name"
+                        {...field}
+                        disabled={isSubmitting || avatarUploading || coverUploading}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -500,7 +274,11 @@ export default function OrganizationForm({
                   <FormItem>
                     <FormLabel>Registration Number</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter registration number" {...field} disabled={isSubmitting} />
+                      <Input
+                        placeholder="Enter registration number"
+                        {...field}
+                        disabled={isSubmitting || avatarUploading || coverUploading}
+                      />
                     </FormControl>
                     <FormDescription>Official registration identifier</FormDescription>
                     <FormMessage />
@@ -516,9 +294,9 @@ export default function OrganizationForm({
                     <FormLabel>Organization Type</FormLabel>
                     <FormControl>
                       <select
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition-colors"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:outline-none transition-colors"
                         {...field}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || avatarUploading || coverUploading}
                       >
                         {organizationTypeOptions.map(option => (
                           <option key={option.value} value={option.value}>
@@ -539,7 +317,11 @@ export default function OrganizationForm({
                   <FormItem>
                     <FormLabel>Industry</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Education, Healthcare, Environment" {...field} disabled={isSubmitting} />
+                      <Input
+                        placeholder="e.g., Education, Healthcare, Environment"
+                        {...field}
+                        disabled={isSubmitting || avatarUploading || coverUploading}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -563,7 +345,7 @@ export default function OrganizationForm({
                           const value = e.target.value;
                           field.onChange(value);
                         }}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || avatarUploading || coverUploading}
                       />
                     </FormControl>
                     <FormDescription>Optional - include country code</FormDescription>
@@ -589,7 +371,7 @@ export default function OrganizationForm({
                           const value = e.target.value;
                           field.onChange(value);
                         }}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || avatarUploading || coverUploading}
                       />
                     </FormControl>
                     <FormDescription>Optional - alternative contact</FormDescription>
@@ -616,7 +398,7 @@ export default function OrganizationForm({
                           }
                           field.onChange(value);
                         }}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || avatarUploading || coverUploading}
                       />
                     </FormControl>
                     <FormDescription>Include http:// or https://</FormDescription>
@@ -632,7 +414,11 @@ export default function OrganizationForm({
                   <FormItem className="md:col-span-2">
                     <FormLabel>Address</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter organization address" {...field} disabled={isSubmitting} />
+                      <Input
+                        placeholder="Enter organization address"
+                        {...field}
+                        disabled={isSubmitting || avatarUploading || coverUploading}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -645,7 +431,7 @@ export default function OrganizationForm({
                 render={({ field }) => (
                   <FormItem className="md:col-span-2">
                     <FormLabel className="flex items-center gap-2">
-                      <Target className="w-4 h-4" />
+                      <Target className="w-4 h-4 text-teal-600" />
                       Mission Statement
                     </FormLabel>
                     <FormControl>
@@ -653,7 +439,7 @@ export default function OrganizationForm({
                         placeholder="What is your organization's mission and purpose?"
                         className="min-h-24"
                         {...field}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || avatarUploading || coverUploading}
                       />
                     </FormControl>
                     <FormDescription>Max 500 characters</FormDescription>
@@ -673,7 +459,7 @@ export default function OrganizationForm({
                         placeholder="Describe your organization, services, and impact..."
                         className="min-h-32"
                         {...field}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || avatarUploading || coverUploading}
                       />
                     </FormControl>
                     <FormDescription>Max 1000 characters</FormDescription>
@@ -684,21 +470,47 @@ export default function OrganizationForm({
             </div>
 
             <div className="flex gap-4 pt-4 border-t">
-              <Button type="submit" disabled={isSubmitting || loading} className="min-w-32">
+              <Button
+                type="submit"
+                disabled={isSubmitting || loading || avatarUploading || coverUploading}
+                className="min-w-32 bg-teal-600 hover:bg-teal-700 text-white flex items-center gap-2"
+              >
                 {isSubmitting ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Saving...
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {isCreateMode ? 'Creating...' : 'Updating...'}
                   </>
-                ) : organization ? (
-                  'Update Profile'
+                ) : isCreateMode ? (
+                  <>
+                    <Plus className="w-4 h-4" />
+                    Create Profile
+                  </>
                 ) : (
-                  'Create Profile'
+                  <>
+                    <Save className="w-4 h-4" />
+                    Update Profile
+                  </>
                 )}
               </Button>
-              <Button type="button" variant="outline" onClick={handleCancel} disabled={isSubmitting}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCancel}
+                disabled={isSubmitting || avatarUploading || coverUploading}
+              >
                 Cancel
               </Button>
+            </div>
+
+            {/* Help Text */}
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-sm text-blue-700 flex items-start gap-2">
+                <span className="font-medium">Note:</span>
+                {isCreateMode
+                  ? 'You are creating a new organization profile. This will be linked to your user account.'
+                  : 'You are updating an existing organization profile. All changes will be saved to your profile.'
+                }
+              </p>
             </div>
           </form>
         </Form>

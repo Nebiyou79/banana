@@ -152,7 +152,7 @@ export default function OrganizationProfilePage() {
     };
 
     const handleEdit = () => {
-        window.location.href = '/social/organization/profile/edit';
+        window.location.href = '/dashboard/organization/social/profile/edit';
     };
 
     const handleAction = (action: string, data?: any) => {
@@ -684,7 +684,7 @@ export default function OrganizationProfilePage() {
                             Create your organization profile to showcase your mission, projects, and connect with supporters.
                         </p>
                         <Button
-                            onClick={() => window.location.href = '/social/organization/profile/edit'}
+                            onClick={() => window.location.href = '/dashboard/organization/social/profile/edit'}
                             className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white backdrop-blur-lg border-gray-300"
                         >
                             <PlusCircle className="w-4 h-4 mr-2" />
@@ -704,7 +704,7 @@ export default function OrganizationProfilePage() {
             name: organizationProfile.name,
             avatar: organizationProfile.logoFullUrl || userProfile!.user.avatar,
         },
-        coverPhoto: organizationProfile.bannerFullUrl || userProfile!.coverPhoto,
+        coverPhoto: organizationProfile.bannerFullUrl || userProfile!.cover,
         headline: userProfile!.headline || organizationProfile.mission?.substring(0, 100) || 'Organization Profile',
         location: organizationProfile.address,
         website: organizationProfile.website,

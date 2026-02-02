@@ -2,38 +2,41 @@ const mongoose = require('mongoose');
 
 const reactionTypes = {
   LIKE: 'like',
-  LOVE: 'love',
-  LAUGH: 'laugh',
-  WOW: 'wow',
-  SAD: 'sad',
-  ANGRY: 'angry',
+  HEART: 'heart',
   CELEBRATE: 'celebrate',
-  SUPPORT: 'support'
+  PERCENT_100: 'percent_100',
+  CLAP: 'clap'
+};
+
+const dislikeTypes = {
+  DISLIKE: 'dislike'
 };
 
 const reactionEmojis = {
   [reactionTypes.LIKE]: '👍',
-  [reactionTypes.LOVE]: '❤️',
-  [reactionTypes.LAUGH]: '😂',
-  [reactionTypes.WOW]: '😮',
-  [reactionTypes.SAD]: '😢',
-  [reactionTypes.ANGRY]: '😠',
+  [reactionTypes.HEART]: '❤️',
   [reactionTypes.CELEBRATE]: '🎉',
-  [reactionTypes.SUPPORT]: '🤝'
+  [reactionTypes.PERCENT_100]: '💯',
+  [reactionTypes.CLAP]: '👏'
+};
+
+const dislikeEmojis = {
+  [dislikeTypes.DISLIKE]: '👎'
 };
 
 const reactionLabels = {
   [reactionTypes.LIKE]: 'Like',
-  [reactionTypes.LOVE]: 'Love',
-  [reactionTypes.LAUGH]: 'Laugh',
-  [reactionTypes.WOW]: 'Wow',
-  [reactionTypes.SAD]: 'Sad',
-  [reactionTypes.ANGRY]: 'Angry',
+  [reactionTypes.HEART]: 'Heart',
   [reactionTypes.CELEBRATE]: 'Celebrate',
-  [reactionTypes.SUPPORT]: 'Support'
+  [reactionTypes.PERCENT_100]: '100%',
+  [reactionTypes.CLAP]: 'Clap'
 };
 
-const likeSchema = new mongoose.Schema({
+const dislikeLabels = {
+  [dislikeTypes.DISLIKE]: 'Dislike'
+};
+
+const interactionSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -53,10 +56,27 @@ const likeSchema = new mongoose.Schema({
     refPath: 'targetType'
   },
   
+  interactionType: {
+    type: String,
+    enum: ['reaction', 'dislike'],
+    required: true,
+    default: 'reaction'
+  },
+  
   reaction: {
     type: String,
     enum: Object.values(reactionTypes),
-    default: reactionTypes.LIKE
+    required: function() {
+      return this.interactionType === 'reaction';
+    }
+  },
+  
+  dislike: {
+    type: String,
+    enum: Object.values(dislikeTypes),
+    required: function() {
+      return this.interactionType === 'dislike';
+    }
   },
   
   createdAt: {
@@ -71,31 +91,61 @@ const likeSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Virtual for reaction emoji
-likeSchema.virtual('reactionEmoji').get(function() {
-  return reactionEmojis[this.reaction] || '👍';
+// Virtual for emoji
+interactionSchema.virtual('emoji').get(function() {
+  if (this.interactionType === 'reaction' && this.reaction) {
+    return reactionEmojis[this.reaction] || '👍';
+  } else if (this.interactionType === 'dislike' && this.dislike) {
+    return dislikeEmojis[this.dislike] || '👎';
+  }
+  return '';
 });
 
-// Virtual for reaction label
-likeSchema.virtual('reactionLabel').get(function() {
-  return reactionLabels[this.reaction] || 'Like';
+// Virtual for label
+interactionSchema.virtual('label').get(function() {
+  if (this.interactionType === 'reaction' && this.reaction) {
+    return reactionLabels[this.reaction] || 'Like';
+  } else if (this.interactionType === 'dislike' && this.dislike) {
+    return dislikeLabels[this.dislike] || 'Dislike';
+  }
+  return '';
 });
 
-// Compound index for unique like per user per target
-likeSchema.index({ user: 1, targetType: 1, targetId: 1 }, { 
+// Virtual for value (either reaction or dislike)
+interactionSchema.virtual('value').get(function() {
+  return this.interactionType === 'reaction' ? this.reaction : this.dislike;
+});
+
+// Virtual for isDisliked (convenience for frontend)
+interactionSchema.virtual('isDisliked').get(function() {
+  return this.interactionType === 'dislike';
+});
+
+// Compound index for unique interaction per user per target
+// CRITICAL: One interaction total (reaction OR dislike) per user per target
+interactionSchema.index({ 
+  user: 1, 
+  targetType: 1, 
+  targetId: 1 
+}, { 
   unique: true,
-  name: 'unique_user_target_like'
+  name: 'unique_user_target_interaction',
+  background: true
 });
 
 // Indexes for efficient querying
-likeSchema.index({ targetType: 1, targetId: 1 });
-likeSchema.index({ createdAt: -1 });
-likeSchema.index({ reaction: 1 });
+interactionSchema.index({ targetType: 1, targetId: 1 });
+interactionSchema.index({ createdAt: -1 });
+interactionSchema.index({ interactionType: 1 });
+interactionSchema.index({ reaction: 1 });
+interactionSchema.index({ dislike: 1 });
+interactionSchema.index({ user: 1, interactionType: 1 });
+interactionSchema.index({ targetType: 1, targetId: 1, interactionType: 1 });
 
 // Static methods
-likeSchema.statics = {
+interactionSchema.statics = {
   // Get reactions for a specific target
-  getForTarget: function(targetType, targetId, options = {}) {
+  getReactionsForTarget: function(targetType, targetId, options = {}) {
     const { 
       page = 1, 
       limit = 50, 
@@ -107,7 +157,11 @@ likeSchema.statics = {
     const skip = (page - 1) * limit;
     const sort = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
     
-    const query = { targetType, targetId };
+    const query = { 
+      targetType, 
+      targetId,
+      interactionType: 'reaction' 
+    };
     if (reaction && Object.values(reactionTypes).includes(reaction)) {
       query.reaction = reaction;
     }
@@ -120,13 +174,40 @@ likeSchema.statics = {
       .lean();
   },
 
-  // Get detailed reaction counts with percentages
+  // Get dislikes for a specific target
+  getDislikesForTarget: function(targetType, targetId, options = {}) {
+    const { 
+      page = 1, 
+      limit = 50,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = options;
+    
+    const skip = (page - 1) * limit;
+    const sort = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
+    
+    const query = { 
+      targetType, 
+      targetId,
+      interactionType: 'dislike' 
+    };
+    
+    return this.find(query)
+      .populate('user', 'name avatar headline username')
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .lean();
+  },
+
+  // Get detailed reaction stats
   getReactionStats: async function(targetType, targetId) {
     const stats = await this.aggregate([
       { 
         $match: { 
           targetType, 
-          targetId 
+          targetId,
+          interactionType: 'reaction'
         } 
       },
       {
@@ -179,8 +260,79 @@ likeSchema.statics = {
     };
   },
 
-  // Check if user has reacted to a target
-  getUserReaction: function(userId, targetType, targetId) {
+  // Get dislike stats
+  getDislikeStats: async function(targetType, targetId) {
+    const stats = await this.aggregate([
+      { 
+        $match: { 
+          targetType, 
+          targetId,
+          interactionType: 'dislike'
+        } 
+      },
+      {
+        $group: {
+          _id: '$dislike',
+          count: { $sum: 1 },
+          users: { $push: '$user' }
+        }
+      },
+      {
+        $project: {
+          dislike: '$_id',
+          count: 1,
+          emoji: {
+            $switch: {
+              branches: Object.entries(dislikeEmojis).map(([key, value]) => ({
+                case: { $eq: ['$_id', key] },
+                then: value
+              })),
+              default: '👎'
+            }
+          },
+          label: {
+            $switch: {
+              branches: Object.entries(dislikeLabels).map(([key, value]) => ({
+                case: { $eq: ['$_id', key] },
+                then: value
+              })),
+              default: 'Dislike'
+            }
+          },
+          _id: 0
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    const total = stats.reduce((sum, item) => sum + item.count, 0);
+
+    return {
+      total,
+      breakdown: stats,
+      hasDislikes: total > 0
+    };
+  },
+
+  // Get overall interaction stats (reactions + dislikes)
+  getInteractionStats: async function(targetType, targetId) {
+    const [reactionStats, dislikeStats] = await Promise.all([
+      this.getReactionStats(targetType, targetId),
+      this.getDislikeStats(targetType, targetId)
+    ]);
+
+    const totalInteractions = reactionStats.total + dislikeStats.total;
+
+    return {
+      reactions: reactionStats,
+      dislikes: dislikeStats,
+      totalInteractions,
+      hasInteractions: totalInteractions > 0
+    };
+  },
+
+  // Check if user has interacted with a target
+  getUserInteraction: function(userId, targetType, targetId) {
     return this.findOne({ 
       user: userId, 
       targetType, 
@@ -190,20 +342,59 @@ likeSchema.statics = {
     .lean();
   },
 
-  // Get user's reaction history
-  getUserReactions: function(userId, options = {}) {
+  // Get user's reaction to a target
+  getUserReaction: function(userId, targetType, targetId) {
+    return this.findOne({ 
+      user: userId, 
+      targetType, 
+      targetId,
+      interactionType: 'reaction'
+    })
+    .lean();
+  },
+
+  // Get user's dislike to a target
+  getUserDislike: function(userId, targetType, targetId) {
+    return this.findOne({ 
+      user: userId, 
+      targetType, 
+      targetId,
+      interactionType: 'dislike'
+    })
+    .lean();
+  },
+
+  // Remove all interactions (both reaction and dislike) for a user-target pair
+  removeAllInteractions: function(userId, targetType, targetId) {
+    return this.deleteMany({
+      user: userId,
+      targetType,
+      targetId
+    });
+  },
+
+  // Get user's interaction history
+  getUserInteractions: function(userId, options = {}) {
     const { 
       page = 1, 
       limit = 20,
       targetType,
-      reaction
+      interactionType,
+      value
     } = options;
     
     const skip = (page - 1) * limit;
     
     const query = { user: userId };
     if (targetType) query.targetType = targetType;
-    if (reaction) query.reaction = reaction;
+    if (interactionType) query.interactionType = interactionType;
+    if (value) {
+      if (interactionType === 'reaction') {
+        query.reaction = value;
+      } else if (interactionType === 'dislike') {
+        query.dislike = value;
+      }
+    }
     
     return this.find(query)
       .populate('user', 'name avatar headline username')
@@ -213,36 +404,49 @@ likeSchema.statics = {
       .lean();
   },
 
-  // Get multiple targets reaction status for a user
-  getBulkReactionStatus: function(userId, targetType, targetIds) {
+  // Get multiple targets interaction status for a user
+  getBulkInteractionStatus: function(userId, targetType, targetIds) {
     return this.find({
       user: userId,
       targetType,
       targetId: { $in: targetIds }
     })
-    .select('targetId reaction createdAt')
+    .select('targetId interactionType reaction dislike createdAt')
     .lean();
   }
 };
 
 // Instance methods
-likeSchema.methods = {
+interactionSchema.methods = {
   toResponse: function() {
-    return {
+    const response = {
       id: this._id,
       user: this.user,
       targetType: this.targetType,
       targetId: this.targetId,
-      reaction: this.reaction,
-      reactionEmoji: this.reactionEmoji,
-      reactionLabel: this.reactionLabel,
+      interactionType: this.interactionType,
+      value: this.value,
+      emoji: this.emoji,
+      label: this.label,
+      isDisliked: this.isDisliked,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt
     };
+
+    if (this.interactionType === 'reaction') {
+      response.reaction = this.reaction;
+    } else if (this.interactionType === 'dislike') {
+      response.dislike = this.dislike;
+    }
+
+    return response;
   }
 };
 
-module.exports = mongoose.model('Like', likeSchema);
+module.exports = mongoose.model('Interaction', interactionSchema);
 module.exports.reactionTypes = reactionTypes;
+module.exports.dislikeTypes = dislikeTypes;
 module.exports.reactionEmojis = reactionEmojis;
+module.exports.dislikeEmojis = dislikeEmojis;
 module.exports.reactionLabels = reactionLabels;
+module.exports.dislikeLabels = dislikeLabels;

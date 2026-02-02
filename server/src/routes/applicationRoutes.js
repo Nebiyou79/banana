@@ -17,7 +17,7 @@ const {
 } = require('../controllers/applicationController');
 const { verifyToken } = require('../middleware/authMiddleware');
 const { restrictTo } = require('../middleware/roleMiddleware');
-const { applicationAttachments, handleAttachmentUploadError } = require('../middleware/attachmentUploadMiddleware');
+const localFileUpload = require('../middleware/localFileUpload');
 
 // Apply validation middleware
 const { body } = require('express-validator');
@@ -26,7 +26,7 @@ const { body } = require('express-validator');
 const parseFormData = (req, res, next) => {
   // Parse JSON fields from form-data
   const fieldsToParse = ['selectedCVs', 'contactInfo', 'skills', 'references', 'workExperience', 'userInfo'];
-  
+
   fieldsToParse.forEach(field => {
     if (req.body[field] && typeof req.body[field] === 'string') {
       try {
@@ -37,7 +37,7 @@ const parseFormData = (req, res, next) => {
       }
     }
   });
-  
+
   next();
 };
 
@@ -71,8 +71,8 @@ const updateStatusValidation = [
     .notEmpty()
     .withMessage('Status is required')
     .isIn([
-      'applied', 'under-review', 'shortlisted', 'interview-scheduled', 
-      'interviewed', 'offer-pending', 'offer-made', 'offer-accepted', 
+      'applied', 'under-review', 'shortlisted', 'interview-scheduled',
+      'interviewed', 'offer-pending', 'offer-made', 'offer-accepted',
       'offer-rejected', 'on-hold', 'rejected', 'withdrawn'
     ])
     .withMessage('Invalid status')
@@ -105,17 +105,31 @@ router.get(
   getMyApplications
 );
 
-// Apply for job
+// Apply for job with local file upload - USING SINGLE MIDDLEWARE
 router.post(
   '/apply/:jobId',
   verifyToken,
   restrictTo('candidate'),
-  applicationAttachments,
-  handleAttachmentUploadError,
+  // Use the new single middleware that handles multiple file fields
+  localFileUpload.applicationWithFiles(),
   parseFormData,
   applyForJobValidation,
   applyForJob
 );
+
+// Alternative: More specific version with custom field names
+// router.post(
+//   '/apply/:jobId',
+//   verifyToken,
+//   restrictTo('candidate'),
+//   // Handle reference documents
+//   localFileUpload.custom({ fieldName: 'referencePdfs', maxFiles: 5, folder: 'applications' }),
+//   // Handle experience documents
+//   localFileUpload.custom({ fieldName: 'experiencePdfs', maxFiles: 5, folder: 'applications' }),
+//   parseFormData,
+//   applyForJobValidation,
+//   applyForJob
+// );
 
 // Withdraw application
 router.put(
@@ -140,7 +154,7 @@ router.get(
   '/company/:applicationId',
   verifyToken,
   restrictTo('company', 'admin'),
-  getCompanyApplicationDetails  // USE CONTROLLER METHOD
+  getCompanyApplicationDetails
 );
 
 // ===== ORGANIZATION ROUTES =====
@@ -158,7 +172,7 @@ router.get(
   '/organization/:applicationId',
   verifyToken,
   restrictTo('organization', 'admin'),
-  getOrganizationApplicationDetails  // USE CONTROLLER METHOD
+  getOrganizationApplicationDetails
 );
 
 // ===== SHARED COMPANY/ORGANIZATION ROUTES =====

@@ -4,7 +4,7 @@ import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/comp
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { Plus, X } from 'lucide-react';
-import { applyBgColor } from '@/utils/color';
+import { colorClasses, getTheme, ThemeMode } from '@/utils/color';
 import { useToast } from '@/hooks/use-toast';
 
 interface SkillsInputProps {
@@ -12,16 +12,19 @@ interface SkillsInputProps {
   name: string;
   label?: string;
   placeholder?: string;
+  themeMode?: ThemeMode;
 }
 
 const SkillsInput: React.FC<SkillsInputProps> = ({
   control,
   name,
   label = "Skills",
-  placeholder = "Add a skill and press Enter or click +"
+  placeholder = "Add a skill and press Enter or click +",
+  themeMode = 'light'
 }) => {
   const [inputValue, setInputValue] = useState('');
   const { toast } = useToast();
+  const currentTheme = getTheme(themeMode);
 
   const handleAddSkill = (onChange: (skills: string[]) => void, currentSkills: string[]) => {
     try {
@@ -96,60 +99,103 @@ const SkillsInput: React.FC<SkillsInputProps> = ({
       name={name}
       render={({ field }) => (
         <FormItem>
-          <FormLabel>{label}</FormLabel>
+          <FormLabel className={`font-semibold ${colorClasses.text.darkNavy} text-sm sm:text-base`}>
+            {label}
+          </FormLabel>
           <FormControl>
-            <div className="space-y-3">
+            <div className="space-y-3 sm:space-y-4">
               {/* Input with add button */}
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                 <Input
                   placeholder={placeholder}
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyPress={(e) => handleKeyPress(e, field.onChange, field.value || [])}
-                  className="flex-1"
+                  className={`flex-1 text-sm sm:text-base ${colorClasses.border.gray400} focus:ring-2 focus:ring-offset-1 transition-all`}
                   maxLength={100}
+                  style={{
+                    backgroundColor: currentTheme.bg.primary,
+                    color: currentTheme.text.primary
+                  }}
                 />
                 <button
                   type="button"
                   onClick={() => handleAddSkill(field.onChange, field.value || [])}
                   disabled={!inputValue.trim()}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
+                  className={`
+                    px-4 py-2.5 sm:py-3 rounded-lg 
+                    hover:opacity-90 active:scale-95
+                    disabled:opacity-50 disabled:cursor-not-allowed 
+                    transition-all duration-200 flex items-center justify-center
+                    gap-1.5 sm:gap-2 ${colorClasses.text.white}
+                    min-w-[80px] sm:min-w-[100px]
+                  `}
+                  style={{ backgroundColor: currentTheme.bg.blue }}
                 >
-                  <Plus className="h-4 w-4" />
+                  <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  <span className="text-sm sm:text-base font-medium">Add</span>
                 </button>
               </div>
 
               {/* Skills display */}
-              <div className="flex flex-wrap gap-2 min-h-[40px] p-2 border border-gray-200 rounded-lg">
+              <div
+                className={`
+                  flex flex-wrap gap-2 min-h-[48px] sm:min-h-[56px] 
+                  p-3 sm:p-4 border rounded-lg transition-colors
+                  ${colorClasses.border.gray400} ${colorClasses.bg.white}
+                  hover:border-gray-500 focus-within:border-blue-500
+                `}
+              >
                 {(field.value || []).map((skill: string, index: number) => (
-                  <Badge 
+                  <Badge
                     key={`skill-${index}-${skill}`}
-                    variant="secondary" 
-                    className="flex items-center gap-1 py-1.5 px-3 text-sm"
-                    style={applyBgColor('gold')}
+                    variant="secondary"
+                    className={`
+                      flex items-center gap-1.5 py-1.5 px-3 sm:py-2 sm:px-4 
+                      text-xs sm:text-sm font-medium rounded-md
+                      ${colorClasses.text.white}
+                      transition-all duration-200 hover:scale-105
+                      hover:shadow-sm active:scale-95
+                      max-w-[180px] truncate
+                    `}
+                    style={{ backgroundColor: currentTheme.bg.gold }}
                   >
-                    {skill}
+                    <span className="truncate">{skill}</span>
                     <button
                       type="button"
                       onClick={() => handleRemoveSkill(field.onChange, field.value || [], index)}
-                      className="ml-1 hover:text-red-600 transition-colors"
+                      className={`
+                        ml-0.5 hover:opacity-70 transition-opacity
+                        flex-shrink-0 ${colorClasses.text.white}
+                        p-0.5 rounded-sm hover:bg-white/20
+                      `}
+                      aria-label={`Remove ${skill}`}
                     >
-                      <X className="h-3 w-3" />
+                      <X className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                     </button>
                   </Badge>
                 ))}
                 {(field.value || []).length === 0 && (
-                  <span className="text-gray-500 text-sm">No skills added yet</span>
+                  <div className="flex items-center justify-center w-full h-full min-h-[40px]">
+                    <span className={`text-sm italic ${colorClasses.text.gray400} text-center`}>
+                      No skills added yet. Start typing above...
+                    </span>
+                  </div>
                 )}
               </div>
 
               {/* Helper text */}
-              <p className="text-xs text-gray-500">
-                Add skills one by one. Press Enter or click the + button to add. Maximum 50 skills allowed.
-              </p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <p className={`text-xs ${colorClasses.text.gray400}`}>
+                  Press Enter or click Add button to include skills. Max 50 skills.
+                </p>
+                <p className={`text-xs ${colorClasses.text.gray400} font-medium`}>
+                  {(field.value || []).length}/50 skills added
+                </p>
+              </div>
             </div>
           </FormControl>
-          <FormMessage />
+          <FormMessage className="text-xs sm:text-sm" />
         </FormItem>
       )}
     />

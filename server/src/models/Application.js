@@ -1,4 +1,4 @@
-// models/Application.js - FIXED VERSION
+// models/Application.js - UPDATED FOR LOCAL FILE UPLOAD
 const mongoose = require('mongoose');
 
 const attachmentSchema = new mongoose.Schema({
@@ -26,6 +26,9 @@ const attachmentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  downloadUrl: {
+    type: String
+  },
   uploadedAt: {
     type: Date,
     default: Date.now
@@ -34,18 +37,18 @@ const attachmentSchema = new mongoose.Schema({
     type: String,
     maxlength: 200
   }
-}, { 
-  _id: true, // Keep _id: true but let MongoDB auto-generate
-  id: true // This ensures virtual id is available
+}, {
+  _id: true,
+  id: true
 });
 
 const referenceSchema = new mongoose.Schema({
   // Option 1: Upload PDF document
   document: {
     type: attachmentSchema,
-    required: false // Make it optional
+    required: false
   },
-  
+
   // Option 2: Fill form
   name: {
     type: String,
@@ -66,7 +69,7 @@ const referenceSchema = new mongoose.Schema({
     type: String,
     trim: true,
     validate: {
-      validator: function(v) {
+      validator: function (v) {
         return !v || /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(v);
       },
       message: 'Invalid email address'
@@ -89,13 +92,13 @@ const referenceSchema = new mongoose.Schema({
     type: String,
     maxlength: 500
   },
-  
+
   // Track which option was used
   providedAsDocument: {
     type: Boolean,
     default: false
   }
-}, { 
+}, {
   _id: true,
   id: true
 });
@@ -104,9 +107,9 @@ const workExperienceSchema = new mongoose.Schema({
   // Option 1: Upload PDF document
   document: {
     type: attachmentSchema,
-    required: false // Make it optional
+    required: false
   },
-  
+
   // Option 2: Fill form
   company: {
     type: String,
@@ -124,7 +127,7 @@ const workExperienceSchema = new mongoose.Schema({
   endDate: {
     type: Date,
     validate: {
-      validator: function(value) {
+      validator: function (value) {
         return !this.current || !value || value > this.startDate;
       },
       message: 'End date must be after start date for completed experience'
@@ -148,13 +151,13 @@ const workExperienceSchema = new mongoose.Schema({
     position: String,
     contact: String
   },
-  
+
   // Track which option was used
   providedAsDocument: {
     type: Boolean,
     default: false
   }
-}, { 
+}, {
   _id: true,
   id: true
 });
@@ -165,13 +168,13 @@ const applicationSchema = new mongoose.Schema({
     ref: 'Job',
     required: true
   },
-  
+
   candidate: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
-  
+
   // User information (attached from user profile)
   userInfo: {
     name: { type: String, required: true },
@@ -187,7 +190,7 @@ const applicationSchema = new mongoose.Schema({
       twitter: { type: String }
     }
   },
-  
+
   // Candidate's selected CVs
   selectedCVs: [{
     cvId: {
@@ -197,31 +200,32 @@ const applicationSchema = new mongoose.Schema({
     filename: String,
     originalName: String,
     url: String,
+    downloadUrl: String,
     size: Number,
     mimetype: String,
     uploadedAt: Date
   }],
-  
+
   // Professional cover letter
   coverLetter: {
     type: String,
     required: true,
     maxlength: 5000
   },
-  
+
   // Skills the candidate has
   skills: [{
     type: String,
     trim: true,
     required: true
   }],
-  
+
   // References (either document or form)
   references: [referenceSchema],
-  
+
   // Work experience (either document or form)
   workExperience: [workExperienceSchema],
-  
+
   // Contact information
   contactInfo: {
     email: { type: String, required: true },
@@ -229,15 +233,15 @@ const applicationSchema = new mongoose.Schema({
     telegram: { type: String, trim: true },
     location: { type: String, trim: true }
   },
-  
-  // Additional attachments - FIXED: Ensure these arrays work properly
+
+  // Additional attachments
   attachments: {
     referenceDocuments: [attachmentSchema],
     experienceDocuments: [attachmentSchema],
     portfolioFiles: [attachmentSchema],
     otherDocuments: [attachmentSchema]
   },
-  
+
   // Application status and tracking
   status: {
     type: String,
@@ -257,7 +261,7 @@ const applicationSchema = new mongoose.Schema({
     ],
     default: 'applied'
   },
-  
+
   statusHistory: [{
     status: {
       type: String,
@@ -284,7 +288,7 @@ const applicationSchema = new mongoose.Schema({
       notes: String
     }
   }],
-  
+
   // Company response options
   companyResponse: {
     status: {
@@ -300,7 +304,7 @@ const applicationSchema = new mongoose.Schema({
       ref: 'User'
     }
   },
-  
+
   internalNotes: [{
     note: String,
     addedBy: {
@@ -316,7 +320,7 @@ const applicationSchema = new mongoose.Schema({
       default: true
     }
   }],
-  
+
   rating: {
     score: {
       type: Number,
@@ -343,41 +347,41 @@ applicationSchema.index({ 'statusHistory.changedAt': -1 });
 applicationSchema.index({ 'companyResponse.status': 1 });
 
 // Virtual for application age
-applicationSchema.virtual('daysSinceApplied').get(function() {
+applicationSchema.virtual('daysSinceApplied').get(function () {
   return Math.floor((Date.now() - this.createdAt) / (1000 * 60 * 60 * 24));
 });
 
 // Instance method to get all attachments
-applicationSchema.methods.getAllAttachments = function() {
+applicationSchema.methods.getAllAttachments = function () {
   const attachments = [
     ...this.attachments.referenceDocuments,
     ...this.attachments.experienceDocuments,
     ...this.attachments.portfolioFiles,
     ...this.attachments.otherDocuments
   ];
-  
+
   // Add documents from references
   this.references.forEach(ref => {
     if (ref.document) {
       attachments.push(ref.document);
     }
   });
-  
+
   // Add documents from work experience
   this.workExperience.forEach(exp => {
     if (exp.document) {
       attachments.push(exp.document);
     }
   });
-  
+
   return attachments;
 };
 
 // Instance method to cleanup files if application is deleted
-applicationSchema.methods.cleanupFiles = async function() {
+applicationSchema.methods.cleanupFiles = async function () {
   const fs = require('fs').promises;
   const allAttachments = this.getAllAttachments();
-  
+
   for (const attachment of allAttachments) {
     try {
       await fs.access(attachment.path);
@@ -389,10 +393,10 @@ applicationSchema.methods.cleanupFiles = async function() {
 };
 
 // Static method to get applications by job with pagination
-applicationSchema.statics.getByJob = function(jobId, page = 1, limit = 10, filters = {}) {
+applicationSchema.statics.getByJob = function (jobId, page = 1, limit = 10, filters = {}) {
   const skip = (page - 1) * limit;
   const query = { job: jobId, ...filters };
-  
+
   return this.find(query)
     .populate('candidate', 'name email avatar skills education experience certifications cvs bio location phone socialLinks website')
     .populate('statusHistory.changedBy', 'name email')
@@ -404,10 +408,10 @@ applicationSchema.statics.getByJob = function(jobId, page = 1, limit = 10, filte
 };
 
 // Static method to get candidate applications
-applicationSchema.statics.getByCandidate = function(candidateId, page = 1, limit = 10, filters = {}) {
+applicationSchema.statics.getByCandidate = function (candidateId, page = 1, limit = 10, filters = {}) {
   const skip = (page - 1) * limit;
   const query = { candidate: candidateId, ...filters };
-  
+
   return this.find(query)
     .populate('job')
     .populate({
@@ -425,20 +429,20 @@ applicationSchema.statics.getByCandidate = function(candidateId, page = 1, limit
 };
 
 // Instance method to update status with history
-applicationSchema.methods.updateStatus = function(newStatus, changedBy, message = '', interviewDetails = null) {
+applicationSchema.methods.updateStatus = function (newStatus, changedBy, message = '', interviewDetails = null) {
   this.statusHistory.push({
     status: newStatus,
     changedBy: changedBy,
     message: message,
     interviewDetails: interviewDetails
   });
-  
+
   this.status = newStatus;
   return this.save();
 };
 
 // Instance method to add company response
-applicationSchema.methods.addCompanyResponse = function(responseStatus, respondedBy, message = '', interviewLocation = null) {
+applicationSchema.methods.addCompanyResponse = function (responseStatus, respondedBy, message = '', interviewLocation = null) {
   this.companyResponse = {
     status: responseStatus,
     message: message,
@@ -446,12 +450,12 @@ applicationSchema.methods.addCompanyResponse = function(responseStatus, responde
     respondedAt: new Date(),
     respondedBy: respondedBy
   };
-  
+
   return this.save();
 };
 
 // Pre-remove middleware to cleanup files
-applicationSchema.pre('deleteOne', { document: true, query: false }, async function(next) {
+applicationSchema.pre('deleteOne', { document: true, query: false }, async function (next) {
   await this.cleanupFiles();
   next();
 });

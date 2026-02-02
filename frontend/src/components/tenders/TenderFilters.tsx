@@ -153,13 +153,13 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
   const renderFilterBadge = (label: string, value: string, onRemove: () => void) => (
     <Badge
       variant="secondary"
-      className="pl-3 pr-1 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+      className="pl-3 pr-1 py-1.5 bg-bg-secondary text-text-primary hover:bg-bg-secondary/80 transition-colors"
     >
       <span className="text-sm font-medium">{label}:</span>
       <span className="ml-1 font-normal">{value}</span>
       <button
         onClick={onRemove}
-        className="ml-2 rounded-full hover:bg-slate-300 dark:hover:bg-slate-600 p-0.5 transition-colors"
+        className="ml-2 rounded-full hover:bg-bg-surface p-0.5 transition-colors"
         aria-label={`Remove ${label} filter`}
       >
         <X className="w-3 h-3" />
@@ -177,28 +177,28 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
 
   return (
     <div className={cn(
-      "bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800",
+      "bg-bg-primary dark:bg-bg-surface border-b border-border-secondary",
       showSticky && "sticky top-0 z-50 shadow-sm",
       className
     )}>
       <div className="container mx-auto px-4 md:px-6">
         {/* Main Filter Bar */}
         <div className="py-4">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-3 sm:gap-4">
             {/* Search Input */}
             <div className="flex-1">
               <div className="relative group">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 group-focus-within:text-blue-500 transition-colors" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-muted w-4 h-4 group-focus-within:text-blue-500 transition-colors" />
                 <Input
                   placeholder="Search tenders by title, description, or keywords..."
-                  className="pl-9 pr-9 h-11 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-500/30"
+                  className="pl-9 pr-9 h-11 bg-bg-secondary dark:bg-bg-primary border-border-primary focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-500/30"
                   value={localFilters.search || ''}
                   onChange={(e) => updateFilter('search', e.target.value)}
                 />
                 {localFilters.search && (
                   <button
                     onClick={() => updateFilter('search', '')}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-text-muted hover:text-text-primary"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -261,7 +261,7 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
                   variant="ghost"
                   size="sm"
                   onClick={clearFilters}
-                  className="h-11 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
+                  className="h-11 text-text-muted hover:text-text-primary"
                 >
                   Clear all
                   <X className="w-4 h-4 ml-1.5" />
@@ -272,8 +272,8 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
 
           {/* Active Filters Display */}
           {activeFilterCount > 0 && (
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
+            <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:items-center gap-2">
+              <span className="text-sm font-medium text-text-secondary">
                 Active filters:
               </span>
               <div className="flex flex-wrap gap-2">
@@ -330,19 +330,19 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
 
           {/* Expanded Advanced Filters */}
           {isExpanded && (
-            <div className="mt-6 p-6 border rounded-xl bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="mt-4 sm:mt-6 p-4 sm:p-6 border rounded-xl bg-bg-secondary dark:bg-bg-primary/50 border-border-secondary">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
                 {/* Left Column - Basic Filters */}
-                <div className="space-y-6">
+                <div className="space-y-4 sm:space-y-6">
                   <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <h3 className="text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2 text-text-primary">
                       <Tag className="w-5 h-5" />
                       Basic Filters
                     </h3>
 
                     {/* Tender Type */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">Tender Type</Label>
+                    <div className="space-y-2 sm:space-y-3">
+                      <Label className="text-sm font-medium text-text-primary">Tender Type</Label>
                       <RadioGroup
                         value={localFilters.tenderCategory || 'all'}
                         onValueChange={(value) => updateFilter('tenderCategory', value === 'all' ? undefined : value as TenderCategoryType)}
@@ -350,18 +350,18 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
                       >
                         <div className="flex items-center space-x-2">
                           <RadioGroupItem value="all" id="type-all" />
-                          <Label htmlFor="type-all" className="cursor-pointer">All Types</Label>
+                          <Label htmlFor="type-all" className="cursor-pointer text-text-primary">All Types</Label>
                         </div>
                         <div className="flex items-center space-x-2">
                           <RadioGroupItem value="freelance" id="type-freelance" />
-                          <Label htmlFor="type-freelance" className="cursor-pointer flex items-center gap-2">
+                          <Label htmlFor="type-freelance" className="cursor-pointer flex items-center gap-2 text-text-primary">
                             <Briefcase className="w-4 h-4" />
                             Freelance
                           </Label>
                         </div>
                         <div className="flex items-center space-x-2">
                           <RadioGroupItem value="professional" id="type-professional" />
-                          <Label htmlFor="type-professional" className="cursor-pointer flex items-center gap-2">
+                          <Label htmlFor="type-professional" className="cursor-pointer flex items-center gap-2 text-text-primary">
                             <Building className="w-4 h-4" />
                             Professional
                           </Label>
@@ -370,8 +370,8 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
                     </div>
 
                     {/* Workflow Type */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">Workflow Type</Label>
+                    <div className="space-y-2 sm:space-y-3">
+                      <Label className="text-sm font-medium text-text-primary">Workflow Type</Label>
                       <RadioGroup
                         value={localFilters.workflowType || 'all'}
                         onValueChange={(value) => updateFilter('workflowType', value === 'all' ? undefined : value as WorkflowType)}
@@ -379,18 +379,18 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
                       >
                         <div className="flex items-center space-x-2">
                           <RadioGroupItem value="all" id="workflow-all" />
-                          <Label htmlFor="workflow-all" className="cursor-pointer">All Workflows</Label>
+                          <Label htmlFor="workflow-all" className="cursor-pointer text-text-primary">All Workflows</Label>
                         </div>
                         <div className="flex items-center space-x-2">
                           <RadioGroupItem value="open" id="workflow-open" />
-                          <Label htmlFor="workflow-open" className="cursor-pointer flex items-center gap-2">
+                          <Label htmlFor="workflow-open" className="cursor-pointer flex items-center gap-2 text-text-primary">
                             <Globe className="w-4 h-4" />
                             Open Tender
                           </Label>
                         </div>
                         <div className="flex items-center space-x-2">
                           <RadioGroupItem value="closed" id="workflow-closed" />
-                          <Label htmlFor="workflow-closed" className="cursor-pointer flex items-center gap-2">
+                          <Label htmlFor="workflow-closed" className="cursor-pointer flex items-center gap-2 text-text-primary">
                             <Lock className="w-4 h-4" />
                             Sealed Bid
                           </Label>
@@ -399,16 +399,16 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
                     </div>
 
                     {/* Budget Range */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">
+                    <div className="space-y-2 sm:space-y-3">
+                      <Label className="text-sm font-medium text-text-primary">
                         Budget Range
                         {localFilters.minBudget !== undefined && localFilters.maxBudget !== undefined && (
-                          <span className="ml-2 text-slate-500 dark:text-slate-400">
+                          <span className="ml-2 text-text-muted">
                             (${localFilters.minBudget} - ${localFilters.maxBudget})
                           </span>
                         )}
                       </Label>
-                      <div className="space-y-4">
+                      <div className="space-y-3 sm:space-y-4">
                         <Slider
                           value={[
                             localFilters.minBudget || 0,
@@ -423,7 +423,7 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
                           }}
                           className="w-full"
                         />
-                        <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400">
+                        <div className="flex justify-between text-xs text-text-muted">
                           <span>$0</span>
                           <span>$50k</span>
                           <span>$100k+</span>
@@ -434,22 +434,22 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
                 </div>
 
                 {/* Middle Column - Category Filters */}
-                <div className="space-y-6">
+                <div className="space-y-4 sm:space-y-6">
                   <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <h3 className="text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2 text-text-primary">
                       <Briefcase className="w-5 h-5" />
                       Category & Skills
                     </h3>
 
                     {/* Category Selection */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">Category</Label>
+                    <div className="space-y-2 sm:space-y-3">
+                      <Label className="text-sm font-medium text-text-primary">Category</Label>
                       <Popover>
                         <PopoverTrigger asChild>
                           <Button
                             variant="outline"
                             role="combobox"
-                            className="w-full justify-between h-11 bg-white dark:bg-slate-900"
+                            className="w-full justify-between h-11 bg-bg-primary border-border-primary"
                           >
                             {localFilters.procurementCategory
                               ? categoryOptions.find(c => c.value === localFilters.procurementCategory)?.label
@@ -457,7 +457,7 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
                             <ChevronDown className="w-4 h-4 ml-2 opacity-50" />
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-[300px] p-0" align="start">
+                        <PopoverContent className="w-full sm:w-[300px] p-0" align="start">
                           <Command>
                             <CommandInput placeholder="Search categories..." />
                             <CommandList>
@@ -496,22 +496,22 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
                     </div>
 
                     {/* Skills Input */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">Skills</Label>
+                    <div className="space-y-2 sm:space-y-3">
+                      <Label className="text-sm font-medium text-text-primary">Skills</Label>
                       <Input
                         placeholder="Enter skills (comma separated)"
                         value={typeof localFilters.skills === 'string' ? localFilters.skills : ''}
                         onChange={(e) => updateFilter('skills', e.target.value)}
-                        className="h-11 bg-white dark:bg-slate-900"
+                        className="h-11 bg-bg-primary border-border-primary"
                       />
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                      <p className="text-xs text-text-muted">
                         Example: React, Node.js, UI/UX Design
                       </p>
                     </div>
 
                     {/* CPO Filter (Professional only) */}
                     {(localFilters.tenderCategory === 'professional' || !localFilters.tenderCategory) && (
-                      <div className="space-y-3 pt-2">
+                      <div className="space-y-2 sm:space-y-3 pt-2">
                         <div className="flex items-center space-x-2">
                           <Checkbox
                             id="cpo-required"
@@ -522,13 +522,13 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
                           />
                           <Label
                             htmlFor="cpo-required"
-                            className="text-sm font-medium leading-none cursor-pointer flex items-center gap-2"
+                            className="text-sm font-medium leading-none cursor-pointer flex items-center gap-2 text-text-primary"
                           >
                             <AlertCircle className="w-4 h-4" />
                             Requires CPO Only
                           </Label>
                         </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                        <p className="text-xs text-text-muted">
                           Show only tenders that require Certified Payment Order
                         </p>
                       </div>
@@ -537,16 +537,16 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
                 </div>
 
                 {/* Right Column - Advanced Filters */}
-                <div className="space-y-6">
+                <div className="space-y-4 sm:space-y-6">
                   <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <h3 className="text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2 text-text-primary">
                       <Filter className="w-5 h-5" />
                       Advanced Filters
                     </h3>
 
                     {/* Date Range */}
-                    <div className="space-y-4">
-                      <Label className="text-sm font-medium">Deadline</Label>
+                    <div className="space-y-3 sm:space-y-4">
+                      <Label className="text-sm font-medium text-text-primary">Deadline</Label>
                       <div className="grid grid-cols-2 gap-2">
                         <Button
                           variant={localFilters.dateFrom === 'today' ? "default" : "outline"}
@@ -575,8 +575,8 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
 
                     {/* Experience Level (Freelance) */}
                     {(localFilters.tenderCategory === 'freelance' || !localFilters.tenderCategory) && (
-                      <div className="space-y-3">
-                        <Label className="text-sm font-medium">Experience Level</Label>
+                      <div className="space-y-2 sm:space-y-3">
+                        <Label className="text-sm font-medium text-text-primary">Experience Level</Label>
                         <RadioGroup
                           value={localFilters.experienceLevel || 'all'}
                           onValueChange={(value) => updateFilter('experienceLevel', value === 'all' ? undefined : value as ExperienceLevel)}
@@ -584,19 +584,19 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
                         >
                           <div className="flex items-center space-x-2">
                             <RadioGroupItem value="all" id="exp-all" />
-                            <Label htmlFor="exp-all" className="cursor-pointer text-sm">All Levels</Label>
+                            <Label htmlFor="exp-all" className="cursor-pointer text-sm text-text-primary">All Levels</Label>
                           </div>
                           <div className="flex items-center space-x-2">
                             <RadioGroupItem value="entry" id="exp-entry" />
-                            <Label htmlFor="exp-entry" className="cursor-pointer text-sm">Entry Level</Label>
+                            <Label htmlFor="exp-entry" className="cursor-pointer text-sm text-text-primary">Entry Level</Label>
                           </div>
                           <div className="flex items-center space-x-2">
                             <RadioGroupItem value="intermediate" id="exp-intermediate" />
-                            <Label htmlFor="exp-intermediate" className="cursor-pointer text-sm">Intermediate</Label>
+                            <Label htmlFor="exp-intermediate" className="cursor-pointer text-sm text-text-primary">Intermediate</Label>
                           </div>
                           <div className="flex items-center space-x-2">
                             <RadioGroupItem value="expert" id="exp-expert" />
-                            <Label htmlFor="exp-expert" className="cursor-pointer text-sm">Expert</Label>
+                            <Label htmlFor="exp-expert" className="cursor-pointer text-sm text-text-primary">Expert</Label>
                           </div>
                         </RadioGroup>
                       </div>
@@ -604,14 +604,14 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
 
                     {/* Procurement Method (Professional) */}
                     {(localFilters.tenderCategory === 'professional' || !localFilters.tenderCategory) && (
-                      <div className="space-y-3">
-                        <Label className="text-sm font-medium">Procurement Method</Label>
+                      <div className="space-y-2 sm:space-y-3">
+                        <Label className="text-sm font-medium text-text-primary">Procurement Method</Label>
                         <Popover>
                           <PopoverTrigger asChild>
                             <Button
                               variant="outline"
                               role="combobox"
-                              className="w-full justify-between h-11 bg-white dark:bg-slate-900"
+                              className="w-full justify-between h-11 bg-bg-primary border-border-primary"
                             >
                               {localFilters.procurementMethod
                                 ? localFilters.procurementMethod.replace('_', ' ')
@@ -619,7 +619,7 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
                               <ChevronDown className="w-4 h-4 ml-2 opacity-50" />
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent className="w-[250px] p-0" align="start">
+                          <PopoverContent className="w-full sm:w-[250px] p-0" align="start">
                             <Command>
                               <CommandList>
                                 <CommandGroup>
@@ -670,25 +670,27 @@ export const TenderFilters: React.FC<TenderFiltersProps> = ({
               </div>
 
               {/* Action Buttons */}
-              <div className="flex justify-between items-center pt-6 mt-6 border-t border-slate-200 dark:border-slate-800">
-                <div className="text-sm text-slate-500 dark:text-slate-400">
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 sm:pt-6 mt-4 sm:mt-6 border-t border-border-secondary">
+                <div className="text-sm text-text-muted">
                   {activeFilterCount > 0 ? (
                     <span>{activeFilterCount} active filter{activeFilterCount !== 1 ? 's' : ''} applied</span>
                   ) : (
                     <span>No filters applied</span>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full sm:w-auto">
                   <Button
                     variant="outline"
                     onClick={clearFilters}
                     disabled={activeFilterCount === 0}
+                    className="flex-1 sm:flex-none"
                   >
                     Clear All
                   </Button>
                   <Button
                     variant="default"
                     onClick={() => setIsExpanded(false)}
+                    className="flex-1 sm:flex-none"
                   >
                     Apply Filters
                   </Button>

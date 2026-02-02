@@ -1,19 +1,19 @@
 const User = require('../models/User');
 const FreelancerProfile = require('../models/Freelancer');
-const { getFileUrl } = require('../middleware/fileUploadMiddleware');
+const { uploadConfig, processFileInfo } = require('../middleware/fileUploadMiddleware');
 const Tender = require('../models/Tender');
 
 // UPDATED: Profile completeness calculation with age and gender
 const calculateProfileCompleteness = (user, freelancerProfile) => {
   const completenessWeights = {
     basicInfo: {
-      weight: 25, // Increased weight for basic info
+      weight: 25,
       checks: [
         { condition: user.name && user.name.trim().length > 0, points: 20 },
         { condition: user.email, points: 20 },
         { condition: user.avatar, points: 20 },
-        { condition: user.dateOfBirth, points: 20 }, // NEW: Date of birth
-        { condition: user.gender && user.gender !== 'prefer-not-to-say', points: 20 } // NEW: Gender
+        { condition: user.dateOfBirth, points: 20 },
+        { condition: user.gender && user.gender !== 'prefer-not-to-say', points: 20 }
       ]
     },
     professionalInfo: {
@@ -40,7 +40,7 @@ const calculateProfileCompleteness = (user, freelancerProfile) => {
       ]
     },
     contactDetails: {
-      weight: 5, // Reduced weight since basic info now includes age/gender
+      weight: 5,
       checks: [
         { condition: user.location && user.location.trim().length > 0, points: 25 },
         { condition: user.website || (user.socialLinks && Object.values(user.socialLinks).some(link => link)), points: 25 },
@@ -74,7 +74,7 @@ const calculateProfileCompleteness = (user, freelancerProfile) => {
   return Math.round((totalScore / maxPossibleScore) * 100);
 };
 
-// Enhanced getOrCreateFreelancerProfile
+// Get or create freelancer profile
 const getOrCreateFreelancerProfile = async (userId) => {
   try {
     let freelancerProfile = await FreelancerProfile.findOne({ user: userId });
@@ -87,7 +87,6 @@ const getOrCreateFreelancerProfile = async (userId) => {
       });
       await freelancerProfile.save();
       
-      // Update user's role if not already freelancer
       await User.findByIdAndUpdate(userId, { 
         $set: { role: 'freelancer' }
       });
@@ -100,40 +99,33 @@ const getOrCreateFreelancerProfile = async (userId) => {
   }
 };
 
-// Get freelancer dashboard overview - FIXED
+// Get freelancer dashboard overview
 exports.getDashboardOverview = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.userId || req.user._id;
     console.log('📊 Fetching dashboard for user:', userId);
 
-    // Validate user ID
     if (!userId) {
       return res.status(400).json({
         success: false,
-        message: 'User ID is required'
+        message: 'User ID is required',
+        code: 'USER_ID_REQUIRED'
       });
     }
 
-    // Get user with portfolio and skills
     const user = await User.findById(userId).select('portfolio skills name email avatar experience education socialLinks dateOfBirth gender');
     
     if (!user) {
-      console.log('❌ User not found:', userId);
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User not found',
+        code: 'USER_NOT_FOUND'
       });
     }
 
-    // Get or create freelancer profile
     const freelancerProfile = await getOrCreateFreelancerProfile(userId);
-
-    console.log('✅ Found freelancer profile:', freelancerProfile._id);
-
-    // Calculate real profile completeness
     const profileCompletion = calculateProfileCompleteness(user, freelancerProfile);
 
-    // Safe data extraction with defaults
     const stats = {
       profile: {
         completion: profileCompletion,
@@ -161,14 +153,11 @@ exports.getDashboardOverview = async (req, res) => {
       socialLinks: {
         total: user.socialLinks ? Object.values(user.socialLinks).filter(link => link).length : 0
       },
-      // NEW: Age and gender stats
       demographics: {
         age: user.dateOfBirth ? calculateAge(user.dateOfBirth) : null,
         gender: user.gender || 'prefer-not-to-say'
       }
     };
-
-    console.log('📈 Dashboard stats calculated:', stats);
 
     res.status(200).json({
       success: true,
@@ -180,7 +169,8 @@ exports.getDashboardOverview = async (req, res) => {
           strengths: getProfileStrengths(freelancerProfile, user),
           suggestions: getProfileSuggestions(freelancerProfile, user)
         }
-      }
+      },
+      code: 'DASHBOARD_RETRIEVED'
     });
 
   } catch (error) {
@@ -188,15 +178,16 @@ exports.getDashboardOverview = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error fetching dashboard data',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      code: 'DASHBOARD_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-// Professional freelancer stats (Like Upwork/Fiverr)
+// Professional freelancer stats
 exports.getFreelancerStats = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.userId || req.user._id;
     
     const freelancerProfile = await FreelancerProfile.findOne({ user: userId })
       .populate('user', 'name avatar portfolio skills experience education socialLinks dateOfBirth gender');
@@ -204,11 +195,11 @@ exports.getFreelancerStats = async (req, res) => {
     if (!freelancerProfile) {
       return res.status(404).json({
         success: false,
-        message: 'Freelancer profile not found'
+        message: 'Freelancer profile not found',
+        code: 'FREELANCER_NOT_FOUND'
       });
     }
 
-    // Calculate professional stats (like Upwork)
     const user = freelancerProfile.user;
     const profileCompletion = calculateProfileCompleteness(user, freelancerProfile);
     
@@ -224,14 +215,14 @@ exports.getFreelancerStats = async (req, res) => {
       clientReviews: freelancerProfile.ratings?.count || 0,
       averageRating: freelancerProfile.ratings?.average || 0,
       socialLinksCount: user.socialLinks ? Object.values(user.socialLinks).filter(link => link).length : 0,
-      // NEW: Age and gender
       age: user.dateOfBirth ? calculateAge(user.dateOfBirth) : null,
       gender: user.gender || 'prefer-not-to-say'
     };
 
     res.status(200).json({
       success: true,
-      data: stats
+      data: stats,
+      code: 'STATS_RETRIEVED'
     });
 
   } catch (error) {
@@ -239,50 +230,42 @@ exports.getFreelancerStats = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error fetching freelancer stats',
-      error: error.message
+      code: 'STATS_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-// Get complete freelancer profile - FIXED
+// Get complete freelancer profile
 exports.getProfile = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.userId || req.user._id;
     console.log('👤 Fetching profile for user:', userId);
 
-    // Get user data
     const user = await User.findById(userId).select('-passwordHash -loginAttempts -lockUntil');
     
     if (!user) {
-      console.log('❌ User not found:', userId);
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User not found',
+        code: 'USER_NOT_FOUND'
       });
     }
 
-    // Get or create freelancer profile
     const freelancerProfile = await getOrCreateFreelancerProfile(userId);
-
-    console.log('✅ Found user and freelancer profile');
-
-    // Calculate real profile completeness
     const profileCompletion = calculateProfileCompleteness(user, freelancerProfile);
 
-    // Update profile completion in database
     await FreelancerProfile.findOneAndUpdate(
       { user: userId },
       { $set: { profileCompletion } }
     );
 
-    // Prepare profile data
     const profileData = await prepareProfileData(user, freelancerProfile);
-
-    console.log('✅ Profile data prepared successfully');
 
     res.status(200).json({
       success: true,
-      data: profileData
+      data: profileData,
+      code: 'PROFILE_RETRIEVED'
     });
 
   } catch (error) {
@@ -290,21 +273,21 @@ exports.getProfile = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error fetching profile',
-      error: error.message
+      code: 'PROFILE_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-// Update freelancer profile - FIXED with social links handling and age/gender
+// Update freelancer profile
 exports.updateProfile = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.userId || req.user._id;
     const updateData = req.body;
 
     console.log('🔄 Updating profile for user:', userId);
-    console.log('📝 Update data:', updateData);
 
-    // Validate date of birth if provided
+    // Validate date of birth
     if (updateData.dateOfBirth) {
       const dob = new Date(updateData.dateOfBirth);
       const today = new Date();
@@ -314,33 +297,36 @@ exports.updateProfile = async (req, res) => {
       if (dob > maxDate) {
         return res.status(400).json({
           success: false,
-          message: 'You must be at least 16 years old'
+          message: 'You must be at least 16 years old',
+          code: 'INVALID_DOB'
         });
       }
       if (dob < minDate) {
         return res.status(400).json({
           success: false,
-          message: 'Please enter a valid date of birth'
+          message: 'Please enter a valid date of birth',
+          code: 'INVALID_DOB'
         });
       }
     }
 
-    // Validate gender if provided
+    // Validate gender
     if (updateData.gender && !['male', 'female', 'other', 'prefer-not-to-say'].includes(updateData.gender)) {
       return res.status(400).json({
         success: false,
-        message: 'Please select a valid gender option'
+        message: 'Please select a valid gender option',
+        code: 'INVALID_GENDER'
       });
     }
 
-    // Transform skills if they're in object format
+    // Transform skills
     if (updateData.skills && Array.isArray(updateData.skills)) {
       updateData.skills = updateData.skills.map(skill => 
         typeof skill === 'object' ? skill.name : skill
       );
     }
 
-    // Clean social links - remove empty strings and null values
+    // Clean social links
     if (updateData.socialLinks) {
       Object.keys(updateData.socialLinks).forEach(key => {
         if (!updateData.socialLinks[key] || updateData.socialLinks[key].trim() === '') {
@@ -349,22 +335,21 @@ exports.updateProfile = async (req, res) => {
       });
     }
 
-    // Get user and freelancer profile
     const user = await User.findById(userId);
     let freelancerProfile = await getOrCreateFreelancerProfile(userId);
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User not found',
+        code: 'USER_NOT_FOUND'
       });
     }
 
-    // Separate user data and freelancer profile data
+    // Separate update data
     const userUpdateData = {};
     const freelancerUpdateData = {};
 
-    // UPDATED: Include dateOfBirth and gender in user fields
     const userFields = ['name', 'bio', 'location', 'phone', 'website', 'avatar', 'socialLinks', 'skills', 'experience', 'education', 'dateOfBirth', 'gender'];
     const freelancerFields = ['headline', 'hourlyRate', 'availability', 'experienceLevel', 'englishProficiency', 'timezone', 'specialization', 'services'];
 
@@ -374,7 +359,6 @@ exports.updateProfile = async (req, res) => {
       } else if (freelancerFields.includes(key)) {
         freelancerUpdateData[key] = updateData[key];
       } else if (key === 'freelancerProfile' && typeof updateData[key] === 'object') {
-        // Handle nested freelancer profile data
         Object.keys(updateData[key]).forEach(profileKey => {
           if (freelancerFields.includes(profileKey)) {
             freelancerUpdateData[profileKey] = updateData[key][profileKey];
@@ -382,9 +366,6 @@ exports.updateProfile = async (req, res) => {
         });
       }
     });
-
-    console.log('👤 User update data:', userUpdateData);
-    console.log('💼 Freelancer update data:', freelancerUpdateData);
 
     // Update user data
     let updatedUser;
@@ -413,14 +394,14 @@ exports.updateProfile = async (req, res) => {
     if (!updatedUser || !updatedFreelancerProfile) {
       return res.status(404).json({
         success: false,
-        message: 'User or freelancer profile not found'
+        message: 'User or freelancer profile not found',
+        code: 'UPDATE_FAILED'
       });
     }
 
-    // Calculate REAL profile completeness
+    // Calculate profile completeness
     const profileCompletion = calculateProfileCompleteness(updatedUser, updatedFreelancerProfile);
     
-    // Update completion percentage
     await FreelancerProfile.findOneAndUpdate(
       { user: userId },
       { $set: { profileCompletion } }
@@ -434,43 +415,42 @@ exports.updateProfile = async (req, res) => {
       updatedUser.profileCompleted = true;
     }
 
-    // Prepare response data
     const profileData = await prepareProfileData(updatedUser, updatedFreelancerProfile);
-
-    console.log('✅ Profile updated successfully. Completion:', profileCompletion + '%');
 
     res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
       data: profileData,
-      profileCompletion
+      profileCompletion,
+      code: 'PROFILE_UPDATED'
     });
 
   } catch (error) {
     console.error('❌ Update profile error:', error);
     
-    // Handle validation errors for social links
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
         success: false,
         message: 'Validation failed',
-        errors: errors
+        errors: errors,
+        code: 'VALIDATION_ERROR'
       });
     }
     
     res.status(500).json({
       success: false,
       message: 'Server error updating profile',
-      error: error.message
+      code: 'PROFILE_UPDATE_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-// Portfolio Management (using User model's portfolio) - FIXED
+// Portfolio Management
 exports.getPortfolio = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.userId || req.user._id;
     const { page = 1, limit = 10, featured, category } = req.query;
 
     console.log('📁 Fetching portfolio for user:', userId);
@@ -479,19 +459,18 @@ exports.getPortfolio = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User not found',
+        code: 'USER_NOT_FOUND'
       });
     }
 
     let portfolioItems = user.portfolio || [];
-
-    // Transform data for frontend
     const transformedItems = portfolioItems.map(item => ({
       ...item.toObject(),
       mediaUrls: item.mediaUrl ? [item.mediaUrl] : []
     }));
 
-    // Apply filters on transformed data
+    // Apply filters
     let filteredItems = transformedItems;
     if (featured !== undefined) {
       filteredItems = filteredItems.filter(item => item.featured === (featured === 'true'));
@@ -503,15 +482,13 @@ exports.getPortfolio = async (req, res) => {
       );
     }
 
-    // Sort by creation date (newest first)
+    // Sort by creation date
     filteredItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     // Pagination
     const startIndex = (page - 1) * limit;
     const endIndex = page * limit;
     const paginatedItems = filteredItems.slice(startIndex, endIndex);
-
-    console.log('✅ Portfolio items fetched:', paginatedItems.length);
 
     res.status(200).json({
       success: true,
@@ -524,7 +501,8 @@ exports.getPortfolio = async (req, res) => {
           hasNext: endIndex < filteredItems.length,
           hasPrev: startIndex > 0
         }
-      }
+      },
+      code: 'PORTFOLIO_RETRIEVED'
     });
 
   } catch (error) {
@@ -532,14 +510,15 @@ exports.getPortfolio = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error fetching portfolio',
-      error: error.message
+      code: 'PORTFOLIO_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
 exports.addPortfolioItem = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.userId || req.user._id;
     const portfolioData = req.body;
 
     console.log('➕ Adding portfolio item for user:', userId);
@@ -571,7 +550,8 @@ exports.addPortfolioItem = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User not found',
+        code: 'USER_NOT_FOUND'
       });
     }
 
@@ -591,13 +571,12 @@ exports.addPortfolioItem = async (req, res) => {
       mediaUrls: newItem.mediaUrl ? [newItem.mediaUrl] : []
     };
 
-    console.log('✅ Portfolio item added:', frontendItem._id);
-
     res.status(201).json({
       success: true,
       message: 'Portfolio item added successfully',
       data: frontendItem,
-      profileCompletion
+      profileCompletion,
+      code: 'PORTFOLIO_ITEM_ADDED'
     });
 
   } catch (error) {
@@ -605,14 +584,15 @@ exports.addPortfolioItem = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error adding portfolio item',
-      error: error.message
+      code: 'PORTFOLIO_ADD_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
 exports.updatePortfolioItem = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.userId || req.user._id;
     const { id } = req.params;
     const updateData = req.body;
 
@@ -642,7 +622,8 @@ exports.updatePortfolioItem = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'Portfolio item not found'
+        message: 'Portfolio item not found',
+        code: 'PORTFOLIO_ITEM_NOT_FOUND'
       });
     }
 
@@ -654,12 +635,11 @@ exports.updatePortfolioItem = async (req, res) => {
       mediaUrls: updatedItem.mediaUrl ? [updatedItem.mediaUrl] : []
     };
 
-    console.log('✅ Portfolio item updated:', frontendItem._id);
-
     res.status(200).json({
       success: true,
       message: 'Portfolio item updated successfully',
-      data: frontendItem
+      data: frontendItem,
+      code: 'PORTFOLIO_ITEM_UPDATED'
     });
 
   } catch (error) {
@@ -667,14 +647,15 @@ exports.updatePortfolioItem = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error updating portfolio item',
-      error: error.message
+      code: 'PORTFOLIO_UPDATE_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
 exports.deletePortfolioItem = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.userId || req.user._id;
     const { id } = req.params;
 
     console.log('🗑️ Deleting portfolio item:', id);
@@ -692,7 +673,8 @@ exports.deletePortfolioItem = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User not found',
+        code: 'USER_NOT_FOUND'
       });
     }
 
@@ -704,13 +686,12 @@ exports.deletePortfolioItem = async (req, res) => {
       { $set: { profileCompletion } }
     );
 
-    console.log('✅ Portfolio item deleted:', id);
-
     res.status(200).json({
       success: true,
       message: 'Portfolio item deleted successfully',
       data: user.portfolio,
-      profileCompletion
+      profileCompletion,
+      code: 'PORTFOLIO_ITEM_DELETED'
     });
 
   } catch (error) {
@@ -718,7 +699,8 @@ exports.deletePortfolioItem = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error deleting portfolio item',
-      error: error.message
+      code: 'PORTFOLIO_DELETE_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -726,7 +708,7 @@ exports.deletePortfolioItem = async (req, res) => {
 // Services Management
 exports.addService = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.userId || req.user._id;
     const serviceData = req.body;
 
     console.log('➕ Adding service for user:', userId);
@@ -747,17 +729,18 @@ exports.addService = async (req, res) => {
     if (!freelancerProfile) {
       return res.status(404).json({
         success: false,
-        message: 'Freelancer profile not found'
+        message: 'Freelancer profile not found',
+        code: 'FREELANCER_NOT_FOUND'
       });
     }
 
     const newService = freelancerProfile.services[freelancerProfile.services.length - 1];
-    console.log('✅ Service added:', newService._id);
 
     res.status(201).json({
       success: true,
       message: 'Service added successfully',
-      data: newService
+      data: newService,
+      code: 'SERVICE_ADDED'
     });
 
   } catch (error) {
@@ -765,14 +748,15 @@ exports.addService = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error adding service',
-      error: error.message
+      code: 'SERVICE_ADD_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
 exports.getServices = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.userId || req.user._id;
 
     console.log('📋 Fetching services for user:', userId);
 
@@ -785,15 +769,15 @@ exports.getServices = async (req, res) => {
     if (!freelancerProfile) {
       return res.status(404).json({
         success: false,
-        message: 'Freelancer profile not found'
+        message: 'Freelancer profile not found',
+        code: 'FREELANCER_NOT_FOUND'
       });
     }
 
-    console.log('✅ Services fetched:', freelancerProfile.services.length);
-
     res.status(200).json({
       success: true,
-      data: freelancerProfile.services
+      data: freelancerProfile.services,
+      code: 'SERVICES_RETRIEVED'
     });
 
   } catch (error) {
@@ -801,7 +785,8 @@ exports.getServices = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error fetching services',
-      error: error.message
+      code: 'SERVICES_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -825,7 +810,8 @@ exports.getPublicProfile = async (req, res) => {
     if (!freelancerProfile) {
       return res.status(404).json({
         success: false,
-        message: 'Freelancer profile not found'
+        message: 'Freelancer profile not found',
+        code: 'FREELANCER_NOT_FOUND'
       });
     }
 
@@ -848,14 +834,13 @@ exports.getPublicProfile = async (req, res) => {
       $inc: { profileViews: 1 }
     });
 
-    console.log('✅ Public profile fetched:', freelancerProfile._id);
-
     res.status(200).json({
       success: true,
       data: {
         ...freelancerProfile.toObject(),
         user: userData
-      }
+      },
+      code: 'PUBLIC_PROFILE_RETRIEVED'
     });
 
   } catch (error) {
@@ -863,38 +848,45 @@ exports.getPublicProfile = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error fetching public profile',
-      error: error.message
+      code: 'PUBLIC_PROFILE_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-// Upload portfolio files handler - FIXED
+// Upload portfolio files handler - UPDATED
 exports.uploadPortfolioFiles = async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'No files uploaded'
+        message: 'No files uploaded',
+        code: 'NO_FILES'
       });
     }
 
     console.log('📤 Uploading portfolio files:', req.files.length);
 
-    const fileUrls = req.files.map(file => ({
-      filename: file.filename,
-      originalName: file.originalname,
-      url: getFileUrl(file.filename, 'portfolio'),
-      size: file.size,
-      mimetype: file.mimetype,
-      uploadedAt: new Date()
-    }));
+    const fileUrls = req.files.map(file => {
+      const fileInfo = processFileInfo(file, 'portfolio');
+      return {
+        filename: fileInfo.filename,
+        originalName: file.originalname,
+        url: fileInfo.url,
+        path: fileInfo.path,
+        size: file.size,
+        mimetype: file.mimetype,
+        uploadedAt: new Date()
+      };
+    });
 
     console.log('✅ Portfolio files uploaded successfully');
 
     res.status(200).json({
       success: true,
       message: 'Files uploaded successfully',
-      data: fileUrls
+      data: fileUrls,
+      code: 'FILES_UPLOADED'
     });
 
   } catch (error) {
@@ -902,33 +894,36 @@ exports.uploadPortfolioFiles = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error uploading files',
-      error: error.message
+      code: 'FILE_UPLOAD_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-// Upload avatar handler - FIXED
+// Upload avatar handler - UPDATED
 exports.uploadAvatar = async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
         success: false,
-        message: 'No file uploaded'
+        message: 'No file uploaded',
+        code: 'NO_FILE'
       });
     }
 
-    console.log('📤 Uploading avatar for user:', req.user._id);
+    console.log('📤 Uploading avatar for user:', req.user.userId || req.user._id);
 
-    const avatarUrl = getFileUrl(req.file.filename, 'avatars');
+    // Process file info using centralized config
+    const fileInfo = processFileInfo(req.file, 'avatars');
 
     // Update user's avatar in database
-    await User.findByIdAndUpdate(req.user._id, {
-      $set: { avatar: avatarUrl }
+    await User.findByIdAndUpdate(req.user.userId || req.user._id, {
+      $set: { avatar: fileInfo.url }
     });
 
     // Recalculate profile completeness
-    const user = await User.findById(req.user._id);
-    const freelancerProfile = await getOrCreateFreelancerProfile(req.user._id);
+    const user = await User.findById(req.user.userId || req.user._id);
+    const freelancerProfile = await getOrCreateFreelancerProfile(req.user.userId || req.user._id);
     const profileCompletion = calculateProfileCompleteness(user, freelancerProfile);
 
     console.log('✅ Avatar uploaded successfully');
@@ -937,11 +932,13 @@ exports.uploadAvatar = async (req, res) => {
       success: true,
       message: 'Avatar uploaded successfully',
       data: {
-        avatarUrl,
+        avatarUrl: fileInfo.url,
         filename: req.file.filename,
-        size: req.file.size
+        size: req.file.size,
+        path: fileInfo.path
       },
-      profileCompletion
+      profileCompletion,
+      code: 'AVATAR_UPLOADED'
     });
 
   } catch (error) {
@@ -949,14 +946,13 @@ exports.uploadAvatar = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error uploading avatar',
-      error: error.message
+      code: 'AVATAR_UPLOAD_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-// @desc    Get tenders for freelancers with filters
-// @route   GET /api/v1/freelancer/tenders
-// @access  Private (Freelancer)
+// Get tenders for freelancers
 exports.getTenders = async (req, res) => {
   try {
     const {
@@ -971,7 +967,7 @@ exports.getTenders = async (req, res) => {
       sortOrder = 'desc'
     } = req.query;
 
-    console.log('📋 Fetching tenders for freelancer:', req.user._id);
+    console.log('📋 Fetching tenders for freelancer:', req.user.userId || req.user._id);
 
     // Build filter for published tenders that are still open
     const filter = {
@@ -1018,10 +1014,8 @@ exports.getTenders = async (req, res) => {
     // Check which tenders are saved by this freelancer
     const tendersWithSaveStatus = tenders.map(tender => ({
       ...tender,
-      isSaved: tender.metadata?.savedBy?.includes(req.user._id.toString()) || false
+      isSaved: tender.metadata?.savedBy?.includes(req.user.userId?.toString() || req.user._id?.toString()) || false
     }));
-
-    console.log(`✅ Found ${tenders.length} tenders for freelancer`);
 
     res.json({
       success: true,
@@ -1031,7 +1025,8 @@ exports.getTenders = async (req, res) => {
         limit: parseInt(limit),
         total,
         pages: Math.ceil(total / limit)
-      }
+      },
+      code: 'TENDERS_RETRIEVED'
     });
 
   } catch (error) {
@@ -1039,14 +1034,13 @@ exports.getTenders = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error fetching tenders',
-      error: error.message
+      code: 'TENDERS_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-// @desc    Get single tender details for freelancer
-// @route   GET /api/v1/freelancer/tenders/:id
-// @access  Private (Freelancer)
+// Get single tender details for freelancer
 exports.getTenderDetails = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1056,7 +1050,8 @@ exports.getTenderDetails = async (req, res) => {
     if (!id || id === 'undefined') {
       return res.status(400).json({
         success: false,
-        message: 'Valid tender ID is required'
+        message: 'Valid tender ID is required',
+        code: 'INVALID_TENDER_ID'
       });
     }
 
@@ -1068,7 +1063,8 @@ exports.getTenderDetails = async (req, res) => {
     if (!tender) {
       return res.status(404).json({
         success: false,
-        message: 'Tender not found'
+        message: 'Tender not found',
+        code: 'TENDER_NOT_FOUND'
       });
     }
 
@@ -1076,14 +1072,16 @@ exports.getTenderDetails = async (req, res) => {
     if (tender.status !== 'published' && tender.status !== 'open') {
       return res.status(403).json({
         success: false,
-        message: 'This tender is not currently available'
+        message: 'This tender is not currently available',
+        code: 'TENDER_UNAVAILABLE'
       });
     }
 
     if (tender.deadline <= new Date()) {
       return res.status(403).json({
         success: false,
-        message: 'This tender has expired'
+        message: 'This tender has expired',
+        code: 'TENDER_EXPIRED'
       });
     }
 
@@ -1091,20 +1089,19 @@ exports.getTenderDetails = async (req, res) => {
     await tender.incrementViews();
 
     // Check if tender is saved by this freelancer
-    const isSaved = tender.metadata.savedBy.includes(req.user._id.toString());
+    const isSaved = tender.metadata.savedBy.includes(req.user.userId?.toString() || req.user._id?.toString());
 
     // Prepare response data
     const tenderData = {
       ...tender.toObject(),
       isSaved,
-      canSubmitProposal: tender.canSubmitProposal(req.user._id)
+      canSubmitProposal: tender.canSubmitProposal(req.user.userId || req.user._id)
     };
-
-    console.log('✅ Tender details fetched successfully');
 
     res.json({
       success: true,
-      data: tenderData
+      data: tenderData,
+      code: 'TENDER_DETAILS_RETRIEVED'
     });
 
   } catch (error) {
@@ -1113,31 +1110,33 @@ exports.getTenderDetails = async (req, res) => {
     if (error.name === 'CastError') {
       return res.status(400).json({
         success: false,
-        message: 'Invalid tender ID'
+        message: 'Invalid tender ID',
+        code: 'INVALID_TENDER_ID'
       });
     }
 
     res.status(500).json({
       success: false,
       message: 'Server error fetching tender details',
-      error: error.message
+      code: 'TENDER_DETAILS_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-// @desc    Toggle save/unsave tender
-// @route   POST /api/v1/freelancer/tenders/:id/save
-// @access  Private (Freelancer)
+// Toggle save/unsave tender
 exports.toggleSaveTender = async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user.userId || req.user._id;
 
     console.log('💾 Toggle save tender:', id);
 
     if (!id || id === 'undefined') {
       return res.status(400).json({
         success: false,
-        message: 'Valid tender ID is required'
+        message: 'Valid tender ID is required',
+        code: 'INVALID_TENDER_ID'
       });
     }
 
@@ -1146,7 +1145,8 @@ exports.toggleSaveTender = async (req, res) => {
     if (!tender) {
       return res.status(404).json({
         success: false,
-        message: 'Tender not found'
+        message: 'Tender not found',
+        code: 'TENDER_NOT_FOUND'
       });
     }
 
@@ -1154,30 +1154,28 @@ exports.toggleSaveTender = async (req, res) => {
     if (tender.status !== 'published' && tender.status !== 'open') {
       return res.status(400).json({
         success: false,
-        message: 'Cannot save an inactive tender'
+        message: 'Cannot save an inactive tender',
+        code: 'TENDER_INACTIVE'
       });
     }
 
     if (tender.deadline <= new Date()) {
       return res.status(400).json({
         success: false,
-        message: 'Cannot save an expired tender'
+        message: 'Cannot save an expired tender',
+        code: 'TENDER_EXPIRED'
       });
     }
 
-    const isSaved = tender.metadata.savedBy.includes(req.user._id.toString());
+    const isSaved = tender.metadata.savedBy.includes(userId.toString());
 
     if (isSaved) {
-      // Unsaved tender
-      tender.metadata.savedBy.pull(req.user._id);
+      tender.metadata.savedBy.pull(userId);
     } else {
-      // Save tender
-      tender.metadata.savedBy.push(req.user._id);
+      tender.metadata.savedBy.push(userId);
     }
 
     await tender.save();
-
-    console.log(`✅ Tender ${isSaved ? 'unsaved' : 'saved'} successfully`);
 
     res.json({
       success: true,
@@ -1186,7 +1184,8 @@ exports.toggleSaveTender = async (req, res) => {
         saved: !isSaved,
         tenderId: tender._id,
         totalSaves: tender.metadata.savedBy.length 
-      }
+      },
+      code: isSaved ? 'TENDER_UNSAVED' : 'TENDER_SAVED'
     });
 
   } catch (error) {
@@ -1195,29 +1194,30 @@ exports.toggleSaveTender = async (req, res) => {
     if (error.name === 'CastError') {
       return res.status(400).json({
         success: false,
-        message: 'Invalid tender ID'
+        message: 'Invalid tender ID',
+        code: 'INVALID_TENDER_ID'
       });
     }
 
     res.status(500).json({
       success: false,
       message: 'Server error saving tender',
-      error: error.message
+      code: 'TENDER_SAVE_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-// @desc    Get saved tenders
-// @route   GET /api/v1/freelancer/tenders/saved/all
-// @access  Private (Freelancer)
+// Get saved tenders
 exports.getSavedTenders = async (req, res) => {
   try {
     const { page = 1, limit = 12 } = req.query;
+    const userId = req.user.userId || req.user._id;
 
-    console.log('📚 Fetching saved tenders for freelancer:', req.user._id);
+    console.log('📚 Fetching saved tenders for freelancer:', userId);
 
     const tenders = await Tender.find({
-      'metadata.savedBy': req.user._id,
+      'metadata.savedBy': userId,
       status: { $in: ['published', 'open'] },
       deadline: { $gt: new Date() }
     })
@@ -1229,7 +1229,7 @@ exports.getSavedTenders = async (req, res) => {
     .lean();
 
     const total = await Tender.countDocuments({
-      'metadata.savedBy': req.user._id,
+      'metadata.savedBy': userId,
       status: { $in: ['published', 'open'] },
       deadline: { $gt: new Date() }
     });
@@ -1240,8 +1240,6 @@ exports.getSavedTenders = async (req, res) => {
       isSaved: true
     }));
 
-    console.log(`✅ Found ${tenders.length} saved tenders`);
-
     res.json({
       success: true,
       data: tendersWithSaveStatus,
@@ -1250,7 +1248,8 @@ exports.getSavedTenders = async (req, res) => {
         limit: parseInt(limit),
         total,
         pages: Math.ceil(total / limit)
-      }
+      },
+      code: 'SAVED_TENDERS_RETRIEVED'
     });
 
   } catch (error) {
@@ -1258,15 +1257,16 @@ exports.getSavedTenders = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error fetching saved tenders',
-      error: error.message
+      code: 'SAVED_TENDERS_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-// Certification Management - FIXED delete function
+// Certification Management
 exports.getCertifications = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.userId || req.user._id;
     
     console.log('📜 Fetching certifications for user:', userId);
 
@@ -1276,15 +1276,15 @@ exports.getCertifications = async (req, res) => {
     if (!freelancerProfile) {
       return res.status(404).json({
         success: false,
-        message: 'Freelancer profile not found'
+        message: 'Freelancer profile not found',
+        code: 'FREELANCER_NOT_FOUND'
       });
     }
 
-    console.log('✅ Certifications fetched:', freelancerProfile.certifications.length);
-
     res.status(200).json({
       success: true,
-      data: freelancerProfile.certifications
+      data: freelancerProfile.certifications,
+      code: 'CERTIFICATIONS_RETRIEVED'
     });
 
   } catch (error) {
@@ -1292,14 +1292,15 @@ exports.getCertifications = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error fetching certifications',
-      error: error.message
+      code: 'CERTIFICATIONS_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
 exports.addCertification = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.userId || req.user._id;
     const certificationData = req.body;
 
     console.log('➕ Adding certification for user:', userId);
@@ -1320,7 +1321,8 @@ exports.addCertification = async (req, res) => {
     if (!freelancerProfile) {
       return res.status(404).json({
         success: false,
-        message: 'Freelancer profile not found'
+        message: 'Freelancer profile not found',
+        code: 'FREELANCER_NOT_FOUND'
       });
     }
 
@@ -1335,13 +1337,13 @@ exports.addCertification = async (req, res) => {
     );
 
     const newCertification = freelancerProfile.certifications[freelancerProfile.certifications.length - 1];
-    console.log('✅ Certification added:', newCertification._id);
 
     res.status(201).json({
       success: true,
       message: 'Certification added successfully',
       data: newCertification,
-      profileCompletion
+      profileCompletion,
+      code: 'CERTIFICATION_ADDED'
     });
 
   } catch (error) {
@@ -1349,14 +1351,15 @@ exports.addCertification = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error adding certification',
-      error: error.message
+      code: 'CERTIFICATION_ADD_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
 exports.updateCertification = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.userId || req.user._id;
     const { id } = req.params;
     const updateData = req.body;
 
@@ -1367,7 +1370,8 @@ exports.updateCertification = async (req, res) => {
     if (!freelancerProfile) {
       return res.status(404).json({
         success: false,
-        message: 'Freelancer profile not found'
+        message: 'Freelancer profile not found',
+        code: 'FREELANCER_NOT_FOUND'
       });
     }
 
@@ -1375,7 +1379,8 @@ exports.updateCertification = async (req, res) => {
     if (!certification) {
       return res.status(404).json({
         success: false,
-        message: 'Certification not found'
+        message: 'Certification not found',
+        code: 'CERTIFICATION_NOT_FOUND'
       });
     }
 
@@ -1396,13 +1401,12 @@ exports.updateCertification = async (req, res) => {
       { $set: { profileCompletion } }
     );
 
-    console.log('✅ Certification updated:', id);
-
     res.status(200).json({
       success: true,
       message: 'Certification updated successfully',
       data: certification,
-      profileCompletion
+      profileCompletion,
+      code: 'CERTIFICATION_UPDATED'
     });
 
   } catch (error) {
@@ -1410,19 +1414,19 @@ exports.updateCertification = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error updating certification',
-      error: error.message
+      code: 'CERTIFICATION_UPDATE_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
 exports.deleteCertification = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.userId || req.user._id;
     const { id } = req.params;
 
     console.log('🗑️ Deleting certification:', id);
 
-    // FIXED: Use findOneAndUpdate with $pull instead of .remove()
     const freelancerProfile = await FreelancerProfile.findOneAndUpdate(
       { user: userId },
       { 
@@ -1436,7 +1440,8 @@ exports.deleteCertification = async (req, res) => {
     if (!freelancerProfile) {
       return res.status(404).json({
         success: false,
-        message: 'Freelancer profile not found'
+        message: 'Freelancer profile not found',
+        code: 'FREELANCER_NOT_FOUND'
       });
     }
 
@@ -1445,7 +1450,8 @@ exports.deleteCertification = async (req, res) => {
     if (certificationExists) {
       return res.status(404).json({
         success: false,
-        message: 'Certification not found'
+        message: 'Certification not found',
+        code: 'CERTIFICATION_NOT_FOUND'
       });
     }
 
@@ -1459,12 +1465,11 @@ exports.deleteCertification = async (req, res) => {
       { $set: { profileCompletion } }
     );
 
-    console.log('✅ Certification deleted:', id);
-
     res.status(200).json({
       success: true,
       message: 'Certification deleted successfully',
-      profileCompletion
+      profileCompletion,
+      code: 'CERTIFICATION_DELETED'
     });
 
   } catch (error) {
@@ -1472,12 +1477,48 @@ exports.deleteCertification = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error deleting certification',
-      error: error.message
+      code: 'CERTIFICATION_DELETE_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-// NEW: Helper function to calculate age from date of birth
+// Get upload statistics
+exports.getUploadStats = async (req, res) => {
+  try {
+    const stats = uploadConfig.getStats();
+    
+    // Filter for freelancer-related stats
+    const freelancerStats = {
+      'portfolio': stats['portfolio'] || { files: 0, size: '0 Bytes', sizeBytes: 0 },
+      'avatars': stats['avatars'] || { files: 0, size: '0 Bytes', sizeBytes: 0 }
+    };
+
+    res.status(200).json({
+      success: true,
+      data: {
+        freelancerStats,
+        totalStats: stats.total,
+        environment: stats.environment,
+        baseDirectory: stats.baseDirectory
+      },
+      code: 'UPLOAD_STATS_RETRIEVED'
+    });
+  } catch (error) {
+    console.error('Get upload stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error retrieving upload statistics',
+      code: 'UPLOAD_STATS_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// =====================
+// HELPER FUNCTIONS
+// =====================
+
 function calculateAge(dateOfBirth) {
   if (!dateOfBirth) return null;
   const today = new Date();
@@ -1490,7 +1531,6 @@ function calculateAge(dateOfBirth) {
   return age;
 }
 
-// UPDATED: Profile strengths with age and gender
 function getProfileStrengths(freelancerProfile, user) {
   const strengths = [];
   if (freelancerProfile.headline) strengths.push('Professional headline');
@@ -1504,13 +1544,11 @@ function getProfileStrengths(freelancerProfile, user) {
   if (user.socialLinks && Object.values(user.socialLinks).filter(link => link).length >= 2) {
     strengths.push('Social profiles added');
   }
-  // NEW: Age and gender strengths
   if (user.dateOfBirth) strengths.push('Date of birth provided');
   if (user.gender && user.gender !== 'prefer-not-to-say') strengths.push('Gender specified');
   return strengths;
 }
 
-// UPDATED: Profile suggestions with age and gender
 function getProfileSuggestions(freelancerProfile, user) {
   const suggestions = [];
   if (!freelancerProfile.headline) suggestions.push('Add a professional headline');
@@ -1524,31 +1562,24 @@ function getProfileSuggestions(freelancerProfile, user) {
   if (!user.socialLinks || Object.values(user.socialLinks).filter(link => link).length < 2) {
     suggestions.push('Add at least 2 social media profiles');
   }
-  // NEW: Age and gender suggestions
   if (!user.dateOfBirth) suggestions.push('Add your date of birth');
   if (!user.gender || user.gender === 'prefer-not-to-say') suggestions.push('Specify your gender');
   return suggestions;
 }
 
-// UPDATED: Prepare profile data with age and gender
 async function prepareProfileData(user, freelancerProfile) {
   const transformedPortfolio = (user.portfolio || []).map(item => ({
     ...item.toObject(),
     mediaUrls: item.mediaUrl ? [item.mediaUrl] : []
   }));
 
-  // Transform skills for frontend (convert strings to objects if needed)
   const transformedSkills = (user.skills || []).map(skill => 
     typeof skill === 'string' ? { name: skill, level: 'intermediate', yearsOfExperience: 1 } : skill
   );
 
-  // Calculate real profile completeness
   const profileCompletion = calculateProfileCompleteness(user, freelancerProfile);
-
-  // Calculate age
   const age = user.dateOfBirth ? calculateAge(user.dateOfBirth) : null;
 
-  // Combine data according to your model structure
   const profileData = {
     _id: user._id,
     name: user.name,
@@ -1559,9 +1590,9 @@ async function prepareProfileData(user, freelancerProfile) {
     phone: user.phone,
     website: user.website,
     avatar: user.avatar,
-    dateOfBirth: user.dateOfBirth, // NEW
-    gender: user.gender, // NEW
-    age: age, // NEW: Calculated age
+    dateOfBirth: user.dateOfBirth,
+    gender: user.gender,
+    age: age,
     skills: transformedSkills,
     experience: user.experience || [],
     education: user.education || [],
@@ -1590,23 +1621,16 @@ async function prepareProfileData(user, freelancerProfile) {
   return profileData;
 }
 
-// Mock functions for job and proposal counts (you'll need to implement these based on your database)
+// Mock functions
 async function getTotalJobs(userId) {
-  // Implement based on your job/proposal model
-  // For now, return mock data
   return Math.floor(Math.random() * 20);
 }
 
 async function getActiveProposals(userId) {
-  // Implement based on your proposal model
-  // For now, return mock data
   return Math.floor(Math.random() * 5);
 }
 
-// Helper functions
 async function getRecentActivities(userId) {
-  // This would fetch from an activities collection
-  // For now, return mock data
   return [
     {
       id: '1',
@@ -1621,7 +1645,7 @@ async function getRecentActivities(userId) {
       type: 'portfolio',
       title: 'Portfolio Item Added',
       description: 'You added a new project to your portfolio',
-      timestamp: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+      timestamp: new Date(Date.now() - 86400000).toISOString(),
       status: 'success'
     }
   ];

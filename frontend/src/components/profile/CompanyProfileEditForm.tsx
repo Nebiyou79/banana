@@ -9,32 +9,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Separator } from '@/components/ui/Separator';
-import { Loader2, Building, User, Briefcase, Settings, Globe, Shield } from 'lucide-react';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { Loader2, Building, Shield, MapPin, Phone, Globe as GlobeIcon, FileText, Hash } from 'lucide-react';
 import { AvatarUploader } from '@/components/profile/AvatarUploader';
-import { profileService, type Profile, type SocialLinks } from '@/services/profileService';
+import { profileService, type SocialLinks, type CloudinaryImage, type Profile } from '@/services/profileService';
 import { roleProfileService } from '@/services/roleProfileService';
 import { companyService, type CompanyProfile } from '@/services/companyService';
 
-// Form schemas
-const mainProfileSchema = z.object({
-    headline: z.string().min(3, 'Headline must be at least 3 characters').max(100),
-    bio: z.string().max(500, 'Bio cannot exceed 500 characters').optional(),
-    location: z.string().min(2, 'Location must be at least 2 characters'),
+// Form schemas - align with companyService validation
+const companyCoreSchema = z.object({
+    name: z.string().min(2, 'Company name must be at least 2 characters').max(100, 'Company name cannot exceed 100 characters'),
+    tin: z.string().optional(),
+    industry: z.string().optional(),
+    description: z.string().max(1000, 'Description cannot exceed 1000 characters').optional(),
+    address: z.string().optional(),
     phone: z.string().optional(),
     website: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
-});
-
-const companyInfoSchema = z.object({
-    companyInfo: z.object({
-        size: z.enum(['1-10', '11-50', '51-200', '201-500', '501-1000', '1000+']).optional(),
-        foundedYear: z.number().min(1800).max(new Date().getFullYear()).optional(),
-        companyType: z.enum(['startup', 'small-business', 'medium-business', 'large-enterprise', 'multinational', 'non-profit', 'government']).optional(),
-        industry: z.string().optional(),
-        mission: z.string().max(500).optional(),
-        values: z.array(z.string()).optional(),
-        culture: z.string().max(500).optional(),
-        specialties: z.array(z.string()).optional(),
-    }).optional(),
 });
 
 const socialLinksSchema = z.object({
@@ -46,47 +36,68 @@ const socialLinksSchema = z.object({
     website: z.string().url('Please enter a valid website URL').optional().or(z.literal('')),
 });
 
-type MainProfileFormData = z.infer<typeof mainProfileSchema>;
-type CompanyInfoFormData = z.infer<typeof companyInfoSchema>;
+type CompanyCoreFormData = z.infer<typeof companyCoreSchema>;
 type SocialLinksFormData = z.infer<typeof socialLinksSchema>;
 
 interface CompanyProfileFormProps {
-    initialData?: {
-        profile?: Profile;
-        companyProfile?: CompanyProfile;
-        roleSpecific?: any;
-    };
     onSuccess?: () => void;
     onCancel?: () => void;
-    mode?: 'create' | 'edit';
 }
 
-export const CompanyProfileForm: React.FC<CompanyProfileFormProps> = ({
-    initialData,
+export const CompanyProfileEditForm: React.FC<CompanyProfileFormProps> = ({
     onSuccess,
     onCancel,
-    mode = 'edit'
 }) => {
-    const [isLoading, setIsLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState('main');
-    const [profileData, setProfileData] = useState<Profile | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [activeTab, setActiveTab] = useState('core');
     const [companyData, setCompanyData] = useState<CompanyProfile | null>(null);
+    const [userProfile, setUserProfile] = useState<Profile | null>(null);
+    const [socialLinksData, setSocialLinksData] = useState<SocialLinks | null>(null);
     const [companyRoleData, setCompanyRoleData] = useState<any>(null);
+    const [mode, setMode] = useState<'create' | 'edit'>('create');
 
-    // Main profile form
-    const { register: registerMain, handleSubmit: handleSubmitMain, formState: { errors: errorsMain }, reset: resetMain } = useForm<MainProfileFormData>({
-        resolver: zodResolver(mainProfileSchema),
-    });
-
-    // Company info form
-    const { register: registerCompany, handleSubmit: handleSubmitCompany, formState: { errors: errorsCompany }, reset: resetCompany } = useForm<CompanyInfoFormData>({
-        resolver: zodResolver(companyInfoSchema),
+    // Company core form
+    const {
+        register: registerCore,
+        handleSubmit: handleSubmitCore,
+        formState: { errors: errorsCore },
+        reset: resetCore,
+        watch
+    } = useForm<CompanyCoreFormData>({
+        resolver: zodResolver(companyCoreSchema),
+        defaultValues: {
+            name: '',
+            tin: '',
+            industry: '',
+            description: '',
+            address: '',
+            phone: '',
+            website: '',
+        }
     });
 
     // Social links form
-    const { register: registerSocial, handleSubmit: handleSubmitSocial, formState: { errors: errorsSocial }, reset: resetSocial } = useForm<SocialLinksFormData>({
+    const {
+        register: registerSocial,
+        handleSubmit: handleSubmitSocial,
+        formState: { errors: errorsSocial },
+        reset: resetSocial
+    } = useForm<SocialLinksFormData>({
         resolver: zodResolver(socialLinksSchema),
+        defaultValues: {
+            linkedin: '',
+            twitter: '',
+            github: '',
+            facebook: '',
+            instagram: '',
+            website: '',
+        }
     });
+
+    // Watch form values for real-time validation display
+    const watchedName = watch('name');
+    const watchedDescription = watch('description');
 
     // Load data on mount
     useEffect(() => {
@@ -97,155 +108,222 @@ export const CompanyProfileForm: React.FC<CompanyProfileFormProps> = ({
         try {
             setIsLoading(true);
 
-            // Load main profile
+            // Load user profile (for avatar and cover images) using profileService
             const profile = await profileService.getProfile();
-            setProfileData(profile);
-            resetMain({
-                headline: profile.headline || '',
-                bio: profile.bio || '',
-                location: profile.location || '',
-                phone: profile.phone || '',
-                website: profile.website || '',
-            });
+            setUserProfile(profile);
 
-            // Load company-specific profile
-            const roleProfile = await roleProfileService.getCompanyProfile();
-            setCompanyRoleData(roleProfile);
-            
-            // sanitize companyInfo to only include allowed values for the form
-            const sanitizeCompanyInfo = (info: any) => {
-                if (!info) return {};
-                const allowedCompanyTypes = new Set([
-                    'startup',
-                    'small-business',
-                    'medium-business',
-                    'large-enterprise',
-                    'multinational',
-                    'non-profit',
-                    'government'
-                ]);
-                const companyType = allowedCompanyTypes.has(info.companyType) ? info.companyType : undefined;
-                return {
-                    size: info.size,
-                    foundedYear: info.foundedYear,
-                    companyType,
-                    industry: info.industry,
-                    mission: info.mission,
-                    values: Array.isArray(info.values) ? info.values : undefined,
-                    culture: info.culture,
-                    specialties: Array.isArray(info.specialties) ? info.specialties : undefined,
-                };
-            };
-            
-            resetCompany({
-                companyInfo: sanitizeCompanyInfo(roleProfile.companyInfo)
-            });
-
-            // Load company service profile
+            // Load company profile using companyService
             const companyProfile = await companyService.getMyCompany();
             setCompanyData(companyProfile);
 
-            // Reset social links form
-            resetSocial(profile.socialLinks || {});
+            if (companyProfile) {
+                setMode('edit');
+                // Reset core form with company data
+                resetCore({
+                    name: companyProfile.name || '',
+                    tin: companyProfile.tin || '',
+                    industry: companyProfile.industry || '',
+                    description: companyProfile.description || '',
+                    address: companyProfile.address || '',
+                    phone: companyProfile.phone || '',
+                    website: companyProfile.website || '',
+                });
+
+                // Load role-specific data using roleProfileService
+                try {
+                    const roleProfile = await roleProfileService.getCompanyProfile();
+                    setCompanyRoleData(roleProfile);
+                } catch (roleError) {
+                    console.log('No role-specific data found or error loading:', roleError);
+                    setCompanyRoleData(null);
+                }
+
+                // Load social links from user profile
+                if (profile.socialLinks) {
+                    resetSocial(profile.socialLinks);
+                    setSocialLinksData(profile.socialLinks);
+                }
+            } else {
+                setMode('create');
+                // Reset forms with empty values for creation mode
+                resetCore();
+                resetSocial();
+            }
 
         } catch (error) {
-            console.error('Error loading data:', error);
-            toast.error('Failed to load profile data');
+            console.error('Error loading company data:', error);
+            // companyService already shows toast for errors
         } finally {
             setIsLoading(false);
         }
     };
 
-    const handleAvatarComplete = async (avatarUrl: string) => {
+    const handleAvatarComplete = async (avatar: CloudinaryImage, thumbnailUrl?: string) => {
         try {
-            await profileService.updateProfile({ avatar: avatarUrl });
-            setProfileData(prev => prev ? { ...prev, user: { ...prev.user, avatar: avatarUrl } } : null);
-            toast.success('Profile picture updated successfully');
-        } catch {
-            toast.error('Failed to update profile picture');
+            // AvatarUploader already uploaded the image via profileService
+            // Refresh user profile to get the new avatar
+            const updatedProfile = await profileService.getProfile();
+            setUserProfile(updatedProfile);
+            console.log('Avatar upload completed:', avatar);
+        } catch (error) {
+            console.error('Failed to refresh profile data:', error);
         }
     };
 
-    const handleCoverComplete = async (coverUrl: string) => {
+    const handleCoverComplete = async (cover: CloudinaryImage, thumbnailUrl?: string) => {
         try {
-            await profileService.updateProfile({ coverPhoto: coverUrl });
-            setProfileData(prev => prev ? { ...prev, coverPhoto: coverUrl } : null);
-            toast.success('Cover photo updated successfully');
-        } catch {
-            toast.error('Failed to update cover photo');
+            // AvatarUploader already uploaded the image via profileService
+            // Refresh user profile to get the new cover
+            const updatedProfile = await profileService.getProfile();
+            setUserProfile(updatedProfile);
+            console.log('Cover upload completed:', cover);
+        } catch (error) {
+            console.error('Failed to refresh profile data:', error);
         }
     };
 
-    const handleMainProfileSubmit = async (data: MainProfileFormData) => {
+    const handleAvatarDelete = async () => {
         try {
-            setIsLoading(true);
-            await profileService.updateProfile(data);
-            toast.success('Main profile updated successfully');
-            if (onSuccess) onSuccess();
-        } catch {
-            toast.error('Failed to update main profile');
+            // AvatarUploader already handles deletion via profileService.deleteAvatar()
+            // Refresh user profile after deletion
+            const updatedProfile = await profileService.getProfile();
+            setUserProfile(updatedProfile);
+        } catch (error) {
+            console.error('Failed to refresh profile data:', error);
+        }
+    };
+
+    const handleCoverDelete = async () => {
+        try {
+            // AvatarUploader already handles deletion via profileService.deleteCoverPhoto()
+            // Refresh user profile after deletion
+            const updatedProfile = await profileService.getProfile();
+            setUserProfile(updatedProfile);
+        } catch (error) {
+            console.error('Failed to refresh profile data:', error);
+        }
+    };
+
+    const handleAvatarError = (type: 'avatar' | 'cover', error: any) => {
+        console.error(`Avatar uploader error for ${type}:`, error);
+        // AvatarUploader already shows toast errors
+    };
+
+    const handleCoreSubmit = async (data: CompanyCoreFormData) => {
+        try {
+            setIsSubmitting(true);
+
+            if (mode === 'create') {
+                // Create new company using companyService
+                const newCompany = await companyService.createCompany(data);
+                setCompanyData(newCompany);
+                setMode('edit');
+                toast.success('Company profile created successfully!');
+            } else {
+                // Update existing company using companyService
+                const updatedCompany = await companyService.updateMyCompany(data);
+                setCompanyData(updatedCompany);
+                toast.success('Company profile updated successfully!');
+            }
+
+            if (onSuccess) {
+                onSuccess();
+            }
+        } catch (error) {
+            console.error('Failed to save company profile:', error);
+            // companyService handles toast errors internally
         } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleCompanyInfoSubmit = async (data: CompanyInfoFormData) => {
-        try {
-            setIsLoading(true);
-            await roleProfileService.updateCompanyProfile(data);
-            toast.success('Company information updated successfully');
-            if (onSuccess) onSuccess();
-        } catch {
-            toast.error('Failed to update company information');
-        } finally {
-            setIsLoading(false);
+            setIsSubmitting(false);
         }
     };
 
     const handleSocialLinksSubmit = async (data: SocialLinksFormData) => {
         try {
-            setIsLoading(true);
+            setIsSubmitting(true);
+
+            // Update social links using profileService
             await profileService.updateSocialLinks(data as SocialLinks);
-            toast.success('Social links updated successfully');
-            if (onSuccess) onSuccess();
-        } catch {
-            toast.error('Failed to update social links');
+
+            // Refresh user profile to get updated social links
+            const updatedProfile = await profileService.getProfile();
+            setUserProfile(updatedProfile);
+            setSocialLinksData(data);
+
+            toast.success('Social links updated successfully!');
+
+            if (onSuccess) {
+                onSuccess();
+            }
+        } catch (error) {
+            console.error('Failed to update social links:', error);
+            // profileService handles toast errors internally
         } finally {
-            setIsLoading(false);
+            setIsSubmitting(false);
         }
     };
 
-    const handleCompanyServiceSubmit = async () => {
-        try {
-            setIsLoading(true);
-            // This would be handled in a separate company details form
-            // For now, just show a message
-            toast.info('Company registration details can be updated in Company Settings');
-        } catch {
-            toast.error('Failed to update company details');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    if (isLoading && !profileData) {
+    // Loading skeleton
+    if (isLoading) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <Skeleton className="h-8 w-64" />
+                        <Skeleton className="h-4 w-96 mt-2" />
+                    </div>
+                </div>
+
+                <Separator />
+
+                <Card>
+                    <CardHeader>
+                        <Skeleton className="h-6 w-48" />
+                        <Skeleton className="h-4 w-64 mt-2" />
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <Skeleton className="h-32 w-full" />
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <Skeleton className="h-6 w-48" />
+                        <Skeleton className="h-4 w-64 mt-2" />
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {[...Array(6)].map((_, i) => (
+                            <div key={i} className="space-y-2">
+                                <Skeleton className="h-4 w-32" />
+                                <Skeleton className="h-10 w-full" />
+                            </div>
+                        ))}
+                    </CardContent>
+                </Card>
             </div>
         );
     }
+
+    // Get avatar and cover from user profile
+    const avatarUrl = userProfile?.avatar;
+    const coverUrl = userProfile?.cover;
+    const userId = userProfile?.user?._id;
 
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Company Profile</h2>
-                    <p className="text-gray-600 mt-1">Manage your company`s public profile and information</p>
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                        {mode === 'create' ? 'Create Company Profile' : 'Edit Company Profile'}
+                    </h2>
+                    <p className="text-gray-600 dark:text-gray-400 mt-1">
+                        {mode === 'create'
+                            ? 'Set up your company profile to get started'
+                            : 'Manage your company information and branding'}
+                    </p>
                 </div>
                 <div className="flex items-center gap-2">
                     {onCancel && (
-                        <Button variant="outline" onClick={onCancel}>
+                        <Button variant="outline" onClick={onCancel} disabled={isSubmitting}>
                             Cancel
                         </Button>
                     )}
@@ -254,149 +332,160 @@ export const CompanyProfileForm: React.FC<CompanyProfileFormProps> = ({
 
             <Separator />
 
-            {/* Avatar and Cover Uploader */}
+            {/* Branding Section - Logo & Banner using AvatarUploader */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <User className="w-5 h-5" />
-                        Profile Images
+                        <Building className="w-5 h-5" />
+                        Company Branding
                     </CardTitle>
                     <CardDescription>
-                        Upload your company logo and cover photo
+                        Upload your company logo and cover banner. These images are stored in your user profile.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <AvatarUploader
-                        currentAvatar={profileData?.user.avatar}
-                        currentCover={profileData?.coverPhoto as string}
+                        currentAvatar={avatarUrl}
+                        currentCover={coverUrl}
                         onAvatarComplete={handleAvatarComplete}
                         onCoverComplete={handleCoverComplete}
+                        onAvatarDelete={mode === 'edit' ? handleAvatarDelete : undefined}
+                        onCoverDelete={mode === 'edit' ? handleCoverDelete : undefined}
+                        onError={handleAvatarError}
                         type="both"
+                        size="lg"
+                        showHelperText={true}
+                        showDeleteButtons={mode === 'edit'}
+                        maxFileSize={{
+                            avatar: 5,
+                            cover: 10
+                        }}
+                        allowedTypes={['image/jpeg', 'image/jpg', 'image/png', 'image/webp']}
                         aspectRatio={{
                             avatar: '1:1',
                             cover: '16:9'
                         }}
+                        userId={userId}
+                        className="max-w-4xl"
                     />
                 </CardContent>
             </Card>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="grid grid-cols-5 w-full">
-                    <TabsTrigger value="main" className="flex items-center gap-2">
-                        <User className="w-4 h-4" />
-                        Main Profile
-                    </TabsTrigger>
-                    <TabsTrigger value="company" className="flex items-center gap-2">
-                        <Building className="w-4 h-4" />
+                <TabsList className="grid grid-cols-3 w-full">
+                    <TabsTrigger value="core" className="flex items-center gap-2">
+                        <FileText className="w-4 h-4" />
                         Company Info
                     </TabsTrigger>
+                    <TabsTrigger value="contact" className="flex items-center gap-2">
+                        <Phone className="w-4 h-4" />
+                        Contact Details
+                    </TabsTrigger>
                     <TabsTrigger value="social" className="flex items-center gap-2">
-                        <Globe className="w-4 h-4" />
+                        <GlobeIcon className="w-4 h-4" />
                         Social Links
-                    </TabsTrigger>
-                    <TabsTrigger value="registration" className="flex items-center gap-2">
-                        <Briefcase className="w-4 h-4" />
-                        Registration
-                    </TabsTrigger>
-                    <TabsTrigger value="settings" className="flex items-center gap-2">
-                        <Settings className="w-4 h-4" />
-                        Settings
                     </TabsTrigger>
                 </TabsList>
 
-                {/* Main Profile Tab */}
-                <TabsContent value="main" className="space-y-6">
+                {/* Company Core Information Tab */}
+                <TabsContent value="core" className="space-y-6">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Main Profile Information</CardTitle>
+                            <CardTitle>Company Information</CardTitle>
                             <CardDescription>
-                                Basic information that appears on your company profile
+                                Basic information about your company
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <form onSubmit={handleSubmitMain(handleMainProfileSubmit)} className="space-y-6">
+                            <form onSubmit={handleSubmitCore(handleCoreSubmit)} className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Company Headline *
+                                    <div className="space-y-2 md:col-span-2">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            Company Name *
                                         </label>
                                         <input
                                             type="text"
-                                            {...registerMain('headline')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="e.g., Leading Tech Company in Healthcare"
+                                            {...registerCore('name')}
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white"
+                                            placeholder="Enter your company name"
+                                            disabled={mode === 'edit' && companyData?.verified}
                                         />
-                                        {errorsMain.headline && (
-                                            <p className="text-sm text-red-600">{errorsMain.headline.message}</p>
+                                        {errorsCore.name && (
+                                            <p className="text-sm text-red-600 dark:text-red-400">{errorsCore.name.message}</p>
+                                        )}
+                                        <div className="flex justify-between">
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                Required • 2-100 characters
+                                            </p>
+                                            <p className={`text-xs ${(watchedName?.length || 0) > 100 ? 'text-red-500' : 'text-gray-500'}`}>
+                                                {watchedName?.length || 0}/100
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            TIN / Registration Number
+                                        </label>
+                                        <input
+                                            type="text"
+                                            {...registerCore('tin')}
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white"
+                                            placeholder="e.g., 123456789"
+                                        />
+                                        {errorsCore.tin && (
+                                            <p className="text-sm text-red-600 dark:text-red-400">{errorsCore.tin.message}</p>
                                         )}
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Location *
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            Industry
                                         </label>
                                         <input
                                             type="text"
-                                            {...registerMain('location')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="e.g., San Francisco, CA"
+                                            {...registerCore('industry')}
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white"
+                                            placeholder="e.g., Technology, Healthcare, Finance"
                                         />
-                                        {errorsMain.location && (
-                                            <p className="text-sm text-red-600">{errorsMain.location.message}</p>
+                                        {errorsCore.industry && (
+                                            <p className="text-sm text-red-600 dark:text-red-400">{errorsCore.industry.message}</p>
                                         )}
                                     </div>
 
                                     <div className="space-y-2 md:col-span-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Company Bio
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            Company Description
                                         </label>
                                         <textarea
-                                            {...registerMain('bio')}
+                                            {...registerCore('description')}
                                             rows={4}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="Tell us about your company..."
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white"
+                                            placeholder="Describe what your company does..."
                                         />
-                                        {errorsMain.bio && (
-                                            <p className="text-sm text-red-600">{errorsMain.bio.message}</p>
+                                        {errorsCore.description && (
+                                            <p className="text-sm text-red-600 dark:text-red-400">{errorsCore.description.message}</p>
                                         )}
-                                        <p className="text-xs text-gray-500">Max 500 characters</p>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Phone Number
-                                        </label>
-                                        <input
-                                            type="tel"
-                                            {...registerMain('phone')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="+1 (555) 123-4567"
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Website
-                                        </label>
-                                        <input
-                                            type="url"
-                                            {...registerMain('website')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="https://example.com"
-                                        />
-                                        {errorsMain.website && (
-                                            <p className="text-sm text-red-600">{errorsMain.website.message}</p>
-                                        )}
+                                        <div className="flex justify-between">
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                Optional • Max 1000 characters
+                                            </p>
+                                            <p className={`text-xs ${(watchedDescription?.length || 0) > 1000 ? 'text-red-500' : 'text-gray-500'}`}>
+                                                {watchedDescription?.length || 0}/1000
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="flex justify-end gap-3">
-                                    <Button type="button" variant="outline" onClick={onCancel}>
-                                        Cancel
-                                    </Button>
-                                    <Button type="submit" disabled={isLoading}>
-                                        {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                        Save Changes
+                                <div className="flex justify-end gap-3 pt-4">
+                                    {onCancel && (
+                                        <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
+                                            Cancel
+                                        </Button>
+                                    )}
+                                    <Button type="submit" disabled={isSubmitting}>
+                                        {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                        {mode === 'create' ? 'Create Company Profile' : 'Save Changes'}
                                     </Button>
                                 </div>
                             </form>
@@ -404,115 +493,88 @@ export const CompanyProfileForm: React.FC<CompanyProfileFormProps> = ({
                     </Card>
                 </TabsContent>
 
-                {/* Company Information Tab */}
-                <TabsContent value="company" className="space-y-6">
+                {/* Contact Details Tab */}
+                <TabsContent value="contact" className="space-y-6">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Company Details</CardTitle>
+                            <CardTitle>Contact Information</CardTitle>
                             <CardDescription>
-                                Detailed information about your company
+                                How people can contact your company
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <form onSubmit={handleSubmitCompany(handleCompanyInfoSubmit)} className="space-y-6">
+                            <form onSubmit={handleSubmitCore(handleCoreSubmit)} className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Company Size
-                                        </label>
-                                        <select
-                                            {...registerCompany('companyInfo.size')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                        >
-                                            <option value="">Select size</option>
-                                            <option value="1-10">1-10 employees</option>
-                                            <option value="11-50">11-50 employees</option>
-                                            <option value="51-200">51-200 employees</option>
-                                            <option value="201-500">201-500 employees</option>
-                                            <option value="501-1000">501-1000 employees</option>
-                                            <option value="1000+">1000+ employees</option>
-                                        </select>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Founded Year
-                                        </label>
-                                        <input
-                                            type="number"
-                                            {...registerCompany('companyInfo.foundedYear', { valueAsNumber: true })}
-                                            min="1800"
-                                            max={new Date().getFullYear()}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="2020"
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Company Type
-                                        </label>
-                                        <select
-                                            {...registerCompany('companyInfo.companyType')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                        >
-                                            <option value="">Select type</option>
-                                            <option value="startup">Startup</option>
-                                            <option value="small-business">Small Business</option>
-                                            <option value="medium-business">Medium Business</option>
-                                            <option value="large-enterprise">Large Enterprise</option>
-                                            <option value="multinational">Multinational</option>
-                                            <option value="non-profit">Non-Profit</option>
-                                            <option value="government">Government</option>
-                                        </select>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Industry
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            <MapPin className="w-4 h-4 inline mr-2" />
+                                            Address
                                         </label>
                                         <input
                                             type="text"
-                                            {...registerCompany('companyInfo.industry')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="e.g., Technology, Healthcare"
+                                            {...registerCore('address')}
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white"
+                                            placeholder="Company street address"
                                         />
+                                        {errorsCore.address && (
+                                            <p className="text-sm text-red-600 dark:text-red-400">{errorsCore.address.message}</p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            <Phone className="w-4 h-4 inline mr-2" />
+                                            Phone Number
+                                        </label>
+                                        <input
+                                            type="tel"
+                                            {...registerCore('phone')}
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white"
+                                            placeholder="+1 (555) 123-4567"
+                                        />
+                                        {errorsCore.phone && (
+                                            <p className="text-sm text-red-600 dark:text-red-400">{errorsCore.phone.message}</p>
+                                        )}
                                     </div>
 
                                     <div className="space-y-2 md:col-span-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Company Mission
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            <GlobeIcon className="w-4 h-4 inline mr-2" />
+                                            Website
                                         </label>
-                                        <textarea
-                                            {...registerCompany('companyInfo.mission')}
-                                            rows={3}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="What is your company's mission?"
+                                        <input
+                                            type="url"
+                                            {...registerCore('website')}
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white"
+                                            placeholder="https://example.com"
                                         />
-                                        <p className="text-xs text-gray-500">Max 500 characters</p>
-                                    </div>
-
-                                    <div className="space-y-2 md:col-span-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Company Culture
-                                        </label>
-                                        <textarea
-                                            {...registerCompany('companyInfo.culture')}
-                                            rows={3}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="Describe your company culture..."
-                                        />
-                                        <p className="text-xs text-gray-500">Max 500 characters</p>
+                                        {errorsCore.website && (
+                                            <p className="text-sm text-red-600 dark:text-red-400">{errorsCore.website.message}</p>
+                                        )}
                                     </div>
                                 </div>
 
-                                <div className="flex justify-end gap-3">
-                                    <Button type="button" variant="outline" onClick={() => resetCompany()}>
+                                {companyData?.verified && (
+                                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                                        <div className="flex items-center gap-3">
+                                            <Shield className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                            <div>
+                                                <h4 className="font-medium text-blue-900 dark:text-blue-300">Verified Company</h4>
+                                                <p className="text-sm text-blue-700 dark:text-blue-400">
+                                                    Your company is verified. Some fields may be restricted from editing.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="flex justify-end gap-3 pt-4">
+                                    <Button type="button" variant="outline" onClick={() => resetCore()} disabled={isSubmitting}>
                                         Reset
                                     </Button>
-                                    <Button type="submit" disabled={isLoading}>
-                                        {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                        Save Company Info
+                                    <Button type="submit" disabled={isSubmitting}>
+                                        {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                        Save Contact Info
                                     </Button>
                                 </div>
                             </form>
@@ -533,285 +595,112 @@ export const CompanyProfileForm: React.FC<CompanyProfileFormProps> = ({
                             <form onSubmit={handleSubmitSocial(handleSocialLinksSubmit)} className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                            <Hash className="w-4 h-4" />
                                             LinkedIn URL
                                         </label>
                                         <input
                                             type="url"
                                             {...registerSocial('linkedin')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white"
                                             placeholder="https://linkedin.com/company/your-company"
                                         />
                                         {errorsSocial.linkedin && (
-                                            <p className="text-sm text-red-600">{errorsSocial.linkedin.message}</p>
+                                            <p className="text-sm text-red-600 dark:text-red-400">{errorsSocial.linkedin.message}</p>
                                         )}
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                            <Hash className="w-4 h-4" />
                                             Twitter URL
                                         </label>
                                         <input
                                             type="url"
                                             {...registerSocial('twitter')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white"
                                             placeholder="https://twitter.com/your-company"
                                         />
                                         {errorsSocial.twitter && (
-                                            <p className="text-sm text-red-600">{errorsSocial.twitter.message}</p>
+                                            <p className="text-sm text-red-600 dark:text-red-400">{errorsSocial.twitter.message}</p>
                                         )}
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                            <Hash className="w-4 h-4" />
                                             Facebook URL
                                         </label>
                                         <input
                                             type="url"
                                             {...registerSocial('facebook')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white"
                                             placeholder="https://facebook.com/your-company"
                                         />
                                         {errorsSocial.facebook && (
-                                            <p className="text-sm text-red-600">{errorsSocial.facebook.message}</p>
+                                            <p className="text-sm text-red-600 dark:text-red-400">{errorsSocial.facebook.message}</p>
                                         )}
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                            <Hash className="w-4 h-4" />
                                             Instagram URL
                                         </label>
                                         <input
                                             type="url"
                                             {...registerSocial('instagram')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white"
                                             placeholder="https://instagram.com/your-company"
                                         />
                                         {errorsSocial.instagram && (
-                                            <p className="text-sm text-red-600">{errorsSocial.instagram.message}</p>
+                                            <p className="text-sm text-red-600 dark:text-red-400">{errorsSocial.instagram.message}</p>
                                         )}
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                            <Hash className="w-4 h-4" />
                                             GitHub URL
                                         </label>
                                         <input
                                             type="url"
                                             {...registerSocial('github')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white"
                                             placeholder="https://github.com/your-company"
                                         />
                                         {errorsSocial.github && (
-                                            <p className="text-sm text-red-600">{errorsSocial.github.message}</p>
+                                            <p className="text-sm text-red-600 dark:text-red-400">{errorsSocial.github.message}</p>
                                         )}
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                            <GlobeIcon className="w-4 h-4" />
                                             Company Website
                                         </label>
                                         <input
                                             type="url"
                                             {...registerSocial('website')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white"
                                             placeholder="https://your-company.com"
                                         />
                                         {errorsSocial.website && (
-                                            <p className="text-sm text-red-600">{errorsSocial.website.message}</p>
+                                            <p className="text-sm text-red-600 dark:text-red-400">{errorsSocial.website.message}</p>
                                         )}
                                     </div>
                                 </div>
 
-                                <div className="flex justify-end gap-3">
-                                    <Button type="button" variant="outline" onClick={() => resetSocial({})}>
+                                <div className="flex justify-end gap-3 pt-4">
+                                    <Button type="button" variant="outline" onClick={() => resetSocial({})} disabled={isSubmitting}>
                                         Clear All
                                     </Button>
-                                    <Button type="submit" disabled={isLoading}>
-                                        {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                    <Button type="submit" disabled={isSubmitting}>
+                                        {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                                         Save Social Links
                                     </Button>
                                 </div>
                             </form>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* Registration Tab */}
-                <TabsContent value="registration" className="space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Company Registration</CardTitle>
-                            <CardDescription>
-                                Legal and registration information
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {companyData ? (
-                                <div className="space-y-6">
-                                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                                        <div className="flex items-center gap-3">
-                                            <Shield className="w-5 h-5 text-blue-600" />
-                                            <div>
-                                                <h4 className="font-medium text-blue-900">Company Registration Complete</h4>
-                                                <p className="text-sm text-blue-700">
-                                                    Your company is registered as: <strong>{companyData.name}</strong>
-                                                    {companyData.verified && (
-                                                        <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
-                                                            ✓ Verified
-                                                        </span>
-                                                    )}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium text-gray-700">
-                                                Company Name
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={companyData.name}
-                                                readOnly
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                                            />
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium text-gray-700">
-                                                TIN/Registration Number
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={companyData.tin || 'Not provided'}
-                                                readOnly
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                                            />
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium text-gray-700">
-                                                Registration Date
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={new Date(companyData.createdAt).toLocaleDateString()}
-                                                readOnly
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                                            />
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium text-gray-700">
-                                                Verification Status
-                                            </label>
-                                            <div className="flex items-center gap-2">
-                                                <div className={`w-2 h-2 rounded-full ${companyData.verified ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                                                <span className="text-sm">
-                                                    {companyData.verified ? 'Verified' : 'Pending Verification'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="pt-4 border-t">
-                                        <p className="text-sm text-gray-600">
-                                            To update registration details, please contact support or visit the Company Settings page.
-                                        </p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="text-center py-8">
-                                    <Building className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Company Registration Found</h3>
-                                    <p className="text-gray-600 mb-6">
-                                        You need to register your company to access all features.
-                                    </p>
-                                    <Button onClick={handleCompanyServiceSubmit}>
-                                        Register Company
-                                    </Button>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* Settings Tab */}
-                <TabsContent value="settings" className="space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Profile Settings</CardTitle>
-                            <CardDescription>
-                                Manage your profile visibility and preferences
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-6">
-                                <div className="space-y-4">
-                                    <h4 className="font-medium text-gray-900">Profile Visibility</h4>
-                                    <div className="space-y-3">
-                                        <div className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50">
-                                            <input type="radio" id="public" name="visibility" defaultChecked className="w-4 h-4" />
-                                            <div>
-                                                <label htmlFor="public" className="font-medium">Public</label>
-                                                <p className="text-sm text-gray-600">Anyone can view your profile</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50">
-                                            <input type="radio" id="connections" name="visibility" className="w-4 h-4" />
-                                            <div>
-                                                <label htmlFor="connections" className="font-medium">Connections Only</label>
-                                                <p className="text-sm text-gray-600">Only your connections can view full profile</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50">
-                                            <input type="radio" id="private" name="visibility" className="w-4 h-4" />
-                                            <div>
-                                                <label htmlFor="private" className="font-medium">Private</label>
-                                                <p className="text-sm text-gray-600">Only basic information is visible</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <Separator />
-
-                                <div className="space-y-4">
-                                    <h4 className="font-medium text-gray-900">Contact Preferences</h4>
-                                    <div className="space-y-3">
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <label className="font-medium">Allow Messages</label>
-                                                <p className="text-sm text-gray-600">Allow users to send you messages</p>
-                                            </div>
-                                            <input type="checkbox" defaultChecked className="w-4 h-4" />
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <label className="font-medium">Show Contact Information</label>
-                                                <p className="text-sm text-gray-600">Display your email and phone number</p>
-                                            </div>
-                                            <input type="checkbox" className="w-4 h-4" />
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <label className="font-medium">Show Location</label>
-                                                <p className="text-sm text-gray-600">Display your company location</p>
-                                            </div>
-                                            <input type="checkbox" defaultChecked className="w-4 h-4" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="pt-4">
-                                    <Button disabled={isLoading}>
-                                        {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                        Save Settings
-                                    </Button>
-                                </div>
-                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -820,4 +709,4 @@ export const CompanyProfileForm: React.FC<CompanyProfileFormProps> = ({
     );
 };
 
-export default CompanyProfileForm;
+export default CompanyProfileEditForm;

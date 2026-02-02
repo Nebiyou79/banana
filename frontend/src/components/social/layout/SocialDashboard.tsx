@@ -1,17 +1,19 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/router';
-import { useEffect, useState } from 'react';
-import SocialNavbar from './SocialNavbar';
+import { useEffect, useState, useRef } from 'react';
 import SocialSidebar from './SocialSidebar';
 import { profileService } from '@/services/profileService';
 import { toast } from '@/hooks/use-toast';
-import { Sparkles, Zap, TrendingUp, Bell, ChevronRight } from 'lucide-react';
+import { Sparkles, Zap, TrendingUp, Bell, ChevronRight, ChevronDown, ChevronUp, Users, Eye, MousePointer } from 'lucide-react';
 import { Profile } from '@/services/profileService';
 import CandidateAdCard from '../CandidateAdCard';
 import CompanyAdCard from '../CompanyAdCard';
 import FreelancerAdCard from '../FreelanceAdCard';
 import OrganizationAdCard from '../OrganizationAdCard';
 import { getAdsForRole, adConfig, AdData } from '@/data/ads';
+import { RoleThemeProvider, useTheme } from '@/components/social/theme/RoleThemeProvider';
+import React from 'react';
+import SocialNavbar from './SocialNavbar';
 
 interface SocialDashboardLayoutProps {
   children: React.ReactNode;
@@ -19,13 +21,33 @@ interface SocialDashboardLayoutProps {
   adLimit?: number;
 }
 
+// Main layout component with RoleThemeProvider
 export function SocialDashboardLayout({
   children,
   requiredRole,
-  adLimit = 2 // Reduced default to prevent overflow
+  adLimit = 3
+}: SocialDashboardLayoutProps) {
+  return (
+    <RoleThemeProvider overrideRole={requiredRole}>
+      <SocialDashboardContent
+        requiredRole={requiredRole}
+        adLimit={adLimit}
+      >
+        {children}
+      </SocialDashboardContent>
+    </RoleThemeProvider>
+  );
+}
+
+// Separate component for content that uses the theme
+function SocialDashboardContent({
+  children,
+  requiredRole,
+  adLimit = 3
 }: SocialDashboardLayoutProps) {
   const { user, isLoading, isAuthenticated } = useAuth();
   const router = useRouter();
+  const { getPageBgStyle, getCardStyle, getButtonClasses, getTextClasses, colors, role } = useTheme();
   const [checkingProfile, setCheckingProfile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -33,8 +55,16 @@ export function SocialDashboardLayout({
   const [ads, setAds] = useState<AdData[]>([]);
   const [adStats, setAdStats] = useState({
     totalImpressions: 0,
-    totalClicks: 0
+    totalClicks: 0,
+    totalEngagement: 0
   });
+  const [adsExpanded, setAdsExpanded] = useState(false);
+  const [pageLoaded, setPageLoaded] = useState(false);
+
+  /* ------------------------ Animation States ------------------------ */
+  const [heroLoaded, setHeroLoaded] = useState(false);
+  const [statsLoaded, setStatsLoaded] = useState(false);
+  const [adsLoaded, setAdsLoaded] = useState(false);
 
   /* ------------------------ Detect Mobile ------------------------ */
   useEffect(() => {
@@ -42,11 +72,28 @@ export function SocialDashboardLayout({
       const mobile = window.innerWidth < 1024;
       setIsMobile(mobile);
       setSidebarOpen(!mobile);
+      if (mobile) setAdsExpanded(false);
     };
 
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  /* ------------------ Page Load Animation ------------------ */
+  useEffect(() => {
+    setPageLoaded(true);
+
+    // Staggered animations
+    const timer1 = setTimeout(() => setHeroLoaded(true), 300);
+    const timer2 = setTimeout(() => setStatsLoaded(true), 600);
+    const timer3 = setTimeout(() => setAdsLoaded(true), 900);
+
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+    };
   }, []);
 
   /* ------------------ Fetch User Profile ------------------ */
@@ -72,8 +119,9 @@ export function SocialDashboardLayout({
 
       const stats = userAds.reduce((acc, ad) => ({
         totalImpressions: acc.totalImpressions + ad.impressions,
-        totalClicks: acc.totalClicks + ad.clicks
-      }), { totalImpressions: 0, totalClicks: 0 });
+        totalClicks: acc.totalClicks + ad.clicks,
+        totalEngagement: acc.totalEngagement
+      }), { totalImpressions: 0, totalClicks: 0, totalEngagement: 0 });
 
       setAdStats(stats);
     }
@@ -91,23 +139,52 @@ export function SocialDashboardLayout({
     }
   }, [user, isLoading, isAuthenticated, requiredRole, router]);
 
-  /* ------------------ Auto-Close Sidebar on Mobile ------------------ */
-  useEffect(() => {
-    if (isMobile) setSidebarOpen(false);
-  }, [router.pathname, isMobile]);
-
-  /* -------------------- Loading State -------------------- */
+  /* -------------------- Loading State with Animation -------------------- */
   if (isLoading || checkingProfile) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 flex items-center justify-center relative overflow-hidden">
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={getPageBgStyle()}>
+        {/* Animated background elements */}
         <div className="absolute inset-0">
-          <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse delay-1000" />
+          <div
+            className="absolute top-1/4 left-1/4 w-72 h-72 rounded-full blur-3xl animate-ping animate-duration-[2000ms] animate-infinite"
+            style={{ backgroundColor: colors.primary + '10' }}
+          />
+          <div
+            className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full blur-3xl animate-pulse animate-delay-[1000ms] animate-duration-[3000ms]"
+            style={{ backgroundColor: colors.secondary + '10' }}
+          />
         </div>
-        <div className="relative text-center">
-          <div className="w-20 h-20 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin mx-auto"></div>
-          <p className="mt-6 text-lg font-semibold text-slate-700">
+
+        {/* Animated loader with theme colors */}
+        <div className="relative text-center animate-in zoom-in duration-300">
+          <div className="relative">
+            {/* Outer ring */}
+            <div
+              className="w-24 h-24 border-4 rounded-full"
+              style={{ borderColor: colors.primary + '20' }}
+            ></div>
+            {/* Spinning ring */}
+            <div
+              className="absolute inset-0 w-24 h-24 border-4 rounded-full animate-spin"
+              style={{ borderColor: `${colors.primary} transparent transparent transparent` }}
+            ></div>
+            {/* Inner pulsing dot */}
+            <div
+              className="absolute inset-4 w-16 h-16 rounded-full animate-pulse"
+              style={{ backgroundColor: colors.primary + '30' }}
+            ></div>
+          </div>
+          <p
+            className="mt-6 text-lg font-semibold animate-in fade-in-up duration-500"
+            style={{ color: colors.primary }}
+          >
             Loading your dashboard...
+          </p>
+          <p
+            className="mt-2 text-sm animate-in fade-in-up duration-500 animate-delay-300"
+            style={{ color: colors.secondary }}
+          >
+            Role: <span className="font-medium">{role}</span>
           </p>
         </div>
       </div>
@@ -116,19 +193,62 @@ export function SocialDashboardLayout({
 
   if (!isAuthenticated) return null;
 
-  /* ------------------ Access Denied Screen ------------------ */
+  /* ------------------ Access Denied Screen with Animation ------------------ */
   if (requiredRole && user?.role !== requiredRole) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center relative">
-        <div className="relative text-center bg-white/10 backdrop-blur-2xl p-12 rounded-3xl border border-white/20 shadow-2xl max-w-md mx-4">
-          <div className="w-20 h-20 bg-gradient-to-br from-red-500 to-orange-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl">
-            <svg className="w-10 h-10 text-white" stroke="currentColor" fill="none" viewBox="0 0 24 24">
-              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
-                d="M12 9v2m0 4h.01M5.07 19h13.86L12 3 5.07 19z" />
-            </svg>
+      <div className="min-h-screen flex items-center justify-center relative animate-in fade-in duration-500" style={getPageBgStyle()}>
+        {/* Animated background */}
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-gradient-to-br from-red-500/10 via-orange-500/10 to-red-500/10 animate-pulse" />
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent animate-shimmer animate-duration-[2000ms] animate-infinite" />
+        </div>
+
+        <div
+          className="relative text-center p-8 md:p-12 rounded-2xl border backdrop-blur-2xl shadow-2xl max-w-md mx-4 animate-in zoom-in duration-700"
+          style={getCardStyle()}
+        >
+          {/* Animated icon */}
+          <div className="relative mb-6">
+            <div
+              className="w-20 h-20 rounded-full flex items-center justify-center mx-auto shadow-2xl animate-in bounce-in duration-1000"
+              style={{ background: `linear-gradient(135deg, #EF4444 0%, #F59E0B 100%)` }}
+            >
+              <svg className="w-10 h-10 text-white animate-pulse" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+                <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+                  d="M12 9v2m0 4h.01M5.07 19h13.86L12 3 5.07 19z" />
+              </svg>
+            </div>
+            {/* Ring animation */}
+            <div
+              className="absolute inset-0 w-20 h-20 border-4 rounded-full animate-ping"
+              style={{ borderColor: '#EF4444' + '30' }}
+            ></div>
           </div>
-          <h2 className="text-3xl font-bold text-white mb-3">Access Denied</h2>
-          <p className="text-white/70 text-lg tracking-wide">You don`t have permission to access this page.</p>
+
+          <h2
+            className="text-3xl font-bold mb-3 animate-in fade-in-up duration-700 animate-delay-300"
+            style={{ color: colors.error || '#EF4444' }}
+          >
+            Access Denied
+          </h2>
+          <p
+            className="text-lg tracking-wide animate-in fade-in-up duration-700 animate-delay-500"
+            style={{ color: colors.secondary }}
+          >
+            You don't have permission to access this page.
+          </p>
+
+          {/* Animated button */}
+          <button
+            onClick={() => router.push(`/dashboard/${user?.role}/social`)}
+            className="mt-6 px-6 py-3 rounded-lg font-medium shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 active:scale-95 animate-in fade-in-up duration-700 animate-delay-700"
+            style={{
+              background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
+              color: 'white'
+            }}
+          >
+            Go to Your Dashboard
+          </button>
         </div>
       </div>
     );
@@ -150,17 +270,45 @@ export function SocialDashboardLayout({
     }
   };
 
-  /* ------------------- MAIN LAYOUT ------------------- */
+  // Get avatar URL with placeholder
+  const getAvatarUrl = () => {
+    if (userProfile?.avatar?.secure_url) {
+      return userProfile.avatar.secure_url;
+    }
+    if (userProfile?.user.avatar) {
+      return userProfile.user.avatar;
+    }
+    const initials = user?.name?.charAt(0).toUpperCase() || 'U';
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=${encodeURIComponent(colors.primary)}&color=fff&size=150`;
+  };
+
+  /* ------------------- MAIN LAYOUT with optimized sidebar width ------------------- */
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-purple-50/20 relative overflow-hidden">
-      {/* DESKTOP SIDEBAR */}
-      <div className="hidden lg:block fixed inset-y-0 left-0 z-30">
+    <div className={`flex min-h-screen relative overflow-hidden animate-in fade-in duration-500 ${pageLoaded ? 'opacity-100' : 'opacity-0'}`} style={getPageBgStyle()}>
+      {/* Animated background elements */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div
+          className="absolute top-0 left-0 w-64 h-64 rounded-full blur-3xl animate-float animate-duration-[15s] animate-delay-0"
+          style={{ backgroundColor: colors.primary + '5' }}
+        />
+        <div
+          className="absolute bottom-0 right-0 w-96 h-96 rounded-full blur-3xl animate-float animate-duration-[20s] animate-delay-1000"
+          style={{ backgroundColor: colors.secondary + '5' }}
+        />
+        <div
+          className="absolute top-1/2 left-1/4 w-48 h-48 rounded-full blur-3xl animate-float animate-duration-[25s] animate-delay-2000"
+          style={{ backgroundColor: colors.accent + '5' }}
+        />
+      </div>
+
+      {/* DESKTOP LEFT SIDEBAR with Animation */}
+      <div className="hidden lg:block fixed inset-y-0 left-0 z-30 animate-in slide-in-from-left-0 duration-500">
         <div className="h-full">
           <SocialSidebar userProfile={userProfile} />
         </div>
       </div>
 
-      {/* MOBILE SIDEBAR */}
+      {/* MOBILE SIDEBAR with Animation */}
       {sidebarOpen && (
         <>
           <div
@@ -168,166 +316,418 @@ export function SocialDashboardLayout({
             onClick={() => setSidebarOpen(false)}
           />
           <div className="fixed inset-y-0 left-0 z-50 lg:hidden animate-in slide-in-from-left-80 duration-300">
-            <SocialSidebar userProfile={userProfile} onClose={() => setSidebarOpen(false)} />
+            <SocialSidebar
+              userProfile={userProfile}
+              onClose={() => setSidebarOpen(false)}
+            />
           </div>
         </>
       )}
 
-      {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col min-h-screen lg:ml-80">
-        {/* NAVBAR */}
-        <div className="flex-shrink-0 z-20">
-          <SocialNavbar userProfile={userProfile} onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
+      {/* DESKTOP RIGHT ADS SIDEBAR - OPTIMIZED WIDTH */}
+      {!isMobile && (
+        <div className="hidden lg:block fixed right-0 top-0 bottom-0 z-20 w-[470px] animate-in slide-in-from-right-0 duration-500">
+          {/* MIDDLE GROUND: w-[470px] (between 420px and 520px) */}
+          <div
+            className="h-full overflow-y-auto pl-6 pt-24 pb-8 pr-6"
+            style={{
+              scrollbarWidth: 'thin',
+              scrollbarColor: `${colors.primary + '30'} transparent`,
+            }}
+          >
+            {/* Custom scrollbar styles */}
+            <style jsx>{`
+              div::-webkit-scrollbar {
+                width: 6px;
+              }
+              div::-webkit-scrollbar-track {
+                background: transparent;
+              }
+              div::-webkit-scrollbar-thumb {
+                background: ${colors.primary}30;
+                border-radius: 3px;
+              }
+              div::-webkit-scrollbar-thumb:hover {
+                background: ${colors.primary}50;
+              }
+            `}</style>
+
+            <div className="space-y-6">
+              {/* Profile Card - SIGNIFICANTLY SMALLER */}
+              {userProfile && (
+                <div
+                  className="rounded-xl shadow-sm p-4 animate-in slide-in-from-right-0 duration-500"
+                  style={{
+                    ...getCardStyle(),
+                    border: `1px solid ${colors.cardBorderLight || '#e5e7eb'}`
+                  }}
+                >
+                  <div className="flex items-center gap-4">
+                    {/* Avatar - SMALLER */}
+                    <div className="relative">
+                      <div
+                        className="w-16 h-16 rounded-lg flex items-center justify-center overflow-hidden shadow-lg border-2"
+                        style={{
+                          borderColor: colors.cardBgLight || 'white',
+                          background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+                        }}
+                      >
+                        {getAvatarUrl() ? (
+                          <img
+                            src={getAvatarUrl()}
+                            alt={userProfile.user.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              const parent = target.parentElement;
+                              if (parent) {
+                                const fallback = document.createElement('span');
+                                fallback.textContent = userProfile.user.name?.charAt(0).toUpperCase() || 'U';
+                                fallback.className = 'text-white text-lg font-bold';
+                                parent.appendChild(fallback);
+                              }
+                            }}
+                          />
+                        ) : (
+                          <span className="text-white text-lg font-bold">
+                            {userProfile.user.name?.charAt(0).toUpperCase() || 'U'}
+                          </span>
+                        )}
+                      </div>
+                      {/* Online status indicator - SMALLER */}
+                      <div
+                        className="absolute bottom-0 right-0 w-3 h-3 rounded-full border"
+                        style={{
+                          background: colors.success,
+                          borderColor: colors.cardBgLight || 'white'
+                        }}
+                      />
+                    </div>
+
+                    {/* User Info - COMPACT */}
+                    <div className="flex-1 min-w-0">
+                      <h3
+                        className="font-semibold truncate"
+                        style={{ color: colors.primary }}
+                      >
+                        {userProfile.user.name}
+                      </h3>
+                      <p
+                        className="text-sm truncate mt-1"
+                        style={{ color: colors.secondary }}
+                      >
+                        {userProfile.headline?.substring(0, 50) || 'No headline set'}
+                        {userProfile.headline && userProfile.headline.length > 50 ? '...' : ''}
+                      </p>
+
+                      {/* Stats - COMPACT AND HORIZONTAL */}
+                      <div className="flex gap-4 mt-3">
+                        <div className="text-center">
+                          <div
+                            className="font-semibold text-sm"
+                            style={{ color: colors.primary }}
+                          >
+                            {userProfile.socialStats?.followerCount || 0}
+                          </div>
+                          <div
+                            className="text-xs"
+                            style={{ color: colors.secondary }}
+                          >
+                            Followers
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <div
+                            className="font-semibold text-sm"
+                            style={{ color: colors.primary }}
+                          >
+                            {userProfile.socialStats?.followingCount || 0}
+                          </div>
+                          <div
+                            className="text-xs"
+                            style={{ color: colors.secondary }}
+                          >
+                            Following
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sponsored Ads Section - OPTIMIZED FOR WIDTH */}
+              {ads.length > 0 && (
+                <div
+                  className="rounded-xl overflow-hidden animate-in slide-in-from-right-0 duration-500 animate-delay-300"
+                  style={{
+                    ...getCardStyle(),
+                    border: `1px solid ${colors.cardBorderLight || '#e5e7eb'}`
+                  }}
+                >
+                  {/* Ad Header */}
+                  <div
+                    className="px-5 py-3 border-b flex items-center justify-between"
+                    style={{
+                      borderColor: colors.primary + '20',
+                      background: colors.cardBgLight
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4" style={{ color: colors.accent }} />
+                      <span
+                        className="font-semibold text-sm"
+                        style={{ color: colors.primary }}
+                      >
+                        Sponsored
+                      </span>
+                    </div>
+                    <span
+                      className="text-xs px-2 py-1 rounded-full"
+                      style={{
+                        background: colors.primary + '10',
+                        color: colors.primary
+                      }}
+                    >
+                      {ads.length}
+                    </span>
+                  </div>
+
+                  {/* Ads Content - ADJUSTED FOR NEW WIDTH */}
+                  <div className="p-5 space-y-5">
+                    {ads.map((ad, index) => (
+                      <div
+                        key={ad.id}
+                        className="animate-in fade-in-up duration-500"
+                        style={{
+                          animationDelay: `${index * 100}ms`,
+                        }}
+                      >
+                        <div className="w-full">
+                          {renderAdComponent(ad)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Stats Card - COMPACT */}
+              <div
+                className="rounded-xl p-5 animate-in slide-in-from-right-0 duration-500 animate-delay-500"
+                style={{
+                  ...getCardStyle(),
+                  border: `1px solid ${colors.cardBorderLight || '#e5e7eb'}`
+                }}
+              >
+                <h4
+                  className="font-semibold mb-4 flex items-center gap-2 text-sm"
+                  style={{ color: colors.primary }}
+                >
+                  <TrendingUp className="w-4 h-4" />
+                  Ad Performance
+                </h4>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm" style={{ color: colors.secondary }}>Impressions</span>
+                    <span style={{ color: colors.primary }} className="font-semibold">
+                      {adStats.totalImpressions.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm" style={{ color: colors.secondary }}>Clicks</span>
+                    <span style={{ color: colors.primary }} className="font-semibold">
+                      {adStats.totalClicks.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm" style={{ color: colors.secondary }}>CTR</span>
+                    <span style={{ color: colors.primary }} className="font-semibold">
+                      {adStats.totalImpressions > 0
+                        ? `${((adStats.totalClicks / adStats.totalImpressions) * 100).toFixed(1)}%`
+                        : '0%'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* View All Button */}
+                <button
+                  className="w-full mt-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                  style={{
+                    background: `${colors.primary}10`,
+                    color: colors.primary
+                  }}
+                >
+                  View Analytics
+                </button>
+              </div>
+
+              {/* FOOTER REMOVED FROM SIDEBAR - Now at bottom of main page */}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MAIN CONTENT AREA - WITHOUT ENVELOPING CARD */}
+      <div className={`flex-1 flex flex-col min-h-screen ${!isMobile ? 'lg:ml-80 lg:mr-[470px]' : ''}`}>
+        {/* STICKY NAVBAR - Animated entrance */}
+        <div className="sticky top-0 z-50 shrink-0 animate-in slide-in-from-top-0 duration-500"
+          style={{ background: colors.cardBgLight || 'white' }}>
+          <SocialNavbar
+            userProfile={userProfile}
+            onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
+            colors={colors}
+            role={role}
+          />
         </div>
 
-        {/* PAGE CONTENT */}
-        <main className="flex-1 overflow-auto pt-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            {/* HEADER - Simplified */}
-            <div className="mb-6 lg:mb-8">
+        {/* MOBILE ADS TOGGLE with Animation */}
+        {isMobile && ads.length > 0 && (
+          <div className="lg:hidden pt-20 px-4 animate-in fade-in-up duration-500">
+            <button
+              onClick={() => setAdsExpanded(!adsExpanded)}
+              className="w-full flex items-center justify-between p-4 rounded-xl text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] animate-in fade-in-up duration-500 animate-delay-300"
+              style={{
+                background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-lg animate-pulse">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold">Recommended Ads</p>
+                  <p className="text-sm text-white/80 opacity-90">{ads.length} available</p>
+                </div>
+              </div>
+              <div className={`p-2 bg-white/20 rounded-lg transition-transform duration-300 ${adsExpanded ? 'rotate-180' : ''}`}>
+                <ChevronUp className="w-5 h-5" />
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* MOBILE ADS EXPANDED VIEW with Animation */}
+        {isMobile && adsExpanded && (
+          <div className="lg:hidden px-4 py-4 animate-in slide-in-from-top-0 duration-300">
+            <div className="rounded-xl border shadow-lg p-4 space-y-4 animate-in fade-in-up duration-300" style={getCardStyle()}>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-semibold" style={{ color: colors.primary }}>Sponsored Content</h3>
+                <span className="text-xs" style={{ color: colors.secondary }}>{ads.length} ads</span>
+              </div>
+              {ads.map((ad, index) => (
+                <div
+                  key={ad.id}
+                  className="animate-in fade-in-up duration-500"
+                  style={{ animationDelay: `${index * 100}ms` }}
+                >
+                  {renderAdComponent(ad)}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* PAGE CONTENT - Main content area - WITHOUT ENVELOPING CARD */}
+        <main className="flex-1">
+          {/* NO background card engulfing the content */}
+          <div className="mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            {/* HEADER with Animation - STANDALONE */}
+            <div className="mb-6 lg:mb-8 animate-in fade-in-up duration-500">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                 <div>
-                  <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
+                  <div
+                    className="flex pt-15 items-center gap-2 text-sm mb-2 animate-in slide-in-from-left-0 duration-700"
+                    style={{ color: colors.secondary }}
+                  >
                     <span>Dashboard</span>
                     <ChevronRight className="w-4 h-4" />
-                    <span className="text-slate-700 font-medium">
+                    <span
+                      className="font-medium"
+                      style={{ color: colors.primary }}
+                    >
                       {router.pathname.split('/').pop()?.replace(/-/g, ' ') || 'Home'}
                     </span>
                   </div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">
-                    Welcome back, {user?.name}
+                  <h1
+                    className="text-2xl sm:text-3xl font-bold animate-in fade-in-up duration-500"
+                    style={{
+                      color: colors.primary,
+                      opacity: heroLoaded ? 1 : 0
+                    }}
+                  >
+                    Welcome back, <span style={{
+                      background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text'
+                    }}>{user?.name}</span>
                   </h1>
+                  <p
+                    className="mt-1 text-sm animate-in fade-in-up duration-500 animate-delay-200"
+                    style={{ color: colors.secondary }}
+                  >
+                    Role: <span className="font-medium">{role}</span> • Stay connected with your network
+                  </p>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                    <span className="text-slate-700">Live</span>
-                    <Sparkles className="w-4 h-4 text-amber-500" />
+                <div className="flex items-center gap-3 animate-in fade-in-up duration-500 animate-delay-300">
+                  {/* Live Status with Pulse Animation - STANDALONE CARD */}
+                  <div
+                    className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm animate-pulse animate-duration-[2000ms] animate-infinite"
+                    style={getCardStyle()}
+                  >
+                    <div
+                      className="w-2 h-2 rounded-full animate-ping animate-duration-[1000ms] animate-infinite"
+                      style={{ backgroundColor: colors.primary }}
+                    />
+                    <span style={{ color: colors.primary }}>Live</span>
+                    <Sparkles
+                      className="w-4 h-4 animate-bounce animate-duration-[3000ms]"
+                      style={{ color: colors.accent }}
+                    />
                   </div>
-                  <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
-                    <Bell className="w-5 h-5 text-slate-600" />
+                  <button className={`p-2 rounded-lg transition-all duration-300 hover:scale-110 active:scale-95 ${getButtonClasses('ghost')}`}>
+                    <Bell className="w-5 h-5" style={{ color: colors.primary }} />
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* MAIN CONTENT LAYOUT */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-              {/* Main Content - Clean Layout */}
-              <div className="lg:col-span-2">
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-                  {/* Simple header for main content */}
-                  <div className="px-6 py-4 border-b border-slate-100">
-                    <h2 className="text-lg font-semibold text-slate-800">
-                      {router.pathname.includes('feed') ? 'Your Feed' :
-                        router.pathname.includes('connections') ? 'Connections' :
-                          router.pathname.includes('messages') ? 'Messages' : 'Dashboard'}
-                    </h2>
-                  </div>
-
-                  {/* Main content area - clean and minimal */}
-                  <div className="p-6">
-                    {children}
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Sidebar - Fixed Height Container */}
+            {/* MAIN CONTENT - FREE SPACE FOR COMPONENTS */}
+            <div className="animate-in fade-in-up duration-500">
+              {/* NO enveloping card - children render directly */}
               <div className="space-y-6">
-                {/* Profile Card - Simplified */}
-                {userProfile && (
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-                    <div className="flex items-start gap-4">
-                      <div className="relative">
-                        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center overflow-hidden">
-                          {userProfile.user.avatar ? (
-                            <img
-                              src={userProfile.user.avatar}
-                              alt={userProfile.user.name}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <span className="text-white text-xl font-bold">
-                              {userProfile.user.name.charAt(0).toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-slate-800">{userProfile.user.name}</h3>
-                        <p className="text-sm text-slate-600 mt-1">{userProfile.headline || 'No headline set'}</p>
-                        <div className="flex gap-4 mt-3">
-                          <div>
-                            <div className="font-semibold text-slate-800">
-                              {userProfile.socialStats?.followerCount || 0}
-                            </div>
-                            <div className="text-xs text-slate-500">Followers</div>
-                          </div>
-                          <div>
-                            <div className="font-semibold text-slate-800">
-                              {userProfile.socialStats?.followingCount || 0}
-                            </div>
-                            <div className="text-xs text-slate-500">Following</div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                {React.Children.map(children, (child, index) => (
+                  <div
+                    className="animate-in fade-in-up duration-500"
+                    style={{ animationDelay: `${index * 100}ms` }}
+                  >
+                    {child}
                   </div>
-                )}
-
-                {/* Advertisements Section - Fixed Height */}
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="px-5 py-4 border-b border-slate-100">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold text-slate-800">Recommended</h3>
-                      <span className="text-xs text-slate-500">{ads.length} ads</span>
-                    </div>
-                  </div>
-
-                  {/* Fixed height container for ads */}
-                  <div className="p-5 space-y-5 max-h-[calc(100vh-400px)] overflow-y-auto">
-                    {ads.length > 0 ? (
-                      ads.map(ad => renderAdComponent(ad))
-                    ) : (
-                      <div className="text-center py-8">
-                        <Sparkles className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                        <p className="text-sm text-slate-500">No recommendations available</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Quick Stats */}
-                <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-5 text-white">
-                  <h4 className="font-semibold mb-4 flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4" />
-                    Your Stats
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-white/10 rounded-lg p-3">
-                      <div className="text-lg font-bold">
-                        {adStats.totalImpressions > 0
-                          ? `${((adStats.totalClicks / adStats.totalImpressions) * 100).toFixed(1)}%`
-                          : '0%'}
-                      </div>
-                      <div className="text-xs text-slate-300 mt-1">Ad CTR</div>
-                    </div>
-                    <div className="bg-white/10 rounded-lg p-3">
-                      <div className="text-lg font-bold">
-                        {adStats.totalImpressions.toLocaleString()}
-                      </div>
-                      <div className="text-xs text-slate-300 mt-1">Impressions</div>
-                    </div>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
 
-            {/* FOOTER */}
-            <div className="flex items-center justify-center gap-2 mt-8 pt-6 border-t border-slate-200 text-slate-500 text-sm">
-              <Zap className="w-4 h-4 text-amber-500" />
-              <span>Banana Social v2.1.0</span>
+            {/* FOOTER - At bottom of main page (BOTH DESKTOP AND MOBILE) */}
+            <div className="flex items-center justify-center gap-2 mt-12 pt-8 pb-4 text-sm animate-in fade-in-up duration-500 animate-delay-700 border-t"
+              style={{
+                borderColor: colors.primary + '20',
+                borderTopWidth: '1px'
+              }}>
+              <Zap
+                className="w-4 h-4 animate-pulse animate-duration-[2000ms]"
+                style={{ color: colors.accent }}
+              />
+              <span style={{ color: colors.secondary }}>Banana Social v2.1.0 • </span>
+              <span className="font-medium" style={{ color: colors.primary }}>{role} Edition</span>
+            </div>
+
+            {/* SECOND FOOTER LINE */}
+            <div className="text-center pb-8 text-xs animate-in fade-in-up duration-500 animate-delay-800"
+              style={{ color: colors.info || '#6b7280' }}>
+              {new Date().getFullYear()} • All rights reserved
             </div>
           </div>
         </main>

@@ -1,413 +1,889 @@
-// components/forms/OrganizationProfileForm.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// components/forms/OrganizationProfileForm.tsx - FIXED VERSION
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
-import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Separator } from '@/components/ui/Separator';
-import { Loader2, Users, User, Globe, Settings, Shield, Target } from 'lucide-react';
+import { Loader2, Users, Building2, MapPin, Phone, Link, Target, FileText } from 'lucide-react';
 import { AvatarUploader } from '@/components/profile/AvatarUploader';
-import { profileService, type Profile, type SocialLinks } from '@/services/profileService';
-import { roleProfileService } from '@/services/roleProfileService';
+import {
+    profileService,
+    type Profile,
+    type SocialLinks,
+    type CloudinaryImage
+} from '@/services/profileService';
+import {
+    roleProfileService,
+    type OrganizationProfileResponse
+} from '@/services/roleProfileService';
 import { organizationService, type OrganizationProfile } from '@/services/organizationService';
+import { colorClasses } from '@/utils/color';
 
-// Form schemas
-const mainProfileSchema = z.object({
-    headline: z.string().min(3, 'Headline must be at least 3 characters').max(100),
-    bio: z.string().max(500, 'Bio cannot exceed 500 characters').optional(),
-    location: z.string().min(2, 'Location must be at least 2 characters'),
-    phone: z.string().optional(),
-    website: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
+// Form schemas for each service responsibility
+const basicInfoSchema = z.object({
+    name: z.string().min(2, 'Organization name must be at least 2 characters').max(100, 'Organization name cannot exceed 100 characters'),
+    registrationNumber: z.string().optional(),
+    organizationType: z.enum(['non-profit', 'government', 'educational', 'healthcare', 'other']).optional(),
+    industry: z.string().optional(),
 });
 
-const organizationInfoSchema = z.object({
+const organizationDetailsSchema = z.object({
+    description: z.string().max(1000, 'Description cannot exceed 1000 characters').optional(),
+    mission: z.string().max(500, 'Mission statement cannot exceed 500 characters').optional(),
+    address: z.string().optional(),
+});
+
+const contactInfoSchema = z.object({
+    phone: z.string().optional(),
+    secondaryPhone: z.string().optional(),
+    website: z.string().url('Please enter a valid website URL').optional().or(z.literal('')),
+    email: z.string().email('Please enter a valid email').optional(),
+});
+
+const organizationRoleSchema = z.object({
     companyInfo: z.object({
         size: z.enum(['1-10', '11-50', '51-200', '201-500', '501-1000', '1000+']).optional(),
         foundedYear: z.number().min(1800).max(new Date().getFullYear()).optional(),
-        companyType: z.enum(['startup', 'small-business', 'medium-business', 'large-enterprise', 'multinational', 'non-profit', 'government', 'community', 'ngo', 'charity', 'association', 'educational', 'healthcare', 'other']).optional(),
-        industry: z.string().optional(),
+        companyType: z.enum([
+            'non-profit', 'government', 'educational', 'healthcare', 'other',
+            'startup', 'small-business', 'medium-business', 'large-enterprise',
+            'multinational', 'community', 'ngo', 'charity', 'association'
+        ]).optional(),
         mission: z.string().max(500).optional(),
-        values: z.array(z.string()).optional(),
+        // Accept either an array of strings or a comma-separated string so the form input can be processed safely
+        values: z.array(z.string()).or(z.string()).optional(),
         culture: z.string().max(500).optional(),
+        specialties: z.array(z.string()).or(z.string()).optional(),
     }).optional(),
 });
 
+// Social links schema - ONLY social media platforms, NO website
 const socialLinksSchema = z.object({
     linkedin: z.string().url('Please enter a valid LinkedIn URL').optional().or(z.literal('')),
     twitter: z.string().url('Please enter a valid Twitter URL').optional().or(z.literal('')),
     facebook: z.string().url('Please enter a valid Facebook URL').optional().or(z.literal('')),
     instagram: z.string().url('Please enter a valid Instagram URL').optional().or(z.literal('')),
-    website: z.string().url('Please enter a valid website URL').optional().or(z.literal('')),
+    youtube: z.string().url('Please enter a valid YouTube URL').optional().or(z.literal('')),
+    // Note: NO website field here - that's in contact info
 });
 
-type MainProfileFormData = z.infer<typeof mainProfileSchema>;
-type OrganizationInfoFormData = z.infer<typeof organizationInfoSchema>;
+type BasicInfoFormData = z.infer<typeof basicInfoSchema>;
+type OrganizationDetailsFormData = z.infer<typeof organizationDetailsSchema>;
+type ContactInfoFormData = z.infer<typeof contactInfoSchema>;
+type OrganizationRoleFormData = z.infer<typeof organizationRoleSchema>;
 type SocialLinksFormData = z.infer<typeof socialLinksSchema>;
 
 interface OrganizationProfileFormProps {
-    initialData?: {
-        profile?: Profile;
-        organizationProfile?: OrganizationProfile;
-        roleSpecific?: any;
-    };
     onSuccess?: () => void;
     onCancel?: () => void;
-    mode?: 'create' | 'edit';
 }
 
-export const OrganizationProfileForm: React.FC<OrganizationProfileFormProps> = ({
-    initialData,
+export const OrganizationProfileEditForm: React.FC<OrganizationProfileFormProps> = ({
     onSuccess,
     onCancel,
-    mode = 'edit'
 }) => {
-    const [isLoading, setIsLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState('main');
-    const [profileData, setProfileData] = useState<Profile | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [organizationData, setOrganizationData] = useState<OrganizationProfile | null>(null);
-    const [organizationRoleData, setOrganizationRoleData] = useState<any>(null);
+    const [profileData, setProfileData] = useState<Profile | null>(null);
+    const [roleSpecificData, setRoleSpecificData] = useState<OrganizationProfileResponse['data'] | null>(null);
+    const [mode, setMode] = useState<'create' | 'edit'>('create');
+    const [profileCompletion, setProfileCompletion] = useState<number>(0);
+    const [loadingErrors, setLoadingErrors] = useState<string[]>([]);
+    const [logoUrl, setLogoUrl] = useState<string>('');
+    const [bannerUrl, setBannerUrl] = useState<string>('');
 
-    // Main profile form
-    const { register: registerMain, handleSubmit: handleSubmitMain, formState: { errors: errorsMain }, reset: resetMain } = useForm<MainProfileFormData>({
-        resolver: zodResolver(mainProfileSchema),
+    // Form instances for each section
+    const {
+        register: registerBasic,
+        handleSubmit: handleSubmitBasic,
+        formState: { errors: errorsBasic },
+        reset: resetBasic,
+        setValue: setBasicValue
+    } = useForm<BasicInfoFormData>({
+        resolver: zodResolver(basicInfoSchema),
     });
 
-    // Organization info form
-    const { register: registerOrg, handleSubmit: handleSubmitOrg, formState: { errors: errorsOrg }, reset: resetOrg } = useForm<OrganizationInfoFormData>({
-        resolver: zodResolver(organizationInfoSchema),
+    const {
+        register: registerDetails,
+        handleSubmit: handleSubmitDetails,
+        formState: { errors: errorsDetails },
+        reset: resetDetails
+    } = useForm<OrganizationDetailsFormData>({
+        resolver: zodResolver(organizationDetailsSchema),
     });
 
-    // Social links form
-    const { register: registerSocial, handleSubmit: handleSubmitSocial, formState: { errors: errorsSocial }, reset: resetSocial } = useForm<SocialLinksFormData>({
+    const {
+        register: registerContact,
+        handleSubmit: handleSubmitContact,
+        formState: { errors: errorsContact },
+        reset: resetContact
+    } = useForm<ContactInfoFormData>({
+        resolver: zodResolver(contactInfoSchema),
+    });
+
+    const {
+        register: registerRoleSpecific,
+        handleSubmit: handleSubmitRoleSpecific,
+        formState: { errors: errorsRoleSpecific },
+        reset: resetRoleSpecific,
+        setValue: setRoleSpecificValue
+    } = useForm<OrganizationRoleFormData>({
+        resolver: zodResolver(organizationRoleSchema),
+    });
+
+    const {
+        register: registerSocial,
+        handleSubmit: handleSubmitSocial,
+        formState: { errors: errorsSocial },
+        reset: resetSocial
+    } = useForm<SocialLinksFormData>({
         resolver: zodResolver(socialLinksSchema),
     });
 
-    // Load data on mount
+    // Load all data on mount
     useEffect(() => {
         loadData();
     }, []);
 
     const loadData = async () => {
+        const errors: string[] = [];
+
         try {
             setIsLoading(true);
+            setLoadingErrors([]);
 
-            // Load main profile
-            const profile = await profileService.getProfile();
-            setProfileData(profile);
-            resetMain({
-                headline: profile.headline || '',
-                bio: profile.bio || '',
-                location: profile.location || '',
-                phone: profile.phone || '',
-                website: profile.website || '',
-            });
+            // 1. Load organization registration data (organizationService)
+            try {
+                const orgData = await organizationService.getMyOrganization();
 
-            // Load organization-specific profile
-            const roleProfile = await roleProfileService.getOrganizationProfile();
-            setOrganizationRoleData(roleProfile);
+                if (orgData) {
+                    // Organization exists - edit mode
+                    setMode('edit');
+                    setOrganizationData(orgData);
 
-            // Load organization service profile
-            const orgProfile = await organizationService.getMyOrganization();
-            setOrganizationData(orgProfile);
+                    // Populate basic info form
+                    resetBasic({
+                        name: orgData.name,
+                        registrationNumber: orgData.registrationNumber,
+                        organizationType: orgData.organizationType as any,
+                        industry: orgData.industry,
+                    });
 
-            // Reset social links form
-            resetSocial(profile.socialLinks || {});
+                    // Populate organization details form
+                    resetDetails({
+                        description: orgData.description,
+                        mission: orgData.mission,
+                        address: orgData.address,
+                    });
 
-        } catch (error) {
-            console.error('Error loading data:', error);
-            toast.error('Failed to load profile data');
+                    // Populate contact info form
+                    resetContact({
+                        phone: orgData.phone,
+                        secondaryPhone: orgData.secondaryPhone,
+                        website: orgData.website,
+                        email: orgData.user?.email,
+                    });
+
+                    // Set image URLs from organization service if available
+                    if (orgData.logoFullUrl) setLogoUrl(orgData.logoFullUrl);
+                    if (orgData.bannerFullUrl) setBannerUrl(orgData.bannerFullUrl);
+                } else {
+                    // No organization exists - create mode
+                    setMode('create');
+                    setOrganizationData(null);
+                }
+            } catch (orgError: any) {
+                const errorMsg = orgError.message || 'Failed to load organization registration data';
+                errors.push(errorMsg);
+                console.warn('Organization service error:', orgError);
+            }
+
+            // 2. Load user profile data (profileService) - optional, can fail gracefully
+            try {
+                const profile = await profileService.getProfile();
+                setProfileData(profile);
+
+                // Populate social links form (ONLY social media, no website)
+                const socialLinks = profile.socialLinks || {};
+                const { ...socialMediaLinks } = socialLinks;
+                resetSocial(socialMediaLinks);
+
+                // Get profile completion if available
+                try {
+                    const completion = await profileService.getProfileCompletion();
+                    setProfileCompletion(completion.percentage);
+                } catch (completionError) {
+                    console.warn('Profile completion fetch failed, using fallback');
+                    // Use fallback completion based on available data
+                    const calculatedCompletion = calculateFallbackCompletion(profile);
+                    setProfileCompletion(calculatedCompletion);
+                }
+
+                // Update image URLs from profile if available
+                if (profile && !logoUrl) {
+                    const avatarUrl = profileService.getAvatarUrl(profile);
+                    if (avatarUrl) setLogoUrl(avatarUrl);
+                }
+                if (profile && !bannerUrl) {
+                    const coverUrl = profileService.getCoverUrl(profile);
+                    if (coverUrl) setBannerUrl(coverUrl);
+                }
+            } catch (profileError: any) {
+                const errorMsg = 'Profile data: ' + (profileError.message || 'Could not load');
+                errors.push(errorMsg);
+                console.warn('Profile service error:', profileError);
+            }
+
+            // 3. Load role-specific data (roleProfileService) - optional, can fail gracefully
+            try {
+                const roleProfile = await roleProfileService.getOrganizationProfile();
+                setRoleSpecificData(roleProfile);
+
+                // Prepare role-specific form data
+                const roleFormData: OrganizationRoleFormData = {
+                    companyInfo: roleProfile.companyInfo
+                };
+
+                resetRoleSpecific(roleFormData);
+
+                // Set values field as comma-separated string for display
+                if (roleProfile.companyInfo?.values && Array.isArray(roleProfile.companyInfo.values)) {
+                    setRoleSpecificValue('companyInfo.values', roleProfile.companyInfo.values);
+                }
+            } catch (roleError: any) {
+                const errorMsg = 'Organization profile: ' + (roleError.message || 'Could not load');
+                errors.push(errorMsg);
+                console.warn('Role profile service error:', roleError);
+            }
+
+        } catch (error: any) {
+            console.error('Unexpected error loading organization data:', error);
+            errors.push('Unexpected error loading data');
         } finally {
             setIsLoading(false);
+            if (errors.length > 0) {
+                setLoadingErrors(errors);
+                if (errors.length === 1 && errors[0].includes('Failed to load organization registration data')) {
+                    // This is expected when no organization exists yet
+                    console.log('No organization found - create mode');
+                } else {
+                    toast.error('Some data failed to load. You can still edit available fields.', {
+                        duration: 5000,
+                    });
+                }
+            }
         }
     };
 
-    const handleAvatarComplete = async (avatarUrl: string) => {
+    // Helper function to calculate fallback completion percentage
+    const calculateFallbackCompletion = (profile: Profile): number => {
+        let completion = 0;
+
+        // Check for basic fields
+        if (profile?.headline) completion += 20;
+        if (profile?.bio) completion += 15;
+        if (profile?.location) completion += 15;
+        if (profile?.avatar?.secure_url || profile?.user?.avatar) completion += 20;
+        if (profile?.cover?.secure_url) completion += 10;
+
+        // Check for social links
+        const socialLinks = profile?.socialLinks || {};
+        const socialLinksCount = Object.values(socialLinks).filter(link => link).length;
+        if (socialLinksCount > 0) completion += 10;
+
+        // Check for role-specific data
+        const roleSpecific = profile?.roleSpecific;
+        if (roleSpecific?.skills && roleSpecific.skills.length > 0) completion += 10;
+
+        return Math.min(completion, 100);
+    };
+
+    // ========== SERVICE-SPECIFIC HANDLERS ==========
+
+    // organizationService: Create/Update organization registration data
+    const handleBasicInfoSubmit = async (data: BasicInfoFormData) => {
         try {
-            await profileService.updateProfile({ avatar: avatarUrl });
-            setProfileData(prev => prev ? { ...prev, user: { ...prev.user, avatar: avatarUrl } } : null);
-            toast.success('Profile picture updated successfully');
+            setIsSubmitting(true);
+
+            if (mode === 'create') {
+                // Create new organization
+                const newOrg = await organizationService.createOrganization(data);
+                setOrganizationData(newOrg);
+                setMode('edit');
+                toast.success('Organization created successfully!');
+                if (onSuccess) onSuccess();
+            } else if (organizationData?._id) {
+                // Update existing organization
+                const updatedOrg = await organizationService.updateOrganization(organizationData._id, data);
+                setOrganizationData(updatedOrg);
+                toast.success('Organization updated successfully!');
+                if (onSuccess) onSuccess();
+            }
         } catch (error) {
-            toast.error('Failed to update profile picture');
+            // Error handling is done in organizationService
+            console.error('Organization service error:', error);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
-    const handleCoverComplete = async (coverUrl: string) => {
+    // organizationService: Update organization details
+    const handleOrganizationDetailsSubmit = async (data: OrganizationDetailsFormData) => {
         try {
-            await profileService.updateProfile({ coverPhoto: coverUrl });
-            setProfileData(prev => prev ? { ...prev, coverPhoto: coverUrl } : null);
-            toast.success('Cover photo updated successfully');
+            setIsSubmitting(true);
+
+            if (organizationData?._id) {
+                const updatedOrg = await organizationService.updateOrganization(organizationData._id, data);
+                setOrganizationData(updatedOrg);
+                toast.success('Organization details updated successfully!');
+                if (onSuccess) onSuccess();
+            }
         } catch (error) {
-            toast.error('Failed to update cover photo');
+            // Error handling is done in organizationService
+            console.error('Organization service error:', error);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
-    const handleMainProfileSubmit = async (data: MainProfileFormData) => {
+    // organizationService: Update contact information
+    const handleContactInfoSubmit = async (data: ContactInfoFormData) => {
         try {
-            setIsLoading(true);
-            await profileService.updateProfile(data);
-            toast.success('Main profile updated successfully');
+            setIsSubmitting(true);
+
+            if (organizationData?._id) {
+                const updatedOrg = await organizationService.updateOrganization(organizationData._id, data);
+                setOrganizationData(updatedOrg);
+                toast.success('Contact information updated successfully!');
+                if (onSuccess) onSuccess();
+            }
+        } catch (error) {
+            // Error handling is done in organizationService
+            console.error('Organization service error:', error);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    // roleProfileService: Update role-specific metadata
+    const handleRoleSpecificSubmit = async (data: OrganizationRoleFormData) => {
+        try {
+            setIsSubmitting(true);
+
+            // Convert comma-separated values string to array and build properly typed data
+            const companyInfoData = data.companyInfo ? { ...data.companyInfo } : undefined;
+
+            // Handle values field (convert comma-separated string to array)
+            let processedValues: string[] | undefined = undefined;
+            if (companyInfoData?.values) {
+                if (typeof companyInfoData.values === 'string') {
+                    processedValues = companyInfoData.values
+                        .split(',')
+                        .map((value: string) => value.trim())
+                        .filter((value: string) => value.length > 0);
+                } else if (Array.isArray(companyInfoData.values)) {
+                    processedValues = companyInfoData.values;
+                }
+            }
+
+            // Handle specialties field (convert comma-separated string to array)
+            let processedSpecialties: string[] | undefined = undefined;
+            if (companyInfoData?.specialties) {
+                if (typeof companyInfoData.specialties === 'string') {
+                    processedSpecialties = companyInfoData.specialties
+                        .split(',')
+                        .map((specialty: string) => specialty.trim())
+                        .filter((specialty: string) => specialty.length > 0);
+                } else if (Array.isArray(companyInfoData.specialties)) {
+                    processedSpecialties = companyInfoData.specialties;
+                }
+            }
+
+            // Build the properly typed update data
+            const updateData: Parameters<typeof roleProfileService.updateOrganizationProfile>[0] = {
+                companyInfo: companyInfoData ? {
+                    size: companyInfoData.size,
+                    foundedYear: companyInfoData.foundedYear,
+                    companyType: companyInfoData.companyType,
+                    mission: companyInfoData.mission,
+                    values: processedValues,
+                    culture: companyInfoData.culture,
+                    specialties: processedSpecialties,
+                } : undefined,
+            };
+
+            const updatedRoleData = await roleProfileService.updateOrganizationProfile(updateData);
+            setRoleSpecificData(updatedRoleData);
+            toast.success('Organization profile updated successfully!');
+
             if (onSuccess) onSuccess();
         } catch (error) {
-            toast.error('Failed to update main profile');
+            // Error handling is done in roleProfileService
+            console.error('Role profile service error:', error);
         } finally {
-            setIsLoading(false);
+            setIsSubmitting(false);
         }
     };
 
-    const handleOrganizationInfoSubmit = async (data: OrganizationInfoFormData) => {
-        try {
-            setIsLoading(true);
-            await roleProfileService.updateOrganizationProfile(data);
-            toast.success('Organization information updated successfully');
-            if (onSuccess) onSuccess();
-        } catch (error) {
-            toast.error('Failed to update organization information');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
+    // profileService: Update social links (ONLY social media, no website)
     const handleSocialLinksSubmit = async (data: SocialLinksFormData) => {
         try {
-            setIsLoading(true);
-            await profileService.updateSocialLinks(data as SocialLinks);
-            toast.success('Social links updated successfully');
+            setIsSubmitting(true);
+
+            // Filter out empty strings
+            const filteredSocialLinks: SocialLinks = {};
+            Object.entries(data).forEach(([key, value]) => {
+                if (value && value.trim() !== '') {
+                    filteredSocialLinks[key as keyof SocialLinks] = value;
+                }
+            });
+
+            const updatedSocialLinks = await profileService.updateSocialLinks(filteredSocialLinks);
+
+            // Update local profile data if available
+            if (profileData) {
+                setProfileData({
+                    ...profileData,
+                    socialLinks: updatedSocialLinks
+                });
+            }
+
+            toast.success('Social links updated successfully!');
+
             if (onSuccess) onSuccess();
         } catch (error) {
-            toast.error('Failed to update social links');
+            // Error handling is done in profileService
+            console.error('Profile service error:', error);
         } finally {
-            setIsLoading(false);
+            setIsSubmitting(false);
         }
     };
 
-    const handleOrganizationServiceSubmit = async () => {
+    // AvatarUploader: Handle logo upload
+    const handleLogoComplete = async (avatar: CloudinaryImage) => {
         try {
-            setIsLoading(true);
-            // This would be handled in a separate organization details form
-            toast.info('Organization registration details can be updated in Organization Settings');
+            // Update local state immediately for better UX
+            setLogoUrl(avatar.secure_url);
+
+            // Note: profileService.uploadAvatar is already called by AvatarUploader
+            // The actual update to the backend is handled by AvatarUploader
+
+            toast.success('Logo uploaded successfully!');
+
+            // Update profile completion if we have profile data
+            if (profileData) {
+                const calculatedCompletion = calculateFallbackCompletion({
+                    ...profileData,
+                    avatar: avatar
+                });
+                setProfileCompletion(calculatedCompletion);
+            }
         } catch (error) {
-            toast.error('Failed to update organization details');
-        } finally {
-            setIsLoading(false);
+            console.error('Error updating logo:', error);
         }
     };
 
-    if (isLoading && !profileData) {
+    // AvatarUploader: Handle banner upload
+    const handleBannerComplete = async (cover: CloudinaryImage) => {
+        try {
+            // Update local state immediately for better UX
+            setBannerUrl(cover.secure_url);
+
+            // Note: profileService.uploadCoverPhoto is already called by AvatarUploader
+            // The actual update to the backend is handled by AvatarUploader
+
+            toast.success('Banner uploaded successfully!');
+
+            // Update profile completion if we have profile data
+            if (profileData) {
+                const calculatedCompletion = calculateFallbackCompletion({
+                    ...profileData,
+                    cover: cover
+                });
+                setProfileCompletion(calculatedCompletion);
+            }
+        } catch (error) {
+            console.error('Error updating banner:', error);
+        }
+    };
+
+    if (isLoading) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            <div className="flex items-center justify-center min-h-[400px]">
+                <div className="text-center">
+                    <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+                    <p className={`${colorClasses.text.gray600}`}>Loading organization profile...</p>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
+        <div className="space-y-8">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Organization Profile</h2>
-                    <p className="text-gray-600 mt-1">Manage your organization's public profile and information</p>
+                    <h1 className={`text-2xl font-bold ${colorClasses.text.darkNavy}`}>
+                        {mode === 'create' ? 'Register Organization' : 'Organization Profile'}
+                    </h1>
+                    <p className={`${colorClasses.text.gray600} mt-1`}>
+                        {mode === 'create'
+                            ? 'Complete your organization registration to get started'
+                            : 'Manage your organization\'s public profile and information'}
+                    </p>
                 </div>
-                <div className="flex items-center gap-2">
-                    {onCancel && (
-                        <Button variant="outline" onClick={onCancel}>
-                            Cancel
-                        </Button>
-                    )}
-                </div>
+
+                {mode === 'edit' && (
+                    <div className="flex items-center gap-3">
+                        <div className={`px-3 py-1 rounded-full ${colorClasses.bg.blue} ${colorClasses.text.blue}`}>
+                            <span className="text-sm font-medium">Profile Complete: {profileCompletion}%</span>
+                        </div>
+                        {onCancel && (
+                            <button
+                                onClick={onCancel}
+                                className={`px-4 py-2 border rounded-lg hover:${colorClasses.bg.gray100} ${colorClasses.border.gray400} ${colorClasses.text.gray700}`}
+                            >
+                                Cancel
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
 
-            <Separator />
+            {/* Loading Errors Banner */}
+            {loadingErrors.length > 0 && mode === 'edit' && (
+                <div className={`p-4 rounded-lg border ${colorClasses.bg.goldenMustard} ${colorClasses.border.goldenMustard}`}>
+                    <div className="flex items-start gap-3">
+                        <div className="text-yellow-600">
+                            ⚠️
+                        </div>
+                        <div>
+                            <h4 className={`font-medium ${colorClasses.text.darkNavy}`}>Partial Data Loaded</h4>
+                            <p className={`text-sm ${colorClasses.text.gray700} mt-1`}>
+                                Some data failed to load: {loadingErrors.join('; ')}.
+                                You can still edit the available fields below.
+                            </p>
+                            <button
+                                onClick={loadData}
+                                className={`mt-2 text-sm ${colorClasses.text.blue} hover:underline`}
+                            >
+                                Try reloading data
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
-            {/* Avatar and Cover Uploader */}
-            <Card>
+            <Separator className={colorClasses.border.gray400} />
+
+            {/* Branding Section - AvatarUploader */}
+            <Card className={colorClasses.bg.white}>
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <User className="w-5 h-5" />
-                        Organization Images
+                    <CardTitle className={`flex items-center gap-2 ${colorClasses.text.darkNavy}`}>
+                        <Building2 className="w-5 h-5" />
+                        Organization Branding
                     </CardTitle>
-                    <CardDescription>
-                        Upload your organization logo and cover photo
+                    <CardDescription className={colorClasses.text.gray600}>
+                        Upload your organization logo and banner image
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <AvatarUploader
-                        currentAvatar={profileData?.user.avatar}
-                        currentCover={profileData?.coverPhoto as string}
-                        onAvatarComplete={handleAvatarComplete}
-                        onCoverComplete={handleCoverComplete}
+                        currentAvatar={logoUrl}
+                        currentCover={bannerUrl}
+                        onAvatarComplete={handleLogoComplete}
+                        onCoverComplete={handleBannerComplete}
                         type="both"
                         aspectRatio={{
                             avatar: '1:1',
                             cover: '16:9'
                         }}
+                        maxFileSize={{
+                            avatar: 5,
+                            cover: 10
+                        }}
+                        showHelperText={true}
+                        userId={organizationData?._id}
                     />
                 </CardContent>
             </Card>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="grid grid-cols-5 w-full">
-                    <TabsTrigger value="main" className="flex items-center gap-2">
-                        <User className="w-4 h-4" />
-                        Main Profile
-                    </TabsTrigger>
-                    <TabsTrigger value="organization" className="flex items-center gap-2">
-                        <Users className="w-4 h-4" />
-                        Organization Info
-                    </TabsTrigger>
-                    <TabsTrigger value="social" className="flex items-center gap-2">
-                        <Globe className="w-4 h-4" />
-                        Social Links
-                    </TabsTrigger>
-                    <TabsTrigger value="registration" className="flex items-center gap-2">
-                        <Shield className="w-4 h-4" />
-                        Registration
-                    </TabsTrigger>
-                    <TabsTrigger value="settings" className="flex items-center gap-2">
-                        <Settings className="w-4 h-4" />
-                        Settings
-                    </TabsTrigger>
-                </TabsList>
+            {/* Section 1: Basic Information - organizationService */}
+            <Card className={colorClasses.bg.white}>
+                <CardHeader>
+                    <CardTitle className={colorClasses.text.darkNavy}>Basic Information</CardTitle>
+                    <CardDescription className={colorClasses.text.gray600}>
+                        Core organization details for registration
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <form onSubmit={handleSubmitBasic(handleBasicInfoSubmit)} className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                    Organization Name *
+                                </label>
+                                <input
+                                    type="text"
+                                    {...registerBasic('name')}
+                                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
+                                    placeholder="e.g., Green Earth Initiative"
+                                    disabled={mode === 'edit'}
+                                />
+                                {errorsBasic.name && (
+                                    <p className="text-sm text-red-600">{errorsBasic.name.message}</p>
+                                )}
+                                {mode === 'edit' && (
+                                    <p className="text-xs text-gray-500">Organization name cannot be changed after registration</p>
+                                )}
+                            </div>
 
-                {/* Main Profile Tab */}
-                <TabsContent value="main" className="space-y-6">
-                    <Card>
+                            <div className="space-y-2">
+                                <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                    Registration Number
+                                </label>
+                                <input
+                                    type="text"
+                                    {...registerBasic('registrationNumber')}
+                                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
+                                    placeholder="e.g., 123456789"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                    Organization Type
+                                </label>
+                                <select
+                                    {...registerBasic('organizationType')}
+                                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
+                                >
+                                    <option value="">Select type</option>
+                                    {organizationService.getOrganizationTypeOptions().map(option => (
+                                        <option key={option.value} value={option.value}>
+                                            {option.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                    Industry/Sector
+                                </label>
+                                <input
+                                    type="text"
+                                    {...registerBasic('industry')}
+                                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
+                                    placeholder="e.g., Education, Environment, Healthcare"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end">
+                            <button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className={`px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
+                            >
+                                {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                                {mode === 'create' ? 'Register Organization' : 'Update Basic Info'}
+                            </button>
+                        </div>
+                    </form>
+                </CardContent>
+            </Card>
+
+            {/* Show remaining sections only in edit mode */}
+            {mode === 'edit' && (
+                <>
+                    {/* Section 2: Organization Details - organizationService */}
+                    <Card className={colorClasses.bg.white}>
                         <CardHeader>
-                            <CardTitle>Main Profile Information</CardTitle>
-                            <CardDescription>
-                                Basic information that appears on your organization profile
+                            <CardTitle className={`flex items-center gap-2 ${colorClasses.text.darkNavy}`}>
+                                <FileText className="w-5 h-5" />
+                                Organization Details
+                            </CardTitle>
+                            <CardDescription className={colorClasses.text.gray600}>
+                                Tell us about your organization`s work and impact
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <form onSubmit={handleSubmitMain(handleMainProfileSubmit)} className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <form onSubmit={handleSubmitDetails(handleOrganizationDetailsSubmit)} className="space-y-6">
+                                <div className="space-y-6">
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Organization Headline *
-                                        </label>
-                                        <input
-                                            type="text"
-                                            {...registerMain('headline')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="e.g., Leading Non-Profit in Education"
-                                        />
-                                        {errorsMain.headline && (
-                                            <p className="text-sm text-red-600">{errorsMain.headline.message}</p>
-                                        )}
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Location *
-                                        </label>
-                                        <input
-                                            type="text"
-                                            {...registerMain('location')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="e.g., New York, NY"
-                                        />
-                                        {errorsMain.location && (
-                                            <p className="text-sm text-red-600">{errorsMain.location.message}</p>
-                                        )}
-                                    </div>
-
-                                    <div className="space-y-2 md:col-span-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Organization Bio
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                            Description
                                         </label>
                                         <textarea
-                                            {...registerMain('bio')}
+                                            {...registerDetails('description')}
                                             rows={4}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="Tell us about your organization's work and impact..."
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
+                                            placeholder="Describe your organization's purpose, activities, and impact..."
                                         />
-                                        {errorsMain.bio && (
-                                            <p className="text-sm text-red-600">{errorsMain.bio.message}</p>
+                                        {errorsDetails.description && (
+                                            <p className="text-sm text-red-600">{errorsDetails.description.message}</p>
+                                        )}
+                                        <p className="text-xs text-gray-500">Max 1000 characters</p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                            Mission Statement
+                                        </label>
+                                        <textarea
+                                            {...registerDetails('mission')}
+                                            rows={3}
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
+                                            placeholder="What is your organization's core mission?"
+                                        />
+                                        {errorsDetails.mission && (
+                                            <p className="text-sm text-red-600">{errorsDetails.mission.message}</p>
                                         )}
                                         <p className="text-xs text-gray-500">Max 500 characters</p>
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Phone Number
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                            Address
                                         </label>
                                         <input
-                                            type="tel"
-                                            {...registerMain('phone')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="+1 (555) 123-4567"
+                                            type="text"
+                                            {...registerDetails('address')}
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
+                                            placeholder="e.g., 123 Main Street, City, State, ZIP Code"
                                         />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Website
-                                        </label>
-                                        <input
-                                            type="url"
-                                            {...registerMain('website')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="https://example.org"
-                                        />
-                                        {errorsMain.website && (
-                                            <p className="text-sm text-red-600">{errorsMain.website.message}</p>
-                                        )}
                                     </div>
                                 </div>
 
-                                <div className="flex justify-end gap-3">
-                                    <Button type="button" variant="outline" onClick={onCancel}>
-                                        Cancel
-                                    </Button>
-                                    <Button type="submit" disabled={isLoading}>
-                                        {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                        Save Changes
-                                    </Button>
+                                <div className="flex justify-end">
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className={`px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
+                                    >
+                                        {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                                        Save Details
+                                    </button>
                                 </div>
                             </form>
                         </CardContent>
                     </Card>
-                </TabsContent>
 
-                {/* Organization Information Tab */}
-                <TabsContent value="organization" className="space-y-6">
-                    <Card>
+                    {/* Section 3: Contact Information - organizationService */}
+                    <Card className={colorClasses.bg.white}>
                         <CardHeader>
-                            <CardTitle>Organization Details</CardTitle>
-                            <CardDescription>
-                                Detailed information about your organization
+                            <CardTitle className={`flex items-center gap-2 ${colorClasses.text.darkNavy}`}>
+                                <Phone className="w-5 h-5" />
+                                Contact Information
+                            </CardTitle>
+                            <CardDescription className={colorClasses.text.gray600}>
+                                How people can get in touch with your organization
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <form onSubmit={handleSubmitOrg(handleOrganizationInfoSubmit)} className="space-y-6">
+                            <form onSubmit={handleSubmitContact(handleContactInfoSubmit)} className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Organization Type
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                            Primary Phone
                                         </label>
-                                        <select
-                                            {...registerOrg('companyInfo.companyType')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                        >
-                                            <option value="">Select type</option>
-                                            <option value="association">Association</option>
-                                            <option value="non-profit">Non-Profit Organization</option>
-                                            <option value="government">Government Agency</option>
-                                            <option value="educational">Educational Institution</option>
-                                            <option value="healthcare">Healthcare Organization</option>
-                                            <option value="other">Other</option>
-                                        </select>
+                                        <input
+                                            type="tel"
+                                            {...registerContact('phone')}
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
+                                            placeholder="+1 (555) 123-4567"
+                                        />
+                                        {errorsContact.phone && (
+                                            <p className="text-sm text-red-600">{errorsContact.phone.message}</p>
+                                        )}
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                            Secondary Phone
+                                        </label>
+                                        <input
+                                            type="tel"
+                                            {...registerContact('secondaryPhone')}
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
+                                            placeholder="+1 (555) 987-6543"
+                                        />
+                                        {errorsContact.secondaryPhone && (
+                                            <p className="text-sm text-red-600">{errorsContact.secondaryPhone.message}</p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                            Website
+                                        </label>
+                                        <input
+                                            type="url"
+                                            {...registerContact('website')}
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
+                                            placeholder="https://example.org"
+                                        />
+                                        {errorsContact.website && (
+                                            <p className="text-sm text-red-600">{errorsContact.website.message}</p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                            Contact Email
+                                        </label>
+                                        <input
+                                            type="email"
+                                            {...registerContact('email')}
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
+                                            placeholder="contact@example.org"
+                                        />
+                                        {errorsContact.email && (
+                                            <p className="text-sm text-red-600">{errorsContact.email.message}</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end">
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className={`px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
+                                    >
+                                        {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                                        Save Contact Info
+                                    </button>
+                                </div>
+                            </form>
+                        </CardContent>
+                    </Card>
+
+                    {/* Section 4: Organization Profile - roleProfileService */}
+                    <Card className={colorClasses.bg.white}>
+                        <CardHeader>
+                            <CardTitle className={`flex items-center gap-2 ${colorClasses.text.darkNavy}`}>
+                                <Target className="w-5 h-5" />
+                                Organization Profile
+                            </CardTitle>
+                            <CardDescription className={colorClasses.text.gray600}>
+                                Additional organization-specific information
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <form onSubmit={handleSubmitRoleSpecific(handleRoleSpecificSubmit)} className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
                                             Organization Size
                                         </label>
                                         <select
-                                            {...registerOrg('companyInfo.size')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            {...registerRoleSpecific('companyInfo.size')}
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
                                         >
                                             <option value="">Select size</option>
                                             <option value="1-10">1-10 employees</option>
@@ -420,105 +896,125 @@ export const OrganizationProfileForm: React.FC<OrganizationProfileFormProps> = (
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
                                             Founded Year
                                         </label>
                                         <input
                                             type="number"
-                                            {...registerOrg('companyInfo.foundedYear', { valueAsNumber: true })}
+                                            {...registerRoleSpecific('companyInfo.foundedYear', { valueAsNumber: true })}
                                             min="1800"
                                             max={new Date().getFullYear()}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
                                             placeholder="2010"
                                         />
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Industry/Sector
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                            Organization Type (Profile)
+                                        </label>
+                                        <select
+                                            {...registerRoleSpecific('companyInfo.companyType')}
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
+                                        >
+                                            <option value="">Select type</option>
+                                            <option value="non-profit">Non-Profit Organization</option>
+                                            <option value="government">Government Agency</option>
+                                            <option value="educational">Educational Institution</option>
+                                            <option value="healthcare">Healthcare Organization</option>
+                                            <option value="startup">Startup</option>
+                                            <option value="small-business">Small Business</option>
+                                            <option value="medium-business">Medium Business</option>
+                                            <option value="large-enterprise">Large Enterprise</option>
+                                            <option value="multinational">Multinational</option>
+                                            <option value="community">Community Organization</option>
+                                            <option value="ngo">NGO</option>
+                                            <option value="charity">Charity</option>
+                                            <option value="association">Association</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="space-y-2 md:col-span-2">
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                            Core Values (comma separated)
                                         </label>
                                         <input
                                             type="text"
-                                            {...registerOrg('companyInfo.industry')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="e.g., Education, Healthcare, Environment"
+                                            {...registerRoleSpecific('companyInfo.values')}
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
+                                            placeholder="e.g., Integrity, Compassion, Innovation, Collaboration"
                                         />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Enter values separated by commas. Example: `Integrity, Compassion, Innovation, Collaboration``
+                                        </p>
                                     </div>
 
                                     <div className="space-y-2 md:col-span-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Mission Statement
-                                        </label>
-                                        <textarea
-                                            {...registerOrg('companyInfo.mission')}
-                                            rows={3}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="What is your organization's mission?"
-                                        />
-                                        <p className="text-xs text-gray-500">Max 500 characters</p>
-                                    </div>
-
-                                    <div className="space-y-2 md:col-span-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Core Values
-                                        </label>
-                                        <textarea
-                                            {...registerOrg('companyInfo.values')}
-                                            rows={3}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="List your organization's core values (comma-separated)"
-                                        />
-                                        <p className="text-xs text-gray-500">e.g., Integrity, Compassion, Innovation, Collaboration</p>
-                                    </div>
-
-                                    <div className="space-y-2 md:col-span-2">
-                                        <label className="text-sm font-medium text-gray-700">
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
                                             Organization Culture
                                         </label>
                                         <textarea
-                                            {...registerOrg('companyInfo.culture')}
+                                            {...registerRoleSpecific('companyInfo.culture')}
                                             rows={3}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
                                             placeholder="Describe your organization's culture and work environment..."
                                         />
                                         <p className="text-xs text-gray-500">Max 500 characters</p>
                                     </div>
+
+                                    <div className="space-y-2 md:col-span-2">
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                            Specialties (comma separated)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            {...registerRoleSpecific('companyInfo.specialties')}
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
+                                            placeholder="e.g., Environmental Conservation, Youth Education, Community Development"
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Enter specialties separated by commas
+                                        </p>
+                                    </div>
                                 </div>
 
-                                <div className="flex justify-end gap-3">
-                                    <Button type="button" variant="outline" onClick={() => resetOrg()}>
-                                        Reset
-                                    </Button>
-                                    <Button type="submit" disabled={isLoading}>
-                                        {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                        Save Organization Info
-                                    </Button>
+                                <div className="flex justify-end">
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className={`px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
+                                    >
+                                        {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                                        Save Profile Details
+                                    </button>
                                 </div>
                             </form>
                         </CardContent>
                     </Card>
-                </TabsContent>
 
-                {/* Social Links Tab */}
-                <TabsContent value="social" className="space-y-6">
-                    <Card>
+                    {/* Section 5: Social Links - profileService (ONLY social media) */}
+                    <Card className={colorClasses.bg.white}>
                         <CardHeader>
-                            <CardTitle>Social Media Links</CardTitle>
-                            <CardDescription>
-                                Add your organization's social media profiles
+                            <CardTitle className={`flex items-center gap-2 ${colorClasses.text.darkNavy}`}>
+                                <Link className="w-5 h-5" />
+                                Social Media Links
+                            </CardTitle>
+                            <CardDescription className={colorClasses.text.gray600}>
+                                Connect your organization`s social media profiles
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
                             <form onSubmit={handleSubmitSocial(handleSocialLinksSubmit)} className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            LinkedIn URL
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                            LinkedIn
                                         </label>
                                         <input
                                             type="url"
                                             {...registerSocial('linkedin')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
                                             placeholder="https://linkedin.com/company/your-organization"
                                         />
                                         {errorsSocial.linkedin && (
@@ -527,13 +1023,13 @@ export const OrganizationProfileForm: React.FC<OrganizationProfileFormProps> = (
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Twitter URL
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                            Twitter / X
                                         </label>
                                         <input
                                             type="url"
                                             {...registerSocial('twitter')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
                                             placeholder="https://twitter.com/your-organization"
                                         />
                                         {errorsSocial.twitter && (
@@ -542,13 +1038,13 @@ export const OrganizationProfileForm: React.FC<OrganizationProfileFormProps> = (
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Facebook URL
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                            Facebook
                                         </label>
                                         <input
                                             type="url"
                                             {...registerSocial('facebook')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
                                             placeholder="https://facebook.com/your-organization"
                                         />
                                         {errorsSocial.facebook && (
@@ -557,13 +1053,13 @@ export const OrganizationProfileForm: React.FC<OrganizationProfileFormProps> = (
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Instagram URL
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                            Instagram
                                         </label>
                                         <input
                                             type="url"
                                             {...registerSocial('instagram')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
                                             placeholder="https://instagram.com/your-organization"
                                         />
                                         {errorsSocial.instagram && (
@@ -571,246 +1067,72 @@ export const OrganizationProfileForm: React.FC<OrganizationProfileFormProps> = (
                                         )}
                                     </div>
 
-                                    <div className="space-y-2 md:col-span-2">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            Organization Website
+                                    <div className="space-y-2">
+                                        <label className={`text-sm font-medium ${colorClasses.text.gray800}`}>
+                                            YouTube
                                         </label>
                                         <input
                                             type="url"
-                                            {...registerSocial('website')}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="https://your-organization.org"
+                                            {...registerSocial('youtube')}
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${colorClasses.border.gray400}`}
+                                            placeholder="https://youtube.com/@your-organization"
                                         />
-                                        {errorsSocial.website && (
-                                            <p className="text-sm text-red-600">{errorsSocial.website.message}</p>
+                                        {errorsSocial.youtube && (
+                                            <p className="text-sm text-red-600">{errorsSocial.youtube.message}</p>
                                         )}
                                     </div>
                                 </div>
 
-                                <div className="flex justify-end gap-3">
-                                    <Button type="button" variant="outline" onClick={() => resetSocial({})}>
-                                        Clear All
-                                    </Button>
-                                    <Button type="submit" disabled={isLoading}>
-                                        {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                <div className="flex justify-end">
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className={`px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
+                                    >
+                                        {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                                         Save Social Links
-                                    </Button>
+                                    </button>
                                 </div>
                             </form>
                         </CardContent>
                     </Card>
-                </TabsContent>
+                </>
+            )}
 
-                {/* Registration Tab */}
-                <TabsContent value="registration" className="space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Organization Registration</CardTitle>
-                            <CardDescription>
-                                Legal and registration information
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {organizationData ? (
-                                <div className="space-y-6">
-                                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                                        <div className="flex items-center gap-3">
-                                            <Shield className="w-5 h-5 text-blue-600" />
-                                            <div>
-                                                <h4 className="font-medium text-blue-900">Organization Registration Complete</h4>
-                                                <p className="text-sm text-blue-700">
-                                                    Your organization is registered as: <strong>{organizationData.name}</strong>
-                                                    {organizationData.verified && (
-                                                        <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
-                                                            ✓ Verified
-                                                        </span>
-                                                    )}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium text-gray-700">
-                                                Organization Name
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={organizationData.name}
-                                                readOnly
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                                            />
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium text-gray-700">
-                                                Registration Number
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={organizationData.registrationNumber || 'Not provided'}
-                                                readOnly
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                                            />
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium text-gray-700">
-                                                Organization Type
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={organizationService.getOrganizationTypeLabel(organizationData.organizationType || '')}
-                                                readOnly
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                                            />
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium text-gray-700">
-                                                Registration Date
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={new Date(organizationData.createdAt).toLocaleDateString()}
-                                                readOnly
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="pt-4 border-t">
-                                        <p className="text-sm text-gray-600">
-                                            To update registration details, please contact support or visit the Organization Settings page.
-                                        </p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="text-center py-8">
-                                    <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Organization Registration Found</h3>
-                                    <p className="text-gray-600 mb-6">
-                                        You need to register your organization to access all features.
-                                    </p>
-                                    <Button onClick={handleOrganizationServiceSubmit}>
-                                        Register Organization
-                                    </Button>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* Settings Tab */}
-                <TabsContent value="settings" className="space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Profile Settings</CardTitle>
-                            <CardDescription>
-                                Manage your organization's profile visibility and preferences
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-6">
-                                <div className="space-y-4">
-                                    <h4 className="font-medium text-gray-900">Profile Visibility</h4>
-                                    <div className="space-y-3">
-                                        <div className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50">
-                                            <input type="radio" id="public" name="visibility" defaultChecked className="w-4 h-4" />
-                                            <div>
-                                                <label htmlFor="public" className="font-medium">Public</label>
-                                                <p className="text-sm text-gray-600">Anyone can view your organization profile</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50">
-                                            <input type="radio" id="connections" name="visibility" className="w-4 h-4" />
-                                            <div>
-                                                <label htmlFor="connections" className="font-medium">Partners Only</label>
-                                                <p className="text-sm text-gray-600">Only partner organizations can view full profile</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50">
-                                            <input type="radio" id="private" name="visibility" className="w-4 h-4" />
-                                            <div>
-                                                <label htmlFor="private" className="font-medium">Private</label>
-                                                <p className="text-sm text-gray-600">Only basic information is visible</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <Separator />
-
-                                <div className="space-y-4">
-                                    <h4 className="font-medium text-gray-900">Contact Preferences</h4>
-                                    <div className="space-y-3">
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <label className="font-medium">Allow Volunteer Applications</label>
-                                                <p className="text-sm text-gray-600">Allow users to apply as volunteers</p>
-                                            </div>
-                                            <input type="checkbox" defaultChecked className="w-4 h-4" />
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <label className="font-medium">Allow Donation Inquiries</label>
-                                                <p className="text-sm text-gray-600">Allow users to inquire about donations</p>
-                                            </div>
-                                            <input type="checkbox" defaultChecked className="w-4 h-4" />
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <label className="font-medium">Show Contact Information</label>
-                                                <p className="text-sm text-gray-600">Display email and phone number</p>
-                                            </div>
-                                            <input type="checkbox" className="w-4 h-4" />
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <label className="font-medium">Show Location</label>
-                                                <p className="text-sm text-gray-600">Display organization location</p>
-                                            </div>
-                                            <input type="checkbox" defaultChecked className="w-4 h-4" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <Separator />
-
-                                <div className="space-y-4">
-                                    <h4 className="font-medium text-gray-900">Impact Tracking</h4>
-                                    <div className="space-y-3">
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <label className="font-medium">Show Impact Metrics</label>
-                                                <p className="text-sm text-gray-600">Display organization impact data publicly</p>
-                                            </div>
-                                            <input type="checkbox" defaultChecked className="w-4 h-4" />
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <label className="font-medium">Annual Report Access</label>
-                                                <p className="text-sm text-gray-600">Allow public access to annual reports</p>
-                                            </div>
-                                            <input type="checkbox" className="w-4 h-4" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="pt-4">
-                                    <Button disabled={isLoading}>
-                                        {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                        Save Settings
-                                    </Button>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-            </Tabs>
+            {/* Create Mode Call to Action */}
+            {mode === 'create' && (
+                <div className={`p-6 rounded-lg border ${colorClasses.bg.blue} ${colorClasses.border.blue}`}>
+                    <div className="flex items-start gap-4">
+                        <Users className="w-8 h-8 text-blue-600 mt-1" />
+                        <div>
+                            <h3 className="font-semibold text-blue-900 mb-2">Ready to Register Your Organization?</h3>
+                            <p className={`text-sm ${colorClasses.text.gray700} mb-4`}>
+                                Start by filling out the Basic Information section above. Once registered, you`ll be able to:
+                            </p>
+                            <ul className="space-y-2 text-sm text-blue-800">
+                                <li className="flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                                    Upload your organization logo and banner
+                                </li>
+                                <li className="flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                                    Complete your organization profile details
+                                </li>
+                                <li className="flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                                    Connect social media accounts
+                                </li>
+                                <li className="flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                                    Start recruiting volunteers and partners
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
-export default OrganizationProfileForm;
+export default OrganizationProfileEditForm;

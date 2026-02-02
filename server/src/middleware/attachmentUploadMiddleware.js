@@ -1,36 +1,22 @@
-// middleware/attachmentUploadMiddleware.js - FIXED VERSION
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { uploadConfig } = require('../config/uploads');
 
-// Ensure upload directories exist
-const ensureUploadDirectories = () => {
-  const baseDir = path.join(process.cwd(), 'public', 'uploads');
-  const directories = [
-    path.join(baseDir, 'cv'),
-    path.join(baseDir, 'applications')
-  ];
+/**
+ * ATTACHMENT UPLOAD MIDDLEWARE
+ * For application attachments (references, experience documents)
+ */
 
-  directories.forEach(dir => {
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-      console.log(`📁 Created upload directory: ${dir}`);
-    }
-  });
-};
-
-ensureUploadDirectories();
-
-// Configure storage for different attachment types
+// Configure storage using centralized config
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    // All application files go to the same directory for simplicity
-    let uploadPath = path.join(process.cwd(), 'public', 'uploads', 'applications');
-    
+    // All application files go to 'applications' directory
+    const uploadPath = uploadConfig.getPath('applications');
     cb(null, uploadPath);
   },
   filename: function (req, file, cb) {
-    // Generate unique filename with timestamp and random string
+    // Generate unique filename with timestamp
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const fileExtension = path.extname(file.originalname);
     const baseName = path.basename(file.originalname, fileExtension)
@@ -40,7 +26,7 @@ const storage = multer.diskStorage({
       .substring(0, 50);
     
     const filename = `attachment-${baseName}-${uniqueSuffix}${fileExtension}`;
-    console.log(`📁 Saving file: ${filename}`);
+    console.log(`📁 Saving attachment: ${filename}`);
     cb(null, filename);
   }
 });
@@ -123,17 +109,9 @@ const handleAttachmentUploadError = (err, req, res, next) => {
   next(err);
 };
 
-// Helper function to get file URLs
+// Helper function to get file URLs using centralized config
 const getFileUrl = (filename, fileType = 'applications') => {
-  if (!filename) return null;
-  
-  const isProduction = process.env.NODE_ENV === 'production';
-  const baseUrl = isProduction 
-    ? 'https://getbananalink.com' 
-    : 'http://localhost:4000';
-  
-  // The path should be /uploads/... not /api/v1/uploads/...
-  return `${baseUrl}/uploads/${fileType}/${filename}`;
+  return uploadConfig.getUrl(filename, fileType);
 };
 
 // Helper function to process uploaded files
@@ -153,16 +131,8 @@ const processUploadedFiles = (files) => {
   // Process reference PDFs
   if (files.referencePdfs) {
     processedFiles.referencePdfs = files.referencePdfs.map(file => {
-      const fileData = {
-        filename: file.filename,
-        originalName: file.originalname,
-        path: file.path,
-        size: file.size,
-        mimetype: file.mimetype,
-        url: getFileUrl(file.filename, 'applications'),
-        uploadedAt: new Date()
-      };
-      console.log(`📄 Processed reference document: ${fileData.originalName} -> ${fileData.filename}`);
+      const fileData = uploadConfig.generateFileInfo(file, 'applications');
+      console.log(`📄 Processed reference document: ${fileData.originalname} -> ${fileData.filename}`);
       return fileData;
     });
   }
@@ -170,16 +140,8 @@ const processUploadedFiles = (files) => {
   // Process experience PDFs
   if (files.experiencePdfs) {
     processedFiles.experiencePdfs = files.experiencePdfs.map(file => {
-      const fileData = {
-        filename: file.filename,
-        originalName: file.originalname,
-        path: file.path,
-        size: file.size,
-        mimetype: file.mimetype,
-        url: getFileUrl(file.filename, 'applications'),
-        uploadedAt: new Date()
-      };
-      console.log(`📄 Processed experience document: ${fileData.originalName} -> ${fileData.filename}`);
+      const fileData = uploadConfig.generateFileInfo(file, 'applications');
+      console.log(`📄 Processed experience document: ${fileData.originalname} -> ${fileData.filename}`);
       return fileData;
     });
   }
@@ -202,10 +164,8 @@ const cleanupUploadedFiles = (files) => {
     if (Array.isArray(fileArray)) {
       fileArray.forEach(file => {
         try {
-          if (file.path && fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-            console.log(`🗑️ Deleted file: ${file.path}`);
-          }
+          // Use centralized delete function
+          uploadConfig.deleteFile(file.filename, 'applications');
         } catch (error) {
           console.error('❌ Error deleting file during cleanup:', error);
         }

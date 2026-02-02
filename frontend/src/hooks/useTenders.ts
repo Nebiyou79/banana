@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// src/hooks/useTenders.ts
+// src/hooks/useTenders.ts - UPDATED FOR CLOUDINARY
 import { useState, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
@@ -37,7 +37,11 @@ import {
   ViewMode,
   getViewModeFromStorage,
   saveViewModeToStorage,
-  sortTenders
+  sortTenders,
+  getCloudinaryDownloadUrl,
+  getCloudinaryPreviewUrl,
+  isCloudinaryAttachment,
+  TenderAttachment
 } from '@/services/tenderService';
 import {
   validateFreelanceTender,
@@ -106,6 +110,63 @@ export const useCPOUtils = () => {
   };
 };
 
+// ============ CLOUDINARY UTILITIES ============
+
+/**
+ * Hook for Cloudinary attachment utilities
+ */
+export const useCloudinaryUtils = () => {
+  // Get download URL for attachment
+  const getAttachmentDownloadUrl = useCallback((attachment: TenderAttachment): string => {
+    return getCloudinaryDownloadUrl(attachment);
+  }, []);
+
+  // Get preview URL for attachment
+  const getAttachmentPreviewUrl = useCallback((attachment: TenderAttachment): string => {
+    return getCloudinaryPreviewUrl(attachment);
+  }, []);
+
+  // Check if attachment is from Cloudinary
+  const isAttachmentFromCloudinary = useCallback((attachment: TenderAttachment): boolean => {
+    return isCloudinaryAttachment(attachment);
+  }, []);
+
+  // Download attachment
+  const downloadAttachment = useCallback(async (tenderId: string, attachmentId: string) => {
+    try {
+      const blob = await tenderService.downloadAttachment(tenderId, attachmentId);
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Get attachment info for filename
+      const attachment = await tenderService.getAttachmentInfo(tenderId, attachmentId);
+      link.setAttribute('download', attachment.originalName || 'attachment');
+      
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      
+      // Clean up URL
+      window.URL.revokeObjectURL(url);
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Error downloading attachment:', error);
+      return { success: false, error };
+    }
+  }, []);
+
+  return {
+    getAttachmentDownloadUrl,
+    getAttachmentPreviewUrl,
+    isAttachmentFromCloudinary,
+    downloadAttachment,
+  };
+};
+
 // ============ MAIN HOOKS ============
 
 /**
@@ -119,7 +180,7 @@ export const useTenders = (initialFilters?: TenderFilter) => {
     sortBy: 'createdAt',
     sortOrder: 'desc',
     ...initialFilters,
-    cpoRequired: initialFilters?.cpoRequired ?? false, // ensure boolean
+    cpoRequired: initialFilters?.cpoRequired ?? false,
   });
 
   const queryOptions: UseQueryOptions<TendersResponse, Error> = {
@@ -148,61 +209,6 @@ export const useTenders = (initialFilters?: TenderFilter) => {
 };
 
 /**
- * Hook for fetching a single tender with CPO info
- */
-
-// export const useTender = (id: string, options?: Partial<UseQueryOptions<SingleTenderResponse, Error>> & { isOwner?: boolean }) => {
-//   const { toast } = useToast();
-
-//   const queryKey = tenderKeys.detail(id);
-//   const queryFn = async () => {
-//     // Pass isOwner flag to the service function
-//     return await tenderService.getTender(id, { isOwner: options?.isOwner });
-//   };
-
-//   const queryOptions = {
-//     queryKey,
-//     queryFn,
-//     enabled: !!id,
-//     staleTime: 3 * 60 * 1000, // 3 minutes
-//     retry: (failureCount: number, error: any) => {
-//       // Don't retry on 403 errors
-//       if (error?.response?.status === 403) {
-//         return false;
-//       }
-//       // Retry up to 3 times for other errors
-//       return failureCount < 3;
-//     },
-//     onError: (error: Error) => {
-//       if ((error as any)?.response?.status === 403) {
-//         // Don't show toast for 403 errors - we'll handle it in the component
-//         return;
-//       }
-
-//       toast({
-//         title: 'Error loading tender',
-//         description: error.message || 'Failed to load tender details',
-//         variant: 'destructive',
-//       });
-//     },
-//     ...options,
-//   };
-
-//   const { data, isLoading, error, refetch, isFetching } = useQuery(queryOptions);
-
-//   const tender = data?.data?.tender;
-
-//   return {
-//     tender,
-//     rawTender: tender,
-//     canViewProposals: data?.data?.canViewProposals || false,
-//     isLoading: isLoading || isFetching,
-//     error,
-//     refetch,
-//   };
-// };
-
-/**
  * Hook for creating professional tenders with CPO support
  */
 export const useCreateProfessionalTender = () => {
@@ -211,10 +217,8 @@ export const useCreateProfessionalTender = () => {
 
   return useMutation({
     mutationFn: async ({ data, files }: { data: CreateProfessionalTenderData; files?: File[] }) => {
-      // Prepare CPO data
       const tenderData: CreateProfessionalTenderData = {
         ...data,
-        // Ensure CPO fields are properly included
         cpoRequired: data.cpoRequired || false,
         cpoDescription: data.cpoRequired ? data.cpoDescription || '' : undefined,
       };
@@ -222,7 +226,6 @@ export const useCreateProfessionalTender = () => {
       return await tenderService.createProfessionalTender(tenderData, files);
     },
     onSuccess: (response, variables) => {
-      // Invalidate relevant queries
       queryClient.invalidateQueries({ queryKey: tenderKeys.lists() });
       queryClient.invalidateQueries({ queryKey: tenderKeys.myTenders() });
 
@@ -244,11 +247,10 @@ export const useCreateProfessionalTender = () => {
   });
 };
 
-// ============ FREELANCE TENDER FORM HOOK WITH CPO ============
+// ============ FREELANCE TENDER FORM HOOK WITH CLOUDINARY ============
 
 /**
  * Hook for freelance tender form management
- * Note: CPO is not applicable for freelance tenders
  */
 export const useFreelanceTenderForm = () => {
   const [formData, setFormData] = useState<Partial<CreateFreelanceTenderData>>({});
@@ -300,7 +302,6 @@ export const useFreelanceTenderForm = () => {
       status: formData.status || 'draft',
       engagementType: formData.engagementType || 'fixed_price',
 
-      // Optional fields with defaults
       projectType: formData.projectType || constants.defaultSettings.freelance.defaultProjectType,
       skillsRequired: formData.skillsRequired,
       budget: formData.budget || { min: 0, max: 0, currency: 'USD' },
@@ -318,7 +319,6 @@ export const useFreelanceTenderForm = () => {
       maxFileSize: formData.maxFileSize,
       maxFileCount: formData.maxFileCount,
 
-      // File metadata
       fileDescriptions: files.length > 0 ? fileDescriptions : undefined,
       fileTypes: files.length > 0 ? fileTypes : undefined,
     };
@@ -348,7 +348,7 @@ export const useFreelanceTenderForm = () => {
   };
 };
 
-// ============ PROFESSIONAL TENDER FORM HOOK WITH CPO ============
+// ============ PROFESSIONAL TENDER FORM HOOK WITH CLOUDINARY ============
 
 /**
  * Hook for professional tender form management with CPO
@@ -422,11 +422,9 @@ export const useProfessionalTenderForm = () => {
       status: formData.status || 'draft',
       visibilityType: formData.visibilityType || 'public',
 
-      // CPO fields
       cpoRequired: formData.cpoRequired || false,
       cpoDescription: formData.cpoRequired ? formData.cpoDescription || '' : undefined,
 
-      // Optional fields
       procurementMethod: formData.procurementMethod,
       fundingSource: formData.fundingSource,
       skillsRequired: formData.skillsRequired,
@@ -450,7 +448,6 @@ export const useProfessionalTenderForm = () => {
       maxFileSize: formData.maxFileSize,
       maxFileCount: formData.maxFileCount,
 
-      // File metadata
       fileDescriptions: files.length > 0 ? fileDescriptions : undefined,
       fileTypes: files.length > 0 ? fileTypes : undefined,
     };
@@ -674,13 +671,11 @@ export const useTenderForEditing = (id: string) => {
   const query = useQuery({
     queryKey: ['tenderForEditing', id],
     queryFn: async () => {
-      console.log('✏️ [useTenderForEditing] Fetching tender for editing:', id);
       return await tenderService.getTenderForEditing(id);
     },
     enabled: !!id && !!user,
     retry: (failureCount, error: any) => {
       if (error?.response?.status === 403) {
-        console.log('⛔ [useTenderForEditing] Access denied, not retrying');
         return false;
       }
       return failureCount < 1;
@@ -760,13 +755,11 @@ export const useOwnerTender = (id: string) => {
   const query = useQuery({
     queryKey: ['ownerTender', id],
     queryFn: async () => {
-      console.log('👑 [useOwnerTender] Fetching owner tender:', id);
       return await tenderService.getOwnerTender(id);
     },
     enabled: !!id && !!user,
     retry: (failureCount, error: any) => {
       if (error?.response?.status === 403) {
-        console.log('⛔ [useOwnerTender] 403 error, not retrying');
         return false;
       }
       return failureCount < 1;
@@ -795,26 +788,17 @@ export const useCompanyTender = (id: string) => {
   const query = useQuery({
     queryKey: ['companyTender', id],
     queryFn: async () => {
-      console.log('🏢 [useCompanyTender] Fetching company tender:', id);
       const response = await tenderService.getTender(id, { isOwner: true });
       return response;
     },
     enabled: !!id && !!user && (user.role === 'company' || user.role === 'organization'),
     retry: (failureCount, error: any) => {
-      // Don't retry on 403 errors
       if (error?.response?.status === 403 || error?.message?.includes('Access denied')) {
-        console.log('⛔ [useCompanyTender] 403 error, not retrying');
         return false;
       }
-      // Retry only once for other errors
       return failureCount < 1;
     },
   });
-
-  // Handle errors in a separate effect or based on query status
-  // since onError is no longer standard in useQuery for v5 (if we were strictly following it)
-  // but if it works, we can keep it inside useQuery if types allow.
-  // The current code has it inside useQuery.
 
   return {
     tender: query.data?.data?.tender,
@@ -836,14 +820,12 @@ export const usePublicTender = (id: string) => {
   const query = useQuery({
     queryKey: ['publicTender', id],
     queryFn: async () => {
-      console.log('🌍 [usePublicTender] Fetching public tender:', id);
       const response = await tenderService.getTender(id, { isOwner: false });
       return response;
     },
     enabled: !!id,
     retry: (failureCount, error: any) => {
       if (error?.response?.status === 403 || error?.message?.includes('Access denied')) {
-        console.log('⛔ [usePublicTender] 403 error, not retrying');
         return false;
       }
       return failureCount < 1;
@@ -868,23 +850,16 @@ export const useTender = (id: string, options?: { isOwner?: boolean }) => {
   const query = useQuery({
     queryKey: ['tender', id, options?.isOwner],
     queryFn: async () => {
-      console.log('📄 [useTender] Fetching tender:', id, 'isOwner:', options?.isOwner);
-
-      // Auto-detect if this should be owner view
       const isOwnerView = options?.isOwner !== undefined
         ? options.isOwner
         : (user?.role === 'company' || user?.role === 'organization');
-
-      console.log('👤 [useTender] User role:', user?.role, 'isOwnerView:', isOwnerView);
 
       const response = await tenderService.getTender(id, { isOwner: isOwnerView });
       return response;
     },
     enabled: !!id,
     retry: (failureCount, error: any) => {
-      console.log('🔄 [useTender] Retry attempt:', failureCount, 'Error:', error?.message);
       if (error?.response?.status === 403 || error?.message?.includes('Access denied')) {
-        console.log('⛔ [useTender] 403 error, not retrying');
         return false;
       }
       return failureCount < 1;
@@ -900,6 +875,7 @@ export const useTender = (id: string, options?: { isOwner?: boolean }) => {
     refetch: query.refetch,
   };
 };
+
 /**
  * Hook for toggling tender save status
  */
@@ -963,23 +939,19 @@ export const useCategories = (type?: string, format?: string) => {
     queryFn: async () => {
       const response = await tenderService.getCategories(type as any, format as any);
 
-      // Normalize the response to always have groups
       if (type) {
-        // When type is specified, response has groups
         return {
           groups: response.groups || {},
           allCategories: response.allCategories || [],
           stats: response.stats
         };
       } else {
-        // When no type specified, choose based on context or return both
         return response;
       }
     },
     staleTime: 10 * 60 * 1000, // 10 minutes
   });
 };
-// Add this new hook to useTenders.ts:
 
 /**
  * Hook for handling category selection in forms
@@ -987,26 +959,22 @@ export const useCategories = (type?: string, format?: string) => {
 export const useTenderCategories = (tenderType: 'freelance' | 'professional') => {
   const { data: categoriesData, isLoading, error } = useCategories(tenderType, 'grouped');
 
-  // Extract the groups based on the tender type
   const groups = categoriesData?.groups || {};
 
-  // Convert groups to array format for dropdowns
   const categoryOptions = React.useMemo(() => {
     const options: Array<{ value: string; label: string; group?: string }> = [];
 
     Object.entries(groups).forEach(([groupKey, group]) => {
-      // Add a group header option
       options.push({
         value: `group_${groupKey}`,
         label: group.name,
-        group: 'header' // Mark as header
+        group: 'header'
       });
 
-      // Add subcategories
       group.subcategories.forEach(subcat => {
         options.push({
           value: subcat.id,
-          label: `  ${subcat.name}`, // Indent for visual hierarchy
+          label: `  ${subcat.name}`,
           group: group.name
         });
       });
@@ -1015,12 +983,10 @@ export const useTenderCategories = (tenderType: 'freelance' | 'professional') =>
     return options;
   }, [groups]);
 
-  // Get flat list of all category IDs
   const allCategories = React.useMemo(() => {
     return categoriesData?.allCategories || [];
   }, [categoriesData]);
 
-  // Find category by ID
   const findCategoryById = React.useCallback((categoryId: string) => {
     for (const [groupKey, group] of Object.entries(groups)) {
       const subcategory = group.subcategories.find(sub => sub.id === categoryId);
@@ -1045,6 +1011,7 @@ export const useTenderCategories = (tenderType: 'freelance' | 'professional') =>
     stats: categoriesData?.stats
   };
 };
+
 /**
  * Hook for invitation management
  */
@@ -1165,7 +1132,6 @@ export const useBulkOperations = () => {
   const exportTenders = useMutation({
     mutationFn: (filters?: TenderFilter) => tenderService.exportTenders(filters),
     onSuccess: (data) => {
-      // Create download link
       const url = window.URL.createObjectURL(data);
       const link = document.createElement('a');
       link.href = url;
@@ -1206,21 +1172,31 @@ export const useBulkOperations = () => {
     },
   };
 };
-// Add these hooks to your useTenders.ts:
+
+// ============ ATTACHMENT HOOKS WITH CLOUDINARY ============
 
 /**
- * Hook for downloading attachments
+ * Hook for downloading attachments with Cloudinary support
  */
 export const useDownloadAttachment = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const cloudinaryUtils = useCloudinaryUtils();
 
   return useMutation({
-    mutationFn: ({ tenderId, attachmentId }: { tenderId: string; attachmentId: string }) =>
-      tenderService.downloadAttachment(tenderId, attachmentId),
-    onSuccess: (blob, variables) => {
-      // Trigger a refetch of the tender to update any download counts
-      queryClient.invalidateQueries({ queryKey: tenderKeys.detail(variables.tenderId) });
+    mutationFn: async ({ tenderId, attachmentId }: { tenderId: string; attachmentId: string }) => {
+      return await cloudinaryUtils.downloadAttachment(tenderId, attachmentId);
+    },
+    onSuccess: (result, variables) => {
+      if (result.success) {
+        queryClient.invalidateQueries({ queryKey: tenderKeys.detail(variables.tenderId) });
+      } else {
+        toast({
+          title: 'Download Failed',
+          description: result.error?.message || 'Failed to download file',
+          variant: 'destructive',
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -1233,17 +1209,19 @@ export const useDownloadAttachment = () => {
 };
 
 /**
- * Hook for deleting attachments
+ * Hook for deleting attachments with Cloudinary support
  */
 export const useDeleteAttachment = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: ({ tenderId, attachmentId }: { tenderId: string; attachmentId: string }) =>
-      tenderService.deleteAttachment(tenderId, attachmentId),
+    mutationFn: ({ tenderId, attachmentId, cloudinaryPublicId }: { 
+      tenderId: string; 
+      attachmentId: string; 
+      cloudinaryPublicId?: string 
+    }) => tenderService.deleteAttachment(tenderId, attachmentId, cloudinaryPublicId),
     onSuccess: (_, variables) => {
-      // Invalidate tender query to reflect the deletion
       queryClient.invalidateQueries({ queryKey: tenderKeys.detail(variables.tenderId) });
 
       toast({
@@ -1263,7 +1241,7 @@ export const useDeleteAttachment = () => {
 };
 
 /**
- * Hook for uploading attachments
+ * Hook for uploading attachments with Cloudinary
  */
 export const useUploadAttachments = () => {
   const queryClient = useQueryClient();
@@ -1282,7 +1260,6 @@ export const useUploadAttachments = () => {
       types?: string[]
     }) => tenderService.uploadAttachments(tenderId, files, descriptions, types),
     onSuccess: (attachments, variables) => {
-      // Invalidate tender query to show new attachments
       queryClient.invalidateQueries({ queryKey: tenderKeys.detail(variables.tenderId) });
 
       toast({
@@ -1302,21 +1279,23 @@ export const useUploadAttachments = () => {
 };
 
 /**
- * Hook for getting attachment preview URL
+ * Hook for getting attachment preview URL with Cloudinary support
  */
 export const useAttachmentPreview = () => {
-  return useMutation({
-    mutationFn: ({ tenderId, attachmentId }: { tenderId: string; attachmentId: string }) =>
-      tenderService.previewAttachment(tenderId, attachmentId),
-  });
+  const cloudinaryUtils = useCloudinaryUtils();
+
+  return {
+    getPreviewUrl: cloudinaryUtils.getAttachmentPreviewUrl,
+    isCloudinaryAttachment: cloudinaryUtils.isAttachmentFromCloudinary,
+  };
 };
+
 // ============ UTILITY HOOKS ============
 
 /**
  * Hook for tender validation
  */
 export const useTenderValidation = () => {
-  // These are now using the imported validation functions
   return {
     validateFreelanceTender,
     validateProfessionalTender,
@@ -1335,16 +1314,15 @@ export const useTenderValidation = () => {
  */
 export const useTenderUtils = () => {
   const { toast } = useToast();
+  const cloudinaryUtils = useCloudinaryUtils();
 
   const checkFileUpload = useCallback((files: File[]) => {
     const errors: string[] = [];
 
-    // Check file count
     if (files.length > FILE_UPLOAD_CONSTRAINTS.maxFileCount) {
       errors.push(`Maximum ${FILE_UPLOAD_CONSTRAINTS.maxFileCount} files allowed`);
     }
 
-    // Check file sizes and types
     files.forEach((file, index) => {
       if (file.size > FILE_UPLOAD_CONSTRAINTS.maxFileSize) {
         errors.push(`${file.name} exceeds maximum file size of ${formatFileSize(FILE_UPLOAD_CONSTRAINTS.maxFileSize)}`);
@@ -1380,7 +1358,6 @@ export const useTenderUtils = () => {
   const formatTenderData = useCallback((data: any, type: 'freelance' | 'professional') => {
     const formatted = { ...data };
 
-    // Format dates
     if (formatted.deadline) {
       formatted.deadline = new Date(formatted.deadline).toISOString();
     }
@@ -1417,9 +1394,11 @@ export const useTenderUtils = () => {
     formatFileSize,
     checkFileUpload,
     formatTenderData,
+    getAttachmentDownloadUrl: cloudinaryUtils.getAttachmentDownloadUrl,
+    getAttachmentPreviewUrl: cloudinaryUtils.getAttachmentPreviewUrl,
+    isAttachmentFromCloudinary: cloudinaryUtils.isAttachmentFromCloudinary,
   };
 };
-// Add to the main hooks section in useTenders.ts
 
 /**
  * Hook for managing tender view mode
@@ -1429,7 +1408,6 @@ export const useTenderViewMode = (tenderType: 'freelance' | 'professional') => {
     getViewModeFromStorage(tenderType)
   );
 
-  // Update view mode
   const updateViewMode = useCallback((newMode: Partial<ViewMode>) => {
     setViewMode(prev => {
       const updated = { ...prev, ...newMode };
@@ -1438,17 +1416,6 @@ export const useTenderViewMode = (tenderType: 'freelance' | 'professional') => {
     });
   }, [tenderType]);
 
-  // // Toggle between grid and list
-  // const toggleViewMode = useCallback(() => {
-  //   setViewMode(prev => {
-  //     const newMode = prev.type === 'grid' ? 'list' : 'grid';
-  //     const updated = { ...prev, type: newMode };
-  //     saveViewModeToStorage(tenderType, updated);
-  //     return updated;
-  //   });
-  // }, [tenderType]);
-
-  // Change card size
   const setCardSize = useCallback((size: 'small' | 'medium' | 'large') => {
     setViewMode(prev => {
       const updated = { ...prev, cardSize: size };
@@ -1460,7 +1427,6 @@ export const useTenderViewMode = (tenderType: 'freelance' | 'professional') => {
   return {
     viewMode,
     updateViewMode,
-    // toggleViewMode,
     setCardSize,
     isGridView: viewMode.type === 'grid',
     isListView: viewMode.type === 'list',
@@ -1498,14 +1464,12 @@ export const useTenderSorting = (tenders: Tender[]) => {
 
   const updateSort = useCallback((sortBy: string, sortOrder?: 'asc' | 'desc') => {
     setSortConfig(prev => {
-      // If same column clicked, toggle order
       if (sortBy === prev.sortBy) {
         return {
           sortBy,
           sortOrder: prev.sortOrder === 'asc' ? 'desc' : 'asc',
         };
       }
-      // Otherwise, set new column with default order
       return {
         sortBy,
         sortOrder: sortOrder || 'desc',
@@ -1519,6 +1483,7 @@ export const useTenderSorting = (tenders: Tender[]) => {
     updateSort,
   };
 };
+
 /**
  * Hook for getting tender constants
  */

@@ -1,236 +1,770 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// components/social/post/PostActions.tsx
-import React, { useState } from 'react';
-import { Heart, MessageCircle, Share2, Bookmark, Flag, MoreVertical } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
-import { likeService, ReactionType } from '@/services/likeService';
+// components/social/post/PostActions.tsx - FACEBOOK-STYLE VERSION
+import React, { useState, useEffect, useRef } from 'react';
+import {
+    MessageCircle, Share2, Bookmark, Eye
+} from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useMediaQuery } from '@/hooks/use-media-query';
+import { likeService, ReactionType } from '@/services/likeService';
+import { postService } from '@/services/postService';
 
 interface PostActionsProps {
     post: any;
+    currentUserId?: string;
     onLike?: (reaction?: ReactionType) => void;
+    onDislike?: () => void;
     onComment?: () => void;
     onShare?: () => void;
     onSave?: () => void;
-    isLiked?: boolean;
-    likeCount?: number;
-    commentCount?: number;
-    shareCount?: number;
-    currentReaction?: ReactionType | null;
+    onReactionChange?: (reaction: ReactionType) => void;
+    showDislike?: boolean;
+    onInteractionUpdate?: (interaction: {
+        interactionType: 'reaction' | 'dislike';
+        value: ReactionType | 'dislike';
+    } | null) => void;
 }
+
+// Facebook-style reaction bar component
+const ReactionBar: React.FC<{
+    onSelect: (reaction: ReactionType) => void;
+    onClose: () => void;
+    currentReaction?: ReactionType | null;
+    parentRef: React.RefObject<any>;
+}> = ({ onSelect, onClose, currentReaction, parentRef }) => {
+    const reactions = likeService.getAllReactionTypes();
+    const [isVisible, setIsVisible] = useState(false);
+    const [hoveredReaction, setHoveredReaction] = useState<ReactionType | null>(null);
+    const barRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setIsVisible(true);
+        const handleClickOutside = (event: MouseEvent) => {
+            if (barRef.current && !barRef.current.contains(event.target as Node)) {
+                onClose();
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [onClose]);
+
+    // Position the bar relative to parent
+    const getBarStyle = () => {
+        if (!parentRef.current) return {};
+
+        const parentRect = parentRef.current.getBoundingClientRect();
+
+        return {
+            position: 'absolute' as const,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            bottom: `calc(100% + 10px)`,
+            zIndex: 50,
+        };
+    };
+
+    return (
+        <div
+            ref={barRef}
+            className={`transform transition-all duration-300 ease-out ${isVisible
+                ? 'opacity-100 scale-100 translate-y-0'
+                : 'opacity-0 scale-90 translate-y-4'
+                }`}
+            style={getBarStyle()}
+            onMouseEnter={() => {
+                // Keep bar open when mouse enters reaction bar
+            }}
+            onMouseLeave={onClose}
+        >
+            {/* Facebook-style reaction bar */}
+            <div className="bg-white dark:bg-gray-900 rounded-full shadow-2xl border border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center gap-2">
+                {reactions.map((reaction) => (
+                    <button
+                        key={reaction.type}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onSelect(reaction.type);
+                            onClose();
+                        }}
+                        onMouseEnter={() => setHoveredReaction(reaction.type)}
+                        onMouseLeave={() => setHoveredReaction(null)}
+                        className={`p-1 transform transition-all duration-200 ${currentReaction === reaction.type || hoveredReaction === reaction.type
+                            ? 'scale-125 -translate-y-2'
+                            : 'hover:scale-110 hover:-translate-y-1'
+                            }`}
+                        aria-label={reaction.label}
+                        title={reaction.label}
+                    >
+                        <span className={`text-2xl transition-transform duration-200 ${hoveredReaction === reaction.type ? 'scale-110' : ''}`}>
+                            {reaction.emoji}
+                        </span>
+                    </button>
+                ))}
+            </div>
+
+            {/* Tooltip for hovered reaction */}
+            {hoveredReaction && (
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded-md whitespace-nowrap">
+                    {likeService.getReactionLabel(hoveredReaction)}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// Custom SVG for Like button (Facebook-style)
+const LikeIcon: React.FC<{ isActive: boolean; hasReaction: boolean; reactionEmoji?: string }> = ({
+    isActive,
+    hasReaction,
+    reactionEmoji
+}) => {
+    if (hasReaction && reactionEmoji) {
+        return (
+            <div className="relative">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1.91l-.01-.01L23 10z" />
+                </svg>
+                <span className="absolute -top-2 -right-2 text-lg">
+                    {reactionEmoji}
+                </span>
+            </div>
+        );
+    }
+
+    return isActive ? (
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1.91l-.01-.01L23 10z" />
+        </svg>
+    ) : (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
+        </svg>
+    );
+};
+
+// Custom SVG for Dislike button
+const DislikeIcon: React.FC<{ isActive: boolean }> = ({ isActive }) => {
+    return isActive ? (
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M3 12v2h9l-1.34 5.34L15 15V5H6z" />
+        </svg>
+    ) : (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018a2 2 0 01.485.06l3.76.94m-7 10v5a2 2 0 002 2h.096c.5 0 .905-.405.905-.904 0-.715.211-1.413.608-2.008L17 13V4m-7 10h2m5-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2.5" />
+        </svg>
+    );
+};
 
 export const PostActions: React.FC<PostActionsProps> = ({
     post,
+    currentUserId,
     onLike,
+    onDislike,
     onComment,
     onShare,
-    isLiked = false,
-    likeCount = 0,
-    commentCount = 0,
-    shareCount = 0,
-    currentReaction = null
+    onSave,
+    onReactionChange,
+    showDislike = true,
+    onInteractionUpdate,
 }) => {
-    const [showReactions, setShowReactions] = useState(false);
-    const [showShareMenu, setShowShareMenu] = useState(false);
-    const [showReportDialog, setShowReportDialog] = useState(false);
-    const [isSaved, setIsSaved] = useState(false);
+    const [showReactionBar, setShowReactionBar] = useState(false);
+    const [isSaved, setIsSaved] = useState(post?.isSaved || false);
+    const [userInteraction, setUserInteraction] = useState(post?.userInteraction || null);
+    const [isLoading, setIsLoading] = useState(false);
     const { toast } = useToast();
+    const isMobile = useMediaQuery('(max-width: 768px)');
+    const likeButtonRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    const handleReactionClick = (reaction: ReactionType) => {
-        if (onLike) onLike(reaction);
-        setShowReactions(false);
+    // Cleanup timeouts on unmount
+    useEffect(() => {
+        return () => {
+            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+            if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+            if (longPressTimeoutRef.current) clearTimeout(longPressTimeoutRef.current);
+        };
+    }, []);
+
+    // Update local state when props change
+    useEffect(() => {
+        if (post?.userInteraction !== undefined) {
+            setUserInteraction(post.userInteraction);
+        }
+        if (post?.isSaved !== undefined) {
+            setIsSaved(post.isSaved);
+        }
+    }, [post]);
+
+    // Get stats from post with fallbacks - starting from 0
+    const likeCount = post?.stats?.likes || 0;
+    const dislikeCount = post?.stats?.dislikes || 0;
+    const commentCount = post?.stats?.comments || 0;
+    const shareCount = post?.stats?.shares || 0;
+    const saveCount = post?.stats?.saves || 0;
+    const viewCount = post?.stats?.views || 0;
+
+    // Get current reaction from user interaction
+    const getCurrentReaction = (): ReactionType | null => {
+        if (userInteraction?.interactionType === 'reaction') {
+            return userInteraction.value as ReactionType;
+        }
+        return null;
     };
 
-    const handleLikeClick = (e: React.MouseEvent) => {
+    // Get current reaction emoji
+    const getCurrentReactionEmoji = () => {
+        const currentReaction = getCurrentReaction();
+        if (currentReaction) {
+            return likeService.getReactionEmoji(currentReaction);
+        }
+        return null;
+    };
+
+    // Get current reaction label
+    const getCurrentReactionLabel = () => {
+        const currentReaction = getCurrentReaction();
+        if (currentReaction) {
+            return likeService.getReactionLabel(currentReaction);
+        }
+        return 'Like';
+    };
+
+    // Get color based on current reaction
+    const getReactionColor = () => {
+        const currentReaction = getCurrentReaction();
+        if (currentReaction) {
+            switch (currentReaction) {
+                case 'heart': return 'text-red-600 dark:text-red-400';
+                case 'celebrate': return 'text-yellow-600 dark:text-yellow-400';
+                case 'percent_100': return 'text-green-600 dark:text-green-400';
+                case 'clap': return 'text-orange-600 dark:text-orange-400';
+                case 'like':
+                default: return 'text-blue-600 dark:text-blue-400';
+            }
+        }
+        return 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400';
+    };
+
+    // Handle hover to show reaction bar
+    const handleLikeMouseEnter = () => {
+        if (isMobile || showReactionBar) return;
+
+        if (hideTimeoutRef.current) {
+            clearTimeout(hideTimeoutRef.current);
+        }
+
+        hoverTimeoutRef.current = setTimeout(() => {
+            setShowReactionBar(true);
+        }, 300);
+    };
+
+    const handleLikeMouseLeave = () => {
+        if (hoverTimeoutRef.current) {
+            clearTimeout(hoverTimeoutRef.current);
+        }
+
+        if (!isMobile && showReactionBar) {
+            // Only hide after delay when mouse leaves completely
+            hideTimeoutRef.current = setTimeout(() => {
+                setShowReactionBar(false);
+            }, 500);
+        }
+    };
+
+    // Handle long press for mobile
+    const handleLikeTouchStart = () => {
+        if (!isMobile) return;
+
+        longPressTimeoutRef.current = setTimeout(() => {
+            setShowReactionBar(true);
+        }, 500);
+    };
+
+    const handleLikeTouchEnd = () => {
+        if (longPressTimeoutRef.current) {
+            clearTimeout(longPressTimeoutRef.current);
+        }
+    };
+
+    // Handle like/reaction click
+    const handleLikeClick = async (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        if (onLike) onLike('like');
+
+        if (isLoading) return;
+
+        setIsLoading(true);
+
+        try {
+            const currentReaction = getCurrentReaction();
+            const hasDislike = userInteraction?.interactionType === 'dislike';
+
+            if (hasDislike) {
+                // User has dislike, need to remove it first
+                if (onDislike) onDislike();
+
+                // Then add default like
+                if (onReactionChange) {
+                    onReactionChange('like');
+                } else if (onLike) {
+                    onLike('like');
+                }
+
+                const newInteraction = {
+                    interactionType: 'reaction' as const,
+                    value: 'like' as ReactionType
+                };
+                setUserInteraction(newInteraction);
+                if (onInteractionUpdate) {
+                    onInteractionUpdate(newInteraction);
+                }
+
+                toast({
+                    variant: "success",
+                    title: "Liked",
+                    duration: 1500
+                });
+            } else if (currentReaction) {
+                // User already has a reaction - remove it
+                if (onLike) onLike(undefined); // Pass undefined to indicate removal
+
+                const newInteraction = null;
+                setUserInteraction(newInteraction);
+                if (onInteractionUpdate) {
+                    onInteractionUpdate(newInteraction);
+                }
+
+                toast({
+                    variant: "info",
+                    title: "Reaction removed",
+                    duration: 1500
+                });
+            } else {
+                // No interaction - add default like
+                if (onReactionChange) {
+                    onReactionChange('like');
+                } else if (onLike) {
+                    onLike('like');
+                }
+
+                const newInteraction = {
+                    interactionType: 'reaction' as const,
+                    value: 'like' as ReactionType
+                };
+                setUserInteraction(newInteraction);
+                if (onInteractionUpdate) {
+                    onInteractionUpdate(newInteraction);
+                }
+
+                toast({
+                    variant: "success",
+                    title: "Liked",
+                    duration: 1500
+                });
+            }
+
+            setShowReactionBar(false);
+        } catch (error: any) {
+            console.error('Failed to handle like:', error);
+            // Rollback state on error
+            if (userInteraction) {
+                setUserInteraction(userInteraction);
+            }
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to update reaction"
+            });
+        } finally {
+            setTimeout(() => {
+                setIsLoading(false);
+            }, 300);
+        }
     };
 
+    // Handle reaction selection from bar
+    const handleReactionSelect = async (reaction: ReactionType) => {
+        if (isLoading) return;
+
+        setIsLoading(true);
+
+        try {
+            const currentReaction = getCurrentReaction();
+            const hasDislike = userInteraction?.interactionType === 'dislike';
+
+            if (hasDislike) {
+                // If user has dislike, remove it first
+                if (onDislike) onDislike();
+            }
+
+            if (currentReaction === reaction) {
+                // Clicking same reaction - remove it
+                if (onLike) onLike(undefined);
+
+                const newInteraction = null;
+                setUserInteraction(newInteraction);
+                if (onInteractionUpdate) {
+                    onInteractionUpdate(newInteraction);
+                }
+
+                toast({
+                    variant: "info",
+                    title: "Reaction removed",
+                    duration: 1500
+                });
+            } else {
+                // Add new reaction
+                if (onReactionChange) {
+                    onReactionChange(reaction);
+                } else if (onLike) {
+                    onLike(reaction);
+                }
+
+                const newInteraction = {
+                    interactionType: 'reaction' as const,
+                    value: reaction
+                };
+                setUserInteraction(newInteraction);
+                if (onInteractionUpdate) {
+                    onInteractionUpdate(newInteraction);
+                }
+
+                // Show success feedback
+                const reactionLabel = likeService.getReactionLabel(reaction);
+                toast({
+                    variant: "success",
+                    title: `${reactionLabel}`,
+                    duration: 1500
+                });
+            }
+
+            setShowReactionBar(false);
+        } catch (error: any) {
+            console.error('Failed to set reaction:', error);
+            // Rollback state on error
+            if (userInteraction) {
+                setUserInteraction(userInteraction);
+            }
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to add reaction"
+            });
+        } finally {
+            setTimeout(() => {
+                setIsLoading(false);
+            }, 300);
+        }
+    };
+
+    // Handle dislike click
+    const handleDislikeClick = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (isLoading) return;
+
+        setIsLoading(true);
+        try {
+            const hasDislike = userInteraction?.interactionType === 'dislike';
+            const hasReaction = userInteraction?.interactionType === 'reaction';
+
+            if (hasDislike) {
+                // Remove dislike
+                if (onDislike) onDislike();
+                const newInteraction = null;
+                setUserInteraction(newInteraction);
+                if (onInteractionUpdate) {
+                    onInteractionUpdate(newInteraction);
+                }
+
+                toast({
+                    variant: "info",
+                    title: "Dislike removed",
+                    duration: 1500
+                });
+            } else {
+                // Add dislike (remove any existing reaction first if exists)
+                if (hasReaction && onLike) {
+                    onLike(undefined); // Remove the reaction
+                }
+
+                if (onDislike) onDislike();
+                const newInteraction = {
+                    interactionType: 'dislike' as const,
+                    value: 'dislike' as const
+                };
+                setUserInteraction(newInteraction);
+                if (onInteractionUpdate) {
+                    onInteractionUpdate(newInteraction);
+                }
+
+                toast({
+                    variant: "info",
+                    title: "Disliked",
+                    duration: 1500
+                });
+            }
+        } catch (error: any) {
+            console.error('Failed to handle dislike:', error);
+            // Rollback state on error
+            if (userInteraction) {
+                setUserInteraction(userInteraction);
+            }
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to update reaction"
+            });
+        } finally {
+            setTimeout(() => {
+                setIsLoading(false);
+            }, 300);
+        }
+    };
+
+    // Handle comment click
     const handleCommentClick = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
         if (onComment) onComment();
     };
 
+    // Handle share click
     const handleShareClick = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        setShowShareMenu(!showShareMenu);
+        if (onShare) onShare();
     };
 
-    const handleSaveClick = async () => {
-        setIsSaved(!isSaved);
-        toast({
-            variant: isSaved ? "info" : "success",
-            title: isSaved ? "Unsaved" : "Saved",
-            description: isSaved
-                ? "Post removed from saved"
-                : "Post saved to collection"
-        });
+    // Handle save click
+    const handleSaveClick = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (isLoading) return;
+
+        setIsLoading(true);
+        const previousSavedState = isSaved;
+        const newSavedState = !isSaved;
+
+        try {
+            setIsSaved(newSavedState);
+            if (onSave) onSave();
+
+            // Call postService methods for actual saving
+            if (newSavedState) {
+                await postService.savePost(post._id);
+            } else {
+                await postService.unsavePost(post._id);
+            }
+
+            toast({
+                variant: newSavedState ? "success" : "info",
+                title: newSavedState ? "Saved" : "Unsaved",
+                description: newSavedState
+                    ? "Post saved to your collection"
+                    : "Post removed from saved",
+                duration: 1500
+            });
+        } catch (error: any) {
+            // Rollback on error
+            setIsSaved(previousSavedState);
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: error.message || "Failed to save post"
+            });
+        } finally {
+            setTimeout(() => {
+                setIsLoading(false);
+            }, 300);
+        }
     };
 
-    const handleCopyLink = () => {
-        navigator.clipboard.writeText(`${window.location.origin}/post/${post._id}`);
-        setShowShareMenu(false);
-        toast({
-            variant: "success",
-            title: "Link copied",
-            description: "Post link copied to clipboard"
-        });
+    // Keep reaction bar open when mouse is over it
+    const handleReactionBarMouseEnter = () => {
+        if (hideTimeoutRef.current) {
+            clearTimeout(hideTimeoutRef.current);
+        }
     };
 
-    const handleReport = async (reason: string) => {
-        console.log('Reporting post:', post._id, 'Reason:', reason);
-        setShowReportDialog(false);
-        toast({
-            variant: "success",
-            title: "Report submitted",
-            description: "Our team will review it."
-        });
+    const handleReactionBarMouseLeave = () => {
+        if (!isMobile) {
+            hideTimeoutRef.current = setTimeout(() => {
+                setShowReactionBar(false);
+            }, 500);
+        }
     };
 
-    const getCurrentReactionEmoji = () => {
-        if (currentReaction) return likeService.getReactionEmoji(currentReaction);
-        return isLiked ? '❤️' : '🤍';
-    };
+    const hasReaction = userInteraction?.interactionType === 'reaction';
+    const currentReaction = getCurrentReaction();
+    const currentReactionEmoji = getCurrentReactionEmoji();
+    const currentReactionLabel = getCurrentReactionLabel();
+    const hasDislike = userInteraction?.interactionType === 'dislike';
 
     return (
-        <div className="px-2 py-1.5 border-t border-gray-100">
-            <div className="flex items-center justify-between">
-                {/* Left Actions */}
-                <div className="flex items-center gap-0.5">
-                    {/* Reaction button */}
-                    <div className="relative">
-                        <button
-                            onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setShowReactions(!showReactions);
-                            }}
-                            className={`p-1.5 rounded-lg hover:bg-gray-100 ${currentReaction || isLiked ? 'text-red-600 hover:text-red-700' : 'text-gray-600 hover:text-gray-900'}`}
+        <div ref={containerRef} className="relative px-4 py-3">
+            <div className="flex items-center justify-between gap-4">
+                {/* Left Actions - Reactions, Dislike, Comment, Share */}
+                <div className="flex items-center gap-4">
+                    {/* Like button with reaction bar */}
+                    <div
+                        ref={likeButtonRef}
+                        className="relative"
+                        onMouseEnter={handleLikeMouseEnter}
+                        onMouseLeave={handleLikeMouseLeave}
+                        onTouchStart={handleLikeTouchStart}
+                        onTouchEnd={handleLikeTouchEnd}
+                    >
+                        <div
+                            onClick={handleLikeClick}
+                            className={`flex items-center gap-2 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200 cursor-pointer ${getReactionColor()} ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            aria-label={currentReactionLabel}
+                            title={currentReactionLabel}
                         >
-                            <span className="text-lg">{getCurrentReactionEmoji()}</span>
-                        </button>
+                            <LikeIcon
+                                isActive={hasReaction}
+                                hasReaction={hasReaction}
+                                reactionEmoji={currentReactionEmoji || undefined}
+                            />
+                            {!isMobile && (
+                                <span className="text-sm font-medium">
+                                    {currentReactionLabel}
+                                </span>
+                            )}
+                        </div>
 
-                        {showReactions && (
-                            <div className="absolute bottom-full left-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 flex gap-1 z-20">
-                                {likeService.getAllReactionTypes().map(({ type, emoji, label }) => (
-                                    <button
-                                        key={type}
-                                        onClick={() => handleReactionClick(type)}
-                                        className="p-1 hover:bg-gray-100 rounded-full hover:scale-125 transition-transform"
-                                        title={label}
-                                    >
-                                        <span className="text-xl">{emoji}</span>
-                                    </button>
-                                ))}
+                        {/* Facebook-style reaction bar positioned relative to container */}
+                        {showReactionBar && containerRef.current && (
+                            <div
+                                onMouseEnter={handleReactionBarMouseEnter}
+                                onMouseLeave={handleReactionBarMouseLeave}
+                            >
+                                <ReactionBar
+                                    onSelect={handleReactionSelect}
+                                    onClose={() => setShowReactionBar(false)}
+                                    currentReaction={currentReaction}
+                                    parentRef={containerRef}
+                                />
                             </div>
                         )}
                     </div>
 
+                    {/* Dislike button */}
+                    {showDislike && (
+                        <div
+                            onClick={handleDislikeClick}
+                            className={`flex items-center gap-2 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200 cursor-pointer ${hasDislike
+                                ? 'text-blue-600 dark:text-blue-400'
+                                : 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'
+                                } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            aria-label={hasDislike ? 'Remove dislike' : 'Dislike'}
+                            title={hasDislike ? 'Remove dislike' : 'Dislike'}
+                        >
+                            <DislikeIcon isActive={hasDislike} />
+                            {!isMobile && (
+                                <span className="text-sm font-medium">
+                                    {hasDislike ? 'Disliked' : 'Dislike'}
+                                </span>
+                            )}
+                        </div>
+                    )}
+
                     {/* Comment button */}
-                    <button
+                    <div
                         onClick={handleCommentClick}
-                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-900"
+                        className="flex items-center gap-2 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-200 cursor-pointer"
+                        aria-label="Comment"
+                        title="Comment"
                     >
                         <MessageCircle className="w-5 h-5" />
-                    </button>
+                        {!isMobile && (
+                            <span className="text-sm font-medium">Comment</span>
+                        )}
+                    </div>
 
                     {/* Share button */}
-                    <div className="relative">
-                        <button
-                            onClick={handleShareClick}
-                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-900"
-                        >
-                            <Share2 className="w-5 h-5" />
-                        </button>
-
-                        {showShareMenu && (
-                            <div className="absolute bottom-full left-0 mb-1 w-40 bg-white rounded-lg border border-gray-200 shadow-lg z-10">
-                                <button
-                                    onClick={() => {
-                                        if (onShare) onShare();
-                                        setShowShareMenu(false);
-                                    }}
-                                    className="flex items-center gap-2 w-full px-2 py-1.5 text-left hover:bg-gray-50 rounded-t-lg text-sm"
-                                >
-                                    <Share2 className="w-3 h-3" />
-                                    <span>Share to Feed</span>
-                                </button>
-                                <button
-                                    onClick={handleCopyLink}
-                                    className="flex items-center gap-2 w-full px-2 py-1.5 text-left hover:bg-gray-50 rounded-b-lg text-sm"
-                                >
-                                    <Share2 className="w-3 h-3" />
-                                    <span>Copy Link</span>
-                                </button>
-                            </div>
+                    <div
+                        onClick={handleShareClick}
+                        className="flex items-center gap-2 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-200 cursor-pointer"
+                        aria-label="Share"
+                        title="Share"
+                    >
+                        <Share2 className="w-5 h-5" />
+                        {!isMobile && (
+                            <span className="text-sm font-medium">Share</span>
                         )}
                     </div>
                 </div>
 
-                {/* Right Actions */}
-                <div className="flex items-center gap-0.5">
-                    {/* Save button */}
-                    <button
-                        onClick={handleSaveClick}
-                        className={`p-1.5 rounded-lg hover:bg-gray-100 ${isSaved ? 'text-blue-600 hover:text-blue-700' : 'text-gray-600 hover:text-gray-900'}`}
-                    >
-                        <Bookmark className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
-                    </button>
-
-                    {/* More options */}
-                    <button
-                        onClick={() => setShowReportDialog(true)}
-                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-900"
-                    >
-                        <MoreVertical className="w-5 h-5" />
-                    </button>
+                {/* Right Action - Save */}
+                <div
+                    onClick={handleSaveClick}
+                    className={`flex items-center gap-2 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200 cursor-pointer ${isSaved
+                        ? 'text-blue-600 dark:text-blue-400'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'
+                        } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    aria-label={isSaved ? "Unsave post" : "Save post"}
+                    title={isSaved ? "Unsave post" : "Save post"}
+                >
+                    <Bookmark className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
+                    {!isMobile && (
+                        <span className="text-sm font-medium">
+                            {isSaved ? 'Saved' : 'Save'}
+                        </span>
+                    )}
                 </div>
             </div>
 
-            {/* Report Dialog */}
-            <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
-                <DialogContent className="sm:max-w-[350px]">
-                    <DialogHeader>
-                        <DialogTitle className="text-lg">Report Post</DialogTitle>
-                        <DialogDescription className="text-sm">
-                            Select a reason for reporting
-                        </DialogDescription>
-                    </DialogHeader>
+            {/* Stats Display - All stats starting from 0 */}
+            <div className="mt-2 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 flex-wrap">
+                {/* Likes */}
+                <div className="flex items-center gap-1">
+                    <span className="font-medium">{likeCount}</span>
+                    <span>like{likeCount !== 1 ? 's' : ''}</span>
+                </div>
 
-                    <div className="space-y-1">
-                        {[
-                            "Spam",
-                            "Inappropriate Content",
-                            "Harassment",
-                            "False Information",
-                            "Violence",
-                            "Other",
-                        ].map((reason) => (
-                            <button
-                                key={reason}
-                                onClick={() => handleReport(reason)}
-                                className="w-full px-3 py-2 text-left hover:bg-gray-50 rounded text-sm"
-                            >
-                                {reason}
-                            </button>
-                        ))}
+                {/* Dislikes */}
+                {showDislike && (
+                    <div className="flex items-center gap-1">
+                        <span className="font-medium">{dislikeCount}</span>
+                        <span>dislike{dislikeCount !== 1 ? 's' : ''}</span>
                     </div>
+                )}
 
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                        <Button
-                            variant="outline"
-                            onClick={() => setShowReportDialog(false)}
-                            className="w-full text-sm"
-                        >
-                            Cancel
-                        </Button>
-                    </div>
-                </DialogContent>
-            </Dialog>
+                {/* Comments */}
+                <div
+                    onClick={handleCommentClick}
+                    className="flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
+                >
+                    <span className="font-medium">{commentCount}</span>
+                    <span>comment{commentCount !== 1 ? 's' : ''}</span>
+                </div>
+
+                {/* Shares */}
+                <div className="flex items-center gap-1">
+                    <span className="font-medium">{shareCount}</span>
+                    <span>share{shareCount !== 1 ? 's' : ''}</span>
+                </div>
+
+                {/* Saves */}
+                <div className="flex items-center gap-1">
+                    <span className="font-medium">{saveCount}</span>
+                    <span>save{saveCount !== 1 ? 's' : ''}</span>
+                </div>
+
+                {/* Views */}
+                <div className="flex items-center gap-1 ml-auto">
+                    <Eye className="w-4 h-4" />
+                    <span className="font-medium">{viewCount}</span>
+                    <span>view{viewCount !== 1 ? 's' : ''}</span>
+                </div>
+            </div>
         </div>
     );
 };

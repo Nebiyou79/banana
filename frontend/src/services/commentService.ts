@@ -21,28 +21,16 @@ export interface CommentAuthor {
   headline?: string;
   verificationStatus: 'verified' | 'pending' | 'unverified';
   role?: string;
-  isOnline?: boolean;
-  lastSeen?: string;
 }
 
 export interface CommentEngagement {
   likes: number;
   replies: number;
-  shares: number;
-  views: number;
 }
 
 export interface CommentModeration {
   status: 'active' | 'hidden' | 'deleted' | 'flagged' | 'pending';
   reportedCount: number;
-  reportedBy: Array<{
-    user: string;
-    reason: string;
-    reportedAt: string;
-  }>;
-  moderatedBy?: CommentAuthor;
-  moderationNotes?: string;
-  moderatedAt?: string;
 }
 
 export interface CommentMetadata {
@@ -51,24 +39,15 @@ export interface CommentMetadata {
   edited: {
     isEdited: boolean;
     editedAt?: string;
-    editHistory: Array<{
-      content: string;
-      editedAt: string;
-      reason?: string;
-    }>;
   };
   language: string;
-  sentiment: 'positive' | 'neutral' | 'negative';
   isPinned: boolean;
   pinnedAt?: string;
   pinnedBy?: string;
-  mentionsCount: number;
-  wordCount: number;
 }
 
 export interface Comment {
   _id: string;
-  id: string;
   author: CommentAuthor;
   parentType: 'Post' | 'Comment';
   parentId: string;
@@ -79,11 +58,8 @@ export interface Comment {
   engagement: CommentEngagement;
   moderation: CommentModeration;
   metadata: CommentMetadata;
-  userReaction?: string;
   hasLiked?: boolean;
   replies?: Comment[];
-  isCollapsed?: boolean;
-  isReplyLoading?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -124,74 +100,68 @@ export interface UpdateCommentData {
   hashtags?: string[];
 }
 
-export interface SearchCommentsParams {
-  q: string;
-  page?: number;
-  limit?: number;
-  parentType?: 'Post' | 'Comment';
-  parentId?: string;
-  authorId?: string;
-  sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
-}
-
 export interface GetCommentsParams {
   page?: number;
   limit?: number;
   depth?: number;
-  sortBy?: 'createdAt' | 'engagement.likes' | 'updatedAt' | 'metadata.depth';
+  sortBy?: 'createdAt' | 'engagement.likes';
   sortOrder?: 'asc' | 'desc';
   includeReplies?: boolean;
-  includeDeleted?: boolean;
-  includeHidden?: boolean;
-  authorId?: string;
-  excludePinned?: boolean;
 }
 
-export interface LikeResponse {
-  liked: boolean;
-  likes: number;
-  like?: {
-    _id: string;
-    user: string;
-    targetType: string;
-    targetId: string;
-    reaction: string;
-    createdAt: string;
-  };
-}
-
-export interface ReportResponse {
-  reportedCount: number;
-  status: string;
-  message: string;
-}
-
-// Cache implementation
+// Cache implementation with better tracking
 const commentCache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+const cacheStats = {
+  hits: 0,
+  misses: 0,
+  sets: 0
+};
+
 const cacheComment = (key: string, data: any) => {
   commentCache.set(key, { data, timestamp: Date.now() });
+  cacheStats.sets++;
 };
 
 const getCachedComment = (key: string) => {
   const cached = commentCache.get(key);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    cacheStats.hits++;
     return cached.data;
   }
+  // Remove expired cache
+  if (cached) {
+    commentCache.delete(key);
+  }
+  cacheStats.misses++;
   return undefined;
+};
+
+const clearRelevantCache = (postId?: string, commentId?: string) => {
+  const keysToDelete: string[] = [];
+
+  for (const key of commentCache.keys()) {
+    if (postId && key.includes(`post:${postId}`)) {
+      keysToDelete.push(key);
+    }
+    if (commentId && key.includes(`comment:${commentId}`)) {
+      keysToDelete.push(key);
+    }
+    if (key.includes('replies:')) {
+      keysToDelete.push(key);
+    }
+  }
+
+  keysToDelete.forEach(key => commentCache.delete(key));
+
+  if (keysToDelete.length > 0) {
+    console.log(`🧹 Cleared ${keysToDelete.length} cache entries`);
+  }
 };
 
 // Error handling utility
 const handleApiError = (error: any, defaultMessage: string): never => {
-  console.error('🔴 Comment Service Error:', {
-    status: error.response?.status,
-    data: error.response?.data,
-    message: error.message,
-    config: error.config
-  });
-
   const errorMessage = error.response?.data?.message || error.message || defaultMessage;
 
   if (error.response?.status === 401) {
@@ -214,14 +184,6 @@ const handleApiError = (error: any, defaultMessage: string): never => {
     throw new Error('Rate limit exceeded');
   }
 
-  if (error.response?.data?.errors) {
-    const validationErrors = error.response.data.errors
-      .map((err: any) => err.msg || err.message)
-      .join(', ');
-    handleError(validationErrors);
-    throw new Error(validationErrors);
-  }
-
   handleError(errorMessage);
   throw new Error(errorMessage);
 };
@@ -229,14 +191,12 @@ const handleApiError = (error: any, defaultMessage: string): never => {
 export const commentService = {
   /**
    * Add comment or reply
-   * Unified method that handles both top-level comments and replies
    */
   addComment: async (
     postId: string,
     data: CreateCommentData
   ): Promise<Comment> => {
     try {
-      // Validate input
       if (!data.content?.trim()) {
         throw new Error('Comment content is required');
       }
@@ -248,14 +208,6 @@ export const commentService = {
       let endpoint: string;
       let payload: any;
 
-      console.log('Adding comment with data:', {
-        postId,
-        parentType: data.parentType,
-        parentId: data.parentId,
-        contentLength: data.content.length
-      });
-
-      // Determine if this is a reply or top-level comment
       if (data.parentType === 'Comment' && data.parentId) {
         // It's a reply to a comment
         endpoint = `/comments/comments/${data.parentId}/replies`;
@@ -267,7 +219,6 @@ export const commentService = {
           parentType: 'Comment',
           parentId: data.parentId
         };
-        console.log('Creating reply to comment:', payload);
       } else {
         // It's a top-level comment on a post
         endpoint = `/comments/posts/${postId}/comments`;
@@ -279,7 +230,6 @@ export const commentService = {
           parentType: 'Post',
           parentId: postId
         };
-        console.log('Creating comment on post:', payload);
       }
 
       const response = await api.post<CommentResponse>(endpoint, payload);
@@ -289,31 +239,18 @@ export const commentService = {
       }
 
       // Clear relevant cache entries
-      const cacheKeys = Array.from(commentCache.keys());
-      cacheKeys.forEach(key => {
-        if (key.includes(`post:${postId}`) || key.includes(`comment:`)) {
-          commentCache.delete(key);
-        }
-      });
+      clearRelevantCache(postId, data.parentId);
 
       handleSuccess(response.data.message || 'Comment added successfully');
 
-      // FIX: Ensure the response has proper structure
-      const commentData = response.data.data;
-      return {
-        ...commentData,
-        replies: commentData.replies || [],
-        userReaction: commentData.userReaction || undefined,
-        hasLiked: commentData.hasLiked || false
-      };
+      return response.data.data;
     } catch (error: any) {
-      console.error('Add comment error:', error);
       return handleApiError(error, 'Failed to add comment');
     }
   },
 
   /**
-   * Get post comments with proper tree structure
+   * Get post comments
    */
   getComments: async (
     postId: string,
@@ -324,7 +261,6 @@ export const commentService = {
       const cached = getCachedComment(cacheKey);
 
       if (cached) {
-        console.log('Using cached comments');
         return cached;
       }
 
@@ -346,14 +282,8 @@ export const commentService = {
         throw new Error(response.data.message || 'Failed to fetch comments');
       }
 
-      // Build comment tree from the response
-      if (response.data.data && Array.isArray(response.data.data)) {
-        const commentTree = commentService.utils.buildCommentTree(response.data.data);
-        response.data.data = commentTree;
-
-        // Cache the result
-        cacheComment(cacheKey, response.data);
-      }
+      // Cache the result
+      cacheComment(cacheKey, response.data);
 
       return response.data;
     } catch (error: any) {
@@ -378,7 +308,7 @@ export const commentService = {
 
       const defaultParams = {
         page: 1,
-        limit: 50,
+        limit: 20,
         sortBy: 'createdAt',
         sortOrder: 'asc',
         ...params
@@ -421,13 +351,8 @@ export const commentService = {
         throw new Error(response.data.message || 'Failed to update comment');
       }
 
-      // Clear cache for this comment and its parent
-      const cacheKeys = Array.from(commentCache.keys());
-      cacheKeys.forEach(key => {
-        if (key.includes(`comment:${commentId}`) || key.includes('comments:post:')) {
-          commentCache.delete(key);
-        }
-      });
+      // Clear cache
+      clearRelevantCache(undefined, commentId);
 
       handleSuccess(response.data.message || 'Comment updated successfully');
       return response.data.data;
@@ -450,12 +375,7 @@ export const commentService = {
       }
 
       // Clear cache
-      const cacheKeys = Array.from(commentCache.keys());
-      cacheKeys.forEach(key => {
-        if (key.includes(`comment:${commentId}`) || key.includes('comments:post:')) {
-          commentCache.delete(key);
-        }
-      });
+      clearRelevantCache(undefined, commentId);
 
       handleSuccess(response.data.message || 'Comment deleted successfully');
       return response.data;
@@ -465,51 +385,59 @@ export const commentService = {
   },
 
   /**
-   * Toggle comment like
+   * Like comment
    */
-  toggleCommentLike: async (commentId: string): Promise<{ liked: boolean; likes: number }> => {
+  likeComment: async (commentId: string): Promise<{ hasLiked: boolean; likes: number }> => {
     try {
-      console.log('Toggling like for comment:', commentId);
-
       const response = await api.post<{
         success: boolean;
-        data: {
-          liked: boolean;
-          likes: number;
-          action?: string;
-          like?: any;
-        };
-        message?: string;
+        data: { liked: boolean; likes: number };
       }>(`/comments/comments/${commentId}/like`);
 
       if (!response.data.success) {
-        throw new Error(response.data.message || 'Failed to toggle comment like');
+        throw new Error('Failed to like comment');
       }
 
-      const message = response.data.data.liked ? 'Liked comment' : 'Removed like';
-      handleSuccess(message);
+      // Clear cache for this comment
+      clearRelevantCache(undefined, commentId);
 
-      // Clear cache for this comment and its parent
-      const cacheKeys = Array.from(commentCache.keys());
-      cacheKeys.forEach(key => {
-        if (key.includes(`comment:${commentId}`) || key.includes('comments:post:')) {
-          commentCache.delete(key);
-        }
-      });
+      return {
+        hasLiked: response.data.data.liked,
+        likes: response.data.data.likes
+      };
+    } catch (error: any) {
+      return handleApiError(error, 'Failed to like comment');
+    }
+  },
+
+  /**
+   * Get user's like status for a comment
+   */
+  getUserLikeStatus: async (commentId: string): Promise<{ hasLiked: boolean }> => {
+    try {
+      // Note: This endpoint might need to be implemented in your backend
+      const response = await api.get<{
+        success: boolean;
+        data: { hasLiked: boolean };
+      }>(`/comments/comments/${commentId}/like-status`);
+
+      if (!response.data.success) {
+        throw new Error('Failed to get like status');
+      }
 
       return response.data.data;
-    } catch (error: any) {
-      console.error('Toggle comment like error:', error);
-      return handleApiError(error, 'Failed to toggle comment like');
+    } catch (error) {
+      console.warn('Failed to get user like status:', error);
+      return { hasLiked: false };
     }
   },
 
   /**
    * Report comment
    */
-  reportComment: async (commentId: string, reason?: string): Promise<ReportResponse> => {
+  reportComment: async (commentId: string, reason?: string): Promise<{ success: boolean; message: string }> => {
     try {
-      const response = await api.post<{ success: boolean; data: ReportResponse; message?: string }>(
+      const response = await api.post<{ success: boolean; message: string }>(
         `/comments/comments/${commentId}/report`,
         { reason: reason || 'Inappropriate content' }
       );
@@ -519,61 +447,9 @@ export const commentService = {
       }
 
       handleSuccess(response.data.message || 'Comment reported successfully');
-      return response.data.data;
-    } catch (error: any) {
-      return handleApiError(error, 'Failed to report comment');
-    }
-  },
-
-  /**
-   * Get user's comments
-   */
-  getUserComments: async (
-    userId: string,
-    params?: GetCommentsParams
-  ): Promise<CommentsResponse> => {
-    try {
-      const cacheKey = `comments:user:${userId}:${JSON.stringify(params)}`;
-      const cached = getCachedComment(cacheKey);
-
-      if (cached) {
-        return cached;
-      }
-
-      const response = await api.get<CommentsResponse>(
-        `/comments/user/${userId}`,
-        { params }
-      );
-
-      if (!response.data.success) {
-        throw new Error(response.data.message || 'Failed to fetch user comments');
-      }
-
-      cacheComment(cacheKey, response.data);
       return response.data;
     } catch (error: any) {
-      return handleApiError(error, 'Failed to fetch user comments');
-    }
-  },
-
-  /**
-   * Pin/unpin comment
-   */
-  pinComment: async (commentId: string, pin: boolean = true): Promise<Comment> => {
-    try {
-      const response = await api.patch<CommentResponse>(
-        `/comments/comments/${commentId}/pin`,
-        { pin }
-      );
-
-      if (!response.data.success || !response.data.data) {
-        throw new Error(response.data.message || 'Failed to pin comment');
-      }
-
-      handleSuccess(pin ? 'Comment pinned' : 'Comment unpinned');
-      return response.data.data;
-    } catch (error: any) {
-      return handleApiError(error, 'Failed to pin comment');
+      return handleApiError(error, 'Failed to report comment');
     }
   },
 
@@ -581,12 +457,43 @@ export const commentService = {
    * Clear comment cache
    */
   clearCache: (): void => {
+    const previousSize = commentCache.size;
     commentCache.clear();
-    console.log('Comment cache cleared');
+    console.log(`🗑️ Cleared ${previousSize} cache entries`);
   },
 
   // Utility functions
   utils: {
+    /**
+ * Sort comments by criteria
+ */
+    sortComments: (
+      comments: Comment[],
+      sortBy: 'createdAt' | 'engagement.likes' | 'engagement.replies' = 'createdAt',
+      sortOrder: 'asc' | 'desc' = 'desc'
+    ): Comment[] => {
+      return [...comments].sort((a, b) => {
+        let aValue: number, bValue: number;
+
+        switch (sortBy) {
+          case 'engagement.likes':
+            aValue = a.engagement.likes;
+            bValue = b.engagement.likes;
+            break;
+          case 'engagement.replies':
+            aValue = a.engagement.replies;
+            bValue = b.engagement.replies;
+            break;
+          case 'createdAt':
+          default:
+            aValue = new Date(a.createdAt).getTime();
+            bValue = new Date(b.createdAt).getTime();
+            break;
+        }
+
+        return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
+      });
+    },
     /**
      * Format comment date for display
      */
@@ -640,50 +547,6 @@ export const commentService = {
     },
 
     /**
-     * Build nested comment structure from flat list
-     */
-    buildCommentTree: (comments: Comment[]): Comment[] => {
-      if (!comments || !Array.isArray(comments)) return [];
-
-      const commentMap = new Map<string, Comment>();
-      const rootComments: Comment[] = [];
-
-      // First pass: create map of all comments
-      comments.forEach(comment => {
-        // Ensure replies array exists
-        const commentWithReplies = {
-          ...comment,
-          replies: []
-        };
-        commentMap.set(comment._id, commentWithReplies);
-      });
-
-      // Second pass: build tree structure
-      comments.forEach(comment => {
-        const mappedComment = commentMap.get(comment._id)!;
-
-        if (comment.parentType === 'Comment' && comment.parentId) {
-          // This is a reply, find its parent
-          const parentComment = commentMap.get(comment.parentId);
-          if (parentComment) {
-            if (!parentComment.replies) {
-              parentComment.replies = [];
-            }
-            parentComment.replies.push(mappedComment);
-          }
-        } else {
-          // This is a root comment
-          rootComments.push(mappedComment);
-        }
-      });
-
-      // Sort root comments by creation date (newest first)
-      return rootComments.sort((a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-    },
-
-    /**
      * Validate comment content
      */
     validateContent: (content: string): { isValid: boolean; errors: string[] } => {
@@ -693,24 +556,8 @@ export const commentService = {
         errors.push('Comment cannot be empty');
       }
 
-      if (content.trim().length < 1) {
-        errors.push('Comment must be at least 1 character long');
-      }
-
       if (content.length > 2000) {
         errors.push('Comment cannot exceed 2000 characters');
-      }
-
-      // Check for excessive newlines
-      const newlineCount = (content.match(/\n/g) || []).length;
-      if (newlineCount > 10) {
-        errors.push('Too many line breaks');
-      }
-
-      // Check for excessive special characters
-      const specialCharCount = (content.match(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~]/g) || []).length;
-      if (specialCharCount > content.length * 0.3) {
-        errors.push('Too many special characters');
       }
 
       return {
@@ -738,101 +585,6 @@ export const commentService = {
     },
 
     /**
-     * Calculate reading time for comment
-     */
-    calculateReadingTime: (content: string): number => {
-      const wordsPerMinute = 200;
-      const wordCount = content.trim().split(/\s+/).length;
-      return Math.max(1, Math.ceil(wordCount / wordsPerMinute));
-    },
-
-    /**
-     * Get comment preview
-     */
-    getContentPreview: (content: string, maxLength: number = 120): string => {
-      if (content.length <= maxLength) return content;
-
-      const trimmed = content.substring(0, maxLength);
-      const lastSpace = trimmed.lastIndexOf(' ');
-
-      return lastSpace > 0
-        ? trimmed.substring(0, lastSpace) + '...'
-        : trimmed + '...';
-    },
-
-    /**
-     * Check if comment is visible to user
-     */
-    isCommentVisible: (comment: Comment, currentUserId?: string): boolean => {
-      if (comment.moderation.status === 'active') return true;
-      if (comment.moderation.status === 'deleted') return false;
-
-      // For hidden/flagged comments, check permissions
-      if (currentUserId) {
-        const isOwner = comment.author._id === currentUserId;
-        const isModerator = comment.author.role === 'admin' || comment.author.role === 'moderator';
-        return isOwner || isModerator;
-      }
-
-      return false;
-    },
-
-    /**
-     * Sort comments by criteria
-     */
-    sortComments: (
-      comments: Comment[],
-      sortBy: 'createdAt' | 'engagement.likes' | 'engagement.replies' = 'createdAt',
-      sortOrder: 'asc' | 'desc' = 'desc'
-    ): Comment[] => {
-      return [...comments].sort((a, b) => {
-        let aValue: number, bValue: number;
-
-        switch (sortBy) {
-          case 'engagement.likes':
-            aValue = a.engagement.likes;
-            bValue = b.engagement.likes;
-            break;
-          case 'engagement.replies':
-            aValue = a.engagement.replies;
-            bValue = b.engagement.replies;
-            break;
-          case 'createdAt':
-          default:
-            aValue = new Date(a.createdAt).getTime();
-            bValue = new Date(b.createdAt).getTime();
-            break;
-        }
-
-        return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
-      });
-    },
-
-    /**
-     * Flatten comment tree to array
-     */
-    flattenCommentTree: (comments: Comment[]): Comment[] => {
-      const flattened: Comment[] = [];
-
-      const flatten = (comment: Comment) => {
-        flattened.push(comment);
-        if (comment.replies && comment.replies.length > 0) {
-          comment.replies.forEach(flatten);
-        }
-      };
-
-      comments.forEach(flatten);
-      return flattened;
-    },
-
-    /**
-     * Get total engagement count
-     */
-    getTotalEngagement: (comment: Comment): number => {
-      return comment.engagement.likes + comment.engagement.replies + comment.engagement.shares;
-    },
-
-    /**
      * Format engagement numbers (1k, 1m, etc.)
      */
     formatEngagementNumber: (num: number): string => {
@@ -843,6 +595,11 @@ export const commentService = {
         return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
       }
       return num.toString();
-    }
+    },
+
+    /**
+     * Get cache statistics
+     */
+    getCacheStats: () => ({ ...cacheStats, size: commentCache.size })
   }
 };

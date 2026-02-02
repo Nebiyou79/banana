@@ -1,4 +1,5 @@
-// pages/dashboard/candidate/social/profile/edit.tsx - SIMPLIFIED VERSION
+// pages/dashboard/candidate/social/profile/edit.tsx - FIXED VERSION
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -8,79 +9,60 @@ import { Button } from '@/components/social/ui/Button';
 import { Card } from '@/components/social/ui/Card';
 import {
     ArrowLeft,
-    Save,
     User,
-    Briefcase,
-    GraduationCap,
-    Award,
-    Settings,
-    Loader2,
     CheckCircle,
-    FileText,
-    Shield,
     Sparkles,
     Target,
     Star,
-    Zap
+    Zap,
+    Cloud
 } from 'lucide-react';
-import { profileService, type Profile } from '@/services/profileService';
-import { candidateService, type CandidateProfile } from '@/services/candidateService';
+import { profileService } from '@/services/profileService';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 // Import the new form
 import CandidateProfileForm from '@/components/profile/CandidateProfileEditForm';
+import { Badge } from '@/components/social/ui/Badge';
 
 export default function CandidateEditProfilePage() {
     const router = useRouter();
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState('basic');
-    const [profile, setProfile] = useState<Profile | null>(null);
-    const [candidateProfile, setCandidateProfile] = useState<CandidateProfile | null>(null);
-    const [completion, setCompletion] = useState<number>(0);
+    const [cloudStorageActive, setCloudStorageActive] = useState(false);
+    const [profileCompletion, setProfileCompletion] = useState(0);
 
     useEffect(() => {
-        fetchProfileData();
+        // Only fetch data needed for page display (not form data)
+        fetchPageData();
     }, []);
 
-    const fetchProfileData = async () => {
+    const fetchPageData = async () => {
         try {
             setLoading(true);
 
-            // Fetch main profile, candidate profile, and completion in parallel
-            const [profileData, candidateData, completionData] = await Promise.all([
+            // Fetch only what the page needs for display
+            const [profileData, completionData] = await Promise.all([
                 profileService.getProfile(),
-                candidateService.getProfile(),
                 profileService.getProfileCompletion()
             ]);
 
-            setProfile(profileData);
-            setCandidateProfile(candidateData);
-            setCompletion(completionData.percentage);
+            setProfileCompletion(completionData.percentage);
+
+            // Check if Cloudinary is being used for display purposes
+            const isAvatarCloudinary = profileService.isCloudinaryUrl(
+                profileService.getAvatarUrl(profileData)
+            );
+            const isCoverCloudinary = profileService.isCloudinaryUrl(
+                profileService.getCoverUrl(profileData)
+            );
+            setCloudStorageActive(isAvatarCloudinary || isCoverCloudinary);
 
         } catch (error: any) {
-            console.error('Failed to fetch profile data:', error);
-            toast.error('Failed to load profile data');
+            console.error('Failed to fetch page data:', error);
+            toast.error('Failed to load page data');
         } finally {
             setLoading(false);
-        }
-    };
-
-    const handleSaveAll = async () => {
-        try {
-            setSaving(true);
-            toast.info('Saving all changes...');
-            // The form handles its own saving
-            setTimeout(() => {
-                toast.success('All changes saved successfully');
-                fetchProfileData(); // Refresh data
-            }, 1000);
-        } catch (error) {
-            toast.error('Failed to save changes');
-        } finally {
-            setSaving(false);
         }
     };
 
@@ -88,6 +70,12 @@ export default function CandidateEditProfilePage() {
         if (window.confirm('Are you sure you want to cancel? Any unsaved changes will be lost.')) {
             router.push('/dashboard/candidate/social/profile');
         }
+    };
+
+    // Handler for form completion - form doesn't support callback yet
+    // This will be called when user manually refreshes or navigates away
+    const handleViewProfile = () => {
+        router.push('/dashboard/candidate/social/profile');
     };
 
     if (loading) {
@@ -99,22 +87,22 @@ export default function CandidateEditProfilePage() {
                 </Head>
                 <SocialDashboardLayout requiredRole="candidate">
                     <RoleThemeProvider>
-                        <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+                        <div className="min-h-screen bg-background">
                             <div className="max-w-7xl mx-auto px-4 py-8">
                                 <div className="animate-pulse space-y-8">
                                     {/* Header Skeleton */}
                                     <div className="flex items-center justify-between">
                                         <div className="space-y-3">
-                                            <div className="h-8 bg-gray-200 rounded w-48" />
-                                            <div className="h-4 bg-gray-200 rounded w-64" />
+                                            <div className="h-8 bg-muted rounded w-48" />
+                                            <div className="h-4 bg-muted rounded w-64" />
                                         </div>
-                                        <div className="h-10 bg-gray-200 rounded w-32" />
+                                        <div className="h-10 bg-muted rounded w-32" />
                                     </div>
 
                                     {/* Content Skeleton */}
                                     <div className="space-y-6">
                                         {[...Array(4)].map((_, i) => (
-                                            <div key={i} className="h-64 bg-gray-200 rounded-xl" />
+                                            <div key={i} className="h-64 bg-muted rounded-xl" />
                                         ))}
                                     </div>
                                 </div>
@@ -134,7 +122,7 @@ export default function CandidateEditProfilePage() {
             </Head>
             <SocialDashboardLayout requiredRole="candidate">
                 <RoleThemeProvider>
-                    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+                    <div className="min-h-screen bg-background">
                         <div className="max-w-7xl mx-auto px-4 py-8">
                             {/* Header */}
                             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
@@ -143,16 +131,16 @@ export default function CandidateEditProfilePage() {
                                         variant="outline"
                                         size="sm"
                                         onClick={handleCancel}
-                                        className="backdrop-blur-lg border-gray-300 hover:bg-gray-50"
+                                        className="border-border hover:bg-accent"
                                     >
                                         <ArrowLeft className="w-4 h-4 mr-2" />
                                         Back
                                     </Button>
                                     <div>
-                                        <h1 className="text-3xl font-bold text-gray-900 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                                        <h1 className="text-3xl font-bold text-foreground">
                                             Edit Your Profile
                                         </h1>
-                                        <p className="text-gray-600 mt-1">
+                                        <p className="text-muted-foreground mt-1">
                                             Update your professional information and personal details
                                         </p>
                                     </div>
@@ -160,21 +148,22 @@ export default function CandidateEditProfilePage() {
 
                                 <div className="flex items-center gap-4">
                                     <div className="text-right">
-                                        <div className="text-sm font-medium text-gray-700 mb-1">Profile Strength</div>
+                                        <div className="text-sm font-medium text-muted-foreground mb-1">
+                                            Profile Strength
+                                        </div>
                                         <div className="flex items-center gap-3">
-                                            <div className="w-32 h-2 rounded-full bg-gray-200 overflow-hidden">
+                                            <div className="w-32 h-2 rounded-full bg-muted overflow-hidden">
                                                 <div
-                                                    className="h-full bg-gradient-to-r from-green-400 to-blue-500 transition-all duration-1000"
-                                                    style={{ width: `${completion}%` }}
+                                                    className="h-full bg-gradient-to-r from-primary to-secondary transition-all duration-1000"
+                                                    style={{ width: `${profileCompletion}%` }}
                                                 />
                                             </div>
-                                            <span className="font-bold text-gray-900">{completion}%</span>
+                                            <span className="font-bold text-foreground">{profileCompletion}%</span>
                                         </div>
                                     </div>
                                     <Button
-                                        onClick={() => router.push('/dashboard/candidate/social/profile')}
-                                        variant="premium"
-                                        className="backdrop-blur-lg border-gray-300"
+                                        onClick={handleViewProfile}
+                                        variant="default"
                                     >
                                         <CheckCircle className="w-4 h-4 mr-2" />
                                         View Profile
@@ -182,124 +171,53 @@ export default function CandidateEditProfilePage() {
                                 </div>
                             </div>
 
-                            {/* Progress Indicators */}
-                            {/* Progress Indicators */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                                {[
-                                    {
-                                        icon: <User />,
-                                        label: 'Basic',
-                                        completed: !!(profile?.headline && profile?.location && profile?.bio)
-                                    },
-                                    {
-                                        icon: <Briefcase />,
-                                        label: 'Professional',
-                                        completed: !!((candidateProfile?.experience?.length ?? 0) > 0 && (candidateProfile?.skills?.length ?? 0) > 0)
-                                    },
-                                    {
-                                        icon: <GraduationCap />,
-                                        label: 'Education',
-                                        completed: !!((candidateProfile?.education?.length ?? 0) > 0)
-                                    },
-                                    {
-                                        icon: <Award />,
-                                        label: 'Skills',
-                                        completed: !!((candidateProfile?.skills?.length ?? 0) > 3)
-                                    },
-                                ].map((item, index) => (
-                                    <Card
-                                        key={index}
-                                        className={`p-4 backdrop-blur-lg transition-all duration-300 hover:scale-105 cursor-pointer ${item.completed
-                                            ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200'
-                                            : 'bg-white border-gray-200 hover:border-blue-500'
-                                            }`}
-                                        onClick={() => setActiveTab(item.label.toLowerCase())}
-                                    >
+                            {/* Cloud Storage Indicator */}
+                            {cloudStorageActive && (
+                                <div className="mb-6">
+                                    <Card className="bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20 rounded-2xl p-4">
                                         <div className="flex items-center justify-between">
-                                            <div className={`p-2 rounded-lg ${item.completed
-                                                ? 'bg-gradient-to-br from-green-500 to-emerald-500'
-                                                : 'bg-gradient-to-br from-blue-500 to-purple-500'
-                                                }`}>
-                                                <div className="w-5 h-5 text-white">{item.icon}</div>
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 rounded-lg bg-gradient-to-br from-primary to-secondary">
+                                                    <Cloud className="w-5 h-5 text-primary-foreground" />
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-semibold text-foreground">Cloud Storage Active</h3>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        Your images are securely stored and optimized in the cloud
+                                                    </p>
+                                                </div>
                                             </div>
-                                            {item.completed && <CheckCircle className="w-5 h-5 text-green-500" />}
-                                        </div>
-                                        <div className="mt-3">
-                                            <div className="font-semibold text-gray-900">{item.label}</div>
-                                            <div className="text-sm text-gray-600">
-                                                {item.completed ? 'Complete' : 'Incomplete'}
-                                            </div>
+                                            <Badge variant="outline" className="border-green-200 bg-green-50 text-green-700">
+                                                <CheckCircle className="w-3 h-3 mr-1" />
+                                                Secure
+                                            </Badge>
                                         </div>
                                     </Card>
-                                ))}
-                            </div>
+                                </div>
+                            )}
 
                             {/* Main Form Container */}
-                            <div className="backdrop-blur-xl bg-gradient-to-b from-white to-gray-50 border border-gray-200 shadow-2xl rounded-3xl overflow-hidden">
+                            <div className="bg-card border border-border shadow-lg rounded-3xl overflow-hidden">
                                 <div className="p-8">
-                                    {/* Tab Navigation */}
-                                    <div className="mb-8">
-                                        <div className="flex items-center space-x-2 overflow-x-auto pb-2">
-                                            {[
-                                                { id: 'basic', label: 'Basic Info', icon: <User className="w-4 h-4" /> },
-                                                { id: 'professional', label: 'Professional', icon: <Briefcase className="w-4 h-4" /> },
-                                                { id: 'cv', label: 'CV & Portfolio', icon: <FileText className="w-4 h-4" /> },
-                                                { id: 'privacy', label: 'Privacy', icon: <Shield className="w-4 h-4" /> },
-                                                { id: 'notifications', label: 'Notifications', icon: <Settings className="w-4 h-4" /> },
-                                            ].map((tab) => (
-                                                <button
-                                                    key={tab.id}
-                                                    onClick={() => setActiveTab(tab.id)}
-                                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${activeTab === tab.id
-                                                        ? 'bg-blue-100 text-blue-700 font-medium'
-                                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                                                        }`}
-                                                >
-                                                    {tab.icon}
-                                                    {tab.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Render the new form */}
+                                    {/* Render the form - it manages its own tabs and data */}
                                     <CandidateProfileForm />
                                 </div>
 
-                                {/* Save Button */}
-                                <div className="border-t border-gray-200 p-8">
+                                {/* Form Actions */}
+                                <div className="border-t border-border p-8">
                                     <div className="flex items-center justify-between">
                                         <Button
                                             onClick={handleCancel}
                                             variant="outline"
-                                            className="backdrop-blur-lg border-gray-300 hover:bg-gray-50"
+                                            className="border-border hover:bg-accent"
                                         >
                                             Cancel
                                         </Button>
 
                                         <div className="flex items-center gap-3">
                                             <Button
-                                                onClick={handleSaveAll}
-                                                variant="premium"
-                                                className="backdrop-blur-lg border-gray-300 group"
-                                                disabled={saving}
-                                            >
-                                                {saving ? (
-                                                    <>
-                                                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                                                        Saving...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Save className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
-                                                        Save All Changes
-                                                    </>
-                                                )}
-                                            </Button>
-
-                                            <Button
-                                                onClick={() => router.push('/dashboard/candidate/social/profile')}
-                                                className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
+                                                onClick={handleViewProfile}
+                                                variant="default"
                                             >
                                                 <CheckCircle className="w-4 h-4 mr-2" />
                                                 View Profile
@@ -310,13 +228,13 @@ export default function CandidateEditProfilePage() {
                             </div>
 
                             {/* Tips Card */}
-                            <Card className="mt-8 backdrop-blur-xl bg-gradient-to-b from-blue-50 to-purple-50 border border-blue-200 rounded-3xl p-6">
+                            <Card className="mt-8 bg-gradient-to-b from-primary/10 to-secondary/10 border border-primary/20 rounded-3xl p-6">
                                 <div className="flex items-start gap-4">
-                                    <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500">
-                                        <Sparkles className="w-6 h-6 text-white" />
+                                    <div className="p-3 rounded-xl bg-gradient-to-br from-primary to-secondary">
+                                        <Sparkles className="w-6 h-6 text-primary-foreground" />
                                     </div>
                                     <div className="flex-1">
-                                        <h4 className="font-bold text-gray-900 text-lg mb-3">
+                                        <h4 className="font-bold text-foreground text-lg mb-3">
                                             Boost Your Profile Visibility
                                         </h4>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -324,13 +242,13 @@ export default function CandidateEditProfilePage() {
                                                 { icon: <Star className="w-4 h-4" />, text: 'Complete all profile sections' },
                                                 { icon: <Target className="w-4 h-4" />, text: 'Add specific skills and certifications' },
                                                 { icon: <Zap className="w-4 h-4" />, text: 'Keep your experience history up to date' },
-                                                { icon: <Shield className="w-4 h-4" />, text: 'Verify your profile for credibility' },
+                                                { icon: <Cloud className="w-4 h-4" />, text: 'Use high-quality images with cloud storage' },
                                             ].map((tip, index) => (
                                                 <div key={index} className="flex items-center gap-3">
-                                                    <div className="p-2 rounded-lg bg-white/50">
+                                                    <div className="p-2 rounded-lg bg-card/50">
                                                         {tip.icon}
                                                     </div>
-                                                    <span className="text-gray-700">{tip.text}</span>
+                                                    <span className="text-foreground/80">{tip.text}</span>
                                                 </div>
                                             ))}
                                         </div>

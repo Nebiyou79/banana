@@ -1,32 +1,47 @@
-// candidateController.js
 const User = require('../models/User');
 const Job = require('../models/Job');
-const { validationResult } = require('express-validator');
 const path = require('path');
-const fs = require('fs');
+const fs = require('fs'); // Added for local file operations
+const { validationResult } = require('express-validator');
+const localFileUpload = require('../middleware/localFileUpload'); // Added for local uploads
 
 // Enhanced error handler
 const handleControllerError = (error, res, customMessage = 'Internal server error') => {
   console.error('Controller Error:', error);
-  
+
   // Mongoose validation errors
   if (error.name === 'ValidationError') {
     const errors = Object.values(error.errors).map(err => err.message);
+
+    // Check if it's a CV validation error
+    const isCVError = errors.some(err =>
+      err.includes('cvs') || err.includes('mimetype')
+    );
+
+    if (isCVError) {
+      return res.status(400).json({
+        success: false,
+        message: 'CV validation failed',
+        errors: errors,
+        code: 'CV_VALIDATION_ERROR'
+      });
+    }
+
     return res.status(400).json({
       success: false,
       message: 'Validation failed',
       errors: errors
     });
   }
-  
+
   // Mongoose cast errors (invalid ID)
   if (error.name === 'CastError') {
     return res.status(400).json({
       success: false,
-      message: 'Invalid ID format'
+      message: 'Invalid ID format. Please provide a valid MongoDB ObjectId.'
     });
   }
-  
+
   // MongoDB duplicate key errors
   if (error.code === 11000) {
     return res.status(400).json({
@@ -34,7 +49,23 @@ const handleControllerError = (error, res, customMessage = 'Internal server erro
       message: 'Duplicate entry found'
     });
   }
-  
+
+  // File system errors
+  if (error.code === 'ENOENT') {
+    return res.status(404).json({
+      success: false,
+      message: 'File not found on server'
+    });
+  }
+
+  // Custom error messages
+  if (error.message && error.message.includes('Maximum')) {
+    return res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+
   // Default error
   res.status(500).json({
     success: false,
@@ -42,7 +73,7 @@ const handleControllerError = (error, res, customMessage = 'Internal server erro
   });
 };
 
-// Enhanced validation helper with age and gender validation
+// Validate profile data
 const validateProfileData = (updateData) => {
   const errors = [];
 
@@ -52,7 +83,7 @@ const validateProfileData = (updateData) => {
     const today = new Date();
     const minDate = new Date(today.getFullYear() - 100, today.getMonth(), today.getDate());
     const maxDate = new Date(today.getFullYear() - 16, today.getMonth(), today.getDate());
-    
+
     if (dob > maxDate) {
       errors.push('You must be at least 16 years old');
     }
@@ -62,7 +93,7 @@ const validateProfileData = (updateData) => {
   }
 
   // Validate gender
-  if (updateData.gender && !['male', 'female', 'other', 'prefer-not-to-say'].includes(updateData.gender)) {
+  if (updateData.gender && !['male', 'female', 'prefer-not-to-say'].includes(updateData.gender)) {
     errors.push('Please select a valid gender option');
   }
 
@@ -135,17 +166,27 @@ const validateProfileData = (updateData) => {
   }
 
   // Validate text field lengths
-  if (updateData.bio && updateData.bio.length > 1000) {
-    errors.push('Bio cannot exceed 1000 characters');
+  if (updateData.bio && updateData.bio.length > 2000) {
+    errors.push('Bio cannot exceed 2000 characters');
   }
 
   return errors;
 };
 
+// Helper: Validate MongoDB ObjectId
+const isValidObjectId = (id) => {
+  return /^[0-9a-fA-F]{24}$/.test(id);
+};
+
+/**
+ * @desc    Update candidate profile
+ * @route   PUT /api/v1/candidate/profile
+ * @access  Private (Candidate)
+ */
 exports.updateProfile = async (req, res) => {
   try {
     const userId = req.user.userId;
-    
+
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -160,6 +201,7 @@ exports.updateProfile = async (req, res) => {
     delete updateData.email;
     delete updateData.role;
     delete updateData.password;
+    delete updateData.cvs; // CVs should be managed separately
 
     // Validate input data
     const validationErrors = validateProfileData(updateData);
@@ -174,11 +216,11 @@ exports.updateProfile = async (req, res) => {
     const user = await User.findByIdAndUpdate(
       userId,
       { $set: updateData },
-      { 
+      {
         new: true,
         runValidators: true
       }
-    ).select('name email role verificationStatus profileCompleted skills education experience certifications cvs portfolio bio location phone website socialLinks dateOfBirth gender');
+    ).select('-passwordHash -loginAttempts -lockUntil');
 
     if (!user) {
       return res.status(404).json({
@@ -198,10 +240,15 @@ exports.updateProfile = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Get candidate profile
+ * @route   GET /api/v1/candidate/profile
+ * @access  Private (Candidate)
+ */
 exports.getProfile = async (req, res) => {
   try {
     const userId = req.user.userId;
-    
+
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -210,7 +257,7 @@ exports.getProfile = async (req, res) => {
     }
 
     const user = await User.findById(userId)
-      .select('name email role verificationStatus profileCompleted skills education experience certifications cvs portfolio bio location phone website socialLinks dateOfBirth gender lastLogin')
+      .select('-passwordHash -loginAttempts -lockUntil')
       .lean();
 
     if (!user) {
@@ -220,16 +267,23 @@ exports.getProfile = async (req, res) => {
       });
     }
 
-    // Calculate age from dateOfBirth
-    if (user.dateOfBirth) {
-      const today = new Date();
-      const birthDate = new Date(user.dateOfBirth);
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const monthDiff = today.getMonth() - birthDate.getMonth();
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
-      }
-      user.age = age;
+    // Format CVs for response
+    if (user.cvs && Array.isArray(user.cvs)) {
+      user.cvs = user.cvs.map(cv => ({
+        _id: cv._id,
+        fileName: cv.fileName,
+        originalName: cv.originalName,
+        size: cv.size,
+        uploadedAt: cv.uploadedAt,
+        isPrimary: cv.isPrimary,
+        mimetype: cv.mimetype,
+        fileExtension: cv.fileExtension,
+        description: cv.description,
+        fileUrl: cv.fileUrl,
+        downloadUrl: cv.downloadUrl,
+        downloadCount: cv.downloadCount || 0,
+        viewCount: cv.viewCount || 0
+      }));
     }
 
     res.json({
@@ -242,120 +296,388 @@ exports.getProfile = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Upload CV(s) to Local Storage
+ * @route   POST /api/v1/candidate/cv
+ * @access  Private (Candidate)
+ */
 exports.uploadCV = async (req, res) => {
-  let uploadedFiles = [];
-  
   try {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'No files uploaded'
-      });
-    }
+    console.log('=== CV UPLOAD START (LOCAL STORAGE) ===');
 
     const userId = req.user.userId;
-    
-    if (!userId) {
-      // Clean up uploaded files if authentication fails
-      req.files.forEach(file => {
-        try { fs.unlinkSync(file.path); } catch (cleanupError) {}
-      });
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
-    }
-
     const user = await User.findById(userId);
+
     if (!user) {
-      req.files.forEach(file => {
-        try { fs.unlinkSync(file.path); } catch (cleanupError) {}
-      });
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
 
-    // Validate file types and sizes (updated to 5MB)
-    const invalidFiles = [];
-    req.files.forEach(file => {
-      const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-      const maxSize = 5 * 1024 * 1024; // 5MB (updated from 10MB)
-      
-      if (!allowedTypes.includes(file.mimetype)) {
-        invalidFiles.push(`File "${file.originalname}" must be PDF, DOC, or DOCX`);
-      }
-      
-      if (file.size > maxSize) {
-        invalidFiles.push(`File "${file.originalname}" must be less than 5MB`);
-      }
-    });
-
-    if (invalidFiles.length > 0) {
-      req.files.forEach(file => {
-        try { fs.unlinkSync(file.path); } catch (cleanupError) {}
-      });
+    // Check if file was uploaded via localFileUpload middleware
+    if (!req.uploadedFile) {
+      console.log('No file uploaded via localFileUpload middleware');
       return res.status(400).json({
         success: false,
-        message: 'File validation failed',
-        errors: invalidFiles
+        message: 'No CV file uploaded'
       });
     }
 
-    // Check CV limit - Maximum 10 CVs total per user (updated from 5)
-    const maxCVsPerUser = 10;
-    if (user.cvs.length + req.files.length > maxCVsPerUser) {
-      req.files.forEach(file => {
-        try { fs.unlinkSync(file.path); } catch (cleanupError) {}
-      });
+    console.log('File uploaded successfully via middleware:', req.uploadedFile.file.originalName);
+
+    // Check max CV limit using model method
+    if (!user.canAddCV()) {
       return res.status(400).json({
         success: false,
-        message: `Maximum ${maxCVsPerUser} CVs allowed. You currently have ${user.cvs.length} CVs and tried to upload ${req.files.length} more.`
+        message: 'Maximum 10 CVs allowed per user'
       });
     }
 
-    uploadedFiles = req.files.map((file, index) => ({
-      filename: file.filename,
-      originalName: file.originalname,
-      path: `/uploads/cv/${file.filename}`,
+    const uploadedFile = req.uploadedFile.file;
+
+    // Create CV data for database
+    const cvData = {
+      fileName: uploadedFile.fileName,
+      originalName: uploadedFile.originalName,
+      filePath: uploadedFile.path,
+      fileUrl: uploadedFile.url,
+      downloadUrl: uploadedFile.downloadUrl,
+      mimetype: uploadedFile.mimetype,
+      size: uploadedFile.size,
+      fileExtension: uploadedFile.originalName.split('.').pop().toLowerCase(),
       uploadedAt: new Date(),
-      isPrimary: user.cvs.length === 0 && index === 0 // Set first uploaded CV as primary if no CVs exist
-    }));
+      isPrimary: user.cvs.length === 0, // First CV is primary
+      description: req.body.description || `CV uploaded on ${new Date().toLocaleDateString()}`,
+      downloadCount: 0,
+      viewCount: 0
+    };
 
-    user.cvs.push(...uploadedFiles);
-    await user.save();
+    // Add CV to user
+    await user.addCV(cvData);
 
-    res.json({
+    // Get the newly added CV
+    const newCV = user.cvs[user.cvs.length - 1];
+
+    console.log('CV saved to database:', newCV._id);
+
+    res.status(201).json({
       success: true,
-      message: `Successfully uploaded ${uploadedFiles.length} CV(s)`,
-      data: { cvs: uploadedFiles }
+      message: 'CV uploaded successfully',
+      data: {
+        cv: {
+          _id: newCV._id,
+          fileName: newCV.fileName,
+          originalName: newCV.originalName,
+          size: newCV.size,
+          uploadedAt: newCV.uploadedAt,
+          isPrimary: newCV.isPrimary,
+          mimetype: newCV.mimetype,
+          fileExtension: newCV.fileExtension,
+          description: newCV.description,
+          fileUrl: newCV.fileUrl,
+          downloadUrl: newCV.downloadUrl
+        },
+        totalCVs: user.cvs.length,
+        primaryCVId: user.cvs.find(cv => cv.isPrimary)?._id?.toString()
+      }
     });
 
   } catch (error) {
-    // Clean up any uploaded files on error
-    if (uploadedFiles.length > 0) {
-      uploadedFiles.forEach(cv => {
-        try {
-          const filePath = path.join(process.cwd(), 'public', cv.path);
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-          }
-        } catch (cleanupError) {
-          console.error('File cleanup error:', cleanupError);
-        }
-      });
-    }
-    
-    handleControllerError(error, res, 'Error during CV upload');
+    console.error('CV upload error:', error);
+    handleControllerError(error, res, 'Error uploading CV');
   }
 };
 
+/**
+ * @desc    Get all CVs for candidate
+ * @route   GET /api/v1/candidate/cvs
+ * @access  Private (Candidate)
+ */
+exports.getAllCVs = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    const user = await User.findById(userId).select('cvs');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const formattedCVs = user.formatCVsForResponse();
+
+    res.json({
+      success: true,
+      data: {
+        cvs: formattedCVs,
+        count: formattedCVs.length,
+        primaryCV: formattedCVs.find(cv => cv.isPrimary)
+      }
+    });
+
+  } catch (error) {
+    handleControllerError(error, res, 'Error fetching CVs');
+  }
+};
+
+/**
+ * @desc    Get single CV metadata
+ * @route   GET /api/v1/candidate/cv/:cvId
+ * @access  Private (Candidate)
+ */
+exports.getCV = async (req, res) => {
+  try {
+    const { cvId } = req.params;
+    const userId = req.user.userId;
+
+    if (!isValidObjectId(cvId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid CV ID format'
+      });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const cv = user.getCVById(cvId);
+    if (!cv) {
+      return res.status(404).json({
+        success: false,
+        message: 'CV not found'
+      });
+    }
+
+    const cvData = user.getCVByIdWithUrls(cvId);
+
+    res.json({
+      success: true,
+      data: cvData
+    });
+
+  } catch (error) {
+    handleControllerError(error, res, 'Error fetching CV');
+  }
+};
+
+/**
+ * @desc    View CV (redirect to file URL)
+ * @route   GET /api/v1/candidate/cv/:cvId/view
+ * @access  Private (Candidate)
+ */
+exports.viewCV = async (req, res) => {
+  try {
+    const { cvId } = req.params;
+    const userId = req.user.userId;
+
+    if (!isValidObjectId(cvId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid CV ID format'
+      });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const cv = user.getCVById(cvId);
+    if (!cv) {
+      return res.status(404).json({
+        success: false,
+        message: 'CV not found'
+      });
+    }
+
+    if (!cv.fileUrl) {
+      return res.status(404).json({
+        success: false,
+        message: 'CV file URL not found'
+      });
+    }
+
+    // Increment view count
+    await user.incrementCVViewCount(cvId);
+
+    console.log(`Redirecting to view CV: ${cv.fileUrl}`);
+    
+    // Redirect to the file URL (served by express.static)
+    res.redirect(cv.fileUrl);
+
+  } catch (error) {
+    handleControllerError(error, res, 'Error viewing CV');
+  }
+};
+
+/**
+ * @desc    Download CV (serves file directly with proper headers)
+ * @route   GET /api/v1/candidate/cv/:cvId/download
+ * @access  Private (Candidate)
+ */
+exports.downloadCV = async (req, res) => {
+  try {
+    const { cvId } = req.params;
+    const userId = req.user.userId;
+
+    if (!isValidObjectId(cvId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid CV ID format'
+      });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const cv = user.getCVById(cvId);
+    if (!cv) {
+      return res.status(404).json({
+        success: false,
+        message: 'CV not found'
+      });
+    }
+
+    if (!cv.filePath) {
+      return res.status(404).json({
+        success: false,
+        message: 'CV file path not found'
+      });
+    }
+
+    // Check if file exists
+    if (!fs.existsSync(cv.filePath)) {
+      return res.status(404).json({
+        success: false,
+        message: 'CV file not found on server'
+      });
+    }
+
+    // Increment download count
+    await user.incrementCVDownloadCount(cvId);
+
+    // Set headers for download
+    res.set({
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(cv.originalName)}"`,
+      'Content-Type': cv.mimetype || 'application/octet-stream',
+      'Content-Length': cv.size,
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+
+    // Stream the file
+    const fileStream = fs.createReadStream(cv.filePath);
+    fileStream.pipe(res);
+
+    console.log(`Downloading CV: ${cv.originalName} (${cv.size} bytes)`);
+
+  } catch (error) {
+    console.error('CV download error:', error);
+    handleControllerError(error, res, 'Error downloading CV');
+  }
+};
+
+/**
+ * @desc    Delete CV from local storage and database
+ * @route   DELETE /api/v1/candidate/cv/:cvId
+ * @access  Private (Candidate)
+ */
+exports.deleteCV = async (req, res) => {
+  try {
+    const { cvId } = req.params;
+    const userId = req.user.userId;
+
+    if (!isValidObjectId(cvId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid CV ID format. Must be a valid MongoDB ObjectId.'
+      });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Find the CV in user's CV array
+    const cvIndex = user.cvs.findIndex(cv => cv._id.toString() === cvId);
+    if (cvIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        message: 'CV not found'
+      });
+    }
+
+    const cvToDelete = user.cvs[cvIndex];
+    const wasPrimary = cvToDelete.isPrimary;
+    const filePath = cvToDelete.filePath;
+
+    // Delete file from local storage if it exists
+    if (filePath && fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+        console.log(`Deleted CV file from local storage: ${filePath}`);
+      } catch (fileError) {
+        console.warn('Local file deletion warning:', fileError.message);
+        // Continue with database removal even if file deletion fails
+      }
+    }
+
+    // Remove CV from user's CVs array using model method
+    await user.removeCV(cvId);
+
+    res.json({
+      success: true,
+      message: 'CV deleted successfully',
+      data: {
+        deletedCVId: cvId,
+        newPrimaryCVId: user.cvs.length > 0 ? user.cvs.find(cv => cv.isPrimary)?._id?.toString() : null,
+        remainingCVs: user.cvs.length
+      }
+    });
+
+  } catch (error) {
+    console.error('Delete CV error:', error);
+    handleControllerError(error, res, 'Error deleting CV');
+  }
+};
+
+/**
+ * @desc    Set primary CV
+ * @route   PATCH /api/v1/candidate/cv/:cvId/primary
+ * @access  Private (Candidate)
+ */
 exports.setPrimaryCV = async (req, res) => {
   try {
     const { cvId } = req.params;
     const userId = req.user.userId;
-    
+
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -370,28 +692,39 @@ exports.setPrimaryCV = async (req, res) => {
       });
     }
 
-    // First, set all CVs to non-primary
-    await User.updateOne(
-      { _id: userId },
-      { $set: { 'cvs.$[].isPrimary': false } }
-    );
-
-    // Then set the specified CV as primary
-    const result = await User.updateOne(
-      { _id: userId, 'cvs._id': cvId },
-      { $set: { 'cvs.$.isPrimary': true } }
-    );
-
-    if (result.modifiedCount === 0) {
-      return res.status(404).json({
+    if (!isValidObjectId(cvId)) {
+      return res.status(400).json({
         success: false,
-        message: 'CV not found or you do not have permission to access it'
+        message: 'Invalid CV ID format. Must be a valid MongoDB ObjectId.'
       });
     }
 
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if CV exists
+    const cvExists = user.cvs.some(cv => cv._id.toString() === cvId);
+    if (!cvExists) {
+      return res.status(404).json({
+        success: false,
+        message: 'CV not found in your profile'
+      });
+    }
+
+    // Set primary CV using model method
+    await user.setPrimaryCV(cvId);
+
     res.json({
       success: true,
-      message: 'Primary CV updated successfully'
+      message: 'Primary CV updated successfully',
+      data: {
+        primaryCVId: cvId
+      }
     });
 
   } catch (error) {
@@ -399,71 +732,11 @@ exports.setPrimaryCV = async (req, res) => {
   }
 };
 
-exports.deleteCV = async (req, res) => {
-  try {
-    const { cvId } = req.params;
-    const userId = req.user.userId;
-    
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
-    }
-
-    if (!cvId) {
-      return res.status(400).json({
-        success: false,
-        message: 'CV ID is required'
-      });
-    }
-
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    const cvToDelete = user.cvs.id(cvId);
-    if (!cvToDelete) {
-      return res.status(404).json({
-        success: false,
-        message: 'CV not found'
-      });
-    }
-
-    // Delete file from filesystem
-    try {
-      const filePath = path.join(process.cwd(), 'public', cvToDelete.path);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    } catch (fileError) {
-      console.warn('File deletion warning:', fileError.message);
-      // Continue with database deletion even if file deletion fails
-    }
-
-    user.cvs.pull(cvId);
-    
-    // Set a new primary CV if the deleted one was primary
-    if (cvToDelete.isPrimary && user.cvs.length > 0) {
-      user.cvs[0].isPrimary = true;
-    }
-
-    await user.save();
-
-    res.json({
-      success: true,
-      message: 'CV deleted successfully'
-    });
-
-  } catch (error) {
-    handleControllerError(error, res, 'Error deleting CV');
-  }
-};
-
+/**
+ * @desc    Get jobs for candidate
+ * @route   GET /api/v1/candidate/jobs
+ * @access  Private (Candidate)
+ */
 exports.getJobsForCandidate = async (req, res) => {
   try {
     const {
@@ -480,9 +753,9 @@ exports.getJobsForCandidate = async (req, res) => {
 
     // Validate pagination parameters
     const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(50, Math.max(1, parseInt(limit))); // Cap at 50 for performance
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
 
-    const filter = { 
+    const filter = {
       status: 'active',
       applicationDeadline: { $gt: new Date() }
     };
@@ -553,14 +826,16 @@ exports.getJobsForCandidate = async (req, res) => {
   }
 };
 
-// @desc    Save job for candidate
-// @route   POST /api/v1/job/:jobId/save
-// @access  Private (Candidate)
+/**
+ * @desc    Save job for candidate
+ * @route   POST /api/v1/candidate/job/:jobId/save
+ * @access  Private (Candidate)
+ */
 exports.saveJob = async (req, res) => {
   try {
     const { jobId } = req.params;
     const userId = req.user.userId;
-    
+
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -572,6 +847,13 @@ exports.saveJob = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Job ID is required'
+      });
+    }
+
+    if (!isValidObjectId(jobId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Job ID format'
       });
     }
 
@@ -609,14 +891,16 @@ exports.saveJob = async (req, res) => {
   }
 };
 
-// @desc    Unsave job for candidate
-// @route   POST /api/v1/job/:jobId/unsave
-// @access  Private (Candidate)
+/**
+ * @desc    Unsave job for candidate
+ * @route   POST /api/v1/candidate/job/:jobId/unsave
+ * @access  Private (Candidate)
+ */
 exports.unsaveJob = async (req, res) => {
   try {
     const { jobId } = req.params;
     const userId = req.user.userId;
-    
+
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -628,6 +912,13 @@ exports.unsaveJob = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Job ID is required'
+      });
+    }
+
+    if (!isValidObjectId(jobId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Job ID format'
       });
     }
 
@@ -665,10 +956,15 @@ exports.unsaveJob = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Get saved jobs
+ * @route   GET /api/v1/candidate/jobs/saved
+ * @access  Private (Candidate)
+ */
 exports.getSavedJobs = async (req, res) => {
   try {
     const userId = req.user.userId;
-    
+
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -679,7 +975,7 @@ exports.getSavedJobs = async (req, res) => {
     const user = await User.findById(userId)
       .populate({
         path: 'savedJobs',
-        match: { 
+        match: {
           status: 'active',
           applicationDeadline: { $gt: new Date() }
         },

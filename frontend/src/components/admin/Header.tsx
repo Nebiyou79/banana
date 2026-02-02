@@ -42,13 +42,13 @@ const Header: React.FC = () => {
           >
             <Menu className="w-5 h-5" />
           </button>
-          
+
           <div>
             <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
               Admin Dashboard
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Welcome back, {user?.name || 'Admin'}
+              Welcome Back, {user?.name || 'Admin'}
             </p>
           </div>
         </div>
@@ -71,7 +71,7 @@ const Header: React.FC = () => {
                 {user?.role || 'Admin'}
               </p>
             </div>
-            
+
             <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
               <span className="text-white font-bold text-sm">
                 {user?.name?.charAt(0).toUpperCase() || 'A'}

@@ -1,113 +1,142 @@
+// server/src/routes/profileRoutes.js
 const express = require('express');
 const router = express.Router();
+
 const profileController = require('../controllers/profileController');
 const roleProfileController = require('../controllers/roleProfileController');
 const { verifyToken } = require('../middleware/authMiddleware');
-const {
-  uploadAvatar,
-  uploadCoverPhoto,
-  validateFileType,
-  validateFileSize
-} = require('../middleware/upload');
-const {
-  validateProfileUpdate,
-  validateProfessionalInfo,
-  validateSocialLinks,
-  validateVerification,
-  validateCandidateProfile,
-  validateCompanyProfile,
-  validateFreelancerProfile,
-  validateOrganizationProfile,
-  validatePrivacySettings,
-  validateNotificationPreferences
-} = require('../middleware/profileValidation');
+const cloudinaryMediaUpload = require('../middleware/cloudinaryMediaUpload');
 
-// Apply authentication middleware to all routes
+// =====================
+// AUTH MIDDLEWARE
+// =====================
 router.use(verifyToken);
 
-// ========== MAIN PROFILE ROUTES ==========
+// =====================
+// MAIN PROFILE ROUTES
+// =====================
 
 // Get current profile
 router.get('/', profileController.getProfile);
 
 // Update profile
-router.put('/', validateProfileUpdate, profileController.updateProfile);
+router.put('/', profileController.updateProfile);
 
 // Get public profile by user ID
 router.get('/public/:id', profileController.getPublicProfile);
 
-// Upload avatar with validation
-router.post('/avatar',
-  uploadAvatar,
-  validateFileType(['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']),
-  validateFileSize(5), // 5MB
+// =====================
+// CLOUDINARY UPLOAD ROUTES
+// =====================
+
+// ========== UPLOAD ROUTES WITH CLOUDINARY ==========
+router.post(
+  '/avatar',
+  cloudinaryMediaUpload.avatar, // This creates req.cloudinaryAvatar
   profileController.uploadAvatar
 );
 
-// Upload cover photo with validation
-router.post('/cover-photo',
-  uploadCoverPhoto,
-  validateFileType(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']),
-  validateFileSize(10), // 10MB
+// Cover photo upload with cloudinaryMediaUpload.cover middleware
+router.post(
+  '/cover',
+  cloudinaryMediaUpload.cover, // This creates req.cloudinaryCover
   profileController.uploadCoverPhoto
 );
 
-// Update professional info
-router.put('/professional-info', validateProfessionalInfo, profileController.updateProfessionalInfo);
+// Delete avatar
+router.delete('/avatar', profileController.deleteAvatar);
 
-// Update social links
-router.put('/social-links', validateSocialLinks, profileController.updateSocialLinks);
+// Delete cover photo
+router.delete('/cover', profileController.deleteCoverPhoto);
 
-// Get profile completion
+// Test upload route
+router.get('/test-upload', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Upload routes are available',
+    routes: {
+      avatar: 'POST /api/v1/profile/avatar',
+      cover: 'POST /api/v1/profile/cover',
+      deleteAvatar: 'DELETE /api/v1/profile/avatar',
+      deleteCover: 'DELETE /api/v1/profile/cover'
+    }
+  });
+});
+
+// =====================
+// PROFILE DATA UPDATES
+// =====================
+
+// Professional information
+router.put('/professional-info', profileController.updateProfessionalInfo);
+
+// Social links
+router.put('/social-links', profileController.updateSocialLinks);
+
+// Profile completion
 router.get('/completion', profileController.getProfileCompletion);
 
-// Submit verification
-router.post('/verification', validateVerification, profileController.submitVerification);
+// Verification
+router.post('/verification', profileController.submitVerification);
 
-// Update privacy settings
-router.put('/privacy-settings', validatePrivacySettings, profileController.updatePrivacySettings);
+// Privacy settings
+router.put('/privacy-settings', profileController.updatePrivacySettings);
 
-// Update notification preferences
-router.put('/notification-preferences', validateNotificationPreferences, profileController.updateNotificationPreferences);
+// Notification preferences
+router.put('/notification-preferences', profileController.updateNotificationPreferences);
 
-// Get profile summary
+// Profile summary
 router.get('/summary', profileController.getProfileSummary);
 
-// Update social stats (admin/internal use)
-router.put('/social-stats', profileController.updateSocialStats);
+// =====================
+// PUBLIC ROUTES (NO AUTH REQUIRED)
+// =====================
 
-// ========== PUBLIC PROFILE ROUTES (No Auth Required) ==========
-
-// Get popular profiles
+// Popular profiles
 router.get('/popular', profileController.getPopularProfiles);
 
 // Search profiles
 router.get('/search', profileController.searchProfiles);
 
-// ========== ROLE-SPECIFIC PROFILE ROUTES ==========
+// =====================
+// ROLE-SPECIFIC ROUTES
+// =====================
 
 // Candidate routes
 router.get('/candidate', roleProfileController.getCandidateProfile);
-router.put('/candidate', validateCandidateProfile, roleProfileController.updateCandidateProfile);
+router.put('/candidate', roleProfileController.updateCandidateProfile);
 
 // Company routes
 router.get('/company', roleProfileController.getCompanyProfile);
-router.put('/company', validateCompanyProfile, roleProfileController.updateCompanyProfile);
+router.put('/company', roleProfileController.updateCompanyProfile);
 
 // Freelancer routes
 router.get('/freelancer', roleProfileController.getFreelancerProfile);
-router.put('/freelancer', validateFreelancerProfile, roleProfileController.updateFreelancerProfile);
+router.put('/freelancer', roleProfileController.updateFreelancerProfile);
 
 // Organization routes
 router.get('/organization', roleProfileController.getOrganizationProfile);
-router.put('/organization', validateOrganizationProfile, roleProfileController.updateOrganizationProfile);
+router.put('/organization', roleProfileController.updateOrganizationProfile);
 
-// 404 handler for profile routes
-router.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Profile route not found',
-    code: 'ROUTE_NOT_FOUND'
+// =====================
+// ADMIN/INTERNAL ROUTES
+// =====================
+
+// Social stats update (admin/internal use)
+router.put('/social-stats', profileController.updateSocialStats);
+
+// =====================
+// HEALTH CHECK ROUTE
+// =====================
+router.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Profile routes are working',
+    timestamp: new Date().toISOString(),
+    user: req.user ? {
+      id: req.user.userId,
+      role: req.user.role
+    } : null
   });
 });
 

@@ -1,541 +1,752 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// components/JobFilter.tsx - FIXED VERSION
 import React, { useState, useEffect } from 'react';
-import { JobFilters } from '@/services/jobService';
-import { 
-  Search, 
-  Filter, 
-  MapPin, 
-  DollarSign,
+import {
+  Search,
+  Filter,
   X,
-  Star,
-  Clock,
-  Globe,
-  Building2,
-  Users,
-  GraduationCap
+  ChevronDown,
+  MapPin,
+  Briefcase,
+  Target,
+  DollarSign,
+  Calendar,
+  CheckCircle,
+  RefreshCw
 } from 'lucide-react';
+import { colorClasses, getTheme, ThemeMode } from '@/utils/color';
+import { jobService, JobFilters as JobFiltersType } from '@/services/jobService';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { Switch } from '@/components/ui/Switch';
 
 interface JobFilterProps {
-  onFilter: (filters: JobFilters) => void;
-  loading?: boolean;
-  initialFilters?: JobFilters;
-  showAdvanced?: boolean;
-  onToggleAdvanced?: () => void;
-  showJobTypeFilter?: boolean;
+  filters?: JobFilterState;
+  onChange: (filters: JobFilterState) => void;
+  onApply: () => void;
+  onClear: () => void;
+  isLoading?: boolean;
+  themeMode?: ThemeMode;
+  className?: string;
 }
 
-const JobFilter: React.FC<JobFilterProps> = ({ 
-  onFilter, 
-  loading = false,
-  initialFilters = {},
-  showAdvanced = false,
-  onToggleAdvanced,
-  showJobTypeFilter = true
+export interface JobFilterState {
+  search: string;
+  category: string | null;
+  types: string[];
+  location: string | null;
+  experienceLevel: string | null;
+  salaryMode: string | null;
+  salaryRange?: {
+    min?: number;
+    max?: number;
+  };
+  datePosted?: string;
+  applicationsOpen?: boolean;
+}
+
+// Default filter state
+const DEFAULT_FILTERS: JobFilterState = {
+  search: '',
+  category: null,
+  types: [],
+  location: null,
+  experienceLevel: null,
+  salaryMode: null,
+  applicationsOpen: false
+};
+
+const JobFilter: React.FC<JobFilterProps> = ({
+  filters = DEFAULT_FILTERS, // Provide default value
+  onChange,
+  onApply,
+  onClear,
+  isLoading = false,
+  themeMode = 'light',
+  className = ''
 }) => {
-  const [filters, setFilters] = useState<JobFilters>({
-    search: '',
-    region: '',
-    city: '',
-    type: '',
-    category: '',
-    remote: '',
-    experienceLevel: '',
-    educationLevel: '',
-    minSalary: undefined,
-    maxSalary: undefined,
-    currency: 'ETB',
-    workArrangement: '',
-    featured: undefined,
-    urgent: undefined,
-    sortBy: 'createdAt',
-    sortOrder: 'desc',
-    jobType: undefined,
-    opportunityType: '',
-    ...initialFilters
-  });
+  const theme = getTheme(themeMode);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  // Check if mobile on mount and resize
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
 
-  // Ethiopian market data
-  const ethiopianRegions = [
-    { name: 'Addis Ababa', slug: 'addis-ababa', cities: ['Addis Ababa', 'Akaki Kaliti', 'Arada', 'Bole', 'Gulele', 'Kirkos', 'Kolfe Keranio', 'Lideta', 'Nifas Silk Lafto', 'Yeka'] },
-    { name: 'Amhara', slug: 'amhara', cities: ['Bahir Dar', 'Gondar', 'Dessie', 'Debre Markos', 'Debre Birhan'] },
-    { name: 'Oromia', slug: 'oromia', cities: ['Adama', 'Nazret', 'Jimma', 'Bishoftu', 'Ambo'] },
-    { name: 'Tigray', slug: 'tigray', cities: ['Mekele', 'Adigrat', 'Axum', 'Adwa', 'Shire'] },
-    { name: 'SNNPR', slug: 'snnpr', cities: ['Hawassa', 'Arba Minch', 'Dila', 'Wolaita Sodo', 'Hosaena'] },
-    { name: 'Somali', slug: 'somali', cities: ['Jijiga', 'Degehabur', 'Gode', 'Kebri Dahar'] },
-    { name: 'Afar', slug: 'afar', cities: ['Semera', 'Asayita', 'Awash', 'Logiya'] },
-    { name: 'Benishangul-Gumuz', slug: 'benishangul-gumuz', cities: ['Assosa', 'Metekel'] },
-    { name: 'Gambela', slug: 'gambela', cities: ['Gambela'] },
-    { name: 'Harari', slug: 'harari', cities: ['Harar'] },
-    { name: 'Sidama', slug: 'sidama', cities: ['Hawassa', 'Yirgalem', 'Leku'] },
-    { name: 'South West Ethiopia', slug: 'south-west-ethiopia', cities: ['Bonga', 'Mizan Teferi'] },
-    { name: 'Dire Dawa', slug: 'dire-dawa', cities: ['Dire Dawa'] },
-    { name: 'International', slug: 'international', cities: ['Remote Worldwide'] }
-  ];
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Filter options
+  const categories = jobService.getJobCategories();
+  const regions = jobService.getEthiopianRegions();
 
   const jobTypes = [
     { value: 'full-time', label: 'Full Time' },
     { value: 'part-time', label: 'Part Time' },
     { value: 'contract', label: 'Contract' },
     { value: 'internship', label: 'Internship' },
-    { value: 'temporary', label: 'Temporary' },
-    { value: 'volunteer', label: 'Volunteer' },
     { value: 'remote', label: 'Remote' },
     { value: 'hybrid', label: 'Hybrid' }
   ];
 
   const experienceLevels = [
-    { value: 'fresh-graduate', label: 'Fresh Graduate' },
     { value: 'entry-level', label: 'Entry Level' },
     { value: 'mid-level', label: 'Mid Level' },
     { value: 'senior-level', label: 'Senior Level' },
-    { value: 'managerial', label: 'Managerial' },
-    { value: 'director', label: 'Director' },
-    { value: 'executive', label: 'Executive' }
+    { value: 'managerial', label: 'Managerial' }
   ];
 
-  const educationLevels = [
-    // Ethiopian Education System
-    { value: 'primary-education', label: 'Primary Education' },
-    { value: 'secondary-education', label: 'Secondary Education' },
-    { value: 'tvet-level-i', label: 'TVET Level I - Basic Skills' },
-    { value: 'tvet-level-ii', label: 'TVET Level II - Skilled Worker' },
-    { value: 'tvet-level-iii', label: 'TVET Level III - Technician' },
-    { value: 'tvet-level-iv', label: 'TVET Level IV - Senior Technician' },
-    { value: 'tvet-level-v', label: 'TVET Level V - Expert/Trainer' },
-    { value: 'undergraduate-bachelors', label: 'Undergraduate (Bachelor\'s)' },
-    { value: 'postgraduate-masters', label: 'Postgraduate (Master\'s)' },
-    { value: 'doctoral-phd', label: 'Doctoral (Ph.D.)' },
-    { value: 'lecturer', label: 'Lecturer' },
-    { value: 'professor', label: 'Professor' },
-    // Backward compatibility
-    { value: 'high-school', label: 'High School' },
-    { value: 'diploma', label: 'Diploma' },
-    { value: 'bachelors', label: "Bachelor's" },
-    { value: 'masters', label: "Master's" },
-    { value: 'phd', label: 'PhD' },
-    { value: 'none-required', label: 'Not Required' }
+  const salaryModes = [
+    { value: 'range', label: 'Salary Range', icon: <DollarSign className="w-4 h-4" /> },
+    { value: 'negotiable', label: 'Negotiable', icon: <Briefcase className="w-4 h-4" /> },
+    { value: 'company-scale', label: 'Company Scale', icon: <Target className="w-4 h-4" /> }
   ];
 
-  const workArrangements = [
-    { value: 'office', label: 'Office' },
-    { value: 'field-work', label: 'Field Work' },
-    { value: 'both', label: 'Both' }
+  const dateOptions = [
+    { value: '24h', label: 'Last 24 hours' },
+    { value: '7d', label: 'Last week' },
+    { value: '30d', label: 'Last month' }
   ];
 
-  const jobTypeOptions = [
-    { value: 'company', label: 'Company Jobs' },
-    { value: 'organization', label: 'Organization Opportunities' }
-  ];
-
-  const opportunityTypes = [
-    { value: 'job', label: 'Job Opportunity' },
-    { value: 'volunteer', label: 'Volunteer Position' },
-    { value: 'internship', label: 'Internship' },
-    { value: 'fellowship', label: 'Fellowship' },
-    { value: 'training', label: 'Training Program' },
-    { value: 'grant', label: 'Grant Opportunity' },
-    { value: 'other', label: 'Other Opportunity' }
-  ];
-
-  const salaryRanges = [
-    { label: 'Under 2,000 ETB', min: 0, max: 2000 },
-    { label: '2,000 - 5,000 ETB', min: 2000, max: 5000 },
-    { label: '5,000 - 10,000 ETB', min: 5000, max: 10000 },
-    { label: '10,000 - 20,000 ETB', min: 10000, max: 20000 },
-    { label: '20,000 - 50,000 ETB', min: 20000, max: 50000 },
-    { label: '50,000+ ETB', min: 50000, max: null }
-  ];
-
-  const selectedRegion = ethiopianRegions.find(region => region.slug === filters.region);
-
-  useEffect(() => {
-    onFilter(filters);
-  }, [filters]);
-
-  const handleChange = (key: keyof JobFilters, value: any) => {
-    setFilters(prev => ({
-      ...prev,
-      [key]: value
-    }));
+  // Calculate active filter count - FIXED: Add safe checks
+  const getActiveFilterCount = () => {
+    let count = 0;
+    if (filters?.search) count++;
+    if (filters?.category) count++;
+    if (filters?.types?.length > 0) count++;
+    if (filters?.location) count++;
+    if (filters?.experienceLevel) count++;
+    if (filters?.salaryMode) count++;
+    if (filters?.salaryRange?.min || filters?.salaryRange?.max) count++;
+    if (filters?.datePosted) count++;
+    if (filters?.applicationsOpen) count++;
+    return count;
   };
 
-  const handleSalaryRangeSelect = (min: number, max: number | null) => {
-    setFilters(prev => ({
-      ...prev,
-      minSalary: min,
-      maxSalary: max || undefined
-    }));
+  const activeFilterCount = getActiveFilterCount();
+
+  // Handler functions with safe checks
+  const handleSearchChange = (value: string) => {
+    onChange({ ...filters, search: value });
   };
 
-  const clearFilters = () => {
-    setFilters({
-      search: '',
-      region: '',
-      city: '',
-      type: '',
-      category: '',
-      remote: '',
-      experienceLevel: '',
-      educationLevel: '',
-      minSalary: undefined,
-      maxSalary: undefined,
-      currency: 'ETB',
-      workArrangement: '',
-      featured: undefined,
-      urgent: undefined,
-      sortBy: 'createdAt',
-      sortOrder: 'desc',
-      jobType: undefined,
-      opportunityType: ''
+  const handleCategoryChange = (value: string) => {
+    onChange({ ...filters, category: value === filters.category ? null : value });
+  };
+
+  const handleTypeToggle = (type: string) => {
+    const currentTypes = filters.types || [];
+    const newTypes = currentTypes.includes(type)
+      ? currentTypes.filter(t => t !== type)
+      : [...currentTypes, type];
+    onChange({ ...filters, types: newTypes });
+  };
+
+  const handleLocationChange = (value: string) => {
+    onChange({ ...filters, location: value === filters.location ? null : value });
+  };
+
+  const handleExperienceChange = (value: string) => {
+    onChange({ ...filters, experienceLevel: value === filters.experienceLevel ? null : value });
+  };
+
+  const handleSalaryModeChange = (value: string) => {
+    onChange({ ...filters, salaryMode: value === filters.salaryMode ? null : value });
+  };
+
+  const handleSalaryRangeChange = (min?: number, max?: number) => {
+    onChange({
+      ...filters,
+      salaryRange: { min, max }
     });
   };
 
-  const hasActiveFilters = Object.values(filters).some(value => 
-    value !== undefined && value !== '' && value !== 'ETB' && value !== 'createdAt' && value !== 'desc'
-  );
+  const handleDatePostedChange = (value: string) => {
+    onChange({ ...filters, datePosted: value === filters.datePosted ? undefined : value });
+  };
 
-  return (
-    <div className="bg-white rounded-xl p-6 border border-gray-200 mb-6">
-      {/* Main Search Bar */}
-      <div className="flex flex-col lg:flex-row gap-4 mb-6">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="Search jobs by title, skills, or company..."
-            value={filters.search || ''}
-            onChange={(e) => handleChange('search', e.target.value)}
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-          />
-        </div>
-        
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowMobileFilters(!showMobileFilters)}
-            className="lg:hidden px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm font-medium"
-          >
-            <Filter className="w-4 h-4" />
+  const handleApplicationsOpenToggle = (checked: boolean) => {
+    onChange({ ...filters, applicationsOpen: checked });
+  };
+
+  const handleClearAll = () => {
+    onClear();
+    setIsExpanded(false);
+    setIsAdvancedOpen(false);
+  };
+
+  const handleApply = () => {
+    onApply();
+    if (isMobile) {
+      setIsExpanded(false);
+    }
+  };
+
+  // Mobile header component
+  const MobileHeader = () => (
+    <div className={`p-4 border-b ${colorClasses.bg.white} dark:${colorClasses.bg.darkNavy}`}
+      style={{ borderColor: theme.border.primary }}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center">
+          <Filter className="w-5 h-5 mr-2" style={{ color: theme.text.primary }} />
+          <h3 className="font-semibold" style={{ color: theme.text.primary }}>
             Filters
-          </button>
-          
-          {onToggleAdvanced && (
-            <button
-              onClick={onToggleAdvanced}
-              className="px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm font-medium"
-            >
-              <Filter className="w-4 h-4" />
-              {showAdvanced ? 'Simple Filters' : 'Advanced Filters'}
-            </button>
+          </h3>
+          {activeFilterCount > 0 && (
+            <Badge className="ml-2" variant="secondary">
+              {activeFilterCount} active
+            </Badge>
           )}
         </div>
+        <button
+          onClick={() => setIsExpanded(false)}
+          className="p-1 hover:opacity-70"
+          style={{ color: theme.text.primary }}
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+    </div>
+  );
+
+  // Filter section component
+  const FilterSection: React.FC<{
+    title: string;
+    icon?: React.ReactNode;
+    children: React.ReactNode;
+  }> = ({ title, icon, children }) => (
+    <div className="mb-6">
+      <div className="flex items-center mb-3">
+        {icon && (
+          <span className="mr-2" style={{ color: theme.text.primary }}>
+            {icon}
+          </span>
+        )}
+        <h4 className="font-medium text-sm" style={{ color: theme.text.primary }}>
+          {title}
+        </h4>
+      </div>
+      {children}
+    </div>
+  );
+
+  // Filter chips for active filters
+  const FilterChips = () => {
+    if (activeFilterCount === 0) return null;
+
+    const chips = [];
+
+    if (filters.search) {
+      chips.push({
+        label: `Search: ${filters.search}`,
+        onRemove: () => onChange({ ...filters, search: '' })
+      });
+    }
+
+    if (filters.category) {
+      const categoryLabel = categories.find(c => c.value === filters.category)?.label || filters.category;
+      chips.push({
+        label: `Category: ${categoryLabel}`,
+        onRemove: () => onChange({ ...filters, category: null })
+      });
+    }
+
+    if (filters.location) {
+      const region = regions.find(r => r.slug === filters.location);
+      chips.push({
+        label: `Location: ${region?.name || filters.location}`,
+        onRemove: () => onChange({ ...filters, location: null })
+      });
+    }
+
+    if (filters.types?.length > 0) {
+      chips.push({
+        label: `Type: ${filters.types.length} selected`,
+        onRemove: () => onChange({ ...filters, types: [] })
+      });
+    }
+
+    if (filters.salaryMode) {
+      const modeLabel = salaryModes.find(m => m.value === filters.salaryMode)?.label || filters.salaryMode;
+      chips.push({
+        label: `Salary: ${modeLabel}`,
+        onRemove: () => onChange({ ...filters, salaryMode: null })
+      });
+    }
+
+    if (filters.applicationsOpen) {
+      chips.push({
+        label: 'Applications Open',
+        onRemove: () => onChange({ ...filters, applicationsOpen: false })
+      });
+    }
+
+    return (
+      <div className="flex flex-wrap gap-2 mb-6">
+        {chips.slice(0, 3).map((chip, index) => (
+          <Badge
+            key={index}
+            variant="outline"
+            className="flex items-center gap-1 pl-2 pr-1 py-1"
+            style={{
+              backgroundColor: theme.bg.primary,
+              borderColor: theme.border.primary,
+              color: theme.text.primary
+            }}
+          >
+            {chip.label}
+            <button
+              onClick={chip.onRemove}
+              className="ml-1 hover:opacity-70"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </Badge>
+        ))}
+        {chips.length > 3 && (
+          <Badge
+            variant="outline"
+            className="pl-2 pr-2 py-1"
+            style={{
+              backgroundColor: theme.bg.primary,
+              borderColor: theme.border.primary,
+              color: theme.text.primary
+            }}
+          >
+            +{chips.length - 3} more
+          </Badge>
+        )}
+      </div>
+    );
+  };
+
+  // Desktop filter content
+  const DesktopFilterContent = () => (
+    <div className="space-y-6">
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4"
+          style={{ color: theme.text.muted }} />
+        <Input
+          type="search"
+          placeholder="Search jobs, companies..."
+          value={filters.search || ''}
+          onChange={(e) => handleSearchChange(e.target.value)}
+          className="pl-9"
+          style={{
+            backgroundColor: theme.bg.primary,
+            borderColor: theme.border.primary,
+            color: theme.text.primary
+          }}
+        />
       </div>
 
-      {/* Quick Filters */}
-      <div className="flex flex-wrap gap-3 mb-6">
-        {showJobTypeFilter && (
-          <select
-            value={filters.jobType || ''}
-            onChange={(e) => handleChange('jobType', e.target.value || undefined)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-          >
-            <option value="">All Types</option>
-            {jobTypeOptions.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        )}
+      {/* Active Filter Chips */}
+      <FilterChips />
 
-        <select
-          value={filters.region || ''}
-          onChange={(e) => handleChange('region', e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-        >
-          <option value="">All Regions</option>
-          {ethiopianRegions.map(region => (
-            <option key={region.slug} value={region.slug}>
-              {region.name}
-            </option>
+      {/* Category */}
+      <FilterSection title="Category" icon={<Briefcase className="w-4 h-4" />}>
+        <div className="grid grid-cols-2 gap-2">
+          {categories.slice(0, 10).map((category) => (
+            <button
+              key={category.value}
+              onClick={() => handleCategoryChange(category.value)}
+              className={`p-2 rounded-lg border text-xs text-left transition-colors ${filters.category === category.value ? 'ring-2' : ''}`}
+              style={{
+                backgroundColor: filters.category === category.value
+                  ? theme.bg.primary
+                  : theme.bg.secondary,
+                borderColor: filters.category === category.value
+                  ? theme.border.primary
+                  : theme.border.secondary,
+                color: theme.text.secondary,
+              }}
+            >
+              {category.label}
+            </button>
           ))}
-        </select>
+        </div>
+      </FilterSection>
 
-        <select
-          value={filters.type || ''}
-          onChange={(e) => handleChange('type', e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-        >
-          <option value="">All Job Types</option>
-          {jobTypes.map(type => (
-            <option key={type.value} value={type.value}>
+      {/* Job Type */}
+      <FilterSection title="Job Type" icon={<Briefcase className="w-4 h-4" />}>
+        <div className="flex flex-wrap gap-2">
+          {jobTypes.map((type) => (
+            <button
+              key={type.value}
+              onClick={() => handleTypeToggle(type.value)}
+              className={`px-3 py-1.5 rounded-full border text-xs transition-colors ${filters.types?.includes(type.value) ? 'ring-1' : ''}`}
+              style={{
+                backgroundColor: filters.types?.includes(type.value)
+                  ? theme.bg.primary
+                  : theme.bg.secondary,
+                borderColor: filters.types?.includes(type.value)
+                  ? theme.border.primary
+                  : theme.border.secondary,
+                color: theme.text.secondary,
+              }}
+            >
               {type.label}
-            </option>
+            </button>
           ))}
-        </select>
+        </div>
+      </FilterSection>
 
-        <select
-          value={filters.experienceLevel || ''}
-          onChange={(e) => handleChange('experienceLevel', e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-        >
-          <option value="">All Experience Levels</option>
-          {experienceLevels.map(level => (
-            <option key={level.value} value={level.value}>
+      {/* Location */}
+      <FilterSection title="Location" icon={<MapPin className="w-4 h-4" />}>
+        <div className="grid grid-cols-2 gap-2">
+          {regions.slice(0, 8).map((region) => (
+            <button
+              key={region.slug}
+              onClick={() => handleLocationChange(region.slug)}
+              className={`p-2 rounded-lg border text-xs text-left ${filters.location === region.slug ? 'ring-2' : ''}`}
+              style={{
+                backgroundColor: filters.location === region.slug
+                  ? theme.bg.primary
+                  : theme.bg.secondary,
+                borderColor: filters.location === region.slug
+                  ? theme.border.primary
+                  : theme.border.secondary,
+                color: theme.text.secondary,
+              }}
+            >
+              {region.name}
+            </button>
+          ))}
+        </div>
+      </FilterSection>
+
+      {/* Experience Level */}
+      <FilterSection title="Experience" icon={<Target className="w-4 h-4" />}>
+        <div className="flex flex-wrap gap-2">
+          {experienceLevels.map((level) => (
+            <button
+              key={level.value}
+              onClick={() => handleExperienceChange(level.value)}
+              className={`px-3 py-1.5 rounded-full border text-xs ${filters.experienceLevel === level.value ? 'ring-1' : ''}`}
+              style={{
+                backgroundColor: filters.experienceLevel === level.value
+                  ? theme.bg.primary
+                  : theme.bg.secondary,
+                borderColor: filters.experienceLevel === level.value
+                  ? theme.border.primary
+                  : theme.border.secondary,
+                color: theme.text.secondary,
+              }}
+            >
               {level.label}
-            </option>
+            </button>
           ))}
-        </select>
+        </div>
+      </FilterSection>
 
-        <select
-          value={filters.remote || ''}
-          onChange={(e) => handleChange('remote', e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-        >
-          <option value="">All Work Locations</option>
-          <option value="on-site">On-Site</option>
-          <option value="hybrid">Hybrid</option>
-          <option value="remote">Remote</option>
-        </select>
+      {/* Salary Mode */}
+      <FilterSection title="Salary Type" icon={<DollarSign className="w-4 h-4" />}>
+        <div className="flex flex-wrap gap-2">
+          {salaryModes.map((mode) => (
+            <button
+              key={mode.value}
+              onClick={() => handleSalaryModeChange(mode.value)}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-full border text-xs ${filters.salaryMode === mode.value ? 'ring-1' : ''}`}
+              style={{
+                backgroundColor: filters.salaryMode === mode.value
+                  ? theme.bg.primary
+                  : theme.bg.secondary,
+                borderColor: filters.salaryMode === mode.value
+                  ? theme.border.primary
+                  : theme.border.secondary,
+                color: theme.text.secondary,
+              }}
+            >
+              {mode.icon}
+              {mode.label}
+            </button>
+          ))}
+        </div>
+      </FilterSection>
 
-        <select
-          value={filters.sortBy || 'createdAt'}
-          onChange={(e) => handleChange('sortBy', e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-        >
-          <option value="createdAt">Newest First</option>
-          <option value="applicationDeadline">Deadline</option>
-          <option value="salary">Salary</option>
-          <option value="relevance">Relevance</option>
-        </select>
-
-        {hasActiveFilters && (
-          <button
-            onClick={clearFilters}
-            className="px-3 py-2 text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-2 text-sm font-medium"
-          >
-            <X className="w-4 h-4" />
-            Clear All
-          </button>
-        )}
-      </div>
+      {/* Advanced Filters Toggle */}
+      <button
+        onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+        className="flex items-center justify-between w-full p-3 rounded-lg border mb-4"
+        style={{
+          backgroundColor: theme.bg.secondary,
+          borderColor: theme.border.secondary
+        }}
+      >
+        <span className="text-sm font-medium" style={{ color: theme.text.primary }}>
+          More Options
+        </span>
+        <ChevronDown className={`w-4 h-4 transition-transform ${isAdvancedOpen ? 'rotate-180' : ''}`}
+          style={{ color: theme.text.primary }} />
+      </button>
 
       {/* Advanced Filters */}
-      {(showAdvanced || showMobileFilters) && (
-        <div className="border-t border-gray-200 pt-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Job Type */}
-            {showJobTypeFilter && (
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                  <Building2 className="w-4 h-4" />
-                  Job Type
-                </label>
-                <select
-                  value={filters.jobType || ''}
-                  onChange={(e) => handleChange('jobType', e.target.value || undefined)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                >
-                  <option value="">All Types</option>
-                  {jobTypeOptions.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+      {isAdvancedOpen && (
+        <div className="space-y-6 p-4 rounded-lg border"
+          style={{
+            backgroundColor: theme.bg.secondary,
+            borderColor: theme.border.secondary
+          }}>
+
+          {/* Salary Range (only if range mode selected) */}
+          {filters.salaryMode === 'range' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium" style={{ color: theme.text.primary }}>
+                  Salary Range (ETB)
+                </span>
+                <span className="text-sm" style={{ color: theme.text.muted }}>
+                  {filters.salaryRange?.min || 0} - {filters.salaryRange?.max || 'Any'}
+                </span>
               </div>
-            )}
-
-            {/* Opportunity Type */}
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                <Users className="w-4 h-4" />
-                Opportunity Type
-              </label>
-              <select
-                value={filters.opportunityType || ''}
-                onChange={(e) => handleChange('opportunityType', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              >
-                <option value="">All Opportunities</option>
-                {opportunityTypes.map(type => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <label className="text-xs block mb-1" style={{ color: theme.text.muted }}>
+                      Min
+                    </label>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={filters.salaryRange?.min || ''}
+                      onChange={(e) => handleSalaryRangeChange(
+                        e.target.value ? parseInt(e.target.value) : undefined,
+                        filters.salaryRange?.max
+                      )}
+                      className="w-full"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs block mb-1" style={{ color: theme.text.muted }}>
+                      Max
+                    </label>
+                    <Input
+                      type="number"
+                      placeholder="Any"
+                      value={filters.salaryRange?.max || ''}
+                      onChange={(e) => handleSalaryRangeChange(
+                        filters.salaryRange?.min,
+                        e.target.value ? parseInt(e.target.value) : undefined
+                      )}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleSalaryRangeChange(10000, 30000)}
+                    className="text-xs px-2 py-1 rounded border"
+                    style={{
+                      backgroundColor: filters.salaryRange?.min === 10000 && filters.salaryRange?.max === 30000
+                        ? theme.bg.primary
+                        : theme.bg.secondary,
+                      borderColor: theme.border.secondary,
+                      color: theme.text.secondary
+                    }}
+                  >
+                    10K-30K
+                  </button>
+                  <button
+                    onClick={() => handleSalaryRangeChange(30000, 50000)}
+                    className="text-xs px-2 py-1 rounded border"
+                    style={{
+                      backgroundColor: filters.salaryRange?.min === 30000 && filters.salaryRange?.max === 50000
+                        ? theme.bg.primary
+                        : theme.bg.secondary,
+                      borderColor: theme.border.secondary,
+                      color: theme.text.secondary
+                    }}
+                  >
+                    30K-50K
+                  </button>
+                  <button
+                    onClick={() => handleSalaryRangeChange(50000, undefined)}
+                    className="text-xs px-2 py-1 rounded border"
+                    style={{
+                      backgroundColor: filters.salaryRange?.min === 50000
+                        ? theme.bg.primary
+                        : theme.bg.secondary,
+                      borderColor: theme.border.secondary,
+                      color: theme.text.secondary
+                    }}
+                  >
+                    50K+
+                  </button>
+                </div>
+              </div>
             </div>
+          )}
 
-            {/* City */}
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                <MapPin className="w-4 h-4" />
-                City
-              </label>
-              <select
-                value={filters.city || ''}
-                onChange={(e) => handleChange('city', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              >
-                <option value="">All Cities</option>
-                {selectedRegion?.cities.map(city => (
-                  <option key={city} value={city}>
-                    {city}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Education Level */}
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                <GraduationCap className="w-4 h-4" />
-                Education Level
-              </label>
-              <select
-                value={filters.educationLevel || ''}
-                onChange={(e) => handleChange('educationLevel', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              >
-                <option value="">Any Education</option>
-                {educationLevels.map(level => (
-                  <option key={level.value} value={level.value}>
-                    {level.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Salary Range */}
-          <div>
-            <label className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
-              Salary Range ({filters.currency})
-            </label>
+          {/* Date Posted */}
+          <div className="space-y-2">
+            <span className="text-sm font-medium" style={{ color: theme.text.primary }}>
+              Date Posted
+            </span>
             <div className="flex flex-wrap gap-2">
-              {salaryRanges.map((range, index) => (
+              {dateOptions.map((option) => (
                 <button
-                  key={index}
-                  onClick={() => handleSalaryRangeSelect(range.min, range.max)}
-                  className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                    filters.minSalary === range.min && filters.maxSalary === range.max
-                      ? 'bg-blue-100 text-blue-700 border-blue-300'
-                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                  }`}
+                  key={option.value}
+                  onClick={() => handleDatePostedChange(option.value)}
+                  className={`px-3 py-1.5 rounded-full border text-xs ${filters.datePosted === option.value ? 'ring-1' : ''}`}
+                  style={{
+                    backgroundColor: filters.datePosted === option.value
+                      ? theme.bg.primary
+                      : theme.bg.secondary,
+                    borderColor: filters.datePosted === option.value
+                      ? theme.border.primary
+                      : theme.border.secondary,
+                    color: theme.text.secondary,
+                  }}
                 >
-                  {range.label}
+                  {option.label}
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-3 mt-3">
-              <input
-                type="number"
-                placeholder="Min"
-                value={filters.minSalary || ''}
-                onChange={(e) => handleChange('minSalary', e.target.value ? Number(e.target.value) : undefined)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              />
-              <span className="text-gray-500">to</span>
-              <input
-                type="number"
-                placeholder="Max"
-                value={filters.maxSalary || ''}
-                onChange={(e) => handleChange('maxSalary', e.target.value ? Number(e.target.value) : undefined)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              />
-            </div>
           </div>
 
-          {/* Special Filters */}
-          <div className="flex flex-wrap gap-4">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={filters.featured || false}
-                onChange={(e) => handleChange('featured', e.target.checked ? true : undefined)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <span className="ml-2 text-sm text-gray-700 flex items-center gap-2">
-                <Star className="w-4 h-4" />
-                Featured Jobs
+          {/* Applications Open */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4" style={{ color: theme.text.primary }} />
+              <span className="text-sm" style={{ color: theme.text.primary }}>
+                Only show jobs accepting applications
               </span>
-            </label>
-
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={filters.urgent || false}
-                onChange={(e) => handleChange('urgent', e.target.checked ? true : undefined)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <span className="ml-2 text-sm text-gray-700 flex items-center gap-2">
-                <Clock className="w-4 h-4" />
-                Urgent Hiring
-              </span>
-            </label>
-
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={filters.remote === 'remote'}
-                onChange={(e) => handleChange('remote', e.target.checked ? 'remote' : '')}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <span className="ml-2 text-sm text-gray-700 flex items-center gap-2">
-                <Globe className="w-4 h-4" />
-                Remote Only
-              </span>
-            </label>
+            </div>
+            <Switch
+              checked={filters.applicationsOpen || false}
+              onCheckedChange={handleApplicationsOpenToggle}
+            />
           </div>
         </div>
       )}
 
-      {/* Active Filters Display */}
-      {hasActiveFilters && (
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-gray-600 font-medium">Active filters:</span>
-            {filters.search && (
-              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
-                Search: {filters.search}
-                <button
-                  onClick={() => handleChange('search', '')}
-                  className="ml-1 hover:text-blue-600"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-            {filters.jobType && (
-              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-800">
-                Type: {jobTypeOptions.find(t => t.value === filters.jobType)?.label}
-                <button
-                  onClick={() => handleChange('jobType', undefined)}
-                  className="ml-1 hover:text-purple-600"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-            {filters.region && (
-              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
-                Region: {ethiopianRegions.find(r => r.slug === filters.region)?.name}
-                <button
-                  onClick={() => handleChange('region', '')}
-                  className="ml-1 hover:text-green-600"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-          </div>
+      {/* Action Buttons */}
+      <div className="flex gap-3 pt-4 border-t"
+        style={{ borderColor: theme.border.secondary }}>
+        <Button
+          variant="outline"
+          onClick={handleClearAll}
+          className="flex-1"
+          disabled={isLoading}
+        >
+          Clear All
+        </Button>
+        <Button
+          onClick={handleApply}
+          className="flex-1"
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <>
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              Applying...
+            </>
+          ) : (
+            'Apply Filters'
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+
+  // Mobile collapsed view
+  const MobileCollapsedView = () => (
+    <div className="flex items-center gap-2 p-4 border rounded-lg"
+      style={{
+        backgroundColor: theme.bg.primary,
+        borderColor: theme.border.primary
+      }}>
+      <Filter className="w-5 h-5" style={{ color: theme.text.primary }} />
+      <button
+        onClick={() => setIsExpanded(true)}
+        className="flex-1 text-left"
+      >
+        <div className="text-sm font-medium" style={{ color: theme.text.primary }}>
+          Filter Jobs
         </div>
+        <div className="text-xs" style={{ color: theme.text.muted }}>
+          {activeFilterCount > 0
+            ? `${activeFilterCount} filter${activeFilterCount > 1 ? 's' : ''} active`
+            : 'Tap to filter'
+          }
+        </div>
+      </button>
+      {activeFilterCount > 0 && (
+        <button
+          onClick={handleClearAll}
+          className="text-xs px-2 py-1 rounded border"
+          style={{
+            backgroundColor: theme.bg.secondary,
+            borderColor: theme.border.secondary,
+            color: theme.text.secondary
+          }}
+        >
+          Clear
+        </button>
       )}
     </div>
   );
+
+  // Mobile expanded view
+  const MobileExpandedView = () => (
+    <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+      <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-gray-900 rounded-t-xl max-h-[85vh] overflow-hidden">
+        <MobileHeader />
+        <div className="p-4 overflow-y-auto max-h-[calc(85vh-64px)]">
+          <DesktopFilterContent />
+        </div>
+      </div>
+    </div>
+  );
+
+  // Render based on screen size
+  if (!isMobile) {
+    return (
+      <div className={`rounded-lg border p-4 ${className}`}
+        style={{
+          borderColor: theme.border.primary,
+          backgroundColor: theme.bg.primary
+        }}>
+        <DesktopFilterContent />
+      </div>
+    );
+  }
+
+  // Mobile view
+  return (
+    <div className={className}>
+      {!isExpanded && <MobileCollapsedView />}
+      {isExpanded && <MobileExpandedView />}
+    </div>
+  );
+};
+
+// Helper function to convert to API filters
+export const buildApiFilters = (filters: JobFilterState): Partial<JobFiltersType> => {
+  const apiFilters: Partial<JobFiltersType> = {};
+
+  if (filters.search) apiFilters.search = filters.search;
+  if (filters.category) apiFilters.category = filters.category;
+  if (filters.types?.length > 0) apiFilters.type = filters.types.join(',');
+  if (filters.location) apiFilters.region = filters.location;
+  if (filters.experienceLevel) apiFilters.experienceLevel = filters.experienceLevel;
+  if (filters.salaryMode) apiFilters.salaryMode = filters.salaryMode as any;
+
+  if (filters.datePosted) {
+    // Date filtering logic can be added here
+  }
+
+  if (filters.applicationsOpen) {
+    apiFilters.isApplyEnabled = true;
+  }
+
+  return apiFilters;
 };
 
 export default JobFilter;

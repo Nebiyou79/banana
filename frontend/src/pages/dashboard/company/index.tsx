@@ -410,7 +410,7 @@ const CompanyDashboard: React.FC = () => {
                   )}
                 </div>
                 <p className="text-gray-600 dark:text-gray-300">
-                  Welcome back, {user?.name || 'Company'}. Manage your hiring and projects efficiently.
+                  Welcome Back, {user?.name || 'Company'}. Manage your hiring and projects efficiently.
                 </p>
 
                 {/* Verification Status Info */}

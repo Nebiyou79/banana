@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// services/applicationService.ts - FIXED VERSION
+// services/applicationService.ts - UPDATED TO MATCH BACKEND EXPECTATIONS
 import api from '@/lib/axios';
 import { handleError, handleSuccess } from '@/lib/error-handler';
 import { candidateService } from './candidateService';
+
 export interface PremiumUISettings {
   glassmorphism: boolean;
   accentColor: 'gold' | 'platinum' | 'sapphire';
@@ -41,6 +42,7 @@ export const premiumStyles = {
     parallax: 'parallax 20s linear infinite'
   }
 };
+
 // Reuse your existing interfaces
 export interface Attachment {
   _id?: string;
@@ -54,6 +56,10 @@ export interface Attachment {
   description?: string;
   downloadUrl?: string;
   viewUrl?: string;
+  // Local upload metadata
+  fileUrl?: string;
+  downloadCount?: number;
+  viewCount?: number;
 }
 
 export interface CandidateCV {
@@ -69,6 +75,8 @@ export interface CandidateCV {
   description?: string;
   downloadUrl?: string;
   viewUrl?: string;
+  // Local upload metadata
+  fileUrl?: string;
 }
 
 export interface CV {
@@ -84,6 +92,8 @@ export interface CV {
   description?: string;
   downloadUrl?: string;
   viewUrl?: string;
+  // Local upload metadata
+  fileUrl?: string;
 }
 
 export interface Reference {
@@ -116,6 +126,8 @@ export interface WorkExperience {
     contact: string;
   };
   providedAsDocument: boolean;
+  // Support multiple documents per experience
+  documents?: Attachment[];
 }
 
 export interface ContactInfo {
@@ -344,7 +356,12 @@ const handleApiError = (error: any, defaultMessage: string): never => {
       data: error.config?.data
     }
   });
-  
+
+  // Log the full response data
+  if (error.response?.data) {
+    console.error('🔴 Full Server Response:', JSON.stringify(error.response.data, null, 2));
+  }
+
   if (error.response?.data?.message) {
     const message = error.response.data.message;
     console.error('🔴 Server Error Message:', message);
@@ -377,65 +394,84 @@ const handleApiError = (error: any, defaultMessage: string): never => {
 // Clean filters to remove empty values
 const cleanFilters = (filters?: ApplicationFilters): ApplicationFilters => {
   if (!filters) return {};
-  
+
   const cleaned: ApplicationFilters = {};
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== '' && value !== null && value !== undefined && value !== 'all') {
       cleaned[key as keyof ApplicationFilters] = value;
     }
   });
-  
+
   return cleaned;
 };
 
 // Utility function to convert Mongoose documents to plain objects
 const convertMongooseDocToPlainObject = (doc: any): any => {
   if (!doc) return doc;
-  
+
   // If it's a Mongoose document, convert to plain object
   if (doc._doc && typeof doc._doc === 'object') {
     return { ...doc._doc };
   }
-  
+
   // If it has toObject method, use it
   if (typeof doc.toObject === 'function') {
     return doc.toObject();
   }
-  
+
   // Otherwise return as is
   return doc;
 };
 
-// Enhanced file field name detection
-const getFileFieldName = (file: File, index?: number): string => {
-  const fileName = file.name.toLowerCase();
-  
-  console.log('📁 [Frontend] Detecting field name for file:', file.name, { fileName });
+// Local upload helper functions
+const isLocalUploadUrl = (url: string): boolean => {
+  return url?.includes('/uploads/') || url?.includes('/api/v1/uploads/');
+};
 
-  // Check if this is a reference document based on filename patterns
-  if (fileName.includes('reference') || 
-      fileName.includes('recommendation') || 
-      fileName.includes('letter') ||
-      fileName.includes('ref-') ||
-      fileName.includes('rec-')) {
-    console.log(`📁 [Frontend] ${file.name} -> referencePdfs`);
-    return 'referencePdfs';
+// FIXED: Enhanced file field name detection to match backend expectations
+const getFileFieldName = (file: File, context?: {
+  type: 'cv' | 'reference' | 'experience';
+  index?: number;
+}): string => {
+  const fileName = file.name.toLowerCase();
+
+  console.log('📁 [Frontend] Detecting field name for file:', file.name, {
+    fileName,
+    context
+  });
+
+  // Check if this is a CV file - backend expects 'cv' field name
+  if (context?.type === 'cv') {
+    return 'cv';
   }
-  
-  // Check if this is an experience document based on filename patterns
-  if (fileName.includes('experience') || 
-      fileName.includes('work') || 
-      fileName.includes('employment') ||
-      fileName.includes('exp-') ||
-      fileName.includes('job-') ||
-      fileName.includes('employment-')) {
-    console.log(`📁 [Frontend] ${file.name} -> experiencePdfs`);
-    return 'experiencePdfs';
+
+  // Check if this is a reference document - backend expects 'referencePdfs' field name
+  if (context?.type === 'reference' ||
+    fileName.includes('reference') ||
+    fileName.includes('recommendation') ||
+    fileName.includes('letter') ||
+    fileName.includes('ref-') ||
+    fileName.includes('rec-') ||
+    fileName.includes('reference_') ||
+    fileName.includes('rec_')) {
+    return 'referencePdfs'; // BACKEND EXPECTS THIS FIELD NAME
   }
-  
-  // Default: assume it's a reference document
-  console.log(`📁 [Frontend] ${file.name} -> referencePdfs (default)`);
-  return 'referencePdfs';
+
+  // Check if this is an experience document - backend expects 'experiencePdfs' field name
+  if (context?.type === 'experience' ||
+    fileName.includes('experience') ||
+    fileName.includes('work') ||
+    fileName.includes('employment') ||
+    fileName.includes('exp-') ||
+    fileName.includes('job-') ||
+    fileName.includes('employment-') ||
+    fileName.includes('experience_') ||
+    fileName.includes('work_')) {
+    return 'experiencePdfs'; // BACKEND EXPECTS THIS FIELD NAME
+  }
+
+  // Default: assume it's an experience document
+  return 'experiencePdfs';
 };
 
 // Enhanced debug function for FormData
@@ -458,21 +494,21 @@ const getFileExtension = (file: any): string => {
     const ext = file.mimetype.split('/')[1];
     if (ext) return ext;
   }
-  
+
   if (file.filename) {
     const ext = file.filename.split('.').pop();
     if (ext && ext.length < 6) return ext;
   }
-  
+
   if (file.originalName) {
     const ext = file.originalName.split('.').pop();
     if (ext && ext.length < 6) return ext;
   }
-  
+
   return 'file';
 };
 
-// Enhanced getCandidateCVs with proper file size handling
+// Enhanced getCandidateCVs with proper local upload handling
 const getCandidateCVs = async (): Promise<CV[]> => {
   try {
     debug('🔄 Attempting to fetch CVs from applications endpoint...');
@@ -487,24 +523,25 @@ const getCandidateCVs = async (): Promise<CV[]> => {
     const cvsData = response.data.data?.cvs || [];
     debug('✅ Loaded CVs from applications endpoint:', cvsData.length);
 
-    // Ensure all CVs have proper file size and metadata
+    // Ensure all CVs have proper file metadata
     const enhancedCVs = cvsData.map((cv: any) => {
       // Convert Mongoose document if needed
       const plainCV = convertMongooseDocToPlainObject(cv);
-      
+
       return {
         _id: plainCV._id,
         filename: plainCV.filename,
         originalName: plainCV.originalName || plainCV.filename,
-        path: plainCV.path,
-        size: plainCV.size || 0, // Ensure size is always a number
+        path: plainCV.path || plainCV.url || plainCV.fileUrl,
+        size: plainCV.size || 0,
         mimetype: plainCV.mimetype || 'application/octet-stream',
-        url: plainCV.url,
+        url: plainCV.url || plainCV.fileUrl,
         uploadedAt: plainCV.uploadedAt,
-        isDefault: plainCV.isDefault,
+        isDefault: plainCV.isDefault || plainCV.isPrimary || false,
         description: plainCV.description,
-        downloadUrl: plainCV.downloadUrl,
-        viewUrl: plainCV.viewUrl
+        downloadUrl: plainCV.downloadUrl || plainCV.url || plainCV.fileUrl,
+        viewUrl: plainCV.viewUrl || plainCV.url || plainCV.fileUrl,
+        fileUrl: plainCV.fileUrl || plainCV.url
       };
     });
 
@@ -525,20 +562,21 @@ const getCandidateCVs = async (): Promise<CV[]> => {
       // Transform the CV data to match the CV interface
       const cvs = profile.cvs.map((cv: any) => {
         const plainCV = convertMongooseDocToPlainObject(cv);
-        
+
         return {
           _id: plainCV._id,
           filename: plainCV.filename,
           originalName: plainCV.originalName || plainCV.filename,
-          path: plainCV.path,
-          size: plainCV.size || 0, // Ensure size is always a number
+          path: plainCV.path || plainCV.url || plainCV.fileUrl,
+          size: plainCV.size || 0,
           mimetype: plainCV.mimetype || 'application/octet-stream',
-          url: plainCV.url,
+          url: plainCV.url || plainCV.fileUrl,
           uploadedAt: plainCV.uploadedAt,
-          isDefault: plainCV.isDefault,
+          isDefault: plainCV.isDefault || plainCV.isPrimary || false,
           description: plainCV.description,
-          downloadUrl: plainCV.downloadUrl,
-          viewUrl: plainCV.viewUrl
+          downloadUrl: plainCV.downloadUrl || plainCV.url || plainCV.fileUrl,
+          viewUrl: plainCV.viewUrl || plainCV.url || plainCV.fileUrl,
+          fileUrl: plainCV.fileUrl || plainCV.url
         };
       });
 
@@ -559,14 +597,14 @@ const getCandidateCVs = async (): Promise<CV[]> => {
   }
 };
 
-// Enhanced file size formatting with better fallbacks
+// Enhanced file size formatting
 const getFileSize = (file: Attachment | CV): string => {
   // Convert Mongoose document first
   const plainFile = convertMongooseDocToPlainObject(file);
-  
+
   // Handle various file size scenarios
   const bytes = plainFile.size;
-  
+
   if (bytes === undefined || bytes === null) {
     debug('⚠️ No file size available for file:', plainFile);
     return 'Unknown size';
@@ -581,11 +619,9 @@ const getFileSize = (file: Attachment | CV): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-// FIXED: Enhanced file URL generation - removed text document handling since we're not creating text files anymore
+// FIXED: Enhanced file URL generation for local uploads
 const getCorrectFileUrl = (file: any, type: 'cv' | 'references' | 'experience' | 'applications'): string => {
   const plainFile = convertMongooseDocToPlainObject(file);
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
-  const cleanBackendUrl = backendUrl.replace(/\/+$/, '');
 
   console.log('🔗 File URL generation details:', {
     type,
@@ -593,39 +629,42 @@ const getCorrectFileUrl = (file: any, type: 'cv' | 'references' | 'experience' |
     originalName: plainFile.originalName,
     _id: plainFile._id,
     url: plainFile.url,
-    path: plainFile.path
+    fileUrl: plainFile.fileUrl,
+    path: plainFile.path,
   });
 
-  // Strategy 1: Use direct URL if available and valid
-  if (plainFile.url) {
-    let url = plainFile.url;
-    if (!url.startsWith('http')) {
-      // Ensure URL starts with /api/v1
-      if (!url.startsWith('/api/v1')) {
-        url = `/api/v1${url.startsWith('/') ? url : '/' + url}`;
-      }
-      url = `${cleanBackendUrl}${url}`;
-    }
-    console.log('✅ Using direct URL:', url);
-    return url;
+  // Strategy 1: Use fileUrl (local upload metadata)
+  if (plainFile.fileUrl) {
+    console.log('✅ Using fileUrl from local upload:', plainFile.fileUrl);
+    return plainFile.fileUrl;
   }
 
-  // Strategy 2: For application attachments, use the uploads endpoint
+  // Strategy 2: Use url (legacy field)
+  if (plainFile.url) {
+    console.log('✅ Using url field:', plainFile.url);
+    return plainFile.url;
+  }
+
+  // Strategy 3: For application attachments, use the uploads endpoint
   if (type === 'applications' || type === 'references' || type === 'experience') {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+    const cleanBackendUrl = backendUrl.replace(/\/+$/, '');
     const url = `${cleanBackendUrl}/api/v1/uploads/applications/${plainFile.filename}`;
     console.log('✅ Using applications upload URL:', url);
     return url;
   }
 
-  // Strategy 3: Use filename with proper type-based path
+  // Strategy 4: Use filename with proper type-based path
   if (plainFile.filename) {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+    const cleanBackendUrl = backendUrl.replace(/\/+$/, '');
     const url = `${cleanBackendUrl}/api/v1/uploads/${type}/${plainFile.filename}`;
     console.log('✅ Using filename URL:', url);
     return url;
   }
 
   console.log('❌ No valid file identifiers found:', plainFile);
-  throw new Error('Unable to generate download URL: No filename, path, URL, or ID available');
+  throw new Error('Unable to generate download URL: No filename, path, URL, or fileUrl available');
 };
 
 // Enhanced file download URL function
@@ -639,12 +678,12 @@ const getEnhancedFileDownloadUrl = (file: Attachment | CV | any, type: 'cv' | 'r
   }
 };
 
-// Enhanced downloadFile function with proper error handling and Mongoose document conversion
+// Enhanced downloadFile function with proper error handling and local upload support
 const downloadFile = async (file: Attachment | CV | any, type: 'cv' | 'references' | 'experience' | 'applications'): Promise<void> => {
   try {
     // Convert Mongoose document to plain object first
     const plainFile = convertMongooseDocToPlainObject(file);
-    
+
     debug('📥 Starting download process for file:', {
       type,
       filename: plainFile.originalName || plainFile.filename,
@@ -653,9 +692,10 @@ const downloadFile = async (file: Attachment | CV | any, type: 'cv' | 'reference
         filename: plainFile.filename,
         originalName: plainFile.originalName,
         url: plainFile.url,
+        fileUrl: plainFile.fileUrl,
         path: plainFile.path,
         size: plainFile.size,
-        mimetype: plainFile.mimetype
+        mimetype: plainFile.mimetype,
       }
     });
 
@@ -667,7 +707,27 @@ const downloadFile = async (file: Attachment | CV | any, type: 'cv' | 'reference
 
     debug('🔗 Generated download URL:', downloadUrl);
 
-    // Use the api instance which automatically includes auth headers
+    // For local upload URLs, we can download directly
+    if (isLocalUploadUrl(downloadUrl)) {
+      debug('📁 Using direct local upload download');
+      const downloadFilename = plainFile.originalName ||
+        plainFile.filename ||
+        `document_${plainFile._id}.${getFileExtension(plainFile)}`;
+
+      // Create download link and trigger download
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = downloadFilename;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      handleSuccess(`File "${downloadFilename}" download started`);
+      return;
+    }
+
+    // For non-local URLs, use the API
     const response = await api.get(downloadUrl, {
       responseType: 'blob',
       timeout: 30000,
@@ -695,9 +755,9 @@ const downloadFile = async (file: Attachment | CV | any, type: 'cv' | 'reference
     }
 
     // Determine filename with fallbacks
-    const downloadFilename = plainFile.originalName || 
-                            plainFile.filename || 
-                            `document_${plainFile._id}.${getFileExtension(plainFile)}`;
+    const downloadFilename = plainFile.originalName ||
+      plainFile.filename ||
+      `document_${plainFile._id}.${getFileExtension(plainFile)}`;
 
     // Create download link and trigger download
     const url = window.URL.createObjectURL(blob);
@@ -718,7 +778,9 @@ const downloadFile = async (file: Attachment | CV | any, type: 'cv' | 'reference
       file: {
         _id: file._id,
         filename: file.filename,
-        originalName: file.originalName
+        originalName: file.originalName,
+        url: file.url,
+        fileUrl: file.fileUrl
       },
       type
     });
@@ -747,12 +809,12 @@ const downloadFile = async (file: Attachment | CV | any, type: 'cv' | 'reference
   }
 };
 
-// Enhanced view file function with better error handling
+// Enhanced view file function with better error handling and local upload support
 const viewFile = async (file: Attachment | CV | any, type: 'cv' | 'references' | 'experience' | 'applications'): Promise<void> => {
   try {
     // Convert Mongoose document first
     const plainFile = convertMongooseDocToPlainObject(file);
-    
+
     debug('👁️ Attempting to view file:', {
       type,
       file: {
@@ -760,7 +822,9 @@ const viewFile = async (file: Attachment | CV | any, type: 'cv' | 'references' |
         filename: plainFile.filename,
         mimetype: plainFile.mimetype,
         _id: plainFile._id,
-        size: plainFile.size
+        size: plainFile.size,
+        url: plainFile.url,
+        fileUrl: plainFile.fileUrl
       }
     });
 
@@ -772,14 +836,24 @@ const viewFile = async (file: Attachment | CV | any, type: 'cv' | 'references' |
     }
 
     const viewUrl = getEnhancedFileDownloadUrl(plainFile, type);
-    
+
     if (!viewUrl) {
       throw new Error('Could not generate view URL');
     }
 
     debug('🔗 Generated view URL:', viewUrl);
 
-    // Test if the URL is accessible
+    // For local upload URLs, we can open directly
+    if (isLocalUploadUrl(viewUrl)) {
+      debug('📁 Opening local upload URL directly');
+      const newWindow = window.open(viewUrl, '_blank');
+      if (!newWindow) {
+        throw new Error('Popup blocked. Please allow popups for this site to view files.');
+      }
+      return;
+    }
+
+    // For non-local URLs, test if accessible
     try {
       const testResponse = await api.head(viewUrl, { timeout: 10000 });
       if (testResponse.status !== 200) {
@@ -796,12 +870,12 @@ const viewFile = async (file: Attachment | CV | any, type: 'cv' | 'references' |
     if (!newWindow) {
       throw new Error('Popup blocked. Please allow popups for this site to view files.');
     }
-    
+
     debug('✅ File opened in new tab successfully');
-    
+
   } catch (err) {
     console.error('❌ Error viewing file:', err);
-    
+
     // Fallback to download if view fails
     try {
       debug('🔄 View failed, attempting download as fallback...');
@@ -815,11 +889,12 @@ const viewFile = async (file: Attachment | CV | any, type: 'cv' | 'references' |
   }
 };
 
-// Enhanced canViewInline with better MIME type detection
+// Enhanced canViewInline with local upload support
 export const canViewInline = (file: Attachment | CV): boolean => {
   // Convert Mongoose document first
   const plainFile = convertMongooseDocToPlainObject(file);
-  
+
+  // Check mimetype
   if (!plainFile.mimetype) {
     // If no mimetype, check by extension
     const filename = plainFile.filename || plainFile.originalName || '';
@@ -829,7 +904,7 @@ export const canViewInline = (file: Attachment | CV): boolean => {
     debug(`📄 Inline view check by extension: ${filename} -> ${result}`);
     return result;
   }
-  
+
   const inlineTypes = [
     'application/pdf',
     'image/jpeg',
@@ -840,7 +915,7 @@ export const canViewInline = (file: Attachment | CV): boolean => {
     'text/plain',
     'text/html'
   ];
-  
+
   const result = inlineTypes.includes(plainFile.mimetype);
   debug(`📄 Inline view check by MIME: ${plainFile.mimetype} -> ${result}`);
   return result;
@@ -886,13 +961,13 @@ const getApplication = async (applicationId: string): Promise<Application> => {
   }
 };
 
-// Enhanced CV service methods
+// Enhanced CV service methods with local upload support
 export const cvService = {
   getUserCVs: async (): Promise<CV[]> => {
     try {
       debug('🔄 Fetching user CVs...');
       const candidateProfile = await candidateService.getProfile();
-      
+
       if (!candidateProfile.cvs || candidateProfile.cvs.length === 0) {
         debug('⚠️ No CVs found in candidate profile');
         return [];
@@ -900,19 +975,20 @@ export const cvService = {
 
       const cvs: CV[] = candidateProfile.cvs.map(cv => {
         const plainCV = convertMongooseDocToPlainObject(cv);
-        
+
         return {
           _id: plainCV._id,
           filename: plainCV.filename,
           originalName: plainCV.originalName || plainCV.filename,
-          url: plainCV.url || `/api/v1/uploads/cv/${plainCV.filename}`,
+          path: plainCV.path || plainCV.url || plainCV.fileUrl,
           size: plainCV.size || 0,
           mimetype: plainCV.mimetype || 'application/octet-stream',
+          url: plainCV.url || plainCV.fileUrl,
           uploadedAt: plainCV.uploadedAt,
-          path: plainCV.path,
           isDefault: plainCV.isPrimary || false,
-          downloadUrl: plainCV.downloadUrl || `/api/v1/uploads/cv/${plainCV.filename}`,
-          viewUrl: plainCV.viewUrl || `/api/v1/uploads/cv/view/${plainCV.filename}`
+          downloadUrl: plainCV.downloadUrl || plainCV.url || plainCV.fileUrl,
+          viewUrl: plainCV.viewUrl || plainCV.url || plainCV.fileUrl,
+          fileUrl: plainCV.fileUrl || plainCV.url
         };
       });
 
@@ -928,26 +1004,27 @@ export const cvService = {
     try {
       // Use candidateService's uploadCVs method
       const uploadedCVs = await candidateService.uploadCVs([file]);
-      
+
       if (!uploadedCVs || uploadedCVs.length === 0) {
         throw new Error('Failed to upload CV - no CV returned');
       }
 
       const uploadedCV = uploadedCVs[0];
-      
+
       // Transform to CV format
       const cv: CV = {
         _id: uploadedCV._id,
-        filename: uploadedCV.filename,
+        filename: uploadedCV.fileName,
         originalName: uploadedCV.originalName,
-        url: uploadedCV.url || `/api/v1/uploads/cv/${uploadedCV.filename}`,
+        url: uploadedCV.url || uploadedCV.fileUrl,
         size: uploadedCV.size || file.size,
         mimetype: uploadedCV.mimetype || file.type,
         uploadedAt: uploadedCV.uploadedAt,
-        path: uploadedCV.path || uploadedCV.url,
+        path: uploadedCV.path || uploadedCV.url || uploadedCV.fileUrl,
         isDefault: uploadedCV.isPrimary || false,
-        downloadUrl: uploadedCV.url || `/api/v1/uploads/cv/${uploadedCV.filename}`,
-        viewUrl: uploadedCV.url || `/api/v1/uploads/cv/view/${uploadedCV.filename}`
+        downloadUrl: uploadedCV.downloadUrl || uploadedCV.url || uploadedCV.fileUrl,
+        // viewUrl: uploadedCV.viewUrl || uploadedCV.url || uploadedCV.fileUrl,
+        fileUrl: uploadedCV.fileUrl || uploadedCV.url
       };
 
       return cv;
@@ -966,34 +1043,45 @@ export const cvService = {
 
   formatFileSize: (bytes: number): string => {
     if (!bytes || bytes === 0) return '0 Bytes';
-    
+
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
 
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  }
+  },
+
+  // Local upload specific helpers
+  isLocalUploadUrl,
 };
 
-// Enhanced main application service
+// CRITICAL FIX: Updated main application service to match backend expectations
 export const applicationService = {
   getCandidateCVs,
-  
-  async applyForJob(jobId: string, data: ApplyForJobData, files?: File[]): Promise<ApplicationResponse> {
+
+  async applyForJob(jobId: string, data: ApplyForJobData, files?: {
+    cvFile?: File; // Optional - user can upload new CV or use existing
+    referenceFiles?: File[];
+    experienceFiles?: File[];
+  }): Promise<ApplicationResponse> {
     try {
       console.log('📤 [Frontend] Submitting application for job:', jobId);
-      console.log('📁 [Frontend] Files to upload:', files?.map(f => ({ 
-        name: f.name, 
-        type: f.type, 
-        size: f.size 
-      })));
+      console.log('📁 [Frontend] Files to upload:', {
+        cvFile: files?.cvFile ? { name: files.cvFile.name, size: files.cvFile.size } : 'No CV file',
+        referenceFiles: files?.referenceFiles?.map(f => ({ name: f.name, size: f.size })) || 'No reference files',
+        experienceFiles: files?.experienceFiles?.map(f => ({ name: f.name, size: f.size })) || 'No experience files'
+      });
+
+      // Validate application data before proceeding
+      const validationErrors = validateApplicationData(data);
+      if (validationErrors.length > 0) {
+        throw new Error(validationErrors.join(', '));
+      }
 
       const formData = new FormData();
-      
-      // Add JSON data with proper stringification for complex objects
+
+      // Add JSON data fields
       formData.append('coverLetter', data.coverLetter);
-      
-      // Stringify arrays and objects properly
       formData.append('skills', JSON.stringify(data.skills || []));
       formData.append('references', JSON.stringify(data.references || []));
       formData.append('workExperience', JSON.stringify(data.workExperience || []));
@@ -1004,57 +1092,37 @@ export const applicationService = {
         formData.append('userInfo', JSON.stringify(data.userInfo));
       }
 
-      // Add files with correct field names
-      if (files && files.length > 0) {
-        const referenceFiles: File[] = [];
-        const experienceFiles: File[] = [];
-        
-        console.log('📁 [Frontend] Categorizing files...');
-        
-        files.forEach((file) => {
-          const fieldName = getFileFieldName(file);
-          console.log(`📁 [Frontend] File ${file.name} -> ${fieldName}`);
-          
-          if (fieldName === 'referencePdfs') {
-            referenceFiles.push(file);
-          } else if (fieldName === 'experiencePdfs') {
-            experienceFiles.push(file);
-          }
-        });
-        
-        // Append reference documents
-        referenceFiles.forEach((file, index) => {
-          formData.append('referencePdfs', file);
-          console.log(`📎 [Frontend] Appended reference document ${index + 1}:`, file.name);
-        });
-        
-        // Append experience documents
-        experienceFiles.forEach((file, index) => {
-          formData.append('experiencePdfs', file);
-          console.log(`📎 [Frontend] Appended experience document ${index + 1}:`, file.name);
-        });
-
-        console.log('📁 [Frontend] File groups:', {
-          referencePdfs: referenceFiles.length,
-          experiencePdfs: experienceFiles.length
-        });
+      // CRITICAL: Add CV file if provided (OPTIONAL - backend can use selectedCVs)
+      if (files?.cvFile) {
+        formData.append('cv', files.cvFile);
+        console.log(`📎 [Frontend] Appended CV file: ${files.cvFile.name} as 'cv'`);
       } else {
-        console.log('📁 [Frontend] No files to upload');
+        console.log('ℹ️ [Frontend] No CV file uploaded - using selectedCVs from profile');
+      }
+
+      // Add reference documents with field name 'referencePdfs'
+      if (files?.referenceFiles && files.referenceFiles.length > 0) {
+        files.referenceFiles.forEach((file, index) => {
+          formData.append('referencePdfs', file);
+          console.log(`📎 [Frontend] Appended reference document ${index + 1}: ${file.name} as 'referencePdfs'`);
+        });
+      }
+
+      // Add experience documents with field name 'experiencePdfs'
+      if (files?.experienceFiles && files.experienceFiles.length > 0) {
+        files.experienceFiles.forEach((file, index) => {
+          formData.append('experiencePdfs', file);
+          console.log(`📎 [Frontend] Appended experience document ${index + 1}: ${file.name} as 'experiencePdfs'`);
+        });
       }
 
       // Debug form data contents
-      console.log('📦 [Frontend] FormData contents:');
-      for (const [key, value] of formData.entries()) {
-        if (value instanceof File) {
-          console.log(`  ${key}: File - ${value.name} (${value.size} bytes, ${value.type})`);
-        } else {
-          console.log(`  ${key}:`, typeof value === 'string' ? value.substring(0, 100) + '...' : value);
-        }
-      }
+      debugFormData(formData);
 
+      console.log('🚀 [Frontend] Sending request to backend...');
       const response = await api.post<ApplicationResponse>(
-        `/applications/apply/${jobId}`, 
-        formData, 
+        `/applications/apply/${jobId}`,
+        formData,
         {
           headers: {
             'Content-Type': 'multipart/form-data',
@@ -1066,10 +1134,118 @@ export const applicationService = {
       console.log('✅ [Frontend] Application submitted successfully!');
       handleSuccess('Application submitted successfully!');
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ [Frontend] Application submission error:', error);
+
+      // Log the actual error response from backend
+      if (error.response?.data) {
+        console.error('🔴 Backend Response:', error.response.data);
+
+        // If it's a validation error, extract the specific field errors
+        if (error.response.data.errors) {
+          console.error('🔴 Field Errors:', error.response.data.errors);
+        }
+      }
+
       throw handleApiError(error, 'Failed to submit application');
     }
+  },
+
+  // // Alternative method that accepts the old format and adapts it
+  // async applyForJobWithLegacyFormat(
+  //   jobId: string,
+  //   data: ApplyForJobData,
+  //   files?: File[]
+  // ): Promise<ApplicationResponse> {
+  //   try {
+  //     console.log('📤 [Frontend] Submitting application with legacy format for job:', jobId);
+
+  //     // Convert legacy files array to new format
+  //     const newFiles = this.convertLegacyFilesToNewFormat(files, data);
+
+  //     // Use the new applyForJob method
+  //     return this.applyForJob(jobId, data, newFiles);
+  //    } catch (error: any) {
+  //     console.error('❌ [Frontend] Application submission error:', error);
+  //     throw handleApiError(error, 'Failed to submit application');
+  //   }
+  // },
+
+  // Helper to convert legacy files array to new format with correct field names
+  convertLegacyFilesToNewFormat(files?: File[], data?: ApplyForJobData): {
+    cvFile?: File;
+    referenceFiles?: File[];
+    experienceFiles?: File[];
+  } {
+    if (!files || files.length === 0) {
+      return {};
+    }
+
+    const result: {
+      cvFile?: File;
+      referenceFiles?: File[];
+      experienceFiles?: File[];
+    } = {
+      referenceFiles: [],
+      experienceFiles: []
+    };
+
+    console.log('🔄 Converting legacy files to new format:', files.map(f => f.name));
+
+    // CRITICAL FIX: Categorize files based on backend expectations
+
+    // First, check if we have data about references and experiences
+    const hasReferenceDocuments = data?.references?.some(ref => ref.providedAsDocument) || false;
+    const hasExperienceDocuments = data?.workExperience?.some(exp => exp.providedAsDocument) || false;
+
+    // Categorize files based on naming patterns and context
+    files.forEach((file) => {
+      const fileName = file.name.toLowerCase();
+
+      // 1. Identify CV file - should be first file or has CV in name
+      if (!result.cvFile && (
+        fileName.includes('cv') ||
+        fileName.includes('resume') ||
+        fileName.includes('curriculum') ||
+        // If it's the first file and we haven't identified a CV yet, assume it's the CV
+        (files.length > 0 && file === files[0])
+      )) {
+        result.cvFile = file;
+        console.log(`✅ Identified as CV: ${file.name}`);
+      }
+      // 2. Identify reference documents
+      else if (fileName.includes('reference') ||
+        fileName.includes('recommendation') ||
+        fileName.includes('letter') ||
+        fileName.includes('ref-') ||
+        fileName.includes('rec-') ||
+        // If we know there should be reference documents from data context
+        hasReferenceDocuments) {
+        result.referenceFiles!.push(file);
+        console.log(`✅ Identified as reference document: ${file.name}`);
+      }
+      // 3. Identify experience documents
+      else {
+        result.experienceFiles!.push(file);
+        console.log(`✅ Identified as experience document: ${file.name}`);
+      }
+    });
+
+    // IMPORTANT: CV file is REQUIRED - if none identified, use first file
+    if (!result.cvFile && files.length > 0) {
+      result.cvFile = files[0];
+      console.log(`⚠️ No CV identified, using first file as CV: ${files[0].name}`);
+
+      // Remove this file from other categories if it was added there
+      if (result.referenceFiles?.includes(files[0])) {
+        result.referenceFiles = result.referenceFiles.filter(f => f !== files[0]);
+      }
+      if (result.experienceFiles?.includes(files[0])) {
+        result.experienceFiles = result.experienceFiles.filter(f => f !== files[0]);
+      }
+    }
+
+    return result;
   },
 
   // Get candidate's applications
@@ -1112,7 +1288,7 @@ export const applicationService = {
       } else if (viewType === 'organization') {
         return this.getOrganizationApplicationDetails(applicationId);
       }
-      
+
       // Fallback to general endpoint
       const response = await api.get<ApplicationResponse>(`/applications/${applicationId}`);
       return response.data;
@@ -1161,7 +1337,7 @@ export const applicationService = {
   async updateApplicationStatus(applicationId: string, data: UpdateStatusData): Promise<ApplicationResponse> {
     try {
       const response = await api.put<ApplicationResponse>(`/applications/${applicationId}/status`, data);
-      
+
       const statusMessages: Record<string, string> = {
         'shortlisted': 'Candidate shortlisted successfully!',
         'interview-scheduled': 'Interview scheduled successfully!',
@@ -1185,7 +1361,7 @@ export const applicationService = {
   async addCompanyResponse(applicationId: string, data: CompanyResponseData): Promise<ApplicationResponse> {
     try {
       const response = await api.put<ApplicationResponse>(`/applications/${applicationId}/company-response`, data);
-      
+
       const responseMessages: Record<string, string> = {
         'selected-for-interview': 'Candidate selected for interview!',
         'active-consideration': 'Response sent to candidate',
@@ -1208,7 +1384,7 @@ export const applicationService = {
       const response = await api.put<{ success: boolean; message: string }>(
         `/applications/${applicationId}/withdraw`
       );
-      
+
       handleSuccess('Application withdrawn successfully');
       return response.data;
     } catch (error) {
@@ -1242,6 +1418,9 @@ export const applicationService = {
   getFileViewUrl: getEnhancedFileDownloadUrl,
   getFileSize,
   canViewInline,
+
+  // Local upload helpers
+  isLocalUploadUrl,
 
   // Enhanced file handling methods with debug
   downloadCV: async (cv: CV): Promise<void> => {
@@ -1287,7 +1466,7 @@ export const applicationService = {
   },
 
   // ===== HELPER METHODS =====
-  
+
   getFileFieldName,
   validateApplicationData,
   getApplication,
@@ -1381,7 +1560,7 @@ export const applicationService = {
       ...application,
       statusLabel: applicationService.getStatusLabel(application.status),
       statusColor: applicationService.getStatusColor(application.status),
-      companyResponseLabel: application.companyResponse?.status 
+      companyResponseLabel: application.companyResponse?.status
         ? applicationService.getCompanyResponseLabel(application.companyResponse.status)
         : null,
       canWithdraw: applicationService.canWithdraw(application.status),
@@ -1415,7 +1594,8 @@ export const applicationService = {
         downloadUrl: cv.downloadUrl,
         viewUrl: cv.viewUrl,
         size: (cv as any).size,
-        mimetype: (cv as any).mimetype
+        mimetype: (cv as any).mimetype,
+        fileUrl: (cv as any).fileUrl
       })),
       workExperience: application.workExperience?.map((exp, index) => ({
         index,
@@ -1427,9 +1607,10 @@ export const applicationService = {
           filename: exp.document.filename,
           originalName: exp.document.originalName,
           url: exp.document.url,
+          fileUrl: exp.document.fileUrl,
           path: exp.document.path,
           size: exp.document.size,
-          mimetype: exp.document.mimetype
+          mimetype: exp.document.mimetype,
         } : null
       })),
       references: application.references?.map((ref, index) => ({
@@ -1441,9 +1622,10 @@ export const applicationService = {
           filename: ref.document.filename,
           originalName: ref.document.originalName,
           url: ref.document.url,
+          fileUrl: ref.document.fileUrl,
           path: ref.document.path,
           size: ref.document.size,
-          mimetype: ref.document.mimetype
+          mimetype: ref.document.mimetype,
         } : null
       })),
       attachments: {
@@ -1459,14 +1641,14 @@ export const applicationService = {
   getFileType: (file: Attachment | any): 'pdf' | 'word' | 'image' | 'text' | 'document' => {
     if (!file) return 'document';
     const plainFile = convertMongooseDocToPlainObject(file);
-    
+
     if (plainFile.mimetype) {
       if (plainFile.mimetype.includes('pdf')) return 'pdf';
       if (plainFile.mimetype.includes('word')) return 'word';
       if (plainFile.mimetype.includes('image')) return 'image';
       if (plainFile.mimetype.includes('text')) return 'text';
     }
-    
+
     if (plainFile.filename) {
       const ext = plainFile.filename.toLowerCase().split('.').pop();
       if (ext === 'pdf') return 'pdf';
@@ -1474,14 +1656,14 @@ export const applicationService = {
       if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) return 'image';
       if (ext === 'txt') return 'text';
     }
-    
+
     return 'document';
   },
 
   // Enhanced file icon helper
   getFileIcon: (file: Attachment | any): string => {
     const fileType = applicationService.getFileType(file);
-    
+
     const icons: Record<'pdf' | 'word' | 'image' | 'text' | 'document', string> = {
       pdf: '📄',
       word: '📝',
@@ -1489,7 +1671,7 @@ export const applicationService = {
       text: '📃',
       document: '📎'
     };
-    
+
     return icons[fileType] || '📎';
   },
 
@@ -1497,7 +1679,7 @@ export const applicationService = {
   isFileDownloadable: (file: Attachment | any): boolean => {
     if (!file) return false;
     const plainFile = convertMongooseDocToPlainObject(file);
-    return !!(plainFile.filename || plainFile.url || plainFile._id);
+    return !!(plainFile.filename || plainFile.url || plainFile._id || plainFile.fileUrl);
   }
 };
 

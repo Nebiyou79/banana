@@ -1,10 +1,23 @@
 // src/components/organization/OrganizationHero.tsx
 import { useState, useEffect } from 'react';
-import { Building2, MapPin, Globe, Calendar, Target, Pencil, CheckCircle2, Info, RefreshCw, Loader2 } from 'lucide-react';
+import {
+  Building2,
+  MapPin,
+  Globe,
+  Calendar,
+  Target,
+  Pencil,
+  CheckCircle2,
+  Info,
+  RefreshCw,
+  Loader2,
+  Cloud,
+  Check
+} from 'lucide-react';
 import Button from '../forms/Button';
-import { getFullImageUrl, getCacheBustUrl, handleImageUpload, getProfileImages } from '@/utils/image-utils';
-import { profileService, Profile } from '@/services/profileService';
-import { toast } from '@/hooks/use-toast';
+import { profileService, Profile, CloudinaryImage } from '@/services/profileService';
+import { toast } from 'sonner';
+import { AvatarUploader } from '@/components/profile/AvatarUploader';
 
 interface OrganizationHeroProps {
   profile?: Profile;
@@ -38,94 +51,30 @@ export default function OrganizationHero({
   // Get the organization-specific data from profile's roleSpecific.companyInfo
   const companyInfo = profile?.roleSpecific?.companyInfo || {};
 
-  // Get image URLs from profile
-  const { coverPhoto, avatar } = getProfileImages(profile);
-  const coverPhotoUrl = getFullImageUrl(coverPhoto);
-  const avatarUrl = getFullImageUrl(avatar);
+  // Get image URLs using profileService
+  const getCoverPhoto = (): string | CloudinaryImage | null => {
+    if (!profile) return null;
+    return profile.cover || null;
+  };
+
+  const getAvatar = (): string | CloudinaryImage | null => {
+    if (!profile) return null;
+    return profile.avatar || null;
+  };
+
+  const coverPhoto = getCoverPhoto();
+  const avatar = getAvatar();
 
   const [showBannerGuide, setShowBannerGuide] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const getCoverPhotoWithCacheBust = () => {
-    return getCacheBustUrl(coverPhotoUrl, refreshKey);
-  };
-
-  const getAvatarWithCacheBust = () => {
-    return getCacheBustUrl(avatarUrl, refreshKey);
-  };
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [coverUploading, setCoverUploading] = useState(false);
 
   const handleRefresh = () => {
     console.log('🔄 Refreshing organization hero');
     if (onRefresh) {
       onRefresh();
     }
-    setRefreshKey(prev => prev + 1);
-  };
-
-  const handleImageUpdate = async (file: File, type: 'avatar' | 'coverPhoto') => {
-    if (!file || !isOwner || !profile) {
-      console.log('❌ Image update blocked:', { hasFile: !!file, isOwner, hasProfile: !!profile });
-      return;
-    }
-
-    try {
-      setIsUploading(true);
-      console.log(`📤 Starting ${type} upload for organization`);
-
-      const result = await handleImageUpload(file, type);
-
-      // Update profile data
-      const updateData = type === 'avatar'
-        ? { avatar: result.url }
-        : { coverPhoto: result.url };
-
-      console.log('📝 Updating profile with:', updateData);
-
-      // Call profileService to update the profile
-      const updatedProfile = await profileService.updateProfile(updateData);
-
-      // Notify parent component
-      if (onProfileUpdate) {
-        onProfileUpdate(updatedProfile);
-      }
-
-      toast({
-        title: 'Success!',
-        description: `${type === 'avatar' ? 'Avatar' : 'Banner'} updated successfully`,
-      });
-
-      // Refresh images
-      setRefreshKey(prev => prev + 1);
-
-      console.log('✅ Image update successful');
-
-    } catch (error: any) {
-      console.error('❌ Image update failed:', error);
-      toast({
-        title: 'Upload Failed',
-        description: error.message || `Failed to upload ${type}`,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleBannerUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    console.log('📁 Banner file selected:', file.name, file.type, file.size);
-    await handleImageUpdate(file, 'coverPhoto');
-    event.target.value = '';
-  };
-
-  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    console.log('📁 Avatar file selected:', file.name, file.type, file.size);
-    await handleImageUpdate(file, 'avatar');
-    event.target.value = '';
   };
 
   // Extract organization data from profile with fallbacks
@@ -143,9 +92,86 @@ export default function OrganizationHero({
   };
 
   const BannerGuideModal = () => (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        {/* ... BannerGuideModal content ... */}
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200">
+        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50 rounded-t-2xl">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              Banner Upload Guide
+            </h2>
+            <button
+              onClick={() => setShowBannerGuide(false)}
+              className="p-2 hover:bg-white rounded-xl transition-all duration-200 hover:scale-110"
+            >
+              <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl overflow-hidden border-2 border-dashed border-blue-300 relative shadow-lg">
+            <div className="aspect-video bg-gradient-to-br from-blue-500 to-purple-500 relative">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="border-2 border-yellow-400 border-dashed w-[60%] h-[60%] flex items-center justify-center bg-yellow-400/10 backdrop-blur-sm">
+                  <span className="text-yellow-400 font-bold text-lg bg-black/70 px-4 py-3 rounded-xl shadow-lg">
+                    Safe Area (1546×423px)
+                  </span>
+                </div>
+              </div>
+
+              <div className="absolute top-3 left-3 bg-black/80 text-white px-3 py-1.5 rounded-lg text-sm font-medium shadow-lg">
+                📏 2560px
+              </div>
+              <div className="absolute top-3 right-3 bg-black/80 text-white px-3 py-1.5 rounded-lg text-sm font-medium shadow-lg">
+                📐 1440px
+              </div>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <h3 className="font-bold text-lg text-gray-900 flex items-center gap-2">
+                <span className="p-2 bg-blue-100 rounded-lg">📐</span>
+                Technical Requirements
+              </h3>
+              <ul className="space-y-3 text-gray-700">
+                {[
+                  { text: 'Dimensions: 2560 × 1440 pixels', icon: '📏' },
+                  { text: 'Format: JPG, PNG, or WebP', icon: '🖼️' },
+                  { text: 'Max Size: 10MB', icon: '💾' },
+                  { text: 'Safe Area: Keep important content within 1546×423px center', icon: '🎯' }
+                ].map((item, index) => (
+                  <li key={index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                    <span className="text-lg">{item.icon}</span>
+                    <span className="text-sm font-medium">{item.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="font-bold text-lg text-gray-900 flex items-center gap-2">
+                <span className="p-2 bg-green-100 rounded-lg">💡</span>
+                Best Practices
+              </h3>
+              <ul className="space-y-3 text-gray-700">
+                {[
+                  { text: 'Use high-quality, professional images', icon: '⭐' },
+                  { text: 'Brand colors that match your logo', icon: '🎨' },
+                  { text: 'Avoid important content near edges', icon: '⚠️' },
+                  { text: 'Optimize for fast loading', icon: '⚡' }
+                ].map((item, index) => (
+                  <li key={index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                    <span className="text-lg">{item.icon}</span>
+                    <span className="text-sm font-medium">{item.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -191,10 +217,10 @@ export default function OrganizationHero({
   }
 
   console.log('🎨 Rendering OrganizationHero with:', {
-    coverPhotoUrl,
-    avatarUrl,
-    hasCoverPhoto: !!coverPhotoUrl,
-    hasAvatar: !!avatarUrl,
+    coverPhoto,
+    avatar,
+    hasCoverPhoto: !!coverPhoto,
+    hasAvatar: !!avatar,
     organizationData
   });
 
@@ -202,25 +228,20 @@ export default function OrganizationHero({
     <div className="relative bg-white rounded-xl shadow-sm border overflow-hidden">
       {/* Banner */}
       <div className="h-48 bg-gradient-to-r from-teal-600 to-teal-800 relative">
-        {coverPhotoUrl ? (
-          <>
-            <img
-              src={getCoverPhotoWithCacheBust()}
-              alt={`${organizationData.name} banner`}
-              className="absolute inset-0 w-full h-full object-cover object-center"
-              key={`banner-${refreshKey}`}
-              onLoad={() => console.log('✅ Banner loaded successfully:', coverPhotoUrl)}
-              onError={(e) => {
-                console.error('❌ Banner failed to load:', coverPhotoUrl);
-                e.currentTarget.style.display = 'none';
-                toast({
-                  title: 'Image Load Error',
-                  description: 'Failed to load banner image',
-                  variant: 'destructive',
-                });
-              }}
-            />
-          </>
+        {coverPhoto ? (
+          <img
+            src={typeof coverPhoto === 'string' ? coverPhoto : coverPhoto.secure_url}
+            alt={`${organizationData.name} banner`}
+            className="absolute inset-0 w-full h-full object-cover object-center"
+            onLoad={() => console.log('✅ Banner loaded successfully')}
+            onError={(e) => {
+              console.error('❌ Banner failed to load');
+              e.currentTarget.style.display = 'none';
+              toast.error('Failed to load banner image', {
+                description: 'Please try refreshing the page',
+              });
+            }}
+          />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-r from-teal-600 to-teal-800 flex flex-col items-center justify-center">
             <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mb-3">
@@ -228,7 +249,7 @@ export default function OrganizationHero({
             </div>
             <p className="text-white/80 text-sm">No banner image</p>
             {isOwner && (
-              <p className="text-white/60 text-xs mt-2">Click "Change Banner" to upload one</p>
+              <p className="text-white/60 text-xs mt-2">Upload a banner to customize your profile</p>
             )}
           </div>
         )}
@@ -250,7 +271,7 @@ export default function OrganizationHero({
 
         {/* Edit Button & Banner Guide */}
         {isOwner && (
-          <div className="absolute top-4 right-16 flex gap-2">
+          <div className="absolute top-4 right-16 flex gap-2 z-10">
             <Button
               onClick={() => setShowBannerGuide(true)}
               variant="outline"
@@ -277,93 +298,52 @@ export default function OrganizationHero({
         {/* Avatar/Logo */}
         <div className="absolute -bottom-8 left-8">
           <div className="bg-white rounded-xl p-2 shadow-lg border relative group">
-            {avatarUrl ? (
-              <>
-                <img
-                  src={getAvatarWithCacheBust()}
-                  alt={`${organizationData.name} logo`}
-                  className="w-16 h-16 object-cover rounded-lg"
-                  key={`avatar-${refreshKey}`}
-                  onLoad={() => console.log('✅ Avatar loaded successfully:', avatarUrl)}
-                  onError={(e) => {
-                    console.error('❌ Avatar failed to load:', avatarUrl);
-                    e.currentTarget.style.display = 'none';
-                    toast({
-                      title: 'Image Load Error',
-                      description: 'Failed to load logo image',
-                      variant: 'destructive',
-                    });
-                  }}
-                />
-                {isOwner && (
-                  <>
-                    <label
-                      htmlFor="organization-avatar-upload"
-                      className="absolute inset-0 bg-black/0 group-hover:bg-black/50 rounded-lg transition-all duration-300 cursor-pointer flex items-center justify-center opacity-0 group-hover:opacity-100"
-                    >
-                      <div className="text-white text-xs font-medium bg-black/70 px-3 py-1.5 rounded backdrop-blur-sm">
-                        Change Logo
-                      </div>
-                    </label>
-                    <input
-                      id="organization-avatar-upload"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleAvatarUpload}
-                      className="hidden"
-                      disabled={isUploading}
-                    />
-                  </>
-                )}
-              </>
+            {avatar ? (
+              <img
+                src={typeof avatar === 'string' ? avatar : avatar.secure_url}
+                alt={`${organizationData.name} logo`}
+                className="w-16 h-16 object-cover rounded-lg"
+                onLoad={() => console.log('✅ Logo loaded successfully')}
+                onError={(e) => {
+                  console.error('❌ Logo failed to load');
+                  e.currentTarget.style.display = 'none';
+                  toast.error('Failed to load logo image', {
+                    description: 'Please try refreshing the page',
+                  });
+                }}
+              />
             ) : (
               <div className="w-16 h-16 bg-teal-100 rounded-lg flex items-center justify-center relative">
                 <Building2 className="w-8 h-8 text-teal-600" />
-                {isOwner && (
-                  <>
-                    <label
-                      htmlFor="organization-avatar-upload"
-                      className="absolute inset-0 bg-teal-50 hover:bg-teal-100 rounded-lg transition-all duration-300 cursor-pointer flex items-center justify-center"
-                    >
-                      <div className="text-teal-700 text-xs font-medium bg-white/90 px-3 py-1.5 rounded backdrop-blur-sm">
-                        Upload Logo
-                      </div>
-                    </label>
-                    <input
-                      id="organization-avatar-upload"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleAvatarUpload}
-                      className="hidden"
-                      disabled={isUploading}
-                    />
-                  </>
-                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* Banner Upload Button */}
+        {/* Upload Avatar/Cover using AvatarUploader (hidden but accessible)
         {isOwner && (
-          <>
-            <label
-              htmlFor="organization-banner-upload"
-              className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm hover:bg-white text-teal-700 hover:text-teal-800 border border-teal-200 hover:border-teal-300 px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:shadow transition-all duration-300 cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Pencil className="w-4 h-4" />
-              {isUploading ? 'Uploading...' : 'Change Banner'}
-            </label>
-            <input
-              id="organization-banner-upload"
-              type="file"
-              accept="image/*"
-              onChange={handleBannerUpload}
-              className="hidden"
-              disabled={isUploading}
+          <div className="absolute bottom-4 right-4 flex gap-2 z-20">
+            <AvatarUploader
+              currentAvatar={avatar}
+              currentCover={coverPhoto}
+              onAvatarComplete={handleAvatarComplete}
+              onCoverComplete={handleCoverComplete}
+              onError={handleUploadError}
+              size="sm"
+              type="both"
+              showHelperText={false}
+              maxFileSize={{
+                avatar: 5,
+                cover: 10
+              }}
+              allowedTypes={['image/jpeg', 'image/jpg', 'image/png', 'image/webp']}
+              aspectRatio={{
+                avatar: '1:1',
+                cover: '16:9'
+              }}
             />
-          </>
-        )}
+          </div>
+        )} */}
       </div>
 
       {/* Organization Info */}
@@ -456,6 +436,14 @@ export default function OrganizationHero({
 
       {/* Banner Guide Modal */}
       {showBannerGuide && <BannerGuideModal />}
+
+      {/* Cloud Storage Status */}
+      {(avatarUploading || coverUploading) && (
+        <div className="absolute bottom-4 left-4 bg-teal-600 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg z-20">
+          <Cloud className="w-4 h-4 animate-pulse" />
+          <span>Uploading to cloud...</span>
+        </div>
+      )}
     </div>
   );
 }

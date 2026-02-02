@@ -22,12 +22,13 @@ import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
 import { DashboardLayout } from "@/components/layout/DashboardLayout"
 import ProfileCompletionCard from "@/components/candidate/ProfileCompletionCard"
-import QuickStatsCard from "@/components/candidate/QuickStatsCard"
+import QuickStatsCard, { StatItem } from "@/components/candidate/QuickStatsCard"
 import { candidateService, CandidateProfile } from "@/services/candidateService"
 import { useToast } from "@/hooks/use-toast"
 import VerificationBadge from '@/components/verifcation/VerificationBadge'
 import { useVerification } from '@/hooks/useVerification'
 import { cn } from '@/lib/utils'
+import { colorClasses } from '@/utils/color'
 
 interface DashboardStats {
   totalApplications: number;
@@ -97,14 +98,14 @@ const CandidateDashboard: React.FC = () => {
     }
   }, [user, toast])
 
-  const dashboardStats = [
+  const dashboardStats: StatItem[] = [
     {
       title: "Skills",
       value: stats.skillsCount.toString(),
       change: `+${stats.skillsCount}`,
       icon: CheckCircle,
       description: "Total skills",
-      color: 'text-blue-500 dark:text-blue-400'
+      color: "blue"
     },
     {
       title: "Experience",
@@ -112,7 +113,7 @@ const CandidateDashboard: React.FC = () => {
       change: `+${stats.experienceCount}`,
       icon: Briefcase,
       description: "Work experiences",
-      color: 'text-emerald-500 dark:text-emerald-400'
+      color: "teal"
     },
     {
       title: "Education",
@@ -120,7 +121,7 @@ const CandidateDashboard: React.FC = () => {
       change: `+${stats.educationCount}`,
       icon: GraduationCap,
       description: "Education entries",
-      color: 'text-orange-500 dark:text-orange-400'
+      color: "orange"
     },
     {
       title: "Certifications",
@@ -128,7 +129,7 @@ const CandidateDashboard: React.FC = () => {
       change: `+${stats.certificationsCount}`,
       icon: Award,
       description: "Certifications & courses",
-      color: 'text-purple-500 dark:text-purple-400'
+      color: "teal"
     },
     {
       title: "CVs",
@@ -136,7 +137,7 @@ const CandidateDashboard: React.FC = () => {
       change: `+${stats.cvCount}`,
       icon: FileText,
       description: "Uploaded resumes",
-      color: 'text-amber-500 dark:text-amber-400'
+      color: "goldenMustard"
     }
   ]
 
@@ -186,9 +187,9 @@ const CandidateDashboard: React.FC = () => {
   if (loading) {
     return (
       <DashboardLayout requiredRole="candidate">
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-amber-500" />
-          <span className="ml-2 text-gray-600 dark:text-gray-300">Loading dashboard...</span>
+        <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+          <Loader2 className={cn("h-12 w-12 animate-spin", colorClasses.text.goldenMustard)} />
+          <span className={cn("text-lg", colorClasses.text.gray800)}>Loading dashboard...</span>
         </div>
       </DashboardLayout>
     )
@@ -203,68 +204,99 @@ const CandidateDashboard: React.FC = () => {
 
   return (
     <DashboardLayout requiredRole="candidate">
-      <div className="space-y-8">
+      <div className="space-y-6 md:space-y-8 p-4 md:p-0">
         {/* Welcome Header with Real Profile Data */}
         <div className={cn(
-          "rounded-lg p-6 shadow-md border",
-          "bg-white dark:bg-gray-800",
-          "border-gray-200 dark:border-gray-700",
+          "rounded-xl p-6 shadow-sm border",
+          colorClasses.bg.white,
+          colorClasses.border.gray100,
           "transition-colors duration-200"
         )}>
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-            <div>
-              <div className="flex items-center gap-4 mb-4">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                  Welcome back, {user?.name || 'Candidate'}!
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+            <div className="flex-1">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4">
+                <h1 className={cn(
+                  "text-2xl md:text-3xl font-bold",
+                  colorClasses.text.darkNavy
+                )}>
+                  Welcome Back, {user?.name || 'Candidate'}!
                 </h1>
                 {/* Verification Badge */}
                 {!verificationLoading && (
-                  <VerificationBadge
-                    autoFetch={true}
-                    size="md"
-                    showText={true}
-                    showTooltip={true}
-                    className="shadow-sm"
-                  />
+                  <div className="flex-shrink-0">
+                    <VerificationBadge
+                      autoFetch={true}
+                      size="md"
+                      showText={true}
+                      showTooltip={true}
+                      className="shadow-sm"
+                    />
+                  </div>
                 )}
               </div>
-              <p className="text-gray-600 dark:text-gray-300 mt-2 max-w-2xl">
+              <p className={cn(
+                "text-sm md:text-base",
+                colorClasses.text.gray800,
+                "mt-2 max-w-2xl"
+              )}>
                 {profile?.bio || "Complete your profile to get better job matches and increase your chances of getting hired."}
               </p>
 
               {/* Profile Quick Info */}
-              <div className="flex flex-wrap gap-4 mt-4">
+              <div className="flex flex-wrap gap-3 mt-4">
                 {profile?.location && (
-                  <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 px-3 py-1.5 rounded-lg">
-                    <MapPin className="h-4 w-4 mr-1" />
+                  <div className={cn(
+                    "flex items-center text-xs md:text-sm px-3 py-1.5 rounded-lg",
+                    colorClasses.text.gray800,
+                    colorClasses.bg.gray100
+                  )}>
+                    <MapPin className="h-3 w-3 md:h-4 md:w-4 mr-1.5" />
                     {profile.location}
                   </div>
                 )}
                 {profile?.phone && (
-                  <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 px-3 py-1.5 rounded-lg">
-                    <Phone className="h-4 w-4 mr-1" />
+                  <div className={cn(
+                    "flex items-center text-xs md:text-sm px-3 py-1.5 rounded-lg",
+                    colorClasses.text.gray800,
+                    colorClasses.bg.gray100
+                  )}>
+                    <Phone className="h-3 w-3 md:h-4 md:w-4 mr-1.5" />
                     {profile.phone}
                   </div>
                 )}
                 {profile?.website && (
-                  <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 px-3 py-1.5 rounded-lg">
-                    <Globe className="h-4 w-4 mr-1" />
-                    {profile.website}
+                  <div className={cn(
+                    "flex items-center text-xs md:text-sm px-3 py-1.5 rounded-lg",
+                    colorClasses.text.gray800,
+                    colorClasses.bg.gray100
+                  )}>
+                    <Globe className="h-3 w-3 md:h-4 md:w-4 mr-1.5" />
+                    <span className="truncate max-w-[120px] md:max-w-none">{profile.website}</span>
                   </div>
                 )}
-                <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 px-3 py-1.5 rounded-lg">
-                  <Mail className="h-4 w-4 mr-1" />
-                  {user?.email}
+                <div className={cn(
+                  "flex items-center text-xs md:text-sm px-3 py-1.5 rounded-lg",
+                  colorClasses.text.gray800,
+                  colorClasses.bg.gray100
+                )}>
+                  <Mail className="h-3 w-3 md:h-4 md:w-4 mr-1.5" />
+                  <span className="truncate max-w-[150px] md:max-w-none">{user?.email}</span>
                 </div>
               </div>
             </div>
 
-            <div className="mt-4 md:mt-0">
+            <div className="flex-shrink-0">
               {/* Verification Status Link */}
-              <Link href="/dashboard/candidate/verification">
-                <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:from-blue-600 hover:to-blue-700 transition-all shadow-sm hover:shadow-md">
-                  <CheckCircle className="h-4 w-4" />
-                  View Verification Status
+              <Link href="/dashboard/candidate/verification" className="block">
+                <button className={cn(
+                  "flex items-center justify-center gap-2 px-4 py-2.5 md:px-5 md:py-3 rounded-lg font-medium",
+                  "w-full md:w-auto",
+                  "transition-all duration-200 hover:shadow-md",
+                  colorClasses.bg.darkNavy,
+                  "text-white"
+                )}>
+                  <CheckCircle className="h-4 w-4 md:h-5 md:w-5" />
+                  <span className="whitespace-nowrap">View Verification</span>
                 </button>
               </Link>
             </div>
@@ -278,15 +310,18 @@ const CandidateDashboard: React.FC = () => {
         <div className="grid gap-6 md:grid-cols-2">
           {/* Quick Actions */}
           <Card className={cn(
-            "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
-            "bg-white dark:bg-gray-800",
-            "border-gray-200 dark:border-gray-700"
+            "border shadow-sm hover:shadow-md transition-shadow duration-200",
+            colorClasses.bg.white,
+            colorClasses.border.gray100
           )}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-gray-900 dark:text-white">Quick Actions</CardTitle>
+            <CardHeader className="pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <CardTitle className={cn(
+                  "text-xl md:text-2xl",
+                  colorClasses.text.darkNavy
+                )}>Quick Actions</CardTitle>
                 {/* Small verification status indicator */}
-                <div className="hidden md:block">
+                <div className="hidden sm:block">
                   <VerificationBadge
                     autoFetch={true}
                     size="sm"
@@ -295,74 +330,87 @@ const CandidateDashboard: React.FC = () => {
                   />
                 </div>
               </div>
-              <CardDescription className="text-gray-600 dark:text-gray-400">
+              <CardDescription className={cn(
+                "text-sm md:text-base",
+                colorClasses.text.gray800
+              )}>
                 Manage your profile and job search
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <Link href="/dashboard/candidate/profile" className="block">
-                <button className="w-full flex items-center justify-start px-4 py-3 text-white rounded-xl font-medium transition-all hover:shadow-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700">
+                <button className={cn(
+                  "w-full flex items-center justify-start px-4 py-3 rounded-lg font-medium",
+                  "transition-all duration-200 hover:shadow-md",
+                  colorClasses.bg.goldenMustard,
+                  "text-white"
+                )}>
                   <User className="mr-3 h-5 w-5" />
-                  Edit Profile
+                  <span>Edit Profile</span>
                 </button>
               </Link>
 
               <Link href="/dashboard/candidate/jobs" className="block">
                 <button className={cn(
-                  "w-full flex items-center justify-start px-4 py-3 rounded-xl font-medium",
-                  "border border-gray-300 dark:border-gray-600",
-                  "text-gray-700 dark:text-gray-300",
-                  "bg-white dark:bg-gray-800",
-                  "hover:bg-gray-50 dark:hover:bg-gray-700",
-                  "transition-all duration-200"
+                  "w-full flex items-center justify-start px-4 py-3 rounded-lg font-medium",
+                  "transition-all duration-200",
+                  colorClasses.border.gray100,
+                  colorClasses.text.darkNavy,
+                  colorClasses.bg.white,
+                  "hover:bg-gray-50"
                 )}>
                   <Briefcase className="mr-3 h-5 w-5" />
-                  Browse Jobs
+                  <span>Browse Jobs</span>
                 </button>
               </Link>
 
               <Link href="/dashboard/candidate/applications" className="block">
                 <button className={cn(
-                  "w-full flex items-center justify-start px-4 py-3 rounded-xl font-medium",
-                  "border border-gray-300 dark:border-gray-600",
-                  "text-gray-700 dark:text-gray-300",
-                  "bg-white dark:bg-gray-800",
-                  "hover:bg-gray-50 dark:hover:bg-gray-700",
-                  "transition-all duration-200"
+                  "w-full flex items-center justify-start px-4 py-3 rounded-lg font-medium",
+                  "transition-all duration-200",
+                  colorClasses.border.gray100,
+                  colorClasses.text.darkNavy,
+                  colorClasses.bg.white,
+                  "hover:bg-gray-50"
                 )}>
                   <FileText className="mr-3 h-5 w-5" />
-                  View Applications
+                  <span>View Applications</span>
                 </button>
               </Link>
 
               <Link href="/dashboard/candidate/saved-jobs" className="block">
                 <button className={cn(
-                  "w-full flex items-center justify-start px-4 py-3 rounded-xl font-medium",
-                  "border border-gray-300 dark:border-gray-600",
-                  "text-gray-700 dark:text-gray-300",
-                  "bg-white dark:bg-gray-800",
-                  "hover:bg-gray-50 dark:hover:bg-gray-700",
-                  "transition-all duration-200"
+                  "w-full flex items-center justify-start px-4 py-3 rounded-lg font-medium",
+                  "transition-all duration-200",
+                  colorClasses.border.gray100,
+                  colorClasses.text.darkNavy,
+                  colorClasses.bg.white,
+                  "hover:bg-gray-50"
                 )}>
                   <Bookmark className="mr-3 h-5 w-5" />
-                  Saved Jobs
+                  <span>Saved Jobs</span>
                 </button>
               </Link>
 
               {/* Verification Action Button */}
               <Link href="/dashboard/candidate/verification" className="block">
                 <button className={cn(
-                  "w-full flex items-center justify-start px-4 py-3 rounded-xl font-medium",
-                  "border-2 border-blue-300 dark:border-blue-500",
-                  "text-blue-700 dark:text-blue-300",
-                  "bg-white dark:bg-gray-800",
-                  "hover:bg-blue-50 dark:hover:bg-blue-900/20",
-                  "transition-all duration-200"
+                  "w-full flex items-center justify-start px-4 py-3 rounded-lg font-medium",
+                  "transition-all duration-200",
+                  "border-2",
+                  colorClasses.border.blue,
+                  colorClasses.text.blue,
+                  colorClasses.bg.white,
+                  "hover:bg-blue-50"
                 )}>
                   <CheckCircle className="mr-3 h-5 w-5" />
-                  Complete Verification
+                  <span className="flex-1 text-left">Complete Verification</span>
                   {verificationData?.verificationStatus === 'partial' && (
-                    <Badge variant="default" className="ml-2 bg-yellow-500 text-yellow-900">
+                    <Badge variant="default" className={cn(
+                      "ml-2",
+                      colorClasses.bg.goldenMustard,
+                      "text-white"
+                    )}>
                       In Progress
                     </Badge>
                   )}
@@ -373,22 +421,28 @@ const CandidateDashboard: React.FC = () => {
 
           {/* Profile Completion with Verification Status */}
           <Card className={cn(
-            "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
-            "bg-white dark:bg-gray-800",
-            "border-gray-200 dark:border-gray-700"
+            "border shadow-sm hover:shadow-md transition-shadow duration-200",
+            colorClasses.bg.white,
+            colorClasses.border.gray100
           )}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-gray-900 dark:text-white">Profile & Verification</CardTitle>
+            <CardHeader className="pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <CardTitle className={cn(
+                  "text-xl md:text-2xl",
+                  colorClasses.text.darkNavy
+                )}>Profile & Verification</CardTitle>
                 <div className="flex items-center gap-2">
                   {verificationData && (
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                    <div className={cn(
+                      "text-sm",
+                      colorClasses.text.gray800
+                    )}>
                       <span className="font-medium">Verification Score: </span>
                       <span className={cn(
                         "font-bold",
-                        verificationData.verificationStatus === 'full' ? 'text-emerald-600 dark:text-emerald-400' :
-                          verificationData.verificationStatus === 'partial' ? 'text-amber-600 dark:text-amber-400' :
-                            'text-orange-600 dark:text-orange-400'
+                        verificationData.verificationStatus === 'full' ? colorClasses.text.teal :
+                          verificationData.verificationStatus === 'partial' ? colorClasses.text.goldenMustard :
+                            colorClasses.text.orange
                       )}>
                         {verificationData.verificationStatus === 'full' ? '100%' :
                           verificationData.verificationStatus === 'partial' ? '50%' : '0%'}
@@ -397,7 +451,10 @@ const CandidateDashboard: React.FC = () => {
                   )}
                 </div>
               </div>
-              <CardDescription className="text-gray-600 dark:text-gray-400">
+              <CardDescription className={cn(
+                "text-sm md:text-base",
+                colorClasses.text.gray800
+              )}>
                 Complete your profile and get verified for better opportunities
               </CardDescription>
             </CardHeader>
@@ -405,18 +462,27 @@ const CandidateDashboard: React.FC = () => {
               {/* Profile Completion Section */}
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Profile Completion</span>
-                  <span className="text-sm font-bold text-amber-600 dark:text-amber-400">
+                  <span className={cn(
+                    "text-sm font-medium",
+                    colorClasses.text.darkNavy
+                  )}>Profile Completion</span>
+                  <span className={cn(
+                    "text-sm font-bold",
+                    colorClasses.text.goldenMustard
+                  )}>
                     {profileCompletion}%
                   </span>
                 </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                <div className={cn(
+                  "w-full rounded-full h-2",
+                  colorClasses.bg.gray100
+                )}>
                   <div
                     className="rounded-full h-2 transition-all duration-500"
                     style={{
                       width: `${profileCompletion}%`,
                       backgroundColor: profileCompletion >= 80 ? '#10b981' :
-                        profileCompletion >= 50 ? '#f59e0b' : '#ef4444'
+                        profileCompletion >= 50 ? '#F1BB03' : '#EF4444'
                     }}
                   />
                 </div>
@@ -426,13 +492,16 @@ const CandidateDashboard: React.FC = () => {
               {verificationData && (
                 <div className={cn(
                   "rounded-lg p-4 border",
-                  "bg-gray-50 dark:bg-gray-900",
-                  "border-gray-200 dark:border-gray-700"
+                  colorClasses.bg.gray100,
+                  colorClasses.border.gray100
                 )}>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2 gap-2">
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Verification Status</span>
+                      <CheckCircle className={cn("h-4 w-4", colorClasses.text.gray800)} />
+                      <span className={cn(
+                        "text-sm font-medium",
+                        colorClasses.text.darkNavy
+                      )}>Verification Status</span>
                     </div>
                     <VerificationBadge
                       status={verificationData.verificationStatus}
@@ -440,13 +509,21 @@ const CandidateDashboard: React.FC = () => {
                       showText={true}
                     />
                   </div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+                  <p className={cn(
+                    "text-xs mt-2",
+                    colorClasses.text.gray800
+                  )}>
                     {verificationData.verificationMessage ||
                       'Complete your verification to increase trust and get more opportunities.'}
                   </p>
                   {verificationData.verificationStatus !== 'full' && (
                     <Link href="/dashboard/candidate/verification">
-                      <button className="w-full mt-3 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg text-sm font-medium hover:from-blue-600 hover:to-blue-700 transition-all">
+                      <button className={cn(
+                        "w-full mt-3 px-4 py-2 rounded-lg text-sm font-medium",
+                        "transition-all duration-200 hover:shadow-md",
+                        colorClasses.bg.darkNavy,
+                        "text-white"
+                      )}>
                         Complete Verification Steps
                       </button>
                     </Link>
@@ -460,21 +537,27 @@ const CandidateDashboard: React.FC = () => {
                   <div key={index} className="flex items-center justify-between">
                     <div className="flex items-center">
                       <div className={cn(
-                        "w-3 h-3 rounded-full mr-3",
-                        item.completed ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                        "w-2.5 h-2.5 rounded-full mr-3",
+                        item.completed ? 'bg-green-500' : colorClasses.bg.gray400
                       )} />
                       <span className={cn(
                         "text-sm",
-                        item.completed ? 'text-gray-800 dark:text-gray-200' : 'text-gray-500 dark:text-gray-400'
+                        item.completed ? colorClasses.text.darkNavy : colorClasses.text.gray400
                       )}>
                         {item.label}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500 dark:text-gray-400">{item.weight} points</span>
+                      <span className={cn(
+                        "text-xs",
+                        colorClasses.text.gray400
+                      )}>{item.weight} points</span>
                       {!item.completed && (
                         <Link href={item.route}>
-                          <button className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium">
+                          <button className={cn(
+                            "text-xs font-medium hover:underline",
+                            colorClasses.text.blue
+                          )}>
                             Complete
                           </button>
                         </Link>
@@ -490,30 +573,42 @@ const CandidateDashboard: React.FC = () => {
         {/* Skills Overview */}
         {profileSkills.length > 0 && (
           <Card className={cn(
-            "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
-            "bg-white dark:bg-gray-800",
-            "border-gray-200 dark:border-gray-700"
+            "border shadow-sm hover:shadow-md transition-shadow duration-200",
+            colorClasses.bg.white,
+            colorClasses.border.gray100
           )}>
-            <CardHeader>
-              <CardTitle className="text-gray-900 dark:text-white">Your Skills</CardTitle>
-              <CardDescription className="text-gray-600 dark:text-gray-400">
+            <CardHeader className="pb-4">
+              <CardTitle className={cn(
+                "text-xl md:text-2xl",
+                colorClasses.text.darkNavy
+              )}>Your Skills</CardTitle>
+              <CardDescription className={cn(
+                "text-sm md:text-base",
+                colorClasses.text.gray800
+              )}>
                 {profileSkills.length} skills added to your profile
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
-                {profileSkills.slice(0, 15).map((skill, index) => (
+                {profileSkills.slice(0, 10).map((skill, index) => (
                   <Badge
                     key={`skill-${index}-${skill}`}
                     variant="secondary"
-                    className="bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-800"
+                    className={cn(
+                      colorClasses.bg.goldenMustard,
+                      colorClasses.text.white
+                    )}
                   >
                     {skill}
                   </Badge>
                 ))}
-                {profileSkills.length > 15 && (
-                  <Badge variant="outline" className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300">
-                    +{profileSkills.length - 15} more
+                {profileSkills.length > 10 && (
+                  <Badge variant="outline" className={cn(
+                    colorClasses.border.gray100,
+                    colorClasses.text.gray800
+                  )}>
+                    +{profileSkills.length - 10} more
                   </Badge>
                 )}
               </div>
@@ -522,27 +617,45 @@ const CandidateDashboard: React.FC = () => {
         )}
 
         {/* Recent Experience, Education & Certifications Summary */}
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {/* Recent Experience */}
           {profileExperience.length > 0 && (
             <Card className={cn(
-              "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
-              "bg-white dark:bg-gray-800",
-              "border-gray-200 dark:border-gray-700"
+              "border shadow-sm hover:shadow-md transition-shadow duration-200",
+              colorClasses.bg.white,
+              colorClasses.border.gray100
             )}>
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">Recent Experience</CardTitle>
-                <CardDescription className="text-gray-600 dark:text-gray-400">
+              <CardHeader className="pb-4">
+                <CardTitle className={cn(
+                  "text-lg md:text-xl",
+                  colorClasses.text.darkNavy
+                )}>Recent Experience</CardTitle>
+                <CardDescription className={cn(
+                  "text-sm",
+                  colorClasses.text.gray800
+                )}>
                   Your most recent work experience
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {profileExperience.slice(0, 2).map((exp, index) => (
-                    <div key={`experience-${index}-${exp.company}`} className="border-l-4 border-amber-500 pl-4 py-1">
-                      <p className="font-semibold text-gray-900 dark:text-white">{exp.position}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{exp.company}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                    <div key={`experience-${index}-${exp.company}`} className={cn(
+                      "border-l-4 pl-4 py-2",
+                      colorClasses.border.goldenMustard
+                    )}>
+                      <p className={cn(
+                        "font-semibold text-sm md:text-base",
+                        colorClasses.text.darkNavy
+                      )}>{exp.position}</p>
+                      <p className={cn(
+                        "text-sm",
+                        colorClasses.text.gray800
+                      )}>{exp.company}</p>
+                      <p className={cn(
+                        "text-xs",
+                        colorClasses.text.gray400
+                      )}>
                         {new Date(exp.startDate).toLocaleDateString()} -
                         {exp.current ? ' Present' : exp.endDate ? ` ${new Date(exp.endDate).toLocaleDateString()}` : ' Not specified'}
                       </p>
@@ -552,11 +665,11 @@ const CandidateDashboard: React.FC = () => {
                     <Link href="/dashboard/candidate/profile">
                       <button className={cn(
                         "w-full flex items-center justify-center px-4 py-2 rounded-lg font-medium",
-                        "border border-gray-300 dark:border-gray-600",
-                        "text-gray-700 dark:text-gray-300",
-                        "bg-white dark:bg-gray-800",
-                        "hover:bg-gray-50 dark:hover:bg-gray-700",
-                        "transition-all duration-200"
+                        "transition-all duration-200",
+                        colorClasses.border.gray100,
+                        colorClasses.text.darkNavy,
+                        colorClasses.bg.white,
+                        "hover:bg-gray-50"
                       )}>
                         View All {profileExperience.length} Experiences
                         <ArrowRight className="ml-2 h-4 w-4" />
@@ -571,23 +684,41 @@ const CandidateDashboard: React.FC = () => {
           {/* Education Summary */}
           {profileEducation.length > 0 && (
             <Card className={cn(
-              "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
-              "bg-white dark:bg-gray-800",
-              "border-gray-200 dark:border-gray-700"
+              "border shadow-sm hover:shadow-md transition-shadow duration-200",
+              colorClasses.bg.white,
+              colorClasses.border.gray100
             )}>
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">Education</CardTitle>
-                <CardDescription className="text-gray-600 dark:text-gray-400">
+              <CardHeader className="pb-4">
+                <CardTitle className={cn(
+                  "text-lg md:text-xl",
+                  colorClasses.text.darkNavy
+                )}>Education</CardTitle>
+                <CardDescription className={cn(
+                  "text-sm",
+                  colorClasses.text.gray800
+                )}>
                   Your educational background
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {profileEducation.slice(0, 2).map((edu, index) => (
-                    <div key={`education-${index}-${edu.institution}`} className="border-l-4 border-emerald-500 pl-4 py-1">
-                      <p className="font-semibold text-gray-900 dark:text-white">{edu.degree}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{edu.institution}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                    <div key={`education-${index}-${edu.institution}`} className={cn(
+                      "border-l-4 pl-4 py-2",
+                      colorClasses.border.teal
+                    )}>
+                      <p className={cn(
+                        "font-semibold text-sm md:text-base",
+                        colorClasses.text.darkNavy
+                      )}>{edu.degree}</p>
+                      <p className={cn(
+                        "text-sm",
+                        colorClasses.text.gray800
+                      )}>{edu.institution}</p>
+                      <p className={cn(
+                        "text-xs",
+                        colorClasses.text.gray400
+                      )}>
                         {new Date(edu.startDate).toLocaleDateString()} -
                         {edu.current ? ' Present' : edu.endDate ? ` ${new Date(edu.endDate).toLocaleDateString()}` : ' Not specified'}
                       </p>
@@ -597,11 +728,11 @@ const CandidateDashboard: React.FC = () => {
                     <Link href="/dashboard/candidate/profile">
                       <button className={cn(
                         "w-full flex items-center justify-center px-4 py-2 rounded-lg font-medium",
-                        "border border-gray-300 dark:border-gray-600",
-                        "text-gray-700 dark:text-gray-300",
-                        "bg-white dark:bg-gray-800",
-                        "hover:bg-gray-50 dark:hover:bg-gray-700",
-                        "transition-all duration-200"
+                        "transition-all duration-200",
+                        colorClasses.border.gray100,
+                        colorClasses.text.darkNavy,
+                        colorClasses.bg.white,
+                        "hover:bg-gray-50"
                       )}>
                         View All {profileEducation.length} Education Entries
                         <ArrowRight className="ml-2 h-4 w-4" />
@@ -616,28 +747,49 @@ const CandidateDashboard: React.FC = () => {
           {/* Certifications Summary */}
           {profileCertifications.length > 0 && (
             <Card className={cn(
-              "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
-              "bg-white dark:bg-gray-800",
-              "border-gray-200 dark:border-gray-700"
+              "border shadow-sm hover:shadow-md transition-shadow duration-200",
+              colorClasses.bg.white,
+              colorClasses.border.gray100
             )}>
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">Certifications</CardTitle>
-                <CardDescription className="text-gray-600 dark:text-gray-400">
+              <CardHeader className="pb-4">
+                <CardTitle className={cn(
+                  "text-lg md:text-xl",
+                  colorClasses.text.darkNavy
+                )}>Certifications</CardTitle>
+                <CardDescription className={cn(
+                  "text-sm",
+                  colorClasses.text.gray800
+                )}>
                   Your certifications & courses
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {profileCertifications.slice(0, 2).map((cert: any, index: number) => (
-                    <div key={`certification-${index}-${cert.name}`} className="border-l-4 border-purple-500 pl-4 py-1">
-                      <p className="font-semibold text-gray-900 dark:text-white">{cert.name}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{cert.issuer}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                    <div key={`certification-${index}-${cert.name}`} className={cn(
+                      "border-l-4 pl-4 py-2",
+                      colorClasses.border.blue
+                    )}>
+                      <p className={cn(
+                        "font-semibold text-sm md:text-base",
+                        colorClasses.text.darkNavy
+                      )}>{cert.name}</p>
+                      <p className={cn(
+                        "text-sm",
+                        colorClasses.text.gray800
+                      )}>{cert.issuer}</p>
+                      <p className={cn(
+                        "text-xs",
+                        colorClasses.text.gray400
+                      )}>
                         Issued: {new Date(cert.issueDate).toLocaleDateString()}
                         {cert.expiryDate && ` • Expires: ${new Date(cert.expiryDate).toLocaleDateString()}`}
                       </p>
                       {cert.credentialId && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400">ID: {cert.credentialId}</p>
+                        <p className={cn(
+                          "text-xs",
+                          colorClasses.text.gray400
+                        )}>ID: {cert.credentialId}</p>
                       )}
                     </div>
                   ))}
@@ -645,11 +797,11 @@ const CandidateDashboard: React.FC = () => {
                     <Link href="/dashboard/candidate/profile">
                       <button className={cn(
                         "w-full flex items-center justify-center px-4 py-2 rounded-lg font-medium",
-                        "border border-gray-300 dark:border-gray-600",
-                        "text-gray-700 dark:text-gray-300",
-                        "bg-white dark:bg-gray-800",
-                        "hover:bg-gray-50 dark:hover:bg-gray-700",
-                        "transition-all duration-200"
+                        "transition-all duration-200",
+                        colorClasses.border.gray100,
+                        colorClasses.text.darkNavy,
+                        colorClasses.bg.white,
+                        "hover:bg-gray-50"
                       )}>
                         View All {profileCertifications.length} Certifications
                         <ArrowRight className="ml-2 h-4 w-4" />
@@ -664,37 +816,52 @@ const CandidateDashboard: React.FC = () => {
 
         {/* CV/Resume Status */}
         <Card className={cn(
-          "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
-          "bg-white dark:bg-gray-800",
-          "border-gray-200 dark:border-gray-700"
+          "border shadow-sm hover:shadow-md transition-shadow duration-200",
+          colorClasses.bg.white,
+          colorClasses.border.gray100
         )}>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-gray-900 dark:text-white">CV/Resume Status</CardTitle>
+          <CardHeader className="pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <CardTitle className={cn(
+                "text-xl md:text-2xl",
+                colorClasses.text.darkNavy
+              )}>CV/Resume Status</CardTitle>
               {/* Verification status reminder */}
               {verificationData?.verificationStatus === 'none' && (
-                <Badge variant="destructive" className="animate-pulse bg-red-500 text-white">
+                <Badge variant="destructive" className="animate-pulse">
                   Verification Required
                 </Badge>
               )}
             </div>
-            <CardDescription className="text-gray-600 dark:text-gray-400">
+            <CardDescription className={cn(
+              "text-sm md:text-base",
+              colorClasses.text.gray800
+            )}>
               Manage your uploaded resumes
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className={cn(
-              "flex items-center justify-between p-4 rounded-lg border",
-              "bg-gray-50 dark:bg-gray-900",
-              "border-gray-200 dark:border-gray-700"
+              "flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg border gap-4",
+              colorClasses.bg.gray100,
+              colorClasses.border.gray100
             )}>
               <div className="flex items-center space-x-3">
-                <FileText className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                <FileText className={cn(
+                  "h-8 w-8",
+                  colorClasses.text.blue
+                )} />
                 <div>
-                  <p className="font-medium text-gray-900 dark:text-white">
+                  <p className={cn(
+                    "font-medium text-sm md:text-base",
+                    colorClasses.text.darkNavy
+                  )}>
                     {profileCvs.length > 0 ? `${profileCvs.length} CV(s) Uploaded` : 'No CVs Uploaded'}
                   </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className={cn(
+                    "text-xs md:text-sm",
+                    colorClasses.text.gray800
+                  )}>
                     {profileCvs.length > 0
                       ? `Primary CV: ${primaryCv?.originalName || 'Not set'}`
                       : 'Upload your CV to apply for jobs'
@@ -702,14 +869,23 @@ const CandidateDashboard: React.FC = () => {
                   </p>
                   {/* Verification tip */}
                   {verificationData?.verificationStatus === 'none' && (
-                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    <p className={cn(
+                      "text-xs mt-1",
+                      colorClasses.text.orange
+                    )}>
                       ⚠️ Uploading documents helps with verification
                     </p>
                   )}
                 </div>
               </div>
               <Link href="/dashboard/candidate/profile">
-                <button className="px-6 py-3 text-white rounded-lg font-medium transition-all hover:shadow-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700">
+                <button className={cn(
+                  "px-4 py-2.5 md:px-6 md:py-3 rounded-lg font-medium",
+                  "transition-all duration-200 hover:shadow-md",
+                  "whitespace-nowrap",
+                  colorClasses.bg.goldenMustard,
+                  "text-white"
+                )}>
                   {profileCvs.length > 0 ? 'Manage CVs' : 'Upload CV'}
                   <ArrowRight className="ml-2 h-4 w-4 inline" />
                 </button>
@@ -718,68 +894,24 @@ const CandidateDashboard: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Certifications Status */}
-        {profileCertifications.length > 0 && (
-          <Card className={cn(
-            "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
-            "bg-white dark:bg-gray-800",
-            "border-gray-200 dark:border-gray-700"
-          )}>
-            <CardHeader>
-              <CardTitle className="text-gray-900 dark:text-white">Certifications & Courses</CardTitle>
-              <CardDescription className="text-gray-600 dark:text-gray-400">
-                Your professional certifications and training
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className={cn(
-                "flex items-center justify-between p-4 rounded-lg border",
-                "bg-gray-50 dark:bg-gray-900",
-                "border-gray-200 dark:border-gray-700"
-              )}>
-                <div className="flex items-center space-x-3">
-                  <Award className="h-8 w-8 text-purple-600 dark:text-purple-400" />
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {profileCertifications.length} Certification(s) Added
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {profileCertifications.length === 1
-                        ? '1 certification in your profile'
-                        : `${profileCertifications.length} certifications in your profile`
-                      }
-                    </p>
-                    {/* Verification tip */}
-                    {verificationData?.verificationStatus === 'partial' && (
-                      <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                        ✅ Certifications help boost verification score
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <Link href="/dashboard/candidate/profile">
-                  <button className="px-6 py-3 text-white rounded-lg font-medium transition-all hover:shadow-lg bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700">
-                    Manage Certifications
-                    <ArrowRight className="ml-2 h-4 w-4 inline" />
-                  </button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Verification Status Card */}
         <Card className={cn(
-          "border-0 shadow-md hover:shadow-lg transition-shadow duration-200",
-          "bg-white dark:bg-gray-800",
-          "border-l-4 border-blue-500",
-          "border-gray-200 dark:border-gray-700"
+          "border shadow-sm hover:shadow-md transition-shadow duration-200",
+          colorClasses.bg.white,
+          "border-l-4",
+          colorClasses.border.blue
         )}>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-gray-900 dark:text-white">
+          <CardHeader className="pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <CardTitle className={cn(
+                "text-xl md:text-2xl",
+                colorClasses.text.darkNavy
+              )}>
                 <div className="flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <Shield className={cn(
+                    "h-5 w-5",
+                    colorClasses.text.blue
+                  )} />
                   Account Verification Status
                 </div>
               </CardTitle>
@@ -791,7 +923,10 @@ const CandidateDashboard: React.FC = () => {
                 className="shadow-md"
               />
             </div>
-            <CardDescription className="text-gray-600 dark:text-gray-400">
+            <CardDescription className={cn(
+              "text-sm md:text-base",
+              colorClasses.text.gray800
+            )}>
               Increase your trust score and get more opportunities
             </CardDescription>
           </CardHeader>
@@ -801,17 +936,23 @@ const CandidateDashboard: React.FC = () => {
                 <div className={cn(
                   "p-4 rounded-lg border",
                   verificationData?.verificationDetails?.emailVerified
-                    ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-                    : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700'
+                    ? cn(
+                      colorClasses.bg.teal,
+                      colorClasses.text.white
+                    )
+                    : cn(
+                      colorClasses.bg.gray100,
+                      colorClasses.text.gray800
+                    )
                 )}>
                   <div className="flex items-center gap-2 mb-2">
                     <div className={cn(
                       "h-2 w-2 rounded-full",
-                      verificationData?.verificationDetails?.emailVerified ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                      verificationData?.verificationDetails?.emailVerified ? 'bg-white' : colorClasses.bg.gray400
                     )} />
-                    <span className="font-medium text-gray-700 dark:text-gray-300">Email Verification</span>
+                    <span className="font-medium">Email Verification</span>
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className="text-sm">
                     {verificationData?.verificationDetails?.emailVerified
                       ? '✅ Your email is verified'
                       : '⚠️ Verify your email address'}
@@ -821,17 +962,23 @@ const CandidateDashboard: React.FC = () => {
                 <div className={cn(
                   "p-4 rounded-lg border",
                   verificationData?.verificationDetails?.profileVerified
-                    ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-                    : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700'
+                    ? cn(
+                      colorClasses.bg.teal,
+                      colorClasses.text.white
+                    )
+                    : cn(
+                      colorClasses.bg.gray100,
+                      colorClasses.text.gray800
+                    )
                 )}>
                   <div className="flex items-center gap-2 mb-2">
                     <div className={cn(
                       "h-2 w-2 rounded-full",
-                      verificationData?.verificationDetails?.profileVerified ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                      verificationData?.verificationDetails?.profileVerified ? 'bg-white' : colorClasses.bg.gray400
                     )} />
-                    <span className="font-medium text-gray-700 dark:text-gray-300">Profile Verification</span>
+                    <span className="font-medium">Profile Verification</span>
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className="text-sm">
                     {verificationData?.verificationDetails?.profileVerified
                       ? '✅ Your profile is verified'
                       : '📝 Complete your profile details'}
@@ -841,17 +988,23 @@ const CandidateDashboard: React.FC = () => {
                 <div className={cn(
                   "p-4 rounded-lg border",
                   verificationData?.verificationDetails?.documentsVerified
-                    ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-                    : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700'
+                    ? cn(
+                      colorClasses.bg.teal,
+                      colorClasses.text.white
+                    )
+                    : cn(
+                      colorClasses.bg.gray100,
+                      colorClasses.text.gray800
+                    )
                 )}>
                   <div className="flex items-center gap-2 mb-2">
                     <div className={cn(
                       "h-2 w-2 rounded-full",
-                      verificationData?.verificationDetails?.documentsVerified ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                      verificationData?.verificationDetails?.documentsVerified ? 'bg-white' : colorClasses.bg.gray400
                     )} />
-                    <span className="font-medium text-gray-700 dark:text-gray-300">Document Verification</span>
+                    <span className="font-medium">Document Verification</span>
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className="text-sm">
                     {verificationData?.verificationDetails?.documentsVerified
                       ? '✅ Your documents are verified'
                       : '📄 Upload and verify documents'}
@@ -859,17 +1012,25 @@ const CandidateDashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pt-4 border-t gap-4">
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className={cn(
+                    "text-sm",
+                    colorClasses.text.gray800
+                  )}>
                     Last verified: {verificationData?.verificationDetails?.lastVerified
                       ? new Date(verificationData.verificationDetails.lastVerified).toLocaleDateString()
                       : 'Never'}
                   </p>
                 </div>
                 <Link href="/dashboard/candidate/verification">
-                  <button className="px-6 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:from-blue-600 hover:to-blue-700 transition-all shadow-sm hover:shadow-md">
-                    View Full Verification Details
+                  <button className={cn(
+                    "px-4 py-2.5 md:px-6 md:py-3 rounded-lg font-medium",
+                    "transition-all duration-200 hover:shadow-md",
+                    colorClasses.bg.darkNavy,
+                    "text-white"
+                  )}>
+                    <span className="whitespace-nowrap">View Full Verification Details</span>
                     <ArrowRight className="ml-2 h-4 w-4 inline" />
                   </button>
                 </Link>

@@ -1,34 +1,98 @@
 const express = require('express');
 const router = express.Router();
 const postController = require('../controllers/postController');
-const { verifyToken, optionalAuth } = require('../middleware/authMiddleware');
-const { uploadMedia, fileSizeLimit } = require('../middleware/upload');
+const { verifyToken } = require('../middleware/authMiddleware');
+const cloudinaryMediaUpload = require('../middleware/cloudinaryMediaUpload');
 
-// Apply authentication middleware to most routes
+// =====================
+// AUTH MIDDLEWARE
+// =====================
 router.use(verifyToken);
 
-// Get feed posts (professional feed)
+// =====================
+// POST MANAGEMENT ROUTES
+// =====================
+
+// Get personalized feed
 router.get('/feed', postController.getFeedPosts);
 
-// Get user's own posts (for dashboard)
-router.get('/my/posts', postController.getMyPosts);
+// Get user's own posts
+router.get('/my-posts', postController.getMyPosts);
 
-// Create post with media handling
-router.post('/', uploadMedia, fileSizeLimit, postController.createPost);
+// Get saved posts (⚠️ MUST be before :id)
+router.get('/saved', postController.getSavedPosts);
 
-// Get specific post (optional auth for public posts)
-router.get('/:id', optionalAuth, postController.getPost);
+// Save post
+router.post('/:id/save', postController.savePost);
 
-// Update post with proper media handling
-router.put('/:id', uploadMedia, fileSizeLimit, postController.updatePost);
+// Unsave post
+router.delete('/:id/save', postController.unsavePost);
 
-// Delete post (with permanent delete option for admins)
-router.delete('/:id', postController.deletePost);
-
-// Get profile posts with professional privacy
+// Get posts by profile ID
 router.get('/profile/:profileId', postController.getProfilePosts);
 
-// Share post
+// Get specific post by ID
+router.get('/:id', postController.getPost);
+
+// =====================
+// POST CREATION ROUTES
+// =====================
+
+// Create new post with Cloudinary media uploads
+router.post(
+  '/',
+  cloudinaryMediaUpload.multiple, // Use Cloudinary middleware for multiple files
+  postController.createPost
+);
+
+// =====================
+// POST UPDATE ROUTES
+// =====================
+
+// Update post with Cloudinary media handling
+router.put(
+  '/:id',
+  cloudinaryMediaUpload.multiple, // Use Cloudinary middleware for multiple files
+  postController.updatePost
+);
+
+// Share a post
 router.post('/:id/share', postController.sharePost);
+
+// =====================
+// POST DELETION ROUTES
+// =====================
+
+// Delete post (soft delete by default, permanent for admin)
+router.delete('/:id', postController.deletePost);
+
+// =====================
+// HEALTH CHECK
+// =====================
+router.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Post routes are operational',
+    timestamp: new Date().toISOString(),
+    user: req.user ? {
+      id: req.user.userId,
+      role: req.user.role
+    } : null
+  });
+});
+
+// =====================
+// 404 HANDLER
+// =====================
+router.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Post route not found',
+    code: 'ROUTE_NOT_FOUND',
+    path: req.originalUrl,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  });
+});
 
 module.exports = router;

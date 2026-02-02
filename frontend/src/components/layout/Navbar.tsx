@@ -70,29 +70,24 @@ export default function Navbar({ onMenuToggle }: NavbarProps) {
       case "candidate":
         return [
           { href: "/dashboard/candidate/jobs", label: "Find Jobs" },
-          { href: "/dashboard/candidate/profile", label: "Profile" },
           { href: "/dashboard/candidate", label: "Dashboard" },
           { href: "/dashboard/candidate/social", label: "Social Feed" },
         ];
       case "freelancer":
         return [
           { href: "/dashboard/freelancer/tenders", label: "Browse Tenders" },
-          { href: "/dashboard/freelancer/profile", label: "Profile" },
           { href: "/dashboard/freelancer", label: "Dashboard" },
           { href: "/dashboard/freelancer/social", label: "Social Feed" },
         ];
       case "company":
         return [
-          { href: "/dashboard/company/jobs", label: "Manage Jobs" },
-          { href: "/tenders", label: "Browse Tenders" },
-          { href: "/dashboard/company/profile", label: "Profile" },
+          { href: "/dashboard/company/tenders", label: "Browse Tenders" },
           { href: "/dashboard/company", label: "Dashboard" },
           { href: "/dashboard/company/social", label: "Social Feed" },
         ];
       case "organization":
         return [
           { href: "/dashboard/organization/tenders", label: "My Tenders" },
-          { href: "/dashboard/organization/profile", label: "Profile" },
           { href: "/dashboard/organization", label: "Dashboard" },
           { href: "/dashboard/organization/social", label: "Social Feed" },
         ];
@@ -189,7 +184,7 @@ export default function Navbar({ onMenuToggle }: NavbarProps) {
             {!user && (
               <div className="hidden lg:flex items-center space-x-3">
                 <Link
-                  href="/signin"
+                  href="/login"
                   className="px-5 py-2.5 text-sm font-medium text-gray-700 hover:text-blue-600 transition-colors rounded-lg hover:bg-gray-50"
                 >
                   Login
@@ -246,7 +241,7 @@ export default function Navbar({ onMenuToggle }: NavbarProps) {
                         Your Profile
                       </Link>
                       <Link
-                        href="/dashboard/${user.role}"
+                        href={`/dashboard/${user.role}`}
                         className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors group"
                         onClick={() => setIsProfileDropdownOpen(false)}
                       >

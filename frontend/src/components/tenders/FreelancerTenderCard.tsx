@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/social/ui/Button';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/Card';
 import { cn } from '@/lib/utils';
+import { colors } from '@/utils/color';
 
 interface FreelanceTenderCardProps {
   tender: Tender;
@@ -68,11 +69,11 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
   const getSizeClasses = () => {
     switch (size) {
       case 'small':
-        return 'p-4';
+        return 'p-3 sm:p-4';
       case 'large':
-        return 'p-6';
+        return 'p-5 sm:p-6';
       default:
-        return 'p-5';
+        return 'p-4 sm:p-5';
     }
   };
 
@@ -80,17 +81,17 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
   if (variant === 'list') {
     return (
       <Card className={cn(
-        "w-full border border-gray-200 dark:border-gray-800 hover:border-green-300 dark:hover:border-green-700 transition-all duration-300 hover:shadow-md dark:hover:shadow-green-900/20",
+        "w-full border border-border-secondary hover:border-green-300 dark:hover:border-green-700 transition-all duration-300 hover:shadow-md",
         className
       )}>
-        <CardContent className={cn("p-6", getSizeClasses())}>
-          <div className="flex flex-col md:flex-row md:items-start gap-6">
+        <CardContent className={cn("p-4 sm:p-6", getSizeClasses())}>
+          <div className="flex flex-col md:flex-row md:items-start gap-4 sm:gap-6">
             {/* Left Section - Main Info */}
-            <div className="flex-1 space-y-4">
+            <div className="flex-1 space-y-3 sm:space-y-4">
               <div className="flex items-start justify-between">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <h3 className="font-semibold text-lg text-gray-900 dark:text-gray-100 line-clamp-1">
+                <div className="space-y-1 sm:space-y-2">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <h3 className="font-semibold text-base sm:text-lg text-text-primary line-clamp-1">
                       {tender.title}
                     </h3>
                     {tender.freelanceSpecific?.urgency === 'urgent' && (
@@ -102,7 +103,7 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className="bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800">
+                    <Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
                       {tender.procurementCategory}
                     </Badge>
                     <Badge variant={tender.workflowType === 'open' ? 'default' : 'secondary'} className="text-xs">
@@ -122,32 +123,32 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
                     variant="ghost"
                     size="icon"
                     onClick={handleSaveToggle}
-                    className="text-gray-400 hover:text-green-600 dark:hover:text-green-400"
+                    className="text-text-muted hover:text-emerald-600 dark:hover:text-emerald-400"
                   >
                     <Save className={cn(
-                      "h-5 w-5",
-                      isSaved && "fill-green-500 text-green-500 dark:fill-green-400 dark:text-green-400"
+                      "h-4 w-4 sm:h-5 sm:w-5",
+                      isSaved && "fill-emerald-500 text-emerald-500 dark:fill-emerald-400 dark:text-emerald-400"
                     )} />
                   </Button>
                 )}
               </div>
 
-              <p className="text-gray-600 dark:text-gray-400 text-sm line-clamp-2">
+              <p className="text-text-secondary text-sm line-clamp-2">
                 {tender.description}
               </p>
 
               {/* Skills */}
               {tender.skillsRequired && tender.skillsRequired.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Required Skills</p>
+                  <p className="text-sm font-medium text-text-primary">Required Skills</p>
                   <div className="flex flex-wrap gap-2">
                     {tender.skillsRequired.slice(0, 5).map((skill, index) => (
-                      <Badge key={index} variant="secondary" className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                      <Badge key={index} variant="secondary" className="bg-bg-secondary text-text-primary">
                         {skill}
                       </Badge>
                     ))}
                     {tender.skillsRequired.length > 5 && (
-                      <Badge variant="outline" className="text-gray-500 dark:text-gray-500">
+                      <Badge variant="outline" className="text-text-muted">
                         +{tender.skillsRequired.length - 5} more
                       </Badge>
                     )}
@@ -157,37 +158,37 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
             </div>
 
             {/* Right Section - Stats & Actions */}
-            <div className="md:w-64 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="md:w-56 lg:w-64 space-y-3 sm:space-y-4">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-500">
-                    <DollarSign className="h-4 w-4" />
+                  <div className="flex items-center gap-2 text-sm text-text-muted">
+                    <DollarSign className="h-3 w-3 sm:h-4 sm:w-4" />
                     <span>Budget</span>
                   </div>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">{formatBudget()}</p>
+                  <p className="font-medium text-text-primary text-sm sm:text-base">{formatBudget()}</p>
                 </div>
 
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-500">
-                    <Clock className="h-4 w-4" />
+                  <div className="flex items-center gap-2 text-sm text-text-muted">
+                    <Clock className="h-3 w-3 sm:h-4 sm:w-4" />
                     <span>Deadline</span>
                   </div>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">{formatDeadline(tender.deadline)}</p>
+                  <p className="font-medium text-text-primary text-sm sm:text-base">{formatDeadline(tender.deadline)}</p>
                 </div>
               </div>
 
               {/* Language & Timezone */}
               {(tender.freelanceSpecific?.languagePreference || tender.freelanceSpecific?.timezonePreference) && (
-                <div className="flex items-center gap-4 text-sm">
+                <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-sm">
                   {tender.freelanceSpecific.languagePreference && (
-                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <Globe className="h-4 w-4" />
+                    <div className="flex items-center gap-2 text-text-secondary">
+                      <Globe className="h-3 w-3 sm:h-4 sm:w-4" />
                       <span>{tender.freelanceSpecific.languagePreference}</span>
                     </div>
                   )}
                   {tender.freelanceSpecific.timezonePreference && (
-                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <MapPin className="h-4 w-4" />
+                    <div className="flex items-center gap-2 text-text-secondary">
+                      <MapPin className="h-3 w-3 sm:h-4 sm:w-4" />
                       <span>{tender.freelanceSpecific.timezonePreference}</span>
                     </div>
                   )}
@@ -195,11 +196,11 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
               )}
 
               {/* Countdown & Status */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {isActive && daysRemaining >= 0 && (
                   <Badge
                     variant={daysRemaining <= 3 ? 'destructive' : 'outline'}
-                    className="bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800"
+                    className="bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
                   >
                     <Clock className="h-3 w-3 mr-1" />
                     {daysRemaining === 0 ? 'Ends Today' : `${daysRemaining} days left`}
@@ -213,7 +214,7 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
               {showActions && (
                 <Button
                   onClick={handleViewDetails}
-                  className="w-full bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white"
                 >
                   <Eye className="h-4 w-4 mr-2" />
                   View Details
@@ -229,7 +230,7 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
   // Grid View (default)
   return (
     <Card className={cn(
-      "overflow-hidden border border-gray-200 dark:border-gray-800 hover:border-green-300 dark:hover:border-green-700 transition-all duration-300 hover:shadow-lg dark:hover:shadow-xl",
+      "overflow-hidden border border-border-secondary hover:border-emerald-300 dark:hover:border-emerald-700 transition-all duration-300 hover:shadow-lg",
       size === 'large' ? 'h-full' : '',
       className
     )}>
@@ -237,7 +238,7 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
       <div
         className="h-2 w-full"
         style={{
-          background: 'linear-gradient(90deg, #E8F8F0 0%, #CFF5E7 100%)'
+          background: `linear-gradient(90deg, ${colors.teal}20 0%, ${colors.blue}20 100%)`
         }}
       />
 
@@ -245,14 +246,14 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
         <div className="flex justify-between items-start">
           <div className="space-y-1">
             <h3 className={cn(
-              "font-semibold text-gray-900 dark:text-gray-100 line-clamp-2",
+              "font-semibold text-text-primary line-clamp-2",
               size === 'small' ? 'text-base' : 'text-lg',
               size === 'large' ? 'text-xl' : ''
             )}>
               {tender.title}
             </h3>
-            <div className="flex items-center gap-2 text-sm">
-              <Badge variant="outline" className="bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
                 {tender.procurementCategory}
               </Badge>
               {tender.freelanceSpecific?.urgency === 'urgent' && (
@@ -268,49 +269,49 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
               variant="ghost"
               size="icon"
               onClick={handleSaveToggle}
-              className="text-gray-400 hover:text-green-600 dark:hover:text-green-400"
+              className="text-text-muted hover:text-emerald-600 dark:hover:text-emerald-400"
             >
               <Save className={cn(
-                "h-5 w-5",
-                isSaved && "fill-green-500 text-green-500 dark:fill-green-400 dark:text-green-400"
+                "h-4 w-4 sm:h-5 sm:w-5",
+                isSaved && "fill-emerald-500 text-emerald-500 dark:fill-emerald-400 dark:text-emerald-400"
               )} />
             </Button>
           )}
         </div>
       </CardHeader>
 
-      <CardContent className={cn("space-y-4", getSizeClasses())}>
+      <CardContent className={cn("space-y-3 sm:space-y-4", getSizeClasses())}>
         {/* Budget & Timeline */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-500">
-              <DollarSign className="h-4 w-4" />
+            <div className="flex items-center gap-2 text-sm text-text-muted">
+              <DollarSign className="h-3 w-3 sm:h-4 sm:w-4" />
               <span>Budget</span>
             </div>
-            <p className="font-medium text-gray-900 dark:text-gray-100">{formatBudget()}</p>
+            <p className="font-medium text-text-primary text-sm sm:text-base">{formatBudget()}</p>
           </div>
 
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-500">
-              <Clock className="h-4 w-4" />
+            <div className="flex items-center gap-2 text-sm text-text-muted">
+              <Clock className="h-3 w-3 sm:h-4 sm:w-4" />
               <span>Deadline</span>
             </div>
-            <p className="font-medium text-gray-900 dark:text-gray-100">{formatDeadline(tender.deadline)}</p>
+            <p className="font-medium text-text-primary text-sm sm:text-base">{formatDeadline(tender.deadline)}</p>
           </div>
         </div>
 
         {/* Skills */}
         {tender.skillsRequired && tender.skillsRequired.length > 0 && (
           <div className="space-y-2">
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Required Skills</p>
+            <p className="text-sm font-medium text-text-primary">Required Skills</p>
             <div className="flex flex-wrap gap-2">
               {tender.skillsRequired.slice(0, 3).map((skill, index) => (
-                <Badge key={index} variant="secondary" className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                <Badge key={index} variant="secondary" className="bg-bg-secondary text-text-primary">
                   {skill}
                 </Badge>
               ))}
               {tender.skillsRequired.length > 3 && (
-                <Badge variant="outline" className="text-gray-500 dark:text-gray-500">
+                <Badge variant="outline" className="text-text-muted">
                   +{tender.skillsRequired.length - 3} more
                 </Badge>
               )}
@@ -320,22 +321,22 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
 
         {/* Experience Level */}
         {tender.freelanceSpecific?.experienceLevel && (
-          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-            <Award className="h-4 w-4" />
+          <div className="flex items-center gap-2 text-sm text-text-secondary">
+            <Award className="h-3 w-3 sm:h-4 sm:w-4" />
             <span className="capitalize">{tender.freelanceSpecific.experienceLevel} Level</span>
           </div>
         )}
 
         {/* Language & Timezone */}
         {tender.freelanceSpecific?.languagePreference && (
-          <div className="flex items-center gap-4 text-sm">
-            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-              <Globe className="h-4 w-4" />
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-sm">
+            <div className="flex items-center gap-2 text-text-secondary">
+              <Globe className="h-3 w-3 sm:h-4 sm:w-4" />
               <span>{tender.freelanceSpecific.languagePreference}</span>
             </div>
             {tender.freelanceSpecific.timezonePreference && (
-              <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                <MapPin className="h-4 w-4" />
+              <div className="flex items-center gap-2 text-text-secondary">
+                <MapPin className="h-3 w-3 sm:h-4 sm:w-4" />
                 <span>{tender.freelanceSpecific.timezonePreference}</span>
               </div>
             )}
@@ -344,10 +345,10 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
 
         {/* Countdown Badge */}
         {isActive && daysRemaining >= 0 && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge
               variant={daysRemaining <= 3 ? 'destructive' : 'outline'}
-              className="bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800"
+              className="bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
             >
               <Clock className="h-3 w-3 mr-1" />
               {daysRemaining === 0 ? 'Ends Today' : `${daysRemaining} days left`}
@@ -360,10 +361,10 @@ const FreelanceTenderCard: React.FC<FreelanceTenderCardProps> = ({
       </CardContent>
 
       {showActions && (
-        <CardFooter className={cn("pt-4 border-t border-gray-100 dark:border-gray-800", getSizeClasses())}>
+        <CardFooter className={cn("pt-3 sm:pt-4 border-t border-border-secondary", getSizeClasses())}>
           <Button
             onClick={handleViewDetails}
-            className="w-full bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white"
+            className="w-full bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white"
           >
             <Eye className="h-4 w-4 mr-2" />
             View Details

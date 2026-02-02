@@ -1,13 +1,27 @@
 // components/company/CompanyHero.tsx
 import { useState } from 'react';
-import { Building2, MapPin, Globe, Calendar, Pencil, Info, Star, Award, RefreshCw, Loader2 } from 'lucide-react';
+import {
+  Building2,
+  MapPin,
+  Globe,
+  Calendar,
+  Pencil,
+  Info,
+  Star,
+  Award,
+  RefreshCw,
+  Loader2,
+  Cloud,
+  Upload,
+  Check
+} from 'lucide-react';
 import Button from '../forms/Button';
-import { getFullImageUrl, getCacheBustUrl, handleImageUpload } from '@/utils/image-utils';
-import { profileService, Profile } from '@/services/profileService';
-import { toast } from '@/hooks/use-toast';
+import { profileService, Profile, CloudinaryImage } from '@/services/profileService';
+import { toast } from 'sonner';
+import { AvatarUploader } from '@/components/profile/AvatarUploader';
 
 interface CompanyHeroProps {
-  profile?: Profile | null; // Allow null to match state initialization in parent components
+  profile?: Profile | null;
   isOwner: boolean;
   onEdit: () => void;
   onProfileUpdate?: (updatedProfile: Profile) => void;
@@ -23,95 +37,31 @@ export default function CompanyHero({
   onRefresh,
   isLoading = false
 }: CompanyHeroProps) {
-  // Handle the case where profile might be null by converting to undefined
   const safeProfile = profile === null ? undefined : profile;
-
-  // Get the company-specific data from profile's roleSpecific.companyInfo
   const companyInfo = safeProfile?.roleSpecific?.companyInfo;
-
-  // Get image URLs from profile (like ProfileHeader does)
-  const getCoverPhoto = () => {
-    return safeProfile?.user?.coverPhoto || safeProfile?.coverPhoto;
-  };
-
-  const getAvatar = () => {
-    return safeProfile?.user?.avatar;
-  };
-
-  const coverPhotoUrl = getFullImageUrl(getCoverPhoto());
-  const avatarUrl = getFullImageUrl(getAvatar());
-
   const [showBannerGuide, setShowBannerGuide] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [coverUploading, setCoverUploading] = useState(false);
 
-  const getCoverPhotoWithCacheBust = () => {
-    return getCacheBustUrl(coverPhotoUrl, refreshKey);
+  // Get image URLs using profileService helpers
+  const getCoverPhoto = (): string | CloudinaryImage | null => {
+    if (!safeProfile) return null;
+    return safeProfile.cover || null;
   };
 
-  const getAvatarWithCacheBust = () => {
-    return getCacheBustUrl(avatarUrl, refreshKey);
+  const getAvatar = (): string | CloudinaryImage | null => {
+    if (!safeProfile) return null;
+    return safeProfile.avatar || null;
   };
+
+  const coverPhoto = getCoverPhoto();
+  const avatar = getAvatar();
 
   const handleRefresh = () => {
     if (onRefresh) {
       onRefresh();
     }
-    setRefreshKey(prev => prev + 1);
-  };
-
-  const handleImageUpdate = async (file: File, type: 'avatar' | 'coverPhoto') => {
-    if (!file || !isOwner || !safeProfile) return;
-
-    try {
-      setIsUploading(true);
-
-      const result = await handleImageUpload(file, type);
-
-      // Update profile data
-      const updateData = type === 'avatar'
-        ? { avatar: result.url }
-        : { coverPhoto: result.url };
-
-      // Call profileService to update the profile
-      const updatedProfile = await profileService.updateProfile(updateData);
-
-      // Notify parent component
-      if (onProfileUpdate) {
-        onProfileUpdate(updatedProfile);
-      }
-
-      toast({
-        title: 'Success!',
-        description: `${type === 'avatar' ? 'Logo' : 'Banner'} updated successfully`,
-      });
-
-      // Refresh images
-      setRefreshKey(prev => prev + 1);
-
-    } catch (error: any) {
-      toast({
-        title: 'Upload Failed',
-        description: error.message || `Failed to upload ${type}`,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleBannerUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    await handleImageUpdate(file, 'coverPhoto');
-    event.target.value = '';
-  };
-
-  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    await handleImageUpdate(file, 'avatar');
-    event.target.value = '';
   };
 
   // Extract company data from profile with fallbacks
@@ -145,10 +95,8 @@ export default function CompanyHero({
         </div>
 
         <div className="p-6 space-y-6">
-          {/* Enhanced Banner Template */}
           <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl overflow-hidden border-2 border-dashed border-blue-300 relative shadow-lg">
             <div className="aspect-video bg-gradient-to-br from-blue-500 to-purple-500 relative">
-              {/* Safe Area Guide */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="border-2 border-yellow-400 border-dashed w-[60%] h-[60%] flex items-center justify-center bg-yellow-400/10 backdrop-blur-sm">
                   <span className="text-yellow-400 font-bold text-lg bg-black/70 px-4 py-3 rounded-xl shadow-lg">
@@ -157,7 +105,6 @@ export default function CompanyHero({
                 </div>
               </div>
 
-              {/* Dimension Labels */}
               <div className="absolute top-3 left-3 bg-black/80 text-white px-3 py-1.5 rounded-lg text-sm font-medium shadow-lg">
                 📏 2560px
               </div>
@@ -167,7 +114,6 @@ export default function CompanyHero({
             </div>
           </div>
 
-          {/* Enhanced Requirements Grid */}
           <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-4">
               <h3 className="font-bold text-lg text-gray-900 flex items-center gap-2">
@@ -178,7 +124,7 @@ export default function CompanyHero({
                 {[
                   { text: 'Dimensions: 2560 × 1440 pixels', icon: '📏' },
                   { text: 'Format: JPG, PNG, or WebP', icon: '🖼️' },
-                  { text: 'Max Size: 5MB', icon: '💾' },
+                  { text: 'Max Size: 10MB', icon: '💾' },
                   { text: 'Safe Area: Keep important content within 1546×423px center', icon: '🎯' }
                 ].map((item, index) => (
                   <li key={index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
@@ -214,7 +160,7 @@ export default function CompanyHero({
     </div>
   );
 
-  // Show loading state - check both isLoading and safeProfile (which handles null/undefined)
+  // Show loading state
   if (isLoading || !safeProfile) {
     return (
       <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200/60 overflow-hidden backdrop-blur-sm">
@@ -238,20 +184,17 @@ export default function CompanyHero({
     <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200/60 overflow-hidden backdrop-blur-sm">
       {/* Banner */}
       <div className="h-48 bg-gradient-to-r from-blue-600 to-purple-600 relative overflow-hidden">
-        {coverPhotoUrl ? (
-          <>
-            <img
-              src={getCoverPhotoWithCacheBust()}
-              alt={`${companyData.name} banner`}
-              className="absolute inset-0 w-full h-full object-cover object-center"
-              key={`banner-${refreshKey}`}
-              onLoad={() => console.log('✅ Banner loaded successfully')}
-              onError={(e) => {
-                console.error('❌ Banner failed to load:', coverPhotoUrl);
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-          </>
+        {coverPhoto ? (
+          <img
+            src={typeof coverPhoto === 'string' ? coverPhoto : coverPhoto.secure_url}
+            alt={`${companyData.name} banner`}
+            className="absolute inset-0 w-full h-full object-cover object-center"
+            onLoad={() => console.log('✅ Banner loaded successfully')}
+            onError={(e) => {
+              console.error('❌ Banner failed to load');
+              e.currentTarget.style.display = 'none';
+            }}
+          />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-purple-600 flex flex-col items-center justify-center">
             <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mb-3">
@@ -308,90 +251,52 @@ export default function CompanyHero({
         {/* Logo */}
         <div className="absolute -bottom-6 left-8">
           <div className="bg-white rounded-2xl p-2 shadow-2xl border border-gray-200/60 backdrop-blur-sm relative group">
-            {avatarUrl ? (
+            {avatar ? (
               <>
                 <img
-                  src={getAvatarWithCacheBust()}
+                  src={typeof avatar === 'string' ? avatar : avatar.secure_url}
                   alt={`${companyData.name} logo`}
                   className="w-20 h-20 object-cover rounded-xl shadow-lg"
-                  key={`avatar-${refreshKey}`}
                   onLoad={() => console.log('✅ Logo loaded successfully')}
                   onError={(e) => {
-                    console.error('❌ Logo failed to load:', avatarUrl);
+                    console.error('❌ Logo failed to load');
                     e.currentTarget.style.display = 'none';
                   }}
                 />
                 <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 pointer-events-none" />
-
-                {isOwner && (
-                  <>
-                    <label
-                      htmlFor="company-avatar-upload"
-                      className="absolute inset-0 bg-black/0 group-hover:bg-black/50 rounded-xl transition-all duration-300 cursor-pointer flex items-center justify-center opacity-0 group-hover:opacity-100"
-                    >
-                      <div className="text-white text-xs font-medium bg-black/70 px-3 py-1.5 rounded-lg backdrop-blur-sm">
-                        Change Logo
-                      </div>
-                    </label>
-                    <input
-                      id="company-avatar-upload"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleAvatarUpload}
-                      className="hidden"
-                      disabled={isUploading}
-                    />
-                  </>
-                )}
               </>
             ) : (
               <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex items-center justify-center shadow-inner relative">
                 <Building2 className="w-8 h-8 text-gray-400" />
-                {isOwner && (
-                  <>
-                    <label
-                      htmlFor="company-avatar-upload"
-                      className="absolute inset-0 bg-gray-50 hover:bg-gray-100 rounded-xl transition-all duration-300 cursor-pointer flex items-center justify-center"
-                    >
-                      <div className="text-gray-700 text-xs font-medium bg-white/90 px-3 py-1.5 rounded-lg backdrop-blur-sm">
-                        Upload Logo
-                      </div>
-                    </label>
-                    <input
-                      id="company-avatar-upload"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleAvatarUpload}
-                      className="hidden"
-                      disabled={isUploading}
-                    />
-                  </>
-                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* Banner Upload Button */}
+        {/* Upload Avatar/Cover using AvatarUploader (hidden but accessible)
         {isOwner && (
-          <>
-            <label
-              htmlFor="company-banner-upload"
-              className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm hover:bg-white text-blue-700 hover:text-blue-800 border border-blue-200 hover:border-blue-300 px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:shadow transition-all duration-300 cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Pencil className="w-4 h-4" />
-              {isUploading ? 'Uploading...' : 'Change Banner'}
-            </label>
-            <input
-              id="company-banner-upload"
-              type="file"
-              accept="image/*"
-              onChange={handleBannerUpload}
-              className="hidden"
-              disabled={isUploading}
+          <div className="absolute bottom-4 right-4 flex gap-2 z-20">
+            <AvatarUploader
+              currentAvatar={avatar}
+              currentCover={coverPhoto}
+              onAvatarComplete={handleAvatarComplete}
+              onCoverComplete={handleCoverComplete}
+              onError={handleUploadError}
+              size="sm"
+              type="both"
+              showHelperText={false}
+              maxFileSize={{
+                avatar: 5,
+                cover: 10
+              }}
+              allowedTypes={['image/jpeg', 'image/jpg', 'image/png', 'image/webp']}
+              aspectRatio={{
+                avatar: '1:1',
+                cover: '16:9'
+              }}
             />
-          </>
-        )}
+          </div>
+        )} */}
       </div>
 
       {/* Company Info */}
@@ -474,6 +379,14 @@ export default function CompanyHero({
 
       {/* Banner Guide Modal */}
       {showBannerGuide && <BannerGuideModal />}
+
+      {/* Cloud Storage Status */}
+      {(avatarUploading || coverUploading) && (
+        <div className="absolute bottom-4 left-4 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg z-20">
+          <Cloud className="w-4 h-4 animate-pulse" />
+          <span>Uploading to cloud...</span>
+        </div>
+      )}
     </div>
   );
 }

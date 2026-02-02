@@ -1,11 +1,83 @@
-// controllers/jobController.js - FIXED VERSION
+// controllers/jobController.js - UPDATED VERSION WITH ALL NEW FEATURES
 const Job = require('../models/Job');
 const Company = require('../models/Company');
 const Organization = require('../models/Organization');
 const User = require('../models/User');
 const { validationResult } = require('express-validator');
 
-// @desc    Get all ACTIVE jobs (public)
+// Helper function to count text characters (without HTML tags)
+const countTextCharacters = (html) => {
+  if (!html) return 0;
+  // Remove HTML tags
+  const text = html.replace(/<[^>]*>/g, '');
+  // Remove multiple spaces and newlines
+  const cleanText = text.replace(/\s+/g, ' ').trim();
+  return cleanText.length;
+};
+
+// NEW: Helper function to sanitize salary data based on salaryMode
+const sanitizeSalaryData = (jobData) => {
+  const salaryMode = jobData.salaryMode || (jobData.salary && jobData.salary.mode) || 'range';
+  
+  // Clear salary fields if mode is not 'range'
+  if (salaryMode !== 'range') {
+    if (jobData.salary) {
+      jobData.salary.min = undefined;
+      jobData.salary.max = undefined;
+      jobData.salary.currency = undefined;
+    }
+  }
+  
+  return jobData;
+};
+
+// NEW: Helper to format job response with virtuals
+const formatJobResponse = (job) => {
+  if (!job) return null;
+  
+  // Convert to plain object to include virtuals
+  const jobObj = job.toObject ? job.toObject() : job;
+  
+  // Add computed fields
+  return {
+    ...jobObj,
+    // Virtuals will be included automatically due to schema options
+    // But we'll ensure they're present
+    salaryDisplay: job.salaryDisplay,
+    isSalaryVisible: job.isSalaryVisible,
+    applicationStatus: job.applicationStatus,
+    canAcceptApplications: job.canAcceptApplications,
+    isActive: job.isActive,
+    isExpired: job.isExpired,
+    displayType: job.displayType,
+    ownerType: job.ownerType,
+    // Application info
+    applicationInfo: {
+      isApplyEnabled: job.isApplyEnabled,
+      canApply: job.canApply(),
+      candidatesNeeded: job.candidatesNeeded,
+      candidatesRemaining: Math.max(0, job.candidatesNeeded - (job.applicationCount || 0)),
+      applicationCount: job.applicationCount || 0,
+      status: job.applicationStatus
+    },
+    // Salary info
+    salaryInfo: {
+      display: job.salaryDisplay,
+      mode: job.salaryMode || 'range',
+      details: job.salaryMode === 'range' ? {
+        min: job.salary?.min,
+        max: job.salary?.max,
+        currency: job.salary?.currency,
+        period: job.salary?.period,
+        isNegotiable: job.salary?.isNegotiable,
+        isPublic: job.salary?.isPublic
+      } : null,
+      isVisible: job.isSalaryVisible
+    }
+  };
+};
+
+// @desc    Get all ACTIVE jobs (public) - UPDATED
 // @route   GET /api/v1/job
 // @access  Public
 exports.getJobs = async (req, res, next) => {
@@ -20,7 +92,8 @@ exports.getJobs = async (req, res, next) => {
       experienceLevel,
       minSalary,
       maxSalary,
-      jobType
+      jobType,
+      salaryMode
     } = req.query;
 
     const query = { status: 'active' };
@@ -38,9 +111,13 @@ exports.getJobs = async (req, res, next) => {
     if (type) query.type = type;
     if (experienceLevel) query.experienceLevel = experienceLevel;
     if (jobType) query.jobType = jobType;
+    if (salaryMode) query.salaryMode = salaryMode;
 
+    // Salary filtering only works for jobs with salary mode 'range'
     if (minSalary || maxSalary) {
       query.$and = query.$and || [];
+      query.$and.push({ salaryMode: 'range' });
+      
       if (minSalary) {
         query.$and.push({
           $or: [
@@ -68,9 +145,12 @@ exports.getJobs = async (req, res, next) => {
 
     const total = await Job.countDocuments(query);
 
+    // Format each job response
+    const formattedJobs = jobs.map(job => formatJobResponse(job));
+
     res.status(200).json({
       success: true,
-      data: jobs,
+      data: formattedJobs,
       pagination: {
         current: parseInt(page),
         totalPages: Math.ceil(total / limit),
@@ -87,7 +167,7 @@ exports.getJobs = async (req, res, next) => {
   }
 };
 
-// @desc    Create job - FIXED VERSION
+// @desc    Create job - UPDATED WITH ALL NEW FEATURES
 // @route   POST /api/v1/job
 // @access  Private (Company only)
 exports.createJob = async (req, res, next) => {
@@ -125,12 +205,16 @@ exports.createJob = async (req, res, next) => {
     }
 
     // Log the incoming data for debugging
-    console.log('📥 Received job data:', JSON.stringify(req.body, null, 2));
+    console.log('📥 Received job data:', JSON.stringify({
+      ...req.body,
+      descriptionLength: req.body.description?.length,
+      textOnlyLength: countTextCharacters(req.body.description)
+    }, null, 2));
 
-    // VALIDATE EDUCATION LEVEL BEFORE CREATING JOB
+    // VALIDATE EDUCATION LEVEL
     const validEducationLevels = [
       'primary-education',
-      'secondary-education', 
+      'secondary-education',
       'tvet-level-i',
       'tvet-level-ii',
       'tvet-level-iii',
@@ -142,7 +226,6 @@ exports.createJob = async (req, res, next) => {
       'lecturer',
       'professor',
       'none-required',
-      
       // Backward compatibility
       'high-school',
       'diploma',
@@ -166,6 +249,73 @@ exports.createJob = async (req, res, next) => {
       });
     }
 
+    // VALIDATE CATEGORY (using new enum)
+    const validCategories = Job.schema.path('category').enumValues;
+    if (!validCategories.includes(req.body.category)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: [`Invalid category: ${req.body.category}`],
+        details: [{
+          field: 'category',
+          message: 'Invalid category',
+          value: req.body.category
+        }]
+      });
+    }
+
+    // VALIDATE DESCRIPTION TEXT LENGTH
+    if (req.body.description) {
+      const textLength = countTextCharacters(req.body.description);
+      console.log('📊 Description validation:', {
+        htmlLength: req.body.description.length,
+        textLength: textLength
+      });
+
+      if (textLength < 50) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: ['Description must be at least 50 characters long (text only)'],
+          details: [{
+            field: 'description',
+            message: 'Description must be at least 50 characters long (text only)',
+            value: `Text length: ${textLength} characters`
+          }]
+        });
+      }
+
+      if (textLength > 5000) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: ['Description cannot exceed 5000 characters (text only)'],
+          details: [{
+            field: 'description',
+            message: 'Description cannot exceed 5000 characters (text only)',
+            value: `Text length: ${textLength} characters`
+          }]
+        });
+      }
+    }
+
+    // VALIDATE CANDIDATES NEEDED
+    if (!req.body.candidatesNeeded || req.body.candidatesNeeded < 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: ['At least 1 candidate is required'],
+        details: [{
+          field: 'candidatesNeeded',
+          message: 'At least 1 candidate is required',
+          value: req.body.candidatesNeeded
+        }]
+      });
+    }
+
+    // SANITIZE SALARY DATA BASED ON SALARY MODE
+    const sanitizedData = sanitizeSalaryData(req.body);
+
     // Transform education level if using old values
     const educationLevelMapping = {
       'high-school': 'secondary-education',
@@ -176,29 +326,37 @@ exports.createJob = async (req, res, next) => {
     };
 
     const jobData = {
-      ...req.body,
-      // Normalize education level if needed
+      ...sanitizedData,
+      isApplyEnabled: req.body.isApplyEnabled !== undefined ? req.body.isApplyEnabled : true,
       educationLevel: educationLevelMapping[req.body.educationLevel] || req.body.educationLevel,
       company: company._id,
       jobType: 'company',
-      createdBy: userId
+      createdBy: userId,
+      // Ensure salaryMode defaults to 'range' if not provided
+      salaryMode: req.body.salaryMode || 'range'
     };
 
-    console.log('📤 Creating job with data:', JSON.stringify(jobData, null, 2));
+    console.log('📤 Creating job with data:', JSON.stringify({
+      ...jobData,
+      descriptionLength: jobData.description?.length,
+      textOnlyLength: countTextCharacters(jobData.description)
+    }, null, 2));
 
     const job = await Job.create(jobData);
     await job.populate('company', 'name logoUrl verified industry');
 
     console.log('✅ Job created successfully:', job._id);
 
+    const formattedJob = formatJobResponse(job);
+
     res.status(201).json({
       success: true,
       message: 'Job created successfully',
-      data: job
+      data: formattedJob
     });
   } catch (error) {
     console.error('Create job error:', error);
-    
+
     if (error.name === 'ValidationError') {
       console.log('❌ Mongoose validation errors:', error.errors);
       const messages = Object.values(error.errors).map(val => val.message);
@@ -213,7 +371,7 @@ exports.createJob = async (req, res, next) => {
         }))
       });
     }
-    
+
     // Handle duplicate key errors
     if (error.code === 11000) {
       return res.status(400).json({
@@ -222,7 +380,7 @@ exports.createJob = async (req, res, next) => {
         errors: ['A job with similar details already exists']
       });
     }
-    
+
     res.status(500).json({
       success: false,
       message: 'Error creating job',
@@ -231,7 +389,7 @@ exports.createJob = async (req, res, next) => {
   }
 };
 
-// @desc    Get single job
+// @desc    Get single job - UPDATED
 // @route   GET /api/v1/job/:id
 // @access  Public
 exports.getJob = async (req, res, next) => {
@@ -251,9 +409,11 @@ exports.getJob = async (req, res, next) => {
     job.viewCount = (job.viewCount || 0) + 1;
     await job.save();
 
+    const formattedJob = formatJobResponse(job);
+
     res.status(200).json({
       success: true,
-      data: job
+      data: formattedJob
     });
   } catch (error) {
     console.error('Get job error:', error);
@@ -264,7 +424,7 @@ exports.getJob = async (req, res, next) => {
   }
 };
 
-// @desc    Get company jobs
+// @desc    Get company jobs - UPDATED
 // @route   GET /api/v1/job/company/my-jobs
 // @access  Private (Company only)
 exports.getCompanyJobs = async (req, res, next) => {
@@ -280,8 +440,8 @@ exports.getCompanyJobs = async (req, res, next) => {
     }
 
     const { page = 1, limit = 12, status } = req.query;
-    
-    const query = { 
+
+    const query = {
       company: company._id,
       jobType: 'company'
     };
@@ -295,9 +455,12 @@ exports.getCompanyJobs = async (req, res, next) => {
 
     const total = await Job.countDocuments(query);
 
+    // Format each job response
+    const formattedJobs = jobs.map(job => formatJobResponse(job));
+
     res.status(200).json({
       success: true,
-      data: jobs,
+      data: formattedJobs,
       pagination: {
         current: parseInt(page),
         totalPages: Math.ceil(total / limit),
@@ -313,7 +476,7 @@ exports.getCompanyJobs = async (req, res, next) => {
   }
 };
 
-// @desc    Update job - FIXED VERSION
+// @desc    Update job - UPDATED WITH ALL NEW FEATURES
 // @route   PUT /api/v1/job/:id
 // @access  Private (Company/Admin only)
 exports.updateJob = async (req, res, next) => {
@@ -327,8 +490,8 @@ exports.updateJob = async (req, res, next) => {
       });
     }
 
-    let job = await Job.findById(req.params.id).lean(); // Use lean() to get plain object
-    
+    let job = await Job.findById(req.params.id).lean();
+
     if (!job) {
       return res.status(404).json({
         success: false,
@@ -338,7 +501,7 @@ exports.updateJob = async (req, res, next) => {
 
     const userId = req.user.userId || req.user._id;
     const company = await Company.findOne({ user: userId });
-    
+
     if (!company && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -346,7 +509,7 @@ exports.updateJob = async (req, res, next) => {
       });
     }
 
-    // FIX: Properly compare company IDs
+    // Properly compare company IDs
     const jobCompanyId = job.company?._id ? job.company._id.toString() : job.company?.toString();
     const userCompanyId = company._id.toString();
 
@@ -368,17 +531,47 @@ exports.updateJob = async (req, res, next) => {
       });
     }
 
+    // VALIDATE DESCRIPTION TEXT LENGTH FOR UPDATES
+    if (req.body.description) {
+      const textLength = countTextCharacters(req.body.description);
+      console.log('📊 Description validation for update:', {
+        htmlLength: req.body.description.length,
+        textLength: textLength
+      });
+
+      if (textLength < 50) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: ['Description must be at least 50 characters long (text only)']
+        });
+      }
+
+      if (textLength > 5000) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: ['Description cannot exceed 5000 characters (text only)']
+        });
+      }
+    }
+
+    // SANITIZE SALARY DATA BASED ON SALARY MODE
+    const sanitizedData = sanitizeSalaryData(req.body);
+
     // Use findByIdAndUpdate for better handling
     const updatedJob = await Job.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body },
+      { $set: sanitizedData },
       { new: true, runValidators: true }
     ).populate('company', 'name logoUrl verified industry');
+
+    const formattedJob = formatJobResponse(updatedJob);
 
     res.status(200).json({
       success: true,
       message: 'Job updated successfully',
-      data: updatedJob
+      data: formattedJob
     });
   } catch (error) {
     console.error('Update job error:', error);
@@ -389,13 +582,13 @@ exports.updateJob = async (req, res, next) => {
   }
 };
 
-// @desc    Delete job - FIXED VERSION
+// @desc    Delete job - UPDATED
 // @route   DELETE /api/v1/job/:id
 // @access  Private (Company/Admin only)
 exports.deleteJob = async (req, res, next) => {
   try {
-    const job = await Job.findById(req.params.id).lean(); // Use lean() to get plain object
-    
+    const job = await Job.findById(req.params.id).lean();
+
     if (!job) {
       return res.status(404).json({
         success: false,
@@ -405,7 +598,7 @@ exports.deleteJob = async (req, res, next) => {
 
     const userId = req.user.userId || req.user._id;
     const company = await Company.findOne({ user: userId });
-    
+
     if (!company && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -413,7 +606,7 @@ exports.deleteJob = async (req, res, next) => {
       });
     }
 
-    // FIX: Properly compare company IDs
+    // Properly compare company IDs
     const jobCompanyId = job.company?._id ? job.company._id.toString() : job.company?.toString();
     const userCompanyId = company._id.toString();
 
@@ -446,7 +639,7 @@ exports.deleteJob = async (req, res, next) => {
   }
 };
 
-// @desc    Get organization jobs
+// @desc    Get organization jobs - UPDATED
 // @route   GET /api/v1/job/organization/my-jobs
 // @access  Private (Organization only)
 exports.getOrganizationJobs = async (req, res, next) => {
@@ -462,8 +655,8 @@ exports.getOrganizationJobs = async (req, res, next) => {
     }
 
     const { page = 1, limit = 12, status } = req.query;
-    
-    const query = { 
+
+    const query = {
       organization: organization._id,
       jobType: 'organization'
     };
@@ -477,9 +670,12 @@ exports.getOrganizationJobs = async (req, res, next) => {
 
     const total = await Job.countDocuments(query);
 
+    // Format each job response
+    const formattedJobs = jobs.map(job => formatJobResponse(job));
+
     res.status(200).json({
       success: true,
-      data: jobs,
+      data: formattedJobs,
       pagination: {
         current: parseInt(page),
         totalPages: Math.ceil(total / limit),
@@ -495,7 +691,7 @@ exports.getOrganizationJobs = async (req, res, next) => {
   }
 };
 
-// @desc    Create job for organization
+// @desc    Create job for organization - UPDATED
 // @route   POST /api/v1/job/organization
 // @access  Private (Organization only)
 exports.createOrganizationJob = async (req, res, next) => {
@@ -526,24 +722,71 @@ exports.createOrganizationJob = async (req, res, next) => {
       });
     }
 
+    // VALIDATE DESCRIPTION TEXT LENGTH
+    if (req.body.description) {
+      const textLength = countTextCharacters(req.body.description);
+      console.log('📊 Description validation for organization:', {
+        htmlLength: req.body.description.length,
+        textLength: textLength
+      });
+
+      if (textLength < 50) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: ['Description must be at least 50 characters long (text only)']
+        });
+      }
+
+      if (textLength > 5000) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: ['Description cannot exceed 5000 characters (text only)']
+        });
+      }
+    }
+
+    // VALIDATE CANDIDATES NEEDED
+    if (!req.body.candidatesNeeded || req.body.candidatesNeeded < 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: ['At least 1 candidate is required'],
+        details: [{
+          field: 'candidatesNeeded',
+          message: 'At least 1 candidate is required',
+          value: req.body.candidatesNeeded
+        }]
+      });
+    }
+
+    // SANITIZE SALARY DATA BASED ON SALARY MODE
+    const sanitizedData = sanitizeSalaryData(req.body);
+
     const jobData = {
-      ...req.body,
+      ...sanitizedData,
       organization: organization._id,
+      isApplyEnabled: req.body.isApplyEnabled !== undefined ? req.body.isApplyEnabled : true,
       jobType: 'organization',
-      createdBy: userId
+      createdBy: userId,
+      // Ensure salaryMode defaults to 'range' if not provided
+      salaryMode: req.body.salaryMode || 'range'
     };
 
     const job = await Job.create(jobData);
     await job.populate('organization', 'name logoUrl verified industry organizationType');
 
+    const formattedJob = formatJobResponse(job);
+
     res.status(201).json({
       success: true,
       message: 'Opportunity created successfully',
-      data: job
+      data: formattedJob
     });
   } catch (error) {
     console.error('Create organization job error:', error);
-    
+
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(val => val.message);
       return res.status(400).json({
@@ -552,7 +795,7 @@ exports.createOrganizationJob = async (req, res, next) => {
         errors: messages
       });
     }
-    
+
     res.status(500).json({
       success: false,
       message: 'Error creating opportunity'
@@ -560,7 +803,7 @@ exports.createOrganizationJob = async (req, res, next) => {
   }
 };
 
-// @desc    Update organization job - FIXED VERSION
+// @desc    Update organization job - UPDATED
 // @route   PUT /api/v1/job/organization/:id
 // @access  Private (Organization/Admin only)
 exports.updateOrganizationJob = async (req, res, next) => {
@@ -575,7 +818,7 @@ exports.updateOrganizationJob = async (req, res, next) => {
     }
 
     const job = await Job.findById(req.params.id).lean();
-    
+
     if (!job) {
       return res.status(404).json({
         success: false,
@@ -585,7 +828,7 @@ exports.updateOrganizationJob = async (req, res, next) => {
 
     const userId = req.user.userId || req.user._id;
     const organization = await Organization.findOne({ user: userId });
-    
+
     if (!organization && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -593,7 +836,7 @@ exports.updateOrganizationJob = async (req, res, next) => {
       });
     }
 
-    // FIX: Properly compare organization IDs
+    // Properly compare organization IDs
     const jobOrganizationId = job.organization?._id ? job.organization._id.toString() : job.organization?.toString();
     const userOrganizationId = organization._id.toString();
 
@@ -611,16 +854,46 @@ exports.updateOrganizationJob = async (req, res, next) => {
       });
     }
 
+    // VALIDATE DESCRIPTION TEXT LENGTH FOR UPDATES
+    if (req.body.description) {
+      const textLength = countTextCharacters(req.body.description);
+      console.log('📊 Description validation for organization update:', {
+        htmlLength: req.body.description.length,
+        textLength: textLength
+      });
+
+      if (textLength < 50) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: ['Description must be at least 50 characters long (text only)']
+        });
+      }
+
+      if (textLength > 5000) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: ['Description cannot exceed 5000 characters (text only)']
+        });
+      }
+    }
+
+    // SANITIZE SALARY DATA BASED ON SALARY MODE
+    const sanitizedData = sanitizeSalaryData(req.body);
+
     const updatedJob = await Job.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body },
+      { $set: sanitizedData },
       { new: true, runValidators: true }
     ).populate('organization', 'name logoUrl verified industry organizationType');
+
+    const formattedJob = formatJobResponse(updatedJob);
 
     res.status(200).json({
       success: true,
       message: 'Opportunity updated successfully',
-      data: updatedJob
+      data: formattedJob
     });
   } catch (error) {
     console.error('Update organization job error:', error);
@@ -631,13 +904,13 @@ exports.updateOrganizationJob = async (req, res, next) => {
   }
 };
 
-// @desc    Delete organization job - FIXED VERSION
+// @desc    Delete organization job - UPDATED
 // @route   DELETE /api/v1/job/organization/:id
 // @access  Private (Organization/Admin only)
 exports.deleteOrganizationJob = async (req, res, next) => {
   try {
     const job = await Job.findById(req.params.id).lean();
-    
+
     if (!job) {
       return res.status(404).json({
         success: false,
@@ -647,7 +920,7 @@ exports.deleteOrganizationJob = async (req, res, next) => {
 
     const userId = req.user.userId || req.user._id;
     const organization = await Organization.findOne({ user: userId });
-    
+
     if (!organization && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -655,7 +928,7 @@ exports.deleteOrganizationJob = async (req, res, next) => {
       });
     }
 
-    // FIX: Properly compare organization IDs
+    // Properly compare organization IDs
     const jobOrganizationId = job.organization?._id ? job.organization._id.toString() : job.organization?.toString();
     const userOrganizationId = organization._id.toString();
 
@@ -688,7 +961,7 @@ exports.deleteOrganizationJob = async (req, res, next) => {
   }
 };
 
-// @desc    Get job categories
+// @desc    Get job categories - UPDATED
 // @route   GET /api/v1/job/categories
 // @access  Public
 exports.getCategories = async (req, res, next) => {
@@ -716,9 +989,8 @@ exports.getCategories = async (req, res, next) => {
     });
   }
 };
-// ADD THESE FUNCTIONS TO YOUR EXISTING jobController.js
 
-// @desc    Get jobs for candidates with advanced filtering
+// @desc    Get jobs for candidates with advanced filtering - UPDATED
 // @route   GET /api/v1/job/candidate
 // @access  Private (Candidate)
 exports.getJobsForCandidate = async (req, res, next) => {
@@ -736,7 +1008,7 @@ exports.getJobsForCandidate = async (req, res, next) => {
       remote
     } = req.query;
 
-    const filter = { 
+    const filter = {
       status: 'active',
       applicationDeadline: { $gt: new Date() }
     };
@@ -755,8 +1027,11 @@ exports.getJobsForCandidate = async (req, res, next) => {
     if (experienceLevel) filter.experienceLevel = experienceLevel;
     if (remote) filter.remote = remote;
 
+    // Salary filtering only works for jobs with salary mode 'range'
     if (minSalary || maxSalary) {
       filter.$and = filter.$and || [];
+      filter.$and.push({ salaryMode: 'range' });
+      
       if (minSalary) {
         filter.$and.push({
           $or: [
@@ -781,14 +1056,16 @@ exports.getJobsForCandidate = async (req, res, next) => {
         .populate('organization', 'name logoUrl verified industry organizationType')
         .sort({ featured: -1, urgent: -1, createdAt: -1 })
         .limit(limit * 1)
-        .skip((page - 1) * limit)
-        .lean(),
+        .skip((page - 1) * limit),
       Job.countDocuments(filter)
     ]);
 
+    // Format each job response
+    const formattedJobs = jobs.map(job => formatJobResponse(job));
+
     res.status(200).json({
       success: true,
-      data: jobs,
+      data: formattedJobs,
       pagination: {
         current: parseInt(page),
         totalPages: Math.ceil(total / limit),
@@ -805,7 +1082,7 @@ exports.getJobsForCandidate = async (req, res, next) => {
   }
 };
 
-// jobController.js - ADD THESE TWO NEW FUNCTIONS
+// Existing saveJob, unsaveJob, and getSavedJobs functions remain the same...
 
 // @desc    Save job for candidate
 // @route   POST /api/v1/job/:jobId/save
@@ -827,6 +1104,14 @@ exports.saveJob = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: 'Job not found'
+      });
+    }
+
+    // Check if applications are enabled
+    if (!job.isApplyEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'Applications are closed for this job'
       });
     }
 
@@ -913,16 +1198,16 @@ exports.unsaveJob = async (req, res, next) => {
   }
 };
 
-// @desc    Get saved jobs for candidate - ROBUST FIXED VERSION
+// @desc    Get saved jobs for candidate - UPDATED
 // @route   GET /api/v1/job/saved
 // @access  Private (Candidate)
 exports.getSavedJobs = async (req, res, next) => {
   try {
     const userId = req.user.userId || req.user._id;
-    
+
     // First get user with saved job IDs
     const user = await User.findById(userId).select('savedJobs');
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -946,13 +1231,15 @@ exports.getSavedJobs = async (req, res, next) => {
         { applicationDeadline: null }
       ]
     })
-    .populate('company', 'name logoUrl verified industry')
-    .populate('organization', 'name logoUrl verified industry organizationType')
-    .lean();
+      .populate('company', 'name logoUrl verified industry')
+      .populate('organization', 'name logoUrl verified industry organizationType');
+
+    // Format each job response
+    const formattedJobs = savedJobs.map(job => formatJobResponse(job));
 
     res.status(200).json({
       success: true,
-      data: savedJobs
+      data: formattedJobs
     });
 
   } catch (error) {
@@ -964,22 +1251,3 @@ exports.getSavedJobs = async (req, res, next) => {
     });
   }
 };
-// SIMPLE HELPER FUNCTIONS
-function getEthiopianRegions() {
-  return [
-    { name: 'Addis Ababa', slug: 'addis-ababa' },
-    { name: 'Amhara', slug: 'amhara' },
-    { name: 'Oromia', slug: 'oromia' },
-    { name: 'Tigray', slug: 'tigray' },
-    { name: 'SNNPR', slug: 'snnpr' },
-    { name: 'Somali', slug: 'somali' },
-    { name: 'Afar', slug: 'afar' },
-    { name: 'Benishangul-Gumuz', slug: 'benishangul-gumuz' },
-    { name: 'Gambela', slug: 'gambela' },
-    { name: 'Harari', slug: 'harari' },
-    { name: 'Sidama', slug: 'sidama' },
-    { name: 'South West Ethiopia', slug: 'south-west-ethiopia' },
-    { name: 'Dire Dawa', slug: 'dire-dawa' },
-    { name: 'International', slug: 'international' }
-  ];
-}

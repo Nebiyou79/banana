@@ -1,4 +1,4 @@
-const Like = require('../models/Like');
+const Interaction = require('../models/Like');
 const Post = require('../models/Post');
 const Comment = require('../models/Comment');
 
@@ -20,7 +20,7 @@ const addReaction = async (req, res) => {
     }
 
     // Validate reaction type
-    const validReactions = ['like', 'love', 'laugh', 'wow', 'sad', 'angry', 'celebrate', 'support'];
+    const validReactions = Object.values(Interaction.reactionTypes);
     if (!validReactions.includes(reaction)) {
       return res.status(400).json({
         success: false,
@@ -30,26 +30,11 @@ const addReaction = async (req, res) => {
       });
     }
 
-    // Check if user already reacted to this target
-    const existingReaction = await Like.findOne({
-      user: req.user.userId,
-      targetType,
-      targetId: id
-    });
+    // Get existing interaction (if any) BEFORE removal
+    const existingInteraction = await Interaction.getUserInteraction(req.user.userId, targetType, id);
 
-    if (existingReaction) {
-      return res.status(409).json({
-        success: false,
-        message: `You have already reacted to this ${targetType.toLowerCase()}.`,
-        code: 'ALREADY_REACTED',
-        data: {
-          existingReaction: {
-            reaction: existingReaction.reaction,
-            reactedAt: existingReaction.createdAt
-          }
-        }
-      });
-    }
+    // Remove any existing interaction (reaction or dislike) for this user-target
+    await Interaction.removeAllInteractions(req.user.userId, targetType, id);
 
     // Verify target exists
     const TargetModel = targetType === 'Post' ? Post : Comment;
@@ -73,31 +58,52 @@ const addReaction = async (req, res) => {
     }
 
     // Create new reaction
-    const newReaction = new Like({
+    const newInteraction = new Interaction({
       user: req.user.userId,
       targetType,
       targetId: id,
+      interactionType: 'reaction',
       reaction
     });
 
-    await newReaction.save();
-    await newReaction.populate('user', 'name avatar headline username');
+    await newInteraction.save();
+    await newInteraction.populate('user', 'name avatar headline username');
 
-    // Update target stats
-    const updateField = targetType === 'Post' ? 'stats.likes' : 'likes';
-    await TargetModel.findByIdAndUpdate(id, { 
-      $inc: { [updateField]: 1 } 
-    });
+    // Update target stats - handle transitions correctly
+    const update = {};
+    const likeField = targetType === 'Post' ? 'stats.likes' : 'likes';
+    const dislikeField = targetType === 'Post' ? 'stats.dislikes' : 'dislikes';
+    
+    // Check what existed before
+    if (existingInteraction) {
+      if (existingInteraction.interactionType === 'reaction') {
+        // User changed reaction type - no net change in like count
+        update.$inc = {};
+      } else if (existingInteraction.interactionType === 'dislike') {
+        // User switched from dislike to reaction
+        update.$inc = {
+          [likeField]: 1,
+          [dislikeField]: -1
+        };
+      }
+    } else {
+      // User had no previous interaction
+      update.$inc = { [likeField]: 1 };
+    }
+    
+    if (Object.keys(update.$inc || {}).length > 0) {
+      await TargetModel.findByIdAndUpdate(id, update);
+    }
 
-    // Get updated reaction stats
-    const reactionStats = await Like.getReactionStats(targetType, id);
+    // Get updated interaction stats
+    const interactionStats = await Interaction.getInteractionStats(targetType, id);
 
     res.status(201).json({
       success: true,
       message: `Reaction added successfully.`,
       data: {
-        reaction: newReaction,
-        stats: reactionStats
+        interaction: newInteraction,
+        stats: interactionStats
       }
     });
 
@@ -107,10 +113,11 @@ const addReaction = async (req, res) => {
     // Handle duplicate key error (unique index violation)
     if (error.code === 11000) {
       // Clean up the duplicate
-      await Like.deleteMany({
+      await Interaction.deleteMany({
         user: req.user.userId,
         targetType: req.body.targetType || 'Post',
-        targetId: req.params.id
+        targetId: req.params.id,
+        interactionType: 'reaction'
       });
       
       return res.status(409).json({
@@ -129,13 +136,136 @@ const addReaction = async (req, res) => {
   }
 };
 
-// Remove reaction from a target
-const removeReaction = async (req, res) => {
+// Add dislike to a target
+const addDislike = async (req, res) => {
   try {
     const { id } = req.params;
     const { targetType = 'Post' } = req.body;
 
-    console.log('Remove reaction request:', { id, targetType, userId: req.user.userId });
+    console.log('Add dislike request:', { id, targetType, userId: req.user.userId });
+
+    // Validate input
+    if (!['Post', 'Comment'].includes(targetType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid target type. Must be Post or Comment.',
+        code: 'INVALID_TARGET_TYPE'
+      });
+    }
+
+    // Get existing interaction (if any) BEFORE removal
+    const existingInteraction = await Interaction.getUserInteraction(req.user.userId, targetType, id);
+
+    // Remove any existing interaction (reaction or dislike) for this user-target
+    await Interaction.removeAllInteractions(req.user.userId, targetType, id);
+
+    // Verify target exists
+    const TargetModel = targetType === 'Post' ? Post : Comment;
+    const target = await TargetModel.findById(id);
+    
+    if (!target) {
+      return res.status(404).json({
+        success: false,
+        message: `${targetType} not found.`,
+        code: 'TARGET_NOT_FOUND'
+      });
+    }
+
+    // Check if target is active (if status field exists)
+    if (target.status && target.status !== 'active') {
+      return res.status(404).json({
+        success: false,
+        message: `${targetType} is not available.`,
+        code: 'TARGET_UNAVAILABLE'
+      });
+    }
+
+    // Create new dislike
+    const newInteraction = new Interaction({
+      user: req.user.userId,
+      targetType,
+      targetId: id,
+      interactionType: 'dislike',
+      dislike: 'dislike'
+    });
+
+    await newInteraction.save();
+    await newInteraction.populate('user', 'name avatar headline username');
+
+    // Update target stats - handle transitions correctly
+    const update = {};
+    const likeField = targetType === 'Post' ? 'stats.likes' : 'likes';
+    const dislikeField = targetType === 'Post' ? 'stats.dislikes' : 'dislikes';
+    
+    // Check what existed before
+    if (existingInteraction) {
+      if (existingInteraction.interactionType === 'dislike') {
+        // User was already disliking - no change
+        update.$inc = {};
+      } else if (existingInteraction.interactionType === 'reaction') {
+        // User switched from reaction to dislike
+        update.$inc = {
+          [likeField]: -1,
+          [dislikeField]: 1
+        };
+      }
+    } else {
+      // User had no previous interaction
+      update.$inc = { [dislikeField]: 1 };
+    }
+    
+    if (Object.keys(update.$inc || {}).length > 0) {
+      await TargetModel.findByIdAndUpdate(id, update);
+    }
+
+    // Get updated interaction stats
+    const interactionStats = await Interaction.getInteractionStats(targetType, id);
+
+    res.status(201).json({
+      success: true,
+      message: `Dislike added successfully.`,
+      data: {
+        interaction: newInteraction,
+        stats: interactionStats
+      }
+    });
+
+  } catch (error) {
+    console.error('Add dislike error:', error);
+    
+    // Handle duplicate key error (unique index violation)
+    if (error.code === 11000) {
+      // Clean up the duplicate
+      await Interaction.deleteMany({
+        user: req.user.userId,
+        targetType: req.body.targetType || 'Post',
+        targetId: req.params.id,
+        interactionType: 'dislike'
+      });
+      
+      return res.status(409).json({
+        success: false,
+        message: 'Duplicate dislike detected and cleaned. Please try again.',
+        code: 'DUPLICATE_CLEANED'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to add dislike.',
+      code: 'DISLIKE_ADD_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// Remove interaction (both reaction and dislike) from a target
+const removeInteraction = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { targetType = 'Post' } = req.body;
+
+    console.log('Remove interaction request:', { id, targetType, userId: req.user.userId });
 
     // Validate target type
     if (!['Post', 'Comment'].includes(targetType)) {
@@ -146,54 +276,61 @@ const removeReaction = async (req, res) => {
       });
     }
 
-    // Find and remove ALL reactions by this user to this target (in case of duplicates)
-    const result = await Like.deleteMany({
-      user: req.user.userId,
-      targetType,
-      targetId: id
-    });
-
-    console.log('Delete result:', result);
-
-    if (result.deletedCount === 0) {
+    // Get the interaction before removing to know what type it was
+    const existingInteraction = await Interaction.getUserInteraction(req.user.userId, targetType, id);
+    
+    if (!existingInteraction) {
       return res.status(404).json({
         success: false,
-        message: 'No reaction found to remove.',
-        code: 'REACTION_NOT_FOUND'
+        message: 'No interaction found to remove.',
+        code: 'INTERACTION_NOT_FOUND'
       });
     }
 
-    // Update target stats
-    const TargetModel = targetType === 'Post' ? Post : Comment;
-    const updateField = targetType === 'Post' ? 'stats.likes' : 'likes';
-    await TargetModel.findByIdAndUpdate(id, { 
-      $inc: { [updateField]: -result.deletedCount } 
-    });
+    // Remove ALL interactions by this user to this target
+    const result = await Interaction.removeAllInteractions(req.user.userId, targetType, id);
 
-    // Get updated reaction stats
-    const reactionStats = await Like.getReactionStats(targetType, id);
+    console.log('Delete result:', result);
+
+    // Update target stats based on what was removed
+    const TargetModel = targetType === 'Post' ? Post : Comment;
+    const update = {};
+    
+    if (existingInteraction.interactionType === 'reaction') {
+      const likeField = targetType === 'Post' ? 'stats.likes' : 'likes';
+      update.$inc = { [likeField]: -1 };
+    } else if (existingInteraction.interactionType === 'dislike') {
+      const dislikeField = targetType === 'Post' ? 'stats.dislikes' : 'dislikes';
+      update.$inc = { [dislikeField]: -1 };
+    }
+    
+    await TargetModel.findByIdAndUpdate(id, update);
+
+    // Get updated interaction stats
+    const interactionStats = await Interaction.getInteractionStats(targetType, id);
 
     res.json({
       success: true,
-      message: `Removed ${result.deletedCount} reaction(s) successfully.`,
+      message: `Interaction removed successfully.`,
       data: {
-        removedCount: result.deletedCount,
-        stats: reactionStats
+        removedType: existingInteraction.interactionType,
+        removedValue: existingInteraction.value,
+        stats: interactionStats
       }
     });
 
   } catch (error) {
-    console.error('Remove reaction error:', error);
+    console.error('Remove interaction error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to remove reaction.',
-      code: 'REACTION_REMOVE_ERROR',
+      message: 'Failed to remove interaction.',
+      code: 'INTERACTION_REMOVE_ERROR',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-// Update existing reaction
+// Update existing reaction (change reaction type)
 const updateReaction = async (req, res) => {
   try {
     const { id } = req.params;
@@ -202,7 +339,7 @@ const updateReaction = async (req, res) => {
     console.log('Update reaction request:', { id, reaction, targetType, userId: req.user.userId });
 
     // Validate reaction type
-    const validReactions = ['like', 'love', 'laugh', 'wow', 'sad', 'angry', 'celebrate', 'support'];
+    const validReactions = Object.values(Interaction.reactionTypes);
     if (!reaction || !validReactions.includes(reaction)) {
       return res.status(400).json({
         success: false,
@@ -212,37 +349,85 @@ const updateReaction = async (req, res) => {
       });
     }
 
-    // Find and update reaction
-    const existingReaction = await Like.findOneAndUpdate(
-      {
-        user: req.user.userId,
-        targetType,
-        targetId: id
-      },
-      { reaction },
-      { new: true } // Return updated document
-    );
+    // Find existing interaction
+    const existingInteraction = await Interaction.findOne({
+      user: req.user.userId,
+      targetType,
+      targetId: id
+    });
 
-    if (!existingReaction) {
+    if (!existingInteraction) {
       return res.status(404).json({
         success: false,
-        message: 'No reaction found to update. Please add a reaction first.',
-        code: 'REACTION_NOT_FOUND'
+        message: 'No interaction found to update. Please add a reaction first.',
+        code: 'INTERACTION_NOT_FOUND'
       });
     }
 
-    await existingReaction.populate('user', 'name avatar headline username');
+    // Check if current interaction is a reaction
+    if (existingInteraction.interactionType !== 'reaction') {
+      // If it's a dislike, we need to switch to reaction
+      // Remove the dislike first
+      await Interaction.removeAllInteractions(req.user.userId, targetType, id);
+      
+      // Create new reaction
+      const newInteraction = new Interaction({
+        user: req.user.userId,
+        targetType,
+        targetId: id,
+        interactionType: 'reaction',
+        reaction
+      });
+      
+      await newInteraction.save();
+      await newInteraction.populate('user', 'name avatar headline username');
+      
+      // Update target stats (dislike → reaction)
+      const TargetModel = targetType === 'Post' ? Post : Comment;
+      const likeField = targetType === 'Post' ? 'stats.likes' : 'likes';
+      const dislikeField = targetType === 'Post' ? 'stats.dislikes' : 'dislikes';
+      
+      await TargetModel.findByIdAndUpdate(id, {
+        $inc: {
+          [likeField]: 1,
+          [dislikeField]: -1
+        }
+      });
+      
+      // Get updated interaction stats
+      const interactionStats = await Interaction.getInteractionStats(targetType, id);
 
-    // Get updated reaction stats
-    const reactionStats = await Like.getReactionStats(targetType, id);
+      return res.json({
+        success: true,
+        message: `Reaction updated from dislike successfully.`,
+        data: {
+          previousInteraction: existingInteraction,
+          updatedReaction: reaction,
+          interaction: newInteraction,
+          stats: interactionStats
+        }
+      });
+    }
+
+    // Store old reaction
+    const oldReaction = existingInteraction.reaction;
+
+    // Update reaction
+    existingInteraction.reaction = reaction;
+    await existingInteraction.save();
+    await existingInteraction.populate('user', 'name avatar headline username');
+
+    // Get updated interaction stats
+    const interactionStats = await Interaction.getInteractionStats(targetType, id);
 
     res.json({
       success: true,
       message: `Reaction updated successfully.`,
       data: {
-        previousReaction: existingReaction.reaction, // This is actually the new reaction after update
-        updatedReaction: existingReaction,
-        stats: reactionStats
+        previousReaction: oldReaction,
+        updatedReaction: reaction,
+        interaction: existingInteraction,
+        stats: interactionStats
       }
     });
 
@@ -281,30 +466,27 @@ const getTargetReactions = async (req, res) => {
       });
     }
 
-    // Build query
-    const query = { targetType, targetId: id };
-    if (reaction && reaction !== 'all') {
-      query.reaction = reaction;
-    }
-
     // Get reactions with pagination
-    const reactions = await Like.find(query)
-      .populate('user', 'name avatar headline username')
-      .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
-      .skip((parseInt(page) - 1) * parseInt(limit))
-      .limit(parseInt(limit));
-
-    const total = await Like.countDocuments(query);
-
-    // Get reaction statistics
-    const reactionStats = await Like.getReactionStats(targetType, id);
-
-    // Check user's reaction status
-    const userReaction = await Like.findOne({
-      user: req.user.userId, 
-      targetType, 
-      targetId: id
+    const reactions = await Interaction.getReactionsForTarget(targetType, id, {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      reaction: reaction !== 'all' ? reaction : undefined,
+      sortBy,
+      sortOrder
     });
+
+    const total = await Interaction.countDocuments({
+      targetType,
+      targetId: id,
+      interactionType: 'reaction',
+      ...(reaction && reaction !== 'all' ? { reaction } : {})
+    });
+
+    // Get interaction statistics
+    const interactionStats = await Interaction.getInteractionStats(targetType, id);
+
+    // Check user's interaction status
+    const userInteraction = await Interaction.getUserInteraction(req.user.userId, targetType, id);
 
     res.json({
       success: true,
@@ -316,10 +498,13 @@ const getTargetReactions = async (req, res) => {
           total,
           pages: Math.ceil(total / limit)
         },
-        stats: reactionStats,
-        userReaction: userReaction ? {
-          reaction: userReaction.reaction,
-          reactedAt: userReaction.createdAt
+        stats: interactionStats,
+        userInteraction: userInteraction ? {
+          interactionType: userInteraction.interactionType,
+          value: userInteraction.value,
+          emoji: userInteraction.emoji,
+          reactedAt: userInteraction.createdAt,
+          isDisliked: userInteraction.interactionType === 'dislike'
         } : null
       }
     });
@@ -335,34 +520,109 @@ const getTargetReactions = async (req, res) => {
   }
 };
 
-// Get reaction statistics for a target
-const getReactionStats = async (req, res) => {
+// Get dislikes for a target
+const getTargetDislikes = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { 
+      targetType = 'Post',
+      page = 1, 
+      limit = 50,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    console.log('Get dislikes request:', { id, targetType, page, limit });
+
+    // Validate target type
+    if (!['Post', 'Comment'].includes(targetType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid target type.',
+        code: 'INVALID_TARGET_TYPE'
+      });
+    }
+
+    // Get dislikes with pagination
+    const dislikes = await Interaction.getDislikesForTarget(targetType, id, {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      sortBy,
+      sortOrder
+    });
+
+    const total = await Interaction.countDocuments({
+      targetType,
+      targetId: id,
+      interactionType: 'dislike'
+    });
+
+    // Get interaction statistics
+    const interactionStats = await Interaction.getInteractionStats(targetType, id);
+
+    // Check user's interaction status
+    const userInteraction = await Interaction.getUserInteraction(req.user.userId, targetType, id);
+
+    res.json({
+      success: true,
+      data: {
+        dislikes,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / limit)
+        },
+        stats: interactionStats,
+        userInteraction: userInteraction ? {
+          interactionType: userInteraction.interactionType,
+          value: userInteraction.value,
+          emoji: userInteraction.emoji,
+          reactedAt: userInteraction.createdAt,
+          isDisliked: userInteraction.interactionType === 'dislike'
+        } : null
+      }
+    });
+
+  } catch (error) {
+    console.error('Get target dislikes error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch dislikes.',
+      code: 'FETCH_DISLIKES_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// Get interaction statistics for a target
+const getInteractionStats = async (req, res) => {
   try {
     const { id } = req.params;
     const { targetType = 'Post' } = req.query;
 
-    console.log('Get reaction stats request:', { id, targetType });
+    console.log('Get interaction stats request:', { id, targetType });
 
-    const reactionStats = await Like.getReactionStats(targetType, id);
+    const interactionStats = await Interaction.getInteractionStats(targetType, id);
 
     res.json({
       success: true,
-      data: reactionStats
+      data: interactionStats
     });
 
   } catch (error) {
-    console.error('Get reaction stats error:', error);
+    console.error('Get interaction stats error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch reaction statistics.',
+      message: 'Failed to fetch interaction statistics.',
       code: 'FETCH_STATS_ERROR',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-// Get user's reaction status for multiple targets
-const getBulkReactionStatus = async (req, res) => {
+// Get user's interaction status for multiple targets
+const getBulkInteractionStatus = async (req, res) => {
   try {
     const { targetType = 'Post', targetIds } = req.body;
 
@@ -379,70 +639,184 @@ const getBulkReactionStatus = async (req, res) => {
     // Limit batch size
     const limitedTargetIds = targetIds.slice(0, 100);
     
-    const reactions = await Like.find({
-      user: req.user.userId,
-      targetType,
-      targetId: { $in: limitedTargetIds }
-    }).select('targetId reaction createdAt');
+    const interactions = await Interaction.getBulkInteractionStatus(req.user.userId, targetType, limitedTargetIds);
 
     // Create a map for easy lookup
-    const reactionMap = {};
-    reactions.forEach(react => {
-      reactionMap[react.targetId.toString()] = {
-        reaction: react.reaction,
-        reactedAt: react.createdAt
+    const interactionMap = {};
+    interactions.forEach(interaction => {
+      interactionMap[interaction.targetId.toString()] = {
+        interactionType: interaction.interactionType,
+        value: interaction.interactionType === 'reaction' ? interaction.reaction : interaction.dislike,
+        emoji: interaction.interactionType === 'reaction' 
+          ? Interaction.reactionEmojis[interaction.reaction] 
+          : Interaction.dislikeEmojis[interaction.dislike],
+        reactedAt: interaction.createdAt,
+        isDisliked: interaction.interactionType === 'dislike'
       };
     });
 
     res.json({
       success: true,
       data: {
-        reactions: reactionMap,
+        interactions: interactionMap,
         totalQueried: limitedTargetIds.length,
-        totalFound: reactions.length
+        totalFound: interactions.length
       }
     });
 
   } catch (error) {
-    console.error('Get bulk reaction status error:', error);
+    console.error('Get bulk interaction status error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch bulk reaction status.',
+      message: 'Failed to fetch bulk interaction status.',
       code: 'BULK_STATUS_ERROR',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-// Get user's specific reaction to a target
-const getUserReaction = async (req, res) => {
+// Get user's specific interaction with a target
+const getUserInteraction = async (req, res) => {
   try {
     const { id } = req.params;
     const { targetType = 'Post' } = req.query;
 
-    console.log('Get user reaction request:', { id, targetType, userId: req.user.userId });
+    console.log('Get user interaction request:', { id, targetType, userId: req.user.userId });
 
-    const reaction = await Like.findOne({
-      user: req.user.userId,
-      targetType,
-      targetId: id
-    });
+    const interaction = await Interaction.getUserInteraction(req.user.userId, targetType, id);
 
     res.json({
       success: true,
       data: {
-        hasReaction: !!reaction,
-        reaction: reaction ? reaction.reaction : null,
-        reactedAt: reaction ? reaction.createdAt : null
+        hasInteraction: !!interaction,
+        interaction: interaction ? {
+          interactionType: interaction.interactionType,
+          value: interaction.interactionType === 'reaction' ? interaction.reaction : interaction.dislike,
+          emoji: interaction.interactionType === 'reaction' 
+            ? Interaction.reactionEmojis[interaction.reaction] 
+            : Interaction.dislikeEmojis[interaction.dislike],
+          label: interaction.interactionType === 'reaction'
+            ? Interaction.reactionLabels[interaction.reaction]
+            : Interaction.dislikeLabels[interaction.dislike],
+          reactedAt: interaction.createdAt,
+          isDisliked: interaction.interactionType === 'dislike'
+        } : null
       }
     });
 
   } catch (error) {
-    console.error('Get user reaction error:', error);
+    console.error('Get user interaction error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch user reaction.',
-      code: 'FETCH_USER_REACTION_ERROR',
+      message: 'Failed to fetch user interaction.',
+      code: 'FETCH_USER_INTERACTION_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// Toggle between reaction and dislike
+const toggleInteraction = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { targetType = 'Post' } = req.body;
+
+    console.log('Toggle interaction request:', { id, targetType, userId: req.user.userId });
+
+    // Get current interaction
+    const currentInteraction = await Interaction.getUserInteraction(req.user.userId, targetType, id);
+
+    let result;
+    let update = {};
+    const TargetModel = targetType === 'Post' ? Post : Comment;
+    const likeField = targetType === 'Post' ? 'stats.likes' : 'likes';
+    const dislikeField = targetType === 'Post' ? 'stats.dislikes' : 'dislikes';
+    
+    if (!currentInteraction) {
+      // No current interaction → add default like
+      const newInteraction = new Interaction({
+        user: req.user.userId,
+        targetType,
+        targetId: id,
+        interactionType: 'reaction',
+        reaction: 'like'
+      });
+      
+      await newInteraction.save();
+      result = newInteraction;
+      
+      // Update stats: increment like
+      update.$inc = { [likeField]: 1 };
+    } 
+    else if (currentInteraction.interactionType === 'reaction') {
+      // Switch from reaction to dislike
+      await Interaction.removeAllInteractions(req.user.userId, targetType, id);
+      
+      const newInteraction = new Interaction({
+        user: req.user.userId,
+        targetType,
+        targetId: id,
+        interactionType: 'dislike',
+        dislike: 'dislike'
+      });
+      
+      await newInteraction.save();
+      result = newInteraction;
+      
+      // Update stats: decrement like, increment dislike
+      update.$inc = {
+        [likeField]: -1,
+        [dislikeField]: 1
+      };
+    } 
+    else {
+      // Switch from dislike to default reaction (like)
+      await Interaction.removeAllInteractions(req.user.userId, targetType, id);
+      
+      const newInteraction = new Interaction({
+        user: req.user.userId,
+        targetType,
+        targetId: id,
+        interactionType: 'reaction',
+        reaction: 'like'
+      });
+      
+      await newInteraction.save();
+      result = newInteraction;
+      
+      // Update stats: decrement dislike, increment like
+      update.$inc = {
+        [likeField]: 1,
+        [dislikeField]: -1
+      };
+    }
+
+    // Apply target stats update
+    if (Object.keys(update.$inc || {}).length > 0) {
+      await TargetModel.findByIdAndUpdate(id, update);
+    }
+
+    await result.populate('user', 'name avatar headline username');
+
+    // Get updated interaction stats
+    const interactionStats = await Interaction.getInteractionStats(targetType, id);
+
+    res.json({
+      success: true,
+      message: `Interaction toggled successfully.`,
+      data: {
+        previousInteraction: currentInteraction,
+        newInteraction: result,
+        stats: interactionStats
+      }
+    });
+
+  } catch (error) {
+    console.error('Toggle interaction error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to toggle interaction.',
+      code: 'TOGGLE_INTERACTION_ERROR',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -451,10 +825,13 @@ const getUserReaction = async (req, res) => {
 // Export all controller functions
 module.exports = {
   addReaction,
-  removeReaction,
+  addDislike,
+  removeInteraction,
   updateReaction,
   getTargetReactions,
-  getReactionStats,
-  getBulkReactionStatus,
-  getUserReaction
+  getTargetDislikes,
+  getInteractionStats,
+  getBulkInteractionStatus,
+  getUserInteraction,
+  toggleInteraction
 };

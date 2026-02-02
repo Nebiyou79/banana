@@ -1,45 +1,41 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// pages/dashboard/company/profile.tsx - UPDATED FOR PROFILE-SERVICE HERO
+// pages/dashboard/company/profile.tsx - UPDATED FOR CREATE/UPDATE LOGIC
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { companyService } from '@/services/companyService';
 import { CompanyProfile as Company } from '@/services/companyService';
-import { profileService, Profile } from '@/services/profileService'; // ADDED PROFILE SERVICE
+import { profileService, Profile, CloudinaryImage } from '@/services/profileService';
 import CompanyForm from '@/components/company/CompanyForm';
 import CompanyHero from '@/components/company/CompanyHero';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Pencil, Building2, MapPin, Phone, Globe, FileText, Users, Calendar, Plus } from 'lucide-react';
+import { Pencil, Building2, MapPin, Phone, Globe, FileText, Users, Calendar, Plus, Save, ArrowLeft } from 'lucide-react';
 import Button from '@/components/forms/Button';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import Link from 'next/link';
 
 export default function CompanyProfilePage() {
   const { user, isLoading: authLoading, refetchUser } = useAuth();
   const router = useRouter();
   const [company, setCompany] = useState<Company | null>(null);
-  const [userProfile, setUserProfile] = useState<Profile | null>(null); // ADDED USER PROFILE
+  const [userProfile, setUserProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [profileLoading, setProfileLoading] = useState(true); // ADDED SEPARATE LOADING
+  const [profileLoading, setProfileLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [isCreateMode, setIsCreateMode] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
 
     if (!user || user.role !== 'company') {
-      toast({
-        title: 'Access Denied',
-        description: 'You need to be a company user to access this page.',
-        variant: 'destructive',
-      });
+      toast.error('You need to be a company user to access this page.');
       router.push('/dashboard');
       return;
     }
 
     fetchCompanyProfile();
-    fetchUserProfile(); // ADDED: Fetch user profile
+    fetchUserProfile();
   }, [user, authLoading, router]);
 
   const fetchCompanyProfile = async () => {
@@ -47,13 +43,10 @@ export default function CompanyProfilePage() {
       setLoading(true);
       const companyData = await companyService.getMyCompany();
       setCompany(companyData);
+      setIsCreateMode(!companyData); // Set create mode if no company exists
 
       if (!companyData) {
-        toast({
-          title: 'Profile Not Found',
-          description: 'Please create your company profile to get started.',
-          variant: 'info',
-        });
+        toast.info('Please create your company profile to get started.');
       }
     } catch (error: any) {
       console.error('Error fetching company profile:', error);
@@ -62,7 +55,6 @@ export default function CompanyProfilePage() {
     }
   };
 
-  // ADDED: Fetch user profile for avatar and cover photo
   const fetchUserProfile = async () => {
     try {
       setProfileLoading(true);
@@ -75,140 +67,100 @@ export default function CompanyProfilePage() {
     }
   };
 
-  const handleProfileUpdate = async (data: Partial<Company> & { logoFile?: File; bannerFile?: File }) => {
+  const handleProfileUpdate = async (data: any, isCreate: boolean) => {
     try {
-      const { logoFile, bannerFile, ...companyData } = data;
+      console.log('[ProfilePage] Submitting company data:', data);
+      console.log('[ProfilePage] Mode:', isCreate ? 'CREATE' : 'UPDATE');
 
-      console.log('[ProfilePage] Submitting company data:', companyData);
-      console.log('[ProfilePage] Logo file:', logoFile);
-      console.log('[ProfilePage] Banner file:', bannerFile);
+      // Prepare clean company data
+      const companyData: Partial<Company> = {
+        name: data.name,
+        tin: data.tin,
+        industry: data.industry,
+        description: data.description,
+        address: data.address,
+        phone: data.phone,
+        website: data.website,
+      };
+
+      // Clean up empty strings
+      Object.keys(companyData).forEach(key => {
+        const value = (companyData as any)[key];
+        if (value === '' || value === null) {
+          (companyData as any)[key] = undefined;
+        }
+      });
 
       let updatedCompany: Company;
 
-      if (company) {
-        // Update company data first
-        updatedCompany = await companyService.updateMyCompany(companyData);
-        console.log('[ProfilePage] Company update response:', updatedCompany);
-
-        // Handle file uploads through profile service
-        if (logoFile) {
-          console.log('[ProfilePage] Uploading logo to profile service...');
-          try {
-            await profileService.uploadAvatar(logoFile);
-            // Refresh user profile to get updated avatar
-            await fetchUserProfile();
-          } catch (error) {
-            console.error('[ProfilePage] Logo upload error:', error);
-            // Continue even if logo upload fails
-          }
-        }
-
-        if (bannerFile) {
-          console.log('[ProfilePage] Uploading banner to profile service...');
-          try {
-            await profileService.uploadCoverPhoto(bannerFile);
-            // Refresh user profile to get updated cover photo
-            await fetchUserProfile();
-          } catch (error) {
-            console.error('[ProfilePage] Banner upload error:', error);
-            // Continue even if banner upload fails
-          }
-        }
-
-        // Refetch company to get updated data
-        const refreshedCompany = await companyService.getMyCompany();
-        if (refreshedCompany) {
-          setCompany(refreshedCompany);
-        }
-
-      } else {
-        // Create new company first
+      if (isCreate) {
+        // Create new company
         updatedCompany = await companyService.createCompany(companyData);
-        console.log('[ProfilePage] Company creation response:', updatedCompany);
-
-        // Handle file uploads through profile service
-        if (logoFile) {
-          console.log('[ProfilePage] Uploading logo to profile service for new company...');
-          try {
-            await profileService.uploadAvatar(logoFile);
-            await fetchUserProfile();
-          } catch (error) {
-            console.error('[ProfilePage] Logo upload error:', error);
-          }
-        }
-
-        if (bannerFile) {
-          console.log('[ProfilePage] Uploading banner to profile service for new company...');
-          try {
-            await profileService.uploadCoverPhoto(bannerFile);
-            await fetchUserProfile();
-          } catch (error) {
-            console.error('[ProfilePage] Banner upload error:', error);
-          }
-        }
-
-        // Refetch user and company data
-        if (refetchUser) {
-          await refetchUser();
-        }
-
-        // Refetch company to get updated data
-        const refreshedCompany = await companyService.getMyCompany();
-        if (refreshedCompany) {
-          setCompany(refreshedCompany);
-        }
+        toast.success('Company profile created successfully!');
+      } else {
+        // Update existing company
+        updatedCompany = await companyService.updateMyCompany(companyData);
+        toast.success('Company profile updated successfully!');
       }
 
+      console.log('[ProfilePage] Company operation successful:', updatedCompany);
+
+      // Update local state
+      setCompany(updatedCompany);
+      setIsCreateMode(false);
       setIsEditing(false);
+
+      // Refresh user and company data
+      if (refetchUser) {
+        await refetchUser();
+      }
+      await fetchUserProfile();
 
     } catch (error: any) {
       console.error('[ProfilePage] Profile update error:', error);
+      throw error; // Re-throw to be handled by the form
     }
   };
 
   const handleEditClick = () => {
     try {
       setIsEditing(true);
+      setIsCreateMode(false);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Unable to open edit form',
-        variant: 'destructive',
-      });
+      toast.error('Unable to open edit form');
+    }
+  };
+
+  const handleCreateClick = () => {
+    try {
+      setIsEditing(true);
+      setIsCreateMode(true);
+    } catch (error) {
+      toast.error('Unable to open create form');
     }
   };
 
   const handleCancelEdit = () => {
     try {
       setIsEditing(false);
-      toast({
-        title: 'Edit Cancelled',
+      setIsCreateMode(false);
+      toast.info('Edit cancelled', {
         description: 'Your changes were not saved',
-        variant: 'info',
       });
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Unable to cancel edit',
-        variant: 'destructive',
-      });
+      toast.error('Unable to cancel edit');
     }
   };
 
-  // ADDED: Handle profile updates from CompanyHero component
   const handleProfileUpdateFromHero = (updatedProfile: Profile) => {
-    // This is called when the Hero component updates the profile
-    // Update the local userProfile state
     setUserProfile(updatedProfile);
   };
 
-  // ADDED: Handle refresh from CompanyHero component
   const handleRefresh = () => {
     fetchCompanyProfile();
     fetchUserProfile();
   };
 
-  // Combine loading states
   const isLoading = authLoading || loading || profileLoading;
 
   if (isLoading) {
@@ -224,30 +176,65 @@ export default function CompanyProfilePage() {
     );
   }
 
-  return (
-    <DashboardLayout requiredRole="company">
-      <div className="min-h-screen bg-background">
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-4xl font-bold text-foreground">Company Profile</h1>
-              <p className="text-xl text-muted-foreground mt-2">Manage your company information and branding</p>
+  // Edit/Create mode
+  if (isEditing) {
+    return (
+      <DashboardLayout requiredRole="company">
+        <div className="min-h-screen bg-gray-50 py-8">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            {/* Header */}
+            <div className="mb-8">
+              <button
+                onClick={handleCancelEdit}
+                className="inline-flex items-center text-gray-600 hover:text-gray-900 font-medium mb-6 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to {company ? 'Profile' : 'Dashboard'}
+              </button>
+              <div className="text-center">
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                  {isCreateMode ? 'Create Company Profile' : 'Edit Company Profile'}
+                </h1>
+                <p className="text-gray-600">
+                  {isCreateMode
+                    ? 'Fill in your company details to get started'
+                    : 'Update your company information and settings'}
+                </p>
+              </div>
             </div>
-            {company && !isEditing && (
-              <Button onClick={handleEditClick} size="lg">
-                <Pencil className="w-5 h-5 mr-2" />
-                Edit Profile
-              </Button>
-            )}
-          </div>
 
-          {isEditing ? (
             <CompanyForm
-              company={company}
-              onSubmit={handleProfileUpdate}
+              company={isCreateMode ? null : company}
+              onSubmit={(data) => handleProfileUpdate(data, isCreateMode)}
               onCancel={handleCancelEdit}
+              loading={false} // We'll handle loading in the form button
+              currentAvatar={userProfile?.avatar as CloudinaryImage | null | undefined}
+              currentCover={userProfile?.cover as CloudinaryImage | null | undefined}
             />
-          ) : !company ? (
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // No company profile exists - show create prompt
+  if (!company) {
+    return (
+      <DashboardLayout requiredRole="company">
+        <div className="min-h-screen bg-background">
+          <div className="container mx-auto px-4 py-8">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h1 className="text-4xl font-bold text-foreground">Company Profile</h1>
+                <p className="text-xl text-muted-foreground mt-2">Set up your company profile to get started</p>
+              </div>
+              <Button onClick={handleCreateClick} size="lg">
+                <Plus className="w-5 h-5 mr-2" />
+                Create Profile
+              </Button>
+            </div>
+
+            {/* Empty State */}
             <Card className="border-l-4 border-l-blue-500 shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-2xl text-foreground">
@@ -259,181 +246,209 @@ export default function CompanyProfilePage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-blue-600" />
-                      <span>Attract top talent</span>
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-muted-foreground">
+                    <div className="flex flex-col items-center text-center gap-2 p-4 bg-blue-50 rounded-lg">
+                      <Users className="w-8 h-8 text-blue-600" />
+                      <span className="font-semibold">Attract Top Talent</span>
+                      <p>Showcase your company culture and values</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Building2 className="w-4 h-4 text-green-600" />
-                      <span>Build employer brand</span>
+                    <div className="flex flex-col items-center text-center gap-2 p-4 bg-green-50 rounded-lg">
+                      <Building2 className="w-8 h-8 text-green-600" />
+                      <span className="font-semibold">Build Employer Brand</span>
+                      <p>Establish your company as an employer of choice</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-purple-600" />
-                      <span>Post unlimited jobs</span>
+                    <div className="flex flex-col items-center text-center gap-2 p-4 bg-purple-50 rounded-lg">
+                      <Calendar className="w-8 h-8 text-purple-600" />
+                      <span className="font-semibold">Post Unlimited Jobs</span>
+                      <p>Find the perfect candidates for your openings</p>
                     </div>
                   </div>
-                  <Button onClick={handleEditClick} size="lg" className="mt-4">
-                    <Plus className="w-5 h-5 mr-2" />
-                    Create Company Profile
-                  </Button>
+                  <div className="text-center pt-4">
+                    <Button onClick={handleCreateClick} size="lg" className="px-8">
+                      <Plus className="w-5 h-5 mr-2" />
+                      Create Company Profile
+                    </Button>
+                    <p className="text-sm text-muted-foreground mt-4">
+                      It only takes a few minutes to set up your profile
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
-          ) : (
-            <div className="space-y-8">
-              {/* Hero Section - UPDATED TO USE PROFILE-SERVICE BASED HERO */}
-              <CompanyHero
-                profile={userProfile} // Pass userProfile instead of company
-                isOwner={true}
-                onEdit={handleEditClick}
-                onProfileUpdate={handleProfileUpdateFromHero}
-                onRefresh={handleRefresh}
-                isLoading={profileLoading}
-              />
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
-              {/* Company Details */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-6">
-                  {/* Description Card */}
-                  {company.description && (
-                    <Card className="bg-card">
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-foreground">
-                          <FileText className="w-5 h-5" />
-                          About Our Company
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-foreground/90 leading-relaxed text-lg">
-                          {company.description}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )}
+  // View mode - Company exists
+  return (
+    <DashboardLayout requiredRole="company">
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-4xl font-bold text-foreground">Company Profile</h1>
+              <p className="text-xl text-muted-foreground mt-2">Manage your company information and branding</p>
+            </div>
+            <Button onClick={handleEditClick} size="lg">
+              <Pencil className="w-5 h-5 mr-2" />
+              Edit Profile
+            </Button>
+          </div>
 
-                  {/* Contact Information */}
+          <div className="space-y-8">
+            {/* Hero Section */}
+            <CompanyHero
+              profile={userProfile}
+              isOwner={true}
+              onEdit={handleEditClick}
+              onProfileUpdate={handleProfileUpdateFromHero}
+              onRefresh={handleRefresh}
+              isLoading={profileLoading}
+            />
+
+            {/* Company Details */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 space-y-6">
+                {/* Description Card */}
+                {company.description && (
                   <Card className="bg-card">
                     <CardHeader>
-                      <CardTitle className="text-foreground">Contact Information</CardTitle>
+                      <CardTitle className="flex items-center gap-2 text-foreground">
+                        <FileText className="w-5 h-5" />
+                        About Our Company
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {company.address && (
-                          <div className="flex items-start gap-3">
-                            <MapPin className="w-5 h-5 text-muted-foreground mt-0.5 flex-shrink-0" />
-                            <div>
-                              <h4 className="font-semibold text-foreground">Address</h4>
-                              <p className="text-muted-foreground mt-1">{company.address}</p>
-                            </div>
-                          </div>
-                        )}
-
-                        {company.phone && (
-                          <div className="flex items-start gap-3">
-                            <Phone className="w-5 h-5 text-muted-foreground mt-0.5 flex-shrink-0" />
-                            <div>
-                              <h4 className="font-semibold text-foreground">Phone</h4>
-                              <p className="text-muted-foreground mt-1">{company.phone}</p>
-                            </div>
-                          </div>
-                        )}
-
-                        {company.website && (
-                          <div className="flex items-start gap-3">
-                            <Globe className="w-5 h-5 text-muted-foreground mt-0.5 flex-shrink-0" />
-                            <div>
-                              <h4 className="font-semibold text-foreground">Website</h4>
-                              <a
-                                href={company.website}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary hover:text-primary/80 hover:underline mt-1 block"
-                              >
-                                {company.website}
-                              </a>
-                            </div>
-                          </div>
-                        )}
-
-                        {company.tin && (
-                          <div className="flex items-start gap-3">
-                            <Building2 className="w-5 h-5 text-muted-foreground mt-0.5 flex-shrink-0" />
-                            <div>
-                              <h4 className="font-semibold text-foreground">TIN Number</h4>
-                              <p className="text-muted-foreground mt-1">{company.tin}</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      <p className="text-foreground/90 leading-relaxed text-lg">
+                        {company.description}
+                      </p>
                     </CardContent>
                   </Card>
-                </div>
+                )}
 
-                {/* Sidebar - Company Stats */}
-                <div className="space-y-6">
-                  <Card className="bg-card">
-                    <CardHeader>
-                      <CardTitle className="text-foreground">Company Status</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Verification</span>
-                          <Badge variant={company.verified ? "default" : "secondary"}>
-                            {company.verified ? 'Verified' : 'Pending'}
-                          </Badge>
+                {/* Contact Information */}
+                <Card className="bg-card">
+                  <CardHeader>
+                    <CardTitle className="text-foreground">Contact Information</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {company.address && (
+                        <div className="flex items-start gap-3">
+                          <MapPin className="w-5 h-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                          <div>
+                            <h4 className="font-semibold text-foreground">Address</h4>
+                            <p className="text-muted-foreground mt-1">{company.address}</p>
+                          </div>
                         </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Profile</span>
-                          <Badge variant="default">Complete</Badge>
+                      )}
+
+                      {company.phone && (
+                        <div className="flex items-start gap-3">
+                          <Phone className="w-5 h-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                          <div>
+                            <h4 className="font-semibold text-foreground">Phone</h4>
+                            <p className="text-muted-foreground mt-1">{company.phone}</p>
+                          </div>
                         </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Member Since</span>
-                          <span className="text-sm text-foreground">
-                            {new Date(company.createdAt).toLocaleDateString()}
-                          </span>
+                      )}
+
+                      {company.website && (
+                        <div className="flex items-start gap-3">
+                          <Globe className="w-5 h-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                          <div>
+                            <h4 className="font-semibold text-foreground">Website</h4>
+                            <a
+                              href={company.website}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:text-primary/80 hover:underline mt-1 block"
+                            >
+                              {company.website}
+                            </a>
+                          </div>
                         </div>
+                      )}
+
+                      {company.tin && (
+                        <div className="flex items-start gap-3">
+                          <Building2 className="w-5 h-5 text-muted-foreground mt=0.5 flex-shrink-0" />
+                          <div>
+                            <h4 className="font-semibold text-foreground">TIN Number</h4>
+                            <p className="text-muted-foreground mt-1">{company.tin}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Sidebar - Company Stats */}
+              <div className="space-y-6">
+                <Card className="bg-card">
+                  <CardHeader>
+                    <CardTitle className="text-foreground">Company Status</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Verification</span>
+                        <Badge variant={company.verified ? "default" : "secondary"}>
+                          {company.verified ? 'Verified' : 'Pending'}
+                        </Badge>
                       </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="bg-card">
-                    <CardHeader>
-                      <CardTitle className="text-foreground">Quick Actions</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex flex-col space-y-3">
-                        <Button variant="outline" className="w-full justify-start" asChild>
-                          <Link href="/dashboard/company/jobs/new">
-                            <Plus className="w-4 h-4 mr-2" />
-                            Post New Job
-                          </Link>
-                        </Button>
-
-                        <Button variant="outline" className="w-full justify-start" asChild>
-                          <Link href="/dashboard/company/jobs">
-                            <FileText className="w-4 h-4 mr-2" />
-                            View All Jobs
-                          </Link>
-                        </Button>
-
-                        <Button
-                          variant="outline"
-                          className="w-full justify-start"
-                          onClick={handleEditClick}
-                        >
-                          <Pencil className="w-4 h-4 mr-2" />
-                          Edit Profile
-                        </Button>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Profile</span>
+                        <Badge variant="default">Complete</Badge>
                       </div>
-                    </CardContent>
-                  </Card>
-                </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Member Since</span>
+                        <span className="text-sm text-foreground">
+                          {new Date(company.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-card">
+                  <CardHeader>
+                    <CardTitle className="text-foreground">Quick Actions</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-col space-y-3">
+                      <Button variant="outline" className="w-full justify-start" asChild>
+                        <Link href="/dashboard/company/jobs/new">
+                          <Plus className="w-4 h-4 mr-2" />
+                          Post New Job
+                        </Link>
+                      </Button>
+
+                      <Button variant="outline" className="w-full justify-start" asChild>
+                        <Link href="/dashboard/company/jobs">
+                          <FileText className="w-4 h-4 mr-2" />
+                          View All Jobs
+                        </Link>
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start"
+                        onClick={handleEditClick}
+                      >
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Edit Profile
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </DashboardLayout>

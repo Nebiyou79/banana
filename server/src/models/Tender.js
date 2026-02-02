@@ -36,9 +36,13 @@ const proposalSchema = new mongoose.Schema({
     min: 1
   },
   attachments: [{
-    filename: String,
     originalName: String,
+    fileName: String,
+    size: Number,
+    mimetype: String,
     path: String,
+    url: String,
+    downloadUrl: String,
     fileHash: String,
     uploadedAt: {
       type: Date,
@@ -72,16 +76,24 @@ const proposalSchema = new mongoose.Schema({
   technicalProposal: String,
   financialProposal: String,
   complianceDocuments: [{
-    filename: String,
     originalName: String,
+    fileName: String,
+    size: Number,
+    mimetype: String,
     path: String,
+    url: String,
+    downloadUrl: String,
     documentType: String,
     fileHash: String
   }],
   companyDocuments: [{
-    filename: String,
     originalName: String,
+    fileName: String,
+    size: Number,
+    mimetype: String,
     path: String,
+    url: String,
+    downloadUrl: String,
     documentType: String,
     fileHash: String
   }],
@@ -110,20 +122,10 @@ const tenderVisibilitySchema = new mongoose.Schema({
   allowedUsers: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
-  }],
-  invitedEmails: [{
-    email: String,
-    token: String,
-    tokenExpires: Date,
-    status: {
-      type: String,
-      enum: ['pending', 'accepted', 'declined'],
-      default: 'pending'
-    }
   }]
 });
 
-// Tender Invitation Schema
+// Tender Invitation Schema (SINGLE SCHEMA - NO DUPLICATES)
 const tenderInvitationSchema = new mongoose.Schema({
   invitedUser: {
     type: mongoose.Schema.Types.ObjectId,
@@ -162,13 +164,22 @@ const tenderInvitationSchema = new mongoose.Schema({
   tokenExpires: Date
 });
 
-// Attachment Schema
+// Attachment Schema (LOCAL FILES ONLY)
 const attachmentSchema = new mongoose.Schema({
-  filename: {
+  originalName: {
     type: String,
     required: true
   },
-  originalName: {
+  fileName: {
+    type: String,
+    required: true
+  },
+  size: {
+    type: Number,
+    required: true,
+    min: 1
+  },
+  mimetype: {
     type: String,
     required: true
   },
@@ -176,12 +187,11 @@ const attachmentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  fileSize: {
-    type: Number,
-    required: true,
-    min: 1
+  url: {
+    type: String,
+    required: true
   },
-  fileType: {
+  downloadUrl: {
     type: String,
     required: true
   },
@@ -201,7 +211,7 @@ const attachmentSchema = new mongoose.Schema({
     type: String,
     enum: [
       'terms_of_reference',
-      'technical_specifications', 
+      'technical_specifications',
       'statement_of_work',
       'drawings',
       'bill_of_quantities',
@@ -225,8 +235,11 @@ const attachmentSchema = new mongoose.Schema({
     required: true
   },
   previousVersions: [{
-    filename: String,
+    originalName: String,
+    fileName: String,
     path: String,
+    url: String,
+    downloadUrl: String,
     fileHash: String,
     version: Number,
     replacedAt: Date
@@ -327,7 +340,7 @@ const professionalSpecificSchema = new mongoose.Schema({
     default: 'open_tender'
   },
   fundingSource: String,
-  
+
   // Eligibility criteria
   eligibleBidderType: {
     type: String,
@@ -358,7 +371,7 @@ const professionalSpecificSchema = new mongoose.Schema({
     },
     similarValueProjects: Boolean
   },
-  
+
   // Technical requirements
   projectObjectives: String,
   deliverables: [{
@@ -388,7 +401,7 @@ const professionalSpecificSchema = new mongoose.Schema({
       }
     }
   },
-  
+
   // Evaluation criteria
   evaluationMethod: {
     type: String,
@@ -409,7 +422,7 @@ const professionalSpecificSchema = new mongoose.Schema({
       default: 30
     }
   },
-  
+
   // Submission rules
   bidValidityPeriod: {
     value: Number,
@@ -430,17 +443,17 @@ const professionalSpecificSchema = new mongoose.Schema({
     default: false
   },
   cpoRequired: {
-  type: Boolean,
-  default: false
-},
-cpoDescription: {
-  type: String,
-  maxlength: 1000,
-  trim: true,
-  required: function() {
-    return this.cpoRequired === true;
-  }
-},
+    type: Boolean,
+    default: false
+  },
+  cpoDescription: {
+    type: String,
+    maxlength: 1000,
+    trim: true,
+    required: function () {
+      return this.cpoRequired === true;
+    }
+  },
   // For closed tender integrity
   sealedDataHash: String,
   sealedAt: Date
@@ -467,33 +480,33 @@ const tenderSchema = new mongoose.Schema({
     required: [true, 'Tender description is required'],
     maxlength: [20000, 'Description cannot exceed 20000 characters']
   },
-  
+
   // ============ TENDER CLASSIFICATION ============
   tenderCategory: {
     type: String,
     enum: ['freelance', 'professional'],
     required: true
   },
-  
+
   workflowType: {
     type: String,
     enum: ['open', 'closed'],
     required: true,
     default: 'open'
   },
-  
+
   status: {
     type: String,
     enum: ['draft', 'published', 'locked', 'deadline_reached', 'revealed', 'closed', 'cancelled'],
     default: 'draft'
   },
-  
+
   // ============ VISIBILITY & ACCESS CONTROL ============
   visibility: {
     type: tenderVisibilitySchema,
     required: true
   },
-  
+
   // ============ OWNERSHIP ============
   owner: {
     type: mongoose.Schema.Types.ObjectId,
@@ -515,66 +528,66 @@ const tenderSchema = new mongoose.Schema({
     required: true,
     enum: ['Organization', 'Company']
   },
-  
+
   // ============ TENDER-SPECIFIC FIELDS ============
   freelanceSpecific: freelanceSpecificSchema,
   professionalSpecific: professionalSpecificSchema,
-  
+
   // ============ COMMON FIELDS ============
   procurementCategory: {
     type: String,
     required: true,
     trim: true
   },
-  
+
   skillsRequired: [{
     type: String,
     trim: true,
     maxlength: 50
   }],
-  
+
   // ============ DOCUMENTS & ATTACHMENTS ============
   attachments: [attachmentSchema],
-  
+
   maxFileSize: {
     type: Number,
     default: 50 * 1024 * 1024,
     min: 1 * 1024 * 1024,
     max: 500 * 1024 * 1024
   },
-  
+
   maxFileCount: {
     type: Number,
     default: 20,
     min: 1,
     max: 100
   },
-  
+
   // ============ TIMELINE ============
   deadline: {
     type: Date,
     required: true,
     validate: {
-      validator: function(value) {
+      validator: function (value) {
         return value > new Date();
       },
       message: 'Deadline must be in the future'
     }
   },
-  
+
   publishedAt: Date,
   lockedAt: Date,
   deadlineReachedAt: Date,
   revealedAt: Date,
   closedAt: Date,
   cancelledAt: Date,
-  
+
   // ============ INVITATIONS ============
   invitations: [tenderInvitationSchema],
-  
+
   // ============ APPLICATIONS/PROPOSALS ============
   proposals: [proposalSchema],
-  
+
   // ============ METADATA & TRACKING ============
   metadata: {
     views: {
@@ -624,7 +637,7 @@ const tenderSchema = new mongoose.Schema({
     revealedBy: mongoose.Schema.Types.ObjectId,
     closedBy: mongoose.Schema.Types.ObjectId
   },
-  
+
   // ============ AUDIT & COMPLIANCE ============
   auditLog: [{
     action: String,
@@ -640,7 +653,7 @@ const tenderSchema = new mongoose.Schema({
     ipAddress: String,
     userAgent: String
   }],
-  
+
   isDeleted: {
     type: Boolean,
     default: false
@@ -654,15 +667,22 @@ const tenderSchema = new mongoose.Schema({
   timestamps: true,
   toJSON: {
     virtuals: true,
-    transform: function(doc, ret) {
+    transform: function (doc, ret) {
       ret.id = ret._id;
       delete ret.__v;
+      // Remove sensitive paths from API responses
+      if (ret.attachments) {
+        ret.attachments = ret.attachments.map(att => {
+          const { path, ...safeAtt } = att;
+          return safeAtt;
+        });
+      }
       return ret;
     }
   },
   toObject: {
     virtuals: true,
-    transform: function(doc, ret) {
+    transform: function (doc, ret) {
       ret.id = ret._id;
       delete ret.__v;
       return ret;
@@ -684,7 +704,19 @@ tenderSchema.index({ 'metadata.savedBy': 1 });
 tenderSchema.index({ 'invitations.invitedUser': 1 });
 tenderSchema.index({ 'invitations.invitedCompany': 1 });
 tenderSchema.index({ 'invitations.email': 1 });
-tenderSchema.index({ 
+tenderSchema.index({
+  'invitations.invitedUser': 1,
+  'invitations.invitationStatus': 1
+});
+tenderSchema.index({
+  'invitations.invitedCompany': 1,
+  'invitations.invitationStatus': 1
+});
+tenderSchema.index({
+  'invitations.email': 1,
+  'invitations.invitationStatus': 1
+});
+tenderSchema.index({
   tenderCategory: 1,
   status: 1,
   deadline: 1,
@@ -692,23 +724,31 @@ tenderSchema.index({
 });
 
 // ============ VIRTUAL PROPERTIES ============
-tenderSchema.virtual('isActive').get(function() {
+tenderSchema.virtual('isActive').get(function () {
   return this.status === 'published' && this.deadline > new Date();
 });
 
-tenderSchema.virtual('isExpired').get(function() {
+tenderSchema.virtual('isExpired').get(function () {
   return this.deadline <= new Date();
 });
 
-tenderSchema.virtual('canEdit').get(function() {
-  if (this.status === 'draft') return true;
-  if (this.status === 'published') {
-    return this.workflowType === 'open';
-  }
-  return false;
+tenderSchema.virtual('isFreelance').get(function () {
+  return this.tenderCategory === 'freelance';
 });
 
-tenderSchema.virtual('canViewApplications').get(function() {
+tenderSchema.virtual('isProfessional').get(function () {
+  return this.tenderCategory === 'professional';
+});
+
+tenderSchema.virtual('isOpenWorkflow').get(function () {
+  return this.workflowType === 'open';
+});
+
+tenderSchema.virtual('isClosedWorkflow').get(function () {
+  return this.workflowType === 'closed';
+});
+
+tenderSchema.virtual('canViewApplications').get(function () {
   if (this.status === 'draft') return false;
   if (this.workflowType === 'open') return true;
   if (this.workflowType === 'closed') {
@@ -717,31 +757,97 @@ tenderSchema.virtual('canViewApplications').get(function() {
   return false;
 });
 
-tenderSchema.virtual('isSealed').get(function() {
-  return this.workflowType === 'closed' && 
-         (this.status === 'locked' || this.status === 'deadline_reached');
+tenderSchema.virtual('isSealed').get(function () {
+  return this.workflowType === 'closed' &&
+    (this.status === 'locked' || this.status === 'deadline_reached');
 });
 
-tenderSchema.virtual('isFreelance').get(function() {
-  return this.tenderCategory === 'freelance';
-});
+// ============ STATIC METHODS ============
 
-tenderSchema.virtual('isProfessional').get(function() {
-  return this.tenderCategory === 'professional';
-});
+// Build visibility filter for queries
+tenderSchema.statics.buildVisibilityFilter = async function (userId, userRole) {
+  const filter = { isDeleted: false };
 
-tenderSchema.virtual('isOpenWorkflow').get(function() {
-  return this.workflowType === 'open';
-});
+  // Admin can see everything
+  if (userRole === 'admin') {
+    return filter;
+  }
 
-tenderSchema.virtual('isClosedWorkflow').get(function() {
-  return this.workflowType === 'closed';
-});
+  // For authenticated users
+  if (userId && userRole) {
+    // Owner can see their own tenders regardless of status
+    filter.$or = [{ owner: userId }];
 
-// ============ STATIC METHODS - CATEGORIES ============
+    // Add visibility-based filters for non-owner tenders
+    if (userRole === 'freelancer') {
+      // Freelancers can see freelance tenders with freelancers_only visibility
+      filter.$or.push({
+        tenderCategory: 'freelance',
+        'visibility.visibilityType': 'freelancers_only',
+        status: { $in: ['published', 'locked'] },
+        deadline: { $gt: new Date() }
+      });
+    } else if (userRole === 'company') {
+      // Companies can see professional tenders based on visibility
+      const userCompany = await mongoose.model('Company').findOne({ user: userId });
+
+      if (userCompany) {
+        const companyId = userCompany._id;
+
+        // Public tenders
+        filter.$or.push({
+          tenderCategory: 'professional',
+          'visibility.visibilityType': 'public',
+          status: { $in: ['published', 'locked'] },
+          deadline: { $gt: new Date() }
+        });
+
+        // Companies-only tenders
+        filter.$or.push({
+          tenderCategory: 'professional',
+          'visibility.visibilityType': 'companies_only',
+          status: { $in: ['published', 'locked'] },
+          deadline: { $gt: new Date() }
+        });
+
+        // Invite-only tenders (check invitations)
+        filter.$or.push({
+          tenderCategory: 'professional',
+          'visibility.visibilityType': 'invite_only',
+          status: { $in: ['published', 'locked'] },
+          deadline: { $gt: new Date() },
+          $or: [
+            { 'invitations.invitedUser': userId },
+            { 'invitations.invitedCompany': companyId },
+            { 'invitations.email': (await mongoose.model('User').findById(userId))?.email }
+          ]
+        });
+      }
+    } else if (userRole === 'organization') {
+      // Organizations can see professional tenders
+      filter.$or.push({
+        tenderCategory: 'professional',
+        $or: [
+          { 'visibility.visibilityType': 'public' },
+          { 'visibility.visibilityType': 'companies_only' }
+        ],
+        status: { $in: ['published', 'locked'] },
+        deadline: { $gt: new Date() }
+      });
+    }
+  } else {
+    // Public users can only see freelance tenders
+    filter.tenderCategory = 'freelance';
+    filter['visibility.visibilityType'] = 'freelancers_only';
+    filter.status = 'published';
+    filter.deadline = { $gt: new Date() };
+  }
+
+  return filter;
+};
 
 // Freelance Categories (Upwork-style)
-tenderSchema.statics.getFreelanceCategories = function() {
+tenderSchema.statics.getFreelanceCategories = function () {
   return {
     'technology_programming': {
       name: 'Technology & Programming',
@@ -769,7 +875,7 @@ tenderSchema.statics.getFreelanceCategories = function() {
         { id: 'backend_development', name: 'Backend Development' }
       ]
     },
-    
+
     'design_creative': {
       name: 'Design & Creative',
       subcategories: [
@@ -795,7 +901,7 @@ tenderSchema.statics.getFreelanceCategories = function() {
         { id: 'social_media_design', name: 'Social Media Graphics' }
       ]
     },
-    
+
     'writing_translation': {
       name: 'Writing & Translation',
       subcategories: [
@@ -821,7 +927,7 @@ tenderSchema.statics.getFreelanceCategories = function() {
         { id: 'case_study_writing', name: 'Case Study Writing' }
       ]
     },
-    
+
     'digital_marketing': {
       name: 'Digital Marketing',
       subcategories: [
@@ -847,7 +953,7 @@ tenderSchema.statics.getFreelanceCategories = function() {
         { id: 'conversion_rate_optimization', name: 'Conversion Rate Optimization' }
       ]
     },
-    
+
     'business': {
       name: 'Business',
       subcategories: [
@@ -873,7 +979,7 @@ tenderSchema.statics.getFreelanceCategories = function() {
         { id: 'dashboard_creation', name: 'Dashboard Creation' }
       ]
     },
-    
+
     'engineering_architecture': {
       name: 'Engineering & Architecture',
       subcategories: [
@@ -899,7 +1005,7 @@ tenderSchema.statics.getFreelanceCategories = function() {
         { id: 'cfd_analysis', name: 'CFD Analysis' }
       ]
     },
-    
+
     'education_training': {
       name: 'Education & Training',
       subcategories: [
@@ -925,7 +1031,7 @@ tenderSchema.statics.getFreelanceCategories = function() {
         { id: 'citation_formatting', name: 'Citation Formatting' }
       ]
     },
-    
+
     'music_audio': {
       name: 'Music & Audio',
       subcategories: [
@@ -941,7 +1047,7 @@ tenderSchema.statics.getFreelanceCategories = function() {
         { id: 'audio_restoration', name: 'Audio Restoration' }
       ]
     },
-    
+
     'lifestyle': {
       name: 'Lifestyle',
       subcategories: [
@@ -957,7 +1063,7 @@ tenderSchema.statics.getFreelanceCategories = function() {
         { id: 'spiritual_guidance', name: 'Spiritual Guidance' }
       ]
     },
-    
+
     'other_services': {
       name: 'Other Services',
       subcategories: [
@@ -969,7 +1075,7 @@ tenderSchema.statics.getFreelanceCategories = function() {
 };
 
 // Professional Categories (Procurement-style)
-tenderSchema.statics.getProfessionalCategories = function() {
+tenderSchema.statics.getProfessionalCategories = function () {
   return {
     'construction_infrastructure': {
       name: 'Construction & Infrastructure',
@@ -996,7 +1102,7 @@ tenderSchema.statics.getProfessionalCategories = function() {
         { id: 'fire_protection_systems', name: 'Fire Protection Systems' }
       ]
     },
-    
+
     'goods_supply': {
       name: 'Goods & Supply',
       subcategories: [
@@ -1022,7 +1128,7 @@ tenderSchema.statics.getProfessionalCategories = function() {
         { id: 'pharmaceutical_supplies', name: 'Pharmaceutical Supplies' }
       ]
     },
-    
+
     'consultancy_services': {
       name: 'Consultancy Services',
       subcategories: [
@@ -1048,7 +1154,7 @@ tenderSchema.statics.getProfessionalCategories = function() {
         { id: 'it_consulting', name: 'IT Consulting' }
       ]
     },
-    
+
     'facility_services': {
       name: 'Facility & Support Services',
       subcategories: [
@@ -1074,7 +1180,7 @@ tenderSchema.statics.getProfessionalCategories = function() {
         { id: 'concierge_services', name: 'Concierge Services' }
       ]
     },
-    
+
     'healthcare_services': {
       name: 'Healthcare Services',
       subcategories: [
@@ -1099,7 +1205,7 @@ tenderSchema.statics.getProfessionalCategories = function() {
         { id: 'examination_services', name: 'Examination Services' }
       ]
     },
-    
+
     'public_services': {
       name: 'Public & Government Services',
       subcategories: [
@@ -1125,7 +1231,7 @@ tenderSchema.statics.getProfessionalCategories = function() {
         { id: 'tourism_development', name: 'Tourism Development' }
       ]
     },
-    
+
     'energy_utilities': {
       name: 'Energy & Utilities',
       subcategories: [
@@ -1141,7 +1247,7 @@ tenderSchema.statics.getProfessionalCategories = function() {
         { id: 'satellite_services', name: 'Satellite Services' }
       ]
     },
-    
+
     'it_technology_services': {
       name: 'IT & Technology Services',
       subcategories: [
@@ -1157,7 +1263,7 @@ tenderSchema.statics.getProfessionalCategories = function() {
         { id: 'digital_transformation', name: 'Digital Transformation' }
       ]
     },
-    
+
     'manufacturing_services': {
       name: 'Manufacturing & Production',
       subcategories: [
@@ -1173,7 +1279,7 @@ tenderSchema.statics.getProfessionalCategories = function() {
         { id: 'distribution_services', name: 'Distribution Services' }
       ]
     },
-    
+
     'environmental_services': {
       name: 'Environmental Services',
       subcategories: [
@@ -1189,7 +1295,7 @@ tenderSchema.statics.getProfessionalCategories = function() {
         { id: 'sustainability_consulting', name: 'Sustainability Consulting' }
       ]
     },
-    
+
     'other_procurement': {
       name: 'Other Procurement',
       subcategories: [
@@ -1201,37 +1307,37 @@ tenderSchema.statics.getProfessionalCategories = function() {
 };
 
 // Get all freelance categories as flat array
-tenderSchema.statics.getAllFreelanceCategories = function() {
+tenderSchema.statics.getAllFreelanceCategories = function () {
   const groups = this.getFreelanceCategories();
   const allCategories = [];
-  
+
   Object.values(groups).forEach(group => {
     group.subcategories.forEach(subcategory => {
       allCategories.push(subcategory.id);
     });
   });
-  
+
   return allCategories;
 };
 
 // Get all professional categories as flat array
-tenderSchema.statics.getAllProfessionalCategories = function() {
+tenderSchema.statics.getAllProfessionalCategories = function () {
   const groups = this.getProfessionalCategories();
   const allCategories = [];
-  
+
   Object.values(groups).forEach(group => {
     group.subcategories.forEach(subcategory => {
       allCategories.push(subcategory.id);
     });
   });
-  
+
   return allCategories;
 };
 
 // Get category label by ID
-tenderSchema.statics.getCategoryLabel = function(categoryId, tenderType = 'freelance') {
+tenderSchema.statics.getCategoryLabel = function (categoryId, tenderType = 'freelance') {
   const groups = tenderType === 'freelance' ? this.getFreelanceCategories() : this.getProfessionalCategories();
-  
+
   for (const group of Object.values(groups)) {
     for (const subcategory of group.subcategories) {
       if (subcategory.id === categoryId) {
@@ -1239,14 +1345,14 @@ tenderSchema.statics.getCategoryLabel = function(categoryId, tenderType = 'freel
       }
     }
   }
-  
+
   return categoryId;
 };
 
 // Get group name for a category
-tenderSchema.statics.getCategoryGroup = function(categoryId, tenderType = 'freelance') {
+tenderSchema.statics.getCategoryGroup = function (categoryId, tenderType = 'freelance') {
   const groups = tenderType === 'freelance' ? this.getFreelanceCategories() : this.getProfessionalCategories();
-  
+
   for (const [groupKey, group] of Object.entries(groups)) {
     for (const subcategory of group.subcategories) {
       if (subcategory.id === categoryId) {
@@ -1254,88 +1360,80 @@ tenderSchema.statics.getCategoryGroup = function(categoryId, tenderType = 'freel
       }
     }
   }
-  
-  return null;
-};
 
-// Get categories based on tender type
-tenderSchema.statics.getCategories = function(tenderType = 'freelance') {
-  if (tenderType === 'freelance') {
-    return this.getFreelanceCategories();
-  } else {
-    return this.getProfessionalCategories();
-  }
+  return null;
 };
 
 // ============ INSTANCE METHODS ============
 
-// In your TenderModel.js, update the canUserView method:
-
-tenderSchema.methods.canUserView = async function(userId, userRole) {
+// Check if user can view tender (with invitation support)
+tenderSchema.methods.canUserView = async function (user) {
   try {
+    const userId = user?._id;
+    const userRole = user?.role;
+
     // Admin can view everything
     if (userRole === 'admin') return true;
-    
-    // Owner can always view their own tenders (FIXED)
-    if (this.owner && this.owner.toString() === userId.toString()) return true;
-    
+
+    // Owner can always view their own tenders
+    if (this.owner && this.owner.toString() === userId?.toString()) return true;
+
     // Draft tenders only visible to owner
     if (this.status === 'draft') {
-      return this.owner.toString() === userId.toString();
+      return this.owner.toString() === userId?.toString();
     }
-    
-    // IMPORTANT: Handle unauthenticated users
+
+    // Handle unauthenticated users
     if (!userId) {
       // Public users can only see published freelance tenders
-      return this.tenderCategory === 'freelance' && 
-             this.status === 'published' && 
-             this.deadline > new Date() &&
-             this.visibility.visibilityType === 'freelancers_only';
+      return this.tenderCategory === 'freelance' &&
+        this.status === 'published' &&
+        this.deadline > new Date() &&
+        this.visibility.visibilityType === 'freelancers_only';
     }
-    
+
     // Check tender category specific rules
     if (this.tenderCategory === 'freelance') {
       // Freelance tenders only visible to freelancers
       if (userRole !== 'freelancer') return false;
-      
+
       // Must be published and active
       if (this.status !== 'published' || this.deadline <= new Date()) return false;
-      
+
       return this.visibility.visibilityType === 'freelancers_only';
     }
-    
+
     if (this.tenderCategory === 'professional') {
       // Professional tenders visible to companies and organizations
       if (userRole !== 'company' && userRole !== 'organization' && userRole !== 'admin') return false;
-      
+
       // Owner can see all their professional tenders regardless of status
       if (this.owner.toString() === userId.toString()) return true;
-      
+
       // Must be published/locked and active (except for owner)
       if (this.status !== 'published' && this.status !== 'locked') {
         return false;
       }
-      
+
       // Check if deadline has passed (non-owners can't see expired tenders)
       if (this.deadline <= new Date() && this.owner.toString() !== userId.toString()) {
         return false;
       }
-      
+
       // Check visibility rules
       const visibilityType = this.visibility.visibilityType;
-      
+
       if (visibilityType === 'public' || visibilityType === 'companies_only') {
         // Public and companies-only tenders visible to companies and organizations
         return userRole === 'company' || userRole === 'organization' || userRole === 'admin';
       }
-      
+
       if (visibilityType === 'invite_only') {
         // Check if user/company is invited
-        const isInvited = await this.checkInvitationStatus(userId, userRole);
-        return isInvited;
+        return await this.checkInvitationStatus(userId, userRole);
       }
     }
-    
+
     return false;
   } catch (error) {
     console.error('Error in canUserView:', error);
@@ -1343,87 +1441,154 @@ tenderSchema.methods.canUserView = async function(userId, userRole) {
   }
 };
 
-tenderSchema.methods.canUserApply = async function(userId, userRole) {
-  // Must be published and active
-  if (this.status !== 'published' || this.deadline <= new Date()) {
+// Check if user can update tender (HARD BUSINESS RULES)
+tenderSchema.methods.canUpdate = function (user) {
+  try {
+    // Admin can update anything
+    if (user.role === 'admin') return true;
+
+    // Check ownership
+    if (this.owner.toString() !== user._id.toString()) {
+      return false;
+    }
+
+    // HARD RULE: Only draft tenders can be updated
+    if (this.status !== 'draft') {
+      return false;
+    }
+
+    // HARD RULE: Only freelance tenders can be updated
+    if (this.tenderCategory !== 'freelance') {
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error in canUpdate:', error);
     return false;
   }
-  
-  // Check if already applied
-  const hasApplied = this.proposals.some(p => 
-    p.applicant.toString() === userId.toString()
-  );
-  if (hasApplied) return false;
-  
-  if (this.tenderCategory === 'freelance') {
-    // Only freelancers can apply to freelance tenders
-    if (userRole !== 'freelancer') return false;
-    
-    return this.visibility.visibilityType === 'freelancers_only';
-  }
-  
-  if (this.tenderCategory === 'professional') {
-    // Only companies can apply to professional tenders
-    if (userRole !== 'company') return false;
-    
-    const visibilityType = this.visibility.visibilityType;
-    
-    if (visibilityType === 'public' || visibilityType === 'companies_only') {
-      return true;
-    }
-    
-    if (visibilityType === 'invite_only') {
-      return await this.checkInvitationStatus(userId, userRole);
-    }
-  }
-  
-  return false;
 };
 
-tenderSchema.methods.checkInvitationStatus = async function(userId, userRole) {
+// Check if user can delete tender (HARD BUSINESS RULES)
+tenderSchema.methods.canDelete = function (user) {
+  try {
+    // Admin can delete anything
+    if (user.role === 'admin') return true;
+
+    // Check ownership
+    if (this.owner.toString() !== user._id.toString()) {
+      return false;
+    }
+
+    // HARD RULE: Only draft tenders can be deleted
+    if (this.status !== 'draft') {
+      return false;
+    }
+
+    // HARD RULE: Only freelance tenders can be deleted
+    if (this.tenderCategory !== 'freelance') {
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error in canDelete:', error);
+    return false;
+  }
+};
+
+// Check if user can apply to tender
+tenderSchema.methods.canUserApply = async function (user) {
+  try {
+    const userId = user._id;
+    const userRole = user.role;
+
+    // Must be published and active
+    if (this.status !== 'published' || this.deadline <= new Date()) {
+      return false;
+    }
+
+    // Check if already applied
+    const hasApplied = this.proposals.some(p =>
+      p.applicant.toString() === userId.toString()
+    );
+    if (hasApplied) return false;
+
+    if (this.tenderCategory === 'freelance') {
+      // Only freelancers can apply to freelance tenders
+      if (userRole !== 'freelancer') return false;
+
+      return this.visibility.visibilityType === 'freelancers_only';
+    }
+
+    if (this.tenderCategory === 'professional') {
+      // Only companies can apply to professional tenders
+      if (userRole !== 'company') return false;
+
+      const visibilityType = this.visibility.visibilityType;
+
+      if (visibilityType === 'public' || visibilityType === 'companies_only') {
+        return true;
+      }
+
+      if (visibilityType === 'invite_only') {
+        return await this.checkInvitationStatus(userId, userRole);
+      }
+    }
+
+    return false;
+  } catch (error) {
+    console.error('Error in canUserApply:', error);
+    return false;
+  }
+};
+
+// Check invitation status for user
+tenderSchema.methods.checkInvitationStatus = async function (userId, userRole) {
   if (userRole === 'admin') return true;
-  
+
   for (const invite of this.invitations) {
     if (invite.invitationStatus !== 'accepted') continue;
-    
+
     if (invite.invitationType === 'user' && invite.invitedUser) {
       if (invite.invitedUser.toString() === userId.toString()) {
         return true;
       }
     }
-    
+
     if (invite.invitationType === 'company' && invite.invitedCompany) {
       // Check if user belongs to the invited company
       const Company = mongoose.model('Company');
       const userCompany = await Company.findOne({ user: userId });
-      
+
       if (userCompany && userCompany._id.toString() === invite.invitedCompany.toString()) {
         return true;
       }
     }
-    
+
     if (invite.invitationType === 'email') {
       const User = mongoose.model('User');
       const user = await User.findById(userId);
-      
+
       if (user && user.email === invite.email) {
         return true;
       }
     }
   }
-  
+
   return false;
 };
 
-tenderSchema.methods.lockClosedTender = async function(userId) {
+// Lock closed tender
+tenderSchema.methods.lockClosedTender = async function (userId) {
   if (this.workflowType !== 'closed') {
     throw new Error('Only closed workflow tenders can be locked');
   }
-  
+
   if (this.status !== 'published') {
     throw new Error('Only published tenders can be locked');
   }
-  
+
   // Calculate data hash for integrity
   const dataToHash = {
     title: this.title,
@@ -1432,52 +1597,53 @@ tenderSchema.methods.lockClosedTender = async function(userId) {
     tenderCategory: this.tenderCategory,
     visibility: this.visibility,
     attachments: this.attachments.map(att => ({
-      filename: att.filename,
-      fileSize: att.fileSize,
+      fileName: att.fileName,
+      size: att.size,
       fileHash: att.fileHash
     }))
   };
-  
+
   if (this.tenderCategory === 'professional') {
     dataToHash.professionalSpecific = {
       referenceNumber: this.professionalSpecific.referenceNumber,
       sealedBidConfirmation: this.professionalSpecific.sealedBidConfirmation
     };
   }
-  
+
   const dataString = JSON.stringify(dataToHash);
   const dataHash = crypto.createHash('sha256').update(dataString).digest('hex');
-  
+
   this.status = 'locked';
   this.lockedAt = new Date();
   this.metadata.dataHash = dataHash;
   this.metadata.lockedBy = userId;
-  
+
   await this.save();
-  
+
   // Add audit log
   await this.addAuditLog('LOCK_CLOSED_TENDER', userId, {
     action: 'Closed tender locked',
     dataHash: dataHash,
     reason: 'Tender published as closed workflow'
   });
-  
+
   return this;
 };
 
-tenderSchema.methods.revealProposals = async function(userId) {
+// Reveal proposals for closed tenders
+tenderSchema.methods.revealProposals = async function (userId) {
   if (this.workflowType !== 'closed') {
     throw new Error('Only closed workflow tenders can reveal proposals');
   }
-  
+
   if (this.status !== 'deadline_reached') {
     throw new Error('Cannot reveal proposals before deadline is reached');
   }
-  
+
   this.status = 'revealed';
   this.revealedAt = new Date();
   this.metadata.revealedBy = userId;
-  
+
   // Reveal all sealed proposals
   this.proposals.forEach(proposal => {
     if (proposal.sealed) {
@@ -1485,22 +1651,23 @@ tenderSchema.methods.revealProposals = async function(userId) {
       proposal.revealedAt = new Date();
     }
   });
-  
+
   this.metadata.visibleApplications = this.proposals.length;
   this.metadata.revealedProposals = this.proposals.length;
-  
+
   await this.save();
-  
+
   // Add audit log
   await this.addAuditLog('REVEAL_PROPOSALS', userId, {
     action: 'Proposals revealed',
     revealedCount: this.proposals.length
   });
-  
+
   return this;
 };
 
-tenderSchema.methods.addAuditLog = async function(action, performedBy, changes = {}, ipAddress = '', userAgent = '') {
+// Add audit log entry
+tenderSchema.methods.addAuditLog = async function (action, performedBy, changes = {}, ipAddress = '', userAgent = '') {
   this.auditLog.push({
     action,
     performedBy,
@@ -1509,22 +1676,22 @@ tenderSchema.methods.addAuditLog = async function(action, performedBy, changes =
     userAgent,
     performedAt: new Date()
   });
-  
+
   return this.save();
 };
 
 // ============ PRE-SAVE MIDDLEWARE ============
-tenderSchema.pre('save', async function(next) {
+tenderSchema.pre('save', async function (next) {
   try {
     const now = new Date();
-    
+
     // Generate tender ID if not provided
     if (!this.tenderId && this.status === 'published') {
       const currentYear = now.getFullYear();
       const prefix = this.tenderCategory === 'freelance' ? 'FT' : 'PT';
-      
+
       const lastTender = await this.constructor.findOne(
-        { 
+        {
           tenderId: new RegExp(`^${prefix}-${currentYear}-`),
           tenderCategory: this.tenderCategory
         },
@@ -1540,7 +1707,7 @@ tenderSchema.pre('save', async function(next) {
 
       this.tenderId = `${prefix}-${currentYear}-${sequenceNumber.toString().padStart(4, '0')}`;
     }
-    
+
     // Set timestamps based on status
     if (this.isModified('status')) {
       if (this.status === 'published' && !this.publishedAt) {
@@ -1555,18 +1722,18 @@ tenderSchema.pre('save', async function(next) {
         this.cancelledAt = now;
       }
     }
-    
+
     // Calculate days remaining
     if (this.deadline) {
       const diffTime = this.deadline - now;
       const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       this.metadata.daysRemaining = daysRemaining > 0 ? daysRemaining : 0;
     }
-    
+
     // Update proposal counts
     if (this.proposals) {
       this.metadata.totalApplications = this.proposals.length;
-      
+
       if (this.workflowType === 'open') {
         this.metadata.visibleApplications = this.proposals.length;
       } else if (this.workflowType === 'closed') {
@@ -1575,14 +1742,14 @@ tenderSchema.pre('save', async function(next) {
         this.metadata.visibleApplications = this.proposals.length - sealedCount;
       }
     }
-    
+
     // Update metadata if modified
     if (!this.isNew) {
       this.metadata.isUpdated = true;
       this.metadata.updateCount += 1;
       this.metadata.lastUpdatedAt = now;
     }
-    
+
     next();
   } catch (error) {
     next(error);
@@ -1590,12 +1757,12 @@ tenderSchema.pre('save', async function(next) {
 });
 
 // ============ VALIDATION MIDDLEWARE ============
-tenderSchema.pre('validate', function(next) {
+tenderSchema.pre('validate', function (next) {
   // Ensure only one specific schema is populated based on tenderCategory
   if (this.tenderCategory === 'freelance') {
     // Clear professional specific if present
     this.professionalSpecific = undefined;
-    
+
     // Validate freelance specific required fields
     if (!this.freelanceSpecific || !this.freelanceSpecific.engagementType) {
       this.invalidate('freelanceSpecific.engagementType', 'Engagement type is required for freelance tenders');
@@ -1603,7 +1770,7 @@ tenderSchema.pre('validate', function(next) {
   } else if (this.tenderCategory === 'professional') {
     // Clear freelance specific if present
     this.freelanceSpecific = undefined;
-    
+
     // Validate professional specific required fields
     if (!this.professionalSpecific || !this.professionalSpecific.referenceNumber) {
       this.invalidate('professionalSpecific.referenceNumber', 'Reference number is required for professional tenders');
@@ -1612,14 +1779,14 @@ tenderSchema.pre('validate', function(next) {
       this.invalidate('professionalSpecific.procuringEntity', 'Procuring entity is required for professional tenders');
     }
   }
-  
+
   // Set default visibility based on category
   if (this.isNew && !this.visibility) {
     this.visibility = {
       visibilityType: this.tenderCategory === 'freelance' ? 'freelancers_only' : 'public'
     };
   }
-  
+
   next();
 });
 

@@ -2,27 +2,17 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const sharp = require('sharp');
+const { uploadConfig } = require('../config/uploads');
 
-// Ensure upload directories exist
-const createUploadDirs = () => {
-  const dirs = [
-    path.join(process.cwd(), 'public', 'uploads', 'products'),
-    path.join(process.cwd(), 'public', 'uploads', 'products', 'thumbnails')
-  ];
-  
-  dirs.forEach(dir => {
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-  });
-};
+/**
+ * PRODUCT UPLOAD MIDDLEWARE
+ * For product images
+ */
 
-createUploadDirs();
-
-// Configure storage for product images
+// Configure storage using centralized config
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    const uploadPath = path.join(process.cwd(), 'public', 'uploads', 'products');
+    const uploadPath = uploadConfig.getPath('products');
     cb(null, uploadPath);
   },
   filename: function (req, file, cb) {
@@ -30,7 +20,15 @@ const storage = multer.diskStorage({
     const timestamp = Date.now();
     const randomString = Math.random().toString(36).substring(2, 15);
     const fileExtension = path.extname(file.originalname);
-    const fileName = `product_${userId}_${timestamp}_${randomString}${fileExtension}`;
+    
+    // Clean filename
+    const baseName = path.basename(file.originalname, fileExtension)
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '-')
+      .replace(/-+/g, '-')
+      .substring(0, 50);
+    
+    const fileName = `product-${userId}-${timestamp}-${randomString}${fileExtension}`;
     
     console.log(`📁 Saving product image: ${fileName}`);
     cb(null, fileName);
@@ -65,23 +63,26 @@ const upload = multer({
   fileFilter: fileFilter
 });
 
-// SIMPLE VERSION - No image processing, just return URLs
+// Process images and generate URLs
 const processImages = async (req, res, next) => {
   if (!req.files || req.files.length === 0) {
     return next();
   }
 
   try {
-    const processedFiles = req.files.map((file, index) => ({
-      url: generateImageUrl(file.filename),
-      altText: `Product Image ${index + 1}`,
-      isPrimary: index === 0,
-      order: index,
-      filename: file.filename
-    }));
+    const processedFiles = req.files.map((file, index) => {
+      const fileInfo = uploadConfig.generateFileInfo(file, 'products');
+      
+      return {
+        ...fileInfo,
+        altText: `Product Image ${index + 1}`,
+        isPrimary: index === 0,
+        order: index
+      };
+    });
 
     req.processedFiles = processedFiles;
-    console.log(`✅ Successfully processed ${processedFiles.length} images`);
+    console.log(`✅ Successfully processed ${processedFiles.length} product images`);
     next();
   } catch (error) {
     console.error('❌ Image processing error:', error);
@@ -132,31 +133,42 @@ const handleUploadErrors = (err, req, res, next) => {
   next();
 };
 
-// Utility function to generate image URLs
+// Utility function to generate image URLs using centralized config
 const generateImageUrl = (filename) => {
-  return `/uploads/products/${filename}`;
+  return uploadConfig.getUrl(filename, 'products');
 };
 
 // Utility function to delete product images
 const deleteProductImage = (filename) => {
-  try {
-    const filePath = path.join(process.cwd(), 'public', 'uploads', 'products', filename);
-    
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      console.log(`🗑️ Deleted product image: ${filename}`);
-    }
-    
-    return true;
-  } catch (error) {
-    console.error('Error deleting image:', error);
-    return false;
-  }
+  return uploadConfig.deleteFile(filename, 'products');
 };
 
 // Utility to delete multiple images
 const deleteProductImages = (filenames) => {
   filenames.forEach(filename => deleteProductImage(filename));
+};
+
+// Generate thumbnail for product images (optional)
+const generateProductThumbnail = async (filePath, width = 300, height = 300) => {
+  try {
+    const fileName = path.basename(filePath);
+    const thumbFileName = `thumb-${fileName}`;
+    const thumbPath = uploadConfig.getPath('thumbnails');
+    const fullThumbPath = path.join(thumbPath, thumbFileName);
+
+    await sharp(filePath)
+      .resize(width, height, {
+        fit: 'cover',
+        position: 'center'
+      })
+      .jpeg({ quality: 80 })
+      .toFile(fullThumbPath);
+
+    return uploadConfig.getUrl(thumbFileName, 'thumbnails');
+  } catch (error) {
+    console.error('Error generating product thumbnail:', error);
+    return null;
+  }
 };
 
 module.exports = {
@@ -165,5 +177,6 @@ module.exports = {
   handleUploadErrors,
   generateImageUrl,
   deleteProductImage,
-  deleteProductImages
+  deleteProductImages,
+  generateProductThumbnail
 };

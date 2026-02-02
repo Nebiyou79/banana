@@ -12,13 +12,14 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/Form';
-import { Loader2, Save, Plus, Trash2, Briefcase, GraduationCap, Award, Calendar } from 'lucide-react';
+import { Loader2, Save, Plus, Trash2, Briefcase, GraduationCap, Award, Calendar, HardDrive, AlertCircle } from 'lucide-react';
 import { candidateService, CV } from '@/services/candidateService';
 import { useAuth } from '@/contexts/AuthContext';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import CVUploadCard from '@/components/candidate/CVUploadCard';
 import SkillsInput from '@/components/candidate/SkillsInput';
 import { useToast } from '@/hooks/use-toast';
+import { colorClasses, ThemeMode } from '@/utils/color';
 
 interface ProfileFormData {
   skills: string[];
@@ -57,48 +58,39 @@ interface ProfileFormData {
   }>;
 }
 
-// Date helper functions
+// Format dates for input
 const formatDateForInput = (dateString: string | undefined): string => {
   if (!dateString) return '';
-
   try {
     const date = new Date(dateString);
     return date.toISOString().split('T')[0];
-  } catch (error) {
-    console.error('Error formatting date:', error);
+  } catch {
     return '';
   }
 };
 
 const formatDateForBackend = (dateString: string): string => {
   if (!dateString) return '';
-
   try {
     const date = new Date(dateString);
     return date.toISOString();
-  } catch (error) {
-    console.error('Error parsing date:', error);
+  } catch {
     return dateString;
   }
 };
 
-// Helper function to calculate age from date of birth
 const calculateAge = (dateOfBirth: string): number => {
   if (!dateOfBirth) return 0;
-
   try {
     const today = new Date();
     const birthDate = new Date(dateOfBirth);
     let age = today.getFullYear() - birthDate.getFullYear();
     const monthDiff = today.getMonth() - birthDate.getMonth();
-
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
       age--;
     }
-
     return age;
-  } catch (error) {
-    console.error('Error calculating age:', error);
+  } catch {
     return 0;
   }
 };
@@ -108,8 +100,19 @@ const CandidateProfilePage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [cvs, setCvs] = useState<CV[]>([]);
+  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
+  const [uploadProgress, setUploadProgress] = useState(0);
   const { user } = useAuth();
   const { toast } = useToast();
+
+  // Responsive design classes
+  const responsiveClasses = {
+    container: 'p-4 md:p-6 lg:p-8',
+    grid: 'grid gap-4 md:gap-6 lg:gap-8 md:grid-cols-2',
+    buttonGroup: 'flex flex-col sm:flex-row gap-3 sm:gap-4',
+    sectionGrid: 'grid grid-cols-1 lg:grid-cols-2 gap-4',
+    cardSpacing: 'space-y-4 md:space-y-6',
+  };
 
   const form = useForm<ProfileFormData>({
     defaultValues: {
@@ -126,73 +129,34 @@ const CandidateProfilePage: React.FC = () => {
     }
   });
 
-  // Date validation helper
-  const validateDate = (startDate: string, endDate: string | undefined, isCurrent: boolean, fieldName: string = '') => {
-    try {
-      const errors: string[] = [];
-      const now = new Date();
-
-      const start = startDate ? new Date(startDate) : null;
-      const end = endDate ? new Date(endDate) : null;
-
-      if (!start) {
-        errors.push(`${fieldName} start date is required`);
-        return errors;
-      }
-
-      if (start > now) {
-        errors.push(`${fieldName} start date cannot be in the future`);
-      }
-
-      if (end) {
-        if (end < start) {
-          errors.push(`${fieldName} end date must be after start date`);
-        }
-        if (end > now && !isCurrent) {
-          errors.push(`${fieldName} end date cannot be in the future for completed entries`);
-        }
-      }
-
-      return errors;
-    } catch (error) {
-      console.error('Date validation error:', error);
-      return ['Invalid date format'];
-    }
-  };
-
-  // Age validation helper
-  const validateAge = (dateOfBirth: string): string[] => {
-    const errors: string[] = [];
-
-    if (!dateOfBirth) {
-      return errors; // Date of birth is optional
-    }
-
-    try {
-      const dob = new Date(dateOfBirth);
-      const today = new Date();
-      const minDate = new Date(today.getFullYear() - 100, today.getMonth(), today.getDate());
-      const maxDate = new Date(today.getFullYear() - 16, today.getMonth(), today.getDate());
-
-      if (dob > maxDate) {
-        errors.push('You must be at least 16 years old');
-      }
-      if (dob < minDate) {
-        errors.push('Please enter a valid date of birth');
-      }
-    } catch (error) {
-      errors.push('Invalid date of birth format');
-    }
-
-    return errors;
-  };
-
+  // ✅ UPDATED: Load profile data with local storage CVs
   useEffect(() => {
     const loadProfile = async () => {
+      if (!user) return;
+
       try {
         setIsLoading(true);
+
+        // Load profile data
         const profile = await candidateService.getProfile();
-        setCvs(profile.cvs || []);
+
+        // Load CVs separately using the new endpoint
+        try {
+          const cvResponse = await candidateService.getAllCVs();
+          if (cvResponse.cvs && cvResponse.cvs.length > 0) {
+            setCvs(cvResponse.cvs);
+            console.log('Loaded CVs from local storage:', cvResponse.cvs.length, 'CVs');
+          } else {
+            // Fallback to profile CVs
+            setCvs(profile.cvs || []);
+            console.log('Using profile CVs:', profile.cvs?.length || 0, 'CVs');
+          }
+        } catch (cvError) {
+          console.warn('Could not fetch CVs separately, using profile CVs:', cvError);
+          setCvs(profile.cvs || []);
+        }
+
+        // Set form data
         const formData: ProfileFormData = {
           skills: profile.skills || [],
           bio: profile.bio || '',
@@ -217,54 +181,209 @@ const CandidateProfilePage: React.FC = () => {
             expiryDate: formatDateForInput(cert.expiryDate)
           }))
         };
+
         form.reset(formData);
+
+        console.log('Profile loaded successfully with local storage CVs');
       } catch (error: any) {
         console.error('Failed to load profile:', error);
-        // Error is already handled by the service
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to load profile data',
+          variant: 'destructive',
+        });
       } finally {
         setIsLoading(false);
       }
     };
 
-    if (user) {
-      loadProfile();
-    }
-  }, [form, user]);
+    loadProfile();
+  }, [form, user, toast]);
 
+  // Check theme on mount
+  useEffect(() => {
+    const checkTheme = () => {
+      if (typeof window !== 'undefined') {
+        const isDark = document.documentElement.classList.contains('dark');
+        setThemeMode(isDark ? 'dark' : 'light');
+      }
+    };
+
+    checkTheme();
+
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  // ✅ UPDATED: Handle CV upload with local storage - with progress tracking
+  const handleCVUpload = async (files: File[]) => {
+    if (!user) return;
+
+    try {
+      setIsUploading(true);
+      setUploadProgress(10); // Start progress
+      console.log('Starting local storage upload of', files.length, 'files');
+
+      // Validate files using service
+      const validation = candidateService.validateCVFiles(files);
+      if (!validation.valid) {
+        toast({
+          title: 'Validation Error',
+          description: validation.errors.slice(0, 2).join(', '),
+          variant: 'destructive',
+        });
+        setIsUploading(false);
+        return;
+      }
+
+      // Simulate progress for better UX
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return prev;
+          }
+          return prev + 10;
+        });
+      }, 500);
+
+      // Upload files using service (note: single file at a time with local storage)
+      for (const file of files) {
+        try {
+          await candidateService.uploadSingleCV(file);
+        } catch (error) {
+          console.error('Failed to upload file:', file.name, error);
+          toast({
+            title: 'Upload Error',
+            description: `Failed to upload ${file.name}`,
+            variant: 'destructive',
+          });
+        }
+      }
+
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+
+      // Refresh CV list
+      try {
+        const cvResponse = await candidateService.getAllCVs();
+        if (cvResponse.cvs && cvResponse.cvs.length > 0) {
+          setCvs(cvResponse.cvs);
+        }
+      } catch (refreshError) {
+        console.warn('Could not refresh CV list:', refreshError);
+      }
+
+      toast({
+        title: 'Upload Successful',
+        description: `Successfully uploaded ${files.length} CV(s) to local storage`,
+        variant: 'default',
+      });
+
+      // Reset progress after delay
+      setTimeout(() => setUploadProgress(0), 1000);
+
+    } catch (error: any) {
+      console.error('Failed to upload CVs:', error);
+      setUploadProgress(0);
+      toast({
+        title: 'Upload Failed',
+        description: error.message || 'Failed to upload CVs',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // ✅ UPDATED: Set primary CV
+  const handleSetPrimaryCV = async (cvId: string) => {
+    try {
+      await candidateService.setPrimaryCV(cvId);
+
+      // Update local state
+      setCvs(prev => prev.map(cv => ({
+        ...cv,
+        isPrimary: cv._id === cvId
+      })));
+
+      const cvName = cvs.find(cv => cv._id === cvId)?.originalName || 'CV';
+      toast({
+        title: 'Primary CV Updated',
+        description: `${cvName} is now your primary CV`,
+        variant: 'default',
+      });
+    } catch (error: any) {
+      console.error('Failed to set primary CV:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to set primary CV',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // ✅ UPDATED: Handle CV deletion with local storage
+  const handleDeleteCV = async (cvId: string) => {
+    try {
+      const result = await candidateService.deleteCV(cvId);
+
+      // Update local state
+      setCvs(prev => prev.filter(cv => cv._id !== cvId));
+
+      toast({
+        title: 'CV Deleted',
+        description: `CV has been deleted from local storage. ${result.remainingCVs} CV(s) remaining.`,
+        variant: 'default',
+      });
+    } catch (error: any) {
+      console.error('Failed to delete CV:', error);
+      toast({
+        title: 'Delete Error',
+        description: error.message || 'Failed to delete CV',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Form submission
   const onSubmit = async (values: ProfileFormData) => {
+    if (!user) return;
+
     try {
       setIsSaving(true);
 
-      // Client-side validation for required fields
-      const validationErrors: string[] = [];
+      // Validate required fields
+      const errors: string[] = [];
 
-      // Age validation
-      const ageErrors = validateAge(values.dateOfBirth || '');
-      validationErrors.push(...ageErrors);
-
-      // Validate education required fields
+      // Validate education
       values.education.forEach((edu, index) => {
         if (!edu.institution?.trim() || !edu.degree?.trim() || !edu.startDate) {
-          validationErrors.push(`Education #${index + 1}: Institution, Degree, and Start Date are required`);
+          errors.push(`Education #${index + 1}: Institution, Degree, and Start Date are required`);
         }
       });
 
-      // Validate experience required fields
+      // Validate experience
       values.experience.forEach((exp, index) => {
         if (!exp.company?.trim() || !exp.position?.trim() || !exp.startDate) {
-          validationErrors.push(`Experience #${index + 1}: Company, Position, and Start Date are required`);
+          errors.push(`Experience #${index + 1}: Company, Position, and Start Date are required`);
         }
       });
 
-      // Validate certification required fields
+      // Validate certifications
       values.certifications.forEach((cert, index) => {
         if (!cert.name?.trim() || !cert.issuer?.trim() || !cert.issueDate) {
-          validationErrors.push(`Certification #${index + 1}: Name, Issuer, and Issue Date are required`);
+          errors.push(`Certification #${index + 1}: Name, Issuer, and Issue Date are required`);
         }
       });
 
-      if (validationErrors.length > 0) {
-        validationErrors.forEach(error => {
+      if (errors.length > 0) {
+        errors.forEach(error => {
           toast({
             title: 'Validation Error',
             description: error,
@@ -297,192 +416,85 @@ const CandidateProfilePage: React.FC = () => {
 
       await candidateService.updateProfile(submitData);
       // Success toast is handled by the service
+
     } catch (error: any) {
       console.error('Failed to update profile:', error);
-      // Error is already handled by the service
+      toast({
+        title: 'Update Error',
+        description: error.message || 'Failed to update profile',
+        variant: 'destructive',
+      });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleCVUpload = async (files: File[]) => {
-    try {
-      setIsUploading(true);
-      const uploadedCVs = await candidateService.uploadCVs(files);
-      setCvs(prev => [...prev, ...uploadedCVs]);
-      // Success toast is handled by the service
-    } catch (error: any) {
-      console.error('Failed to upload CVs:', error);
-      // Error is already handled by the service
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleSetPrimaryCV = async (cvId: string) => {
-    try {
-      await candidateService.setPrimaryCV(cvId);
-      setCvs(prev => prev.map(cv => ({
-        ...cv,
-        isPrimary: cv._id === cvId
-      })));
-      // Success toast is handled by the service
-    } catch (error: any) {
-      console.error('Failed to set primary CV:', error);
-      // Error is already handled by the service
-    }
-  };
-
-  const handleDeleteCV = async (cvId: string) => {
-    try {
-      await candidateService.deleteCV(cvId);
-      setCvs(prev => prev.filter(cv => cv._id !== cvId));
-      // Success toast is handled by the service
-    } catch (error: any) {
-      console.error('Failed to delete CV:', error);
-      // Error is already handled by the service
-    }
-  };
-
-  const handleDownloadCV = (cv: CV) => {
-    try {
-      const downloadUrl = candidateService.getCVDownloadUrl(cv);
-      window.open(downloadUrl, '_blank');
-    } catch (error) {
-      console.error('Download CV error:', error);
-      toast({
-        title: 'Download Error',
-        description: 'Failed to download CV',
-        variant: 'destructive',
-      });
-    }
-  };
-
+  // Helper functions for adding/removing entries
   const addEducation = () => {
-    try {
-      const currentEducation = form.getValues('education') || [];
-      const today = new Date().toISOString().split('T')[0];
-
-      form.setValue('education', [
-        ...currentEducation,
-        {
-          institution: '',
-          degree: '',
-          field: '',
-          startDate: today,
-          current: false
-        }
-      ]);
-    } catch (error) {
-      console.error('Add education error:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to add education entry',
-        variant: 'destructive',
-      });
-    }
+    const currentEducation = form.getValues('education') || [];
+    form.setValue('education', [
+      ...currentEducation,
+      {
+        institution: '',
+        degree: '',
+        field: '',
+        startDate: new Date().toISOString().split('T')[0],
+        current: false
+      }
+    ]);
   };
 
   const removeEducation = (index: number) => {
-    try {
-      const currentEducation = form.getValues('education') || [];
-      form.setValue('education', currentEducation.filter((_, i) => i !== index));
-    } catch (error) {
-      console.error('Remove education error:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to remove education entry',
-        variant: 'destructive',
-      });
-    }
+    const currentEducation = form.getValues('education') || [];
+    form.setValue('education', currentEducation.filter((_, i) => i !== index));
   };
 
   const addExperience = () => {
-    try {
-      const currentExperience = form.getValues('experience') || [];
-      const today = new Date().toISOString().split('T')[0];
-
-      form.setValue('experience', [
-        ...currentExperience,
-        {
-          company: '',
-          position: '',
-          startDate: today,
-          current: false,
-          skills: []
-        }
-      ]);
-    } catch (error) {
-      console.error('Add experience error:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to add experience entry',
-        variant: 'destructive',
-      });
-    }
+    const currentExperience = form.getValues('experience') || [];
+    form.setValue('experience', [
+      ...currentExperience,
+      {
+        company: '',
+        position: '',
+        startDate: new Date().toISOString().split('T')[0],
+        current: false,
+        skills: []
+      }
+    ]);
   };
 
   const removeExperience = (index: number) => {
-    try {
-      const currentExperience = form.getValues('experience') || [];
-      form.setValue('experience', currentExperience.filter((_, i) => i !== index));
-    } catch (error) {
-      console.error('Remove experience error:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to remove experience entry',
-        variant: 'destructive',
-      });
-    }
+    const currentExperience = form.getValues('experience') || [];
+    form.setValue('experience', currentExperience.filter((_, i) => i !== index));
   };
 
   const addCertification = () => {
-    try {
-      const currentCertifications = form.getValues('certifications') || [];
-      const today = new Date().toISOString().split('T')[0];
-
-      form.setValue('certifications', [
-        ...currentCertifications,
-        {
-          name: '',
-          issuer: '',
-          issueDate: today,
-          expiryDate: '',
-          credentialId: '',
-          credentialUrl: '',
-          description: ''
-        }
-      ]);
-    } catch (error) {
-      console.error('Add certification error:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to add certification entry',
-        variant: 'destructive',
-      });
-    }
+    const currentCertifications = form.getValues('certifications') || [];
+    form.setValue('certifications', [
+      ...currentCertifications,
+      {
+        name: '',
+        issuer: '',
+        issueDate: new Date().toISOString().split('T')[0],
+        expiryDate: '',
+        credentialId: '',
+        credentialUrl: '',
+        description: ''
+      }
+    ]);
   };
 
   const removeCertification = (index: number) => {
-    try {
-      const currentCertifications = form.getValues('certifications') || [];
-      form.setValue('certifications', currentCertifications.filter((_, i) => i !== index));
-    } catch (error) {
-      console.error('Remove certification error:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to remove certification entry',
-        variant: 'destructive',
-      });
-    }
+    const currentCertifications = form.getValues('certifications') || [];
+    form.setValue('certifications', currentCertifications.filter((_, i) => i !== index));
   };
 
   if (isLoading) {
     return (
       <DashboardLayout requiredRole="candidate">
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="ml-2 text-muted-foreground">Loading profile...</span>
+        <div className="flex flex-col items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+          <span className="text-muted-foreground">Loading profile with local storage CVs...</span>
         </div>
       </DashboardLayout>
     );
@@ -496,81 +508,99 @@ const CandidateProfilePage: React.FC = () => {
 
   return (
     <DashboardLayout requiredRole="candidate">
-      <div className="space-y-6 p-4 md:p-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Profile Management</h1>
-          <p className="text-muted-foreground">Update your candidate profile and CV</p>
+      <div className={`${responsiveClasses.container} ${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} min-h-screen`}>
+        <div className="space-y-2 mb-6 md:mb-8">
+          <h1 className={`text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}>
+            Profile Management
+          </h1>
+          <p className={`text-sm md:text-base lg:text-lg ${colorClasses.text[themeMode === 'dark' ? 'gray100' : 'gray800']}`}>
+            Update your candidate profile and manage your CVs stored in local storage
+          </p>
+          <div className="flex items-center space-x-2 text-sm text-gray-500">
+            <HardDrive className="h-4 w-4" />
+            <span>All CVs are securely stored on our local server</span>
+          </div>
+        </div>
+
+        {/* Local Storage Status Banner */}
+        <div className={`mb-6 p-4 rounded-lg ${colorClasses.bg[themeMode === 'dark' ? 'blue' : 'blue']} bg-opacity-10 border border-blue-200 dark:border-blue-800`}>
+          <div className="flex items-center space-x-3">
+            <HardDrive className="h-6 w-6 text-blue-600" />
+            <div>
+              <p className={`font-medium ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}>
+                Local Storage Active
+              </p>
+              <p className={`text-sm ${colorClasses.text[themeMode === 'dark' ? 'gray100' : 'gray800']}`}>
+                Your CVs are stored on our secure server with direct file access. {cvs.length} CV(s) currently stored.
+              </p>
+            </div>
+          </div>
         </div>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* Basic Information */}
-              <Card className="border-border bg-card shadow-sm">
+            {/* Basic Information & CV Upload Section */}
+            <div className={responsiveClasses.grid}>
+              {/* Basic Information Card */}
+              <Card className={`${colorClasses.bg[themeMode === 'dark' ? 'gray800' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} shadow-sm`}>
                 <CardHeader>
-                  <CardTitle className="text-foreground">Basic Information</CardTitle>
-                  <CardDescription className="text-muted-foreground">Your personal details</CardDescription>
+                  <CardTitle className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                    Basic Information
+                  </CardTitle>
+                  <CardDescription className={colorClasses.text[themeMode === 'dark' ? 'gray100' : 'gray800']}>
+                    Your personal details
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Date of Birth Field */}
+                <CardContent className={responsiveClasses.cardSpacing}>
+                  {/* Date of Birth */}
                   <FormField
                     control={form.control}
                     name="dateOfBirth"
-                    render={({ field }) => {
-                      const ageErrors = validateAge(field.value || '');
-
-                      return (
-                        <FormItem>
-                          <FormLabel className="text-foreground">Date of Birth</FormLabel>
-                          <FormControl>
-                            <div className="space-y-2">
-                              <Input
-                                type="date"
-                                {...field}
-                                value={field.value || ''}
-                                max={new Date().toISOString().split('T')[0]}
-                                onChange={(e) => {
-                                  field.onChange(e.target.value);
-                                }}
-                                className="bg-background border-input"
-                              />
-                              {age && (
-                                <div className="text-sm text-muted-foreground flex items-center">
-                                  <Calendar className="h-4 w-4 mr-2" />
-                                  Age: {age} years old
-                                </div>
-                              )}
-                            </div>
-                          </FormControl>
-                          {ageErrors.length > 0 && (
-                            <div className="text-sm text-destructive">
-                              {ageErrors.map((error, index) => (
-                                <p key={index}>{error}</p>
-                              ))}
-                            </div>
-                          )}
-                          <FormMessage />
-                        </FormItem>
-                      );
-                    }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                          Date of Birth
+                        </FormLabel>
+                        <FormControl>
+                          <div className="space-y-2">
+                            <Input
+                              type="date"
+                              {...field}
+                              value={field.value || ''}
+                              max={new Date().toISOString().split('T')[0]}
+                              className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
+                            />
+                            {age !== null && (
+                              <div className={`text-sm flex items-center ${colorClasses.text[themeMode === 'dark' ? 'gray100' : 'gray800']}`}>
+                                <Calendar className="h-4 w-4 mr-2" />
+                                Age: {age} years old
+                              </div>
+                            )}
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
 
-                  {/* Gender Field */}
+                  {/* Gender */}
                   <FormField
                     control={form.control}
                     name="gender"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-foreground">Gender</FormLabel>
+                        <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                          Gender
+                        </FormLabel>
                         <FormControl>
                           <select
                             {...field}
-                            className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
+                            className={`w-full px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-ring ${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
                           >
+                            <option value="prefer-not-to-say">Prefer not to say</option>
                             <option value="male">Male</option>
                             <option value="female">Female</option>
                             <option value="other">Other</option>
-                            <option value="prefer-not-to-say">Prefer not to say</option>
                           </select>
                         </FormControl>
                         <FormMessage />
@@ -578,19 +608,22 @@ const CandidateProfilePage: React.FC = () => {
                     )}
                   />
 
+                  {/* Bio */}
                   <FormField
                     control={form.control}
                     name="bio"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-foreground">Bio</FormLabel>
+                        <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                          Bio
+                        </FormLabel>
                         <FormControl>
                           <Textarea
                             placeholder="Tell us about yourself, your career goals, and what makes you unique..."
                             rows={4}
                             {...field}
                             value={field.value || ''}
-                            className="bg-background border-input resize-none text-foreground placeholder:text-muted-foreground"
+                            className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']} resize-none`}
                             maxLength={1000}
                           />
                         </FormControl>
@@ -599,19 +632,21 @@ const CandidateProfilePage: React.FC = () => {
                     )}
                   />
 
+                  {/* Location */}
                   <FormField
                     control={form.control}
                     name="location"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-foreground">Location</FormLabel>
+                        <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                          Location
+                        </FormLabel>
                         <FormControl>
                           <Input
                             placeholder="e.g., Addis Ababa, Ethiopia"
                             {...field}
                             value={field.value || ''}
-                            maxLength={100}
-                            className="bg-background border-input text-foreground placeholder:text-muted-foreground"
+                            className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
                           />
                         </FormControl>
                         <FormMessage />
@@ -619,19 +654,21 @@ const CandidateProfilePage: React.FC = () => {
                     )}
                   />
 
+                  {/* Phone */}
                   <FormField
                     control={form.control}
                     name="phone"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-foreground">Phone</FormLabel>
+                        <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                          Phone
+                        </FormLabel>
                         <FormControl>
                           <Input
                             placeholder="+251 91 234 5678"
                             {...field}
                             value={field.value || ''}
-                            maxLength={20}
-                            className="bg-background border-input text-foreground placeholder:text-muted-foreground"
+                            className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
                           />
                         </FormControl>
                         <FormMessage />
@@ -639,19 +676,21 @@ const CandidateProfilePage: React.FC = () => {
                     )}
                   />
 
+                  {/* Website */}
                   <FormField
                     control={form.control}
                     name="website"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-foreground">Website/Portfolio</FormLabel>
+                        <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                          Website/Portfolio
+                        </FormLabel>
                         <FormControl>
                           <Input
                             placeholder="https://yourportfolio.com"
                             {...field}
                             value={field.value || ''}
-                            maxLength={200}
-                            className="bg-background border-input text-foreground placeholder:text-muted-foreground"
+                            className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
                           />
                         </FormControl>
                         <FormMessage />
@@ -661,22 +700,29 @@ const CandidateProfilePage: React.FC = () => {
                 </CardContent>
               </Card>
 
-              {/* CV Upload - Updated to use theme-aware colors */}
+              {/* ✅ UPDATED: CV Upload Card - uses local storage */}
               <CVUploadCard
                 cvs={cvs}
                 onUpload={handleCVUpload}
                 onSetPrimary={handleSetPrimaryCV}
                 onDelete={handleDeleteCV}
-                onDownload={handleDownloadCV}
                 isUploading={isUploading}
+                uploadProgress={uploadProgress}
+                maxFiles={10}
+                maxSizeMB={100}
+                themeMode={themeMode}
               />
             </div>
 
             {/* Skills Section */}
-            <Card className="border-border bg-card shadow-sm">
+            <Card className={`${colorClasses.bg[themeMode === 'dark' ? 'gray800' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} shadow-sm`}>
               <CardHeader>
-                <CardTitle className="text-foreground">Skills</CardTitle>
-                <CardDescription className="text-muted-foreground">Your technical and professional skills</CardDescription>
+                <CardTitle className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                  Skills
+                </CardTitle>
+                <CardDescription className={colorClasses.text[themeMode === 'dark' ? 'gray100' : 'gray800']}>
+                  Your technical and professional skills
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <SkillsInput
@@ -684,207 +730,152 @@ const CandidateProfilePage: React.FC = () => {
                   name="skills"
                   label="Skills"
                   placeholder="Add a skill and press Enter or click +"
+                  themeMode={themeMode}
                 />
               </CardContent>
             </Card>
 
             {/* Education Section */}
-            <Card className="border-border bg-card shadow-sm">
+            <Card className={`${colorClasses.bg[themeMode === 'dark' ? 'gray800' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} shadow-sm`}>
               <CardHeader>
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
-                    <CardTitle className="text-foreground">Education</CardTitle>
-                    <CardDescription className="text-muted-foreground">Your educational background</CardDescription>
+                    <CardTitle className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                      Education
+                    </CardTitle>
+                    <CardDescription className={colorClasses.text[themeMode === 'dark' ? 'gray100' : 'gray800']}>
+                      Your educational background
+                    </CardDescription>
                   </div>
                   <button
                     type="button"
                     onClick={addEducation}
-                    className="flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium transition-all hover:bg-primary/90 hover:shadow-md"
+                    className={`flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-all ${colorClasses.bg.gold} ${colorClasses.text[themeMode === 'dark' ? 'darkNavy' : 'darkNavy']} hover:opacity-90 hover:shadow-md`}
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Add Education
                   </button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {education.map((edu, index) => {
-                  const dateErrors = validateDate(edu.startDate, edu.endDate, edu.current, 'Education');
-
-                  return (
-                    <div key={`education-${index}-${edu.institution}`} className="border border-border rounded-lg p-4 space-y-4 bg-card/50">
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center space-x-2">
-                          <GraduationCap className="h-5 w-5 text-primary" />
-                          <h4 className="font-medium text-foreground">Education #{index + 1}</h4>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeEducation(index)}
-                          className="p-2 text-muted-foreground hover:text-destructive transition-colors"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+              <CardContent className={responsiveClasses.cardSpacing}>
+                {education.map((edu, index) => (
+                  <div
+                    key={`education-${index}`}
+                    className={`border rounded-lg p-4 space-y-4 ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'gray100']}`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center space-x-2">
+                        <GraduationCap className="h-5 w-5 text-primary" />
+                        <h4 className={`font-medium ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}>
+                          Education #{index + 1}
+                        </h4>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => removeEducation(index)}
+                        className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
 
-                      {/* Date validation errors */}
-                      {dateErrors.length > 0 && (
-                        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-                          {dateErrors.map((error, errorIndex) => (
-                            <p key={`education-error-${index}-${errorIndex}`} className="text-sm text-destructive flex items-center">
-                              <span className="w-2 h-2 bg-destructive rounded-full mr-2"></span>
-                              {error}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormField
-                          control={form.control}
-                          name={`education.${index}.institution`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">Institution *</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="University of Example"
-                                  {...field}
-                                  value={field.value || ''}
-                                  className="bg-background border-input text-foreground"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`education.${index}.degree`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">Degree *</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="Bachelor of Science"
-                                  {...field}
-                                  value={field.value || ''}
-                                  className="bg-background border-input text-foreground"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`education.${index}.field`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">Field of Study</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="Computer Science"
-                                  {...field}
-                                  value={field.value || ''}
-                                  className="bg-background border-input text-foreground"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`education.${index}.startDate`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">Start Date *</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="date"
-                                  {...field}
-                                  value={field.value || ''}
-                                  max={new Date().toISOString().split('T')[0]}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value);
-                                  }}
-                                  className="bg-background border-input"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`education.${index}.endDate`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">End Date</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="date"
-                                  {...field}
-                                  value={field.value || ''}
-                                  disabled={form.watch(`education.${index}.current`)}
-                                  max={new Date().toISOString().split('T')[0]}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value);
-                                  }}
-                                  className="bg-background border-input disabled:opacity-50"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`education.${index}.current`}
-                          render={({ field }) => (
-                            <FormItem className="flex items-center space-x-2">
-                              <FormControl>
-                                <input
-                                  type="checkbox"
-                                  checked={field.value || false}
-                                  onChange={(e) => {
-                                    const isChecked = e.target.checked;
-                                    field.onChange(isChecked);
-
-                                    // Clear end date when "current" is checked
-                                    if (isChecked) {
-                                      form.setValue(`education.${index}.endDate`, '');
-                                    }
-                                  }}
-                                  className="rounded border-input focus:ring-ring"
-                                />
-                              </FormControl>
-                              <FormLabel className="!mt-0 cursor-pointer text-foreground">Currently studying here</FormLabel>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
+                    <div className={responsiveClasses.sectionGrid}>
+                      <FormField
+                        control={form.control}
+                        name={`education.${index}.institution`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                              Institution *
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="University of Example"
+                                {...field}
+                                className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
                       <FormField
                         control={form.control}
-                        name={`education.${index}.description`}
+                        name={`education.${index}.degree`}
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-foreground">Description</FormLabel>
+                            <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                              Degree *
+                            </FormLabel>
                             <FormControl>
-                              <Textarea
-                                placeholder="Describe your studies, achievements, courses, etc."
-                                rows={3}
+                              <Input
+                                placeholder="Bachelor of Science"
                                 {...field}
-                                value={field.value || ''}
-                                className="bg-background border-input text-foreground resize-none"
-                                maxLength={500}
+                                className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`education.${index}.field`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                              Field of Study
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="Computer Science"
+                                {...field}
+                                className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`education.${index}.startDate`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                              Start Date *
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="date"
+                                {...field}
+                                max={new Date().toISOString().split('T')[0]}
+                                className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`education.${index}.endDate`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                              End Date
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="date"
+                                {...field}
+                                disabled={form.watch(`education.${index}.current`)}
+                                max={new Date().toISOString().split('T')[0]}
+                                className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']} disabled:opacity-50`}
                               />
                             </FormControl>
                             <FormMessage />
@@ -892,197 +883,123 @@ const CandidateProfilePage: React.FC = () => {
                         )}
                       />
                     </div>
-                  );
-                })}
+
+                    <FormField
+                      control={form.control}
+                      name={`education.${index}.current`}
+                      render={({ field }) => (
+                        <FormItem className="flex items-center space-x-2">
+                          <FormControl>
+                            <input
+                              type="checkbox"
+                              checked={field.value}
+                              onChange={field.onChange}
+                              className="rounded border-gray-300 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                            />
+                          </FormControl>
+                          <FormLabel className={`!mt-0 cursor-pointer ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}>
+                            Currently studying here
+                          </FormLabel>
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name={`education.${index}.description`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                            Description
+                          </FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Describe your studies, achievements, courses, etc."
+                              rows={3}
+                              {...field}
+                              className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']} resize-none`}
+                              maxLength={500}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                ))}
 
                 {education.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground border-2 border-dashed border-border rounded-lg">
-                    <GraduationCap className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                    <p className="mt-2">No education entries yet</p>
-                    <p className="text-sm">Add your educational background to complete your profile</p>
+                  <div className={`text-center py-8 border-2 border-dashed rounded-lg ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']}`}>
+                    <GraduationCap className="mx-auto h-12 w-12 text-gray-400" />
+                    <p className={`mt-2 ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}>
+                      No education entries yet
+                    </p>
+                    <p className={`text-sm ${colorClasses.text[themeMode === 'dark' ? 'gray100' : 'gray800']}`}>
+                      Add your educational background to complete your profile
+                    </p>
                   </div>
                 )}
               </CardContent>
             </Card>
 
             {/* Experience Section */}
-            <Card className="border-border bg-card shadow-sm">
+            <Card className={`${colorClasses.bg[themeMode === 'dark' ? 'gray800' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} shadow-sm`}>
               <CardHeader>
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
-                    <CardTitle className="text-foreground">Experience</CardTitle>
-                    <CardDescription className="text-muted-foreground">Your work experience</CardDescription>
+                    <CardTitle className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                      Experience
+                    </CardTitle>
+                    <CardDescription className={colorClasses.text[themeMode === 'dark' ? 'gray100' : 'gray800']}>
+                      Your work experience
+                    </CardDescription>
                   </div>
                   <button
                     type="button"
                     onClick={addExperience}
-                    className="flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium transition-all hover:bg-primary/90 hover:shadow-md"
+                    className={`flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-all ${colorClasses.bg.gold} ${colorClasses.text[themeMode === 'dark' ? 'darkNavy' : 'darkNavy']} hover:opacity-90 hover:shadow-md`}
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Add Experience
                   </button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {experience.map((exp, index) => {
-                  const dateErrors = validateDate(exp.startDate, exp.endDate, exp.current, 'Experience');
-
-                  return (
-                    <div key={`experience-${index}-${exp.company}`} className="border border-border rounded-lg p-4 space-y-4 bg-card/50">
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center space-x-2">
-                          <Briefcase className="h-5 w-5 text-primary" />
-                          <h4 className="font-medium text-foreground">Experience #{index + 1}</h4>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeExperience(index)}
-                          className="p-2 text-muted-foreground hover:text-destructive transition-colors"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+              <CardContent className={responsiveClasses.cardSpacing}>
+                {experience.map((exp, index) => (
+                  <div
+                    key={`experience-${index}`}
+                    className={`border rounded-lg p-4 space-y-4 ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'gray100']}`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center space-x-2">
+                        <Briefcase className="h-5 w-5 text-primary" />
+                        <h4 className={`font-medium ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}>
+                          Experience #{index + 1}
+                        </h4>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => removeExperience(index)}
+                        className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
 
-                      {/* Date validation errors */}
-                      {dateErrors.length > 0 && (
-                        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-                          {dateErrors.map((error, errorIndex) => (
-                            <p key={`experience-error-${index}-${errorIndex}`} className="text-sm text-destructive flex items-center">
-                              <span className="w-2 h-2 bg-destructive rounded-full mr-2"></span>
-                              {error}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormField
-                          control={form.control}
-                          name={`experience.${index}.company`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">Company *</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="Company Name"
-                                  {...field}
-                                  value={field.value || ''}
-                                  className="bg-background border-input text-foreground"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`experience.${index}.position`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">Position *</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="Job Title"
-                                  {...field}
-                                  value={field.value || ''}
-                                  className="bg-background border-input text-foreground"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`experience.${index}.startDate`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">Start Date *</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="date"
-                                  {...field}
-                                  value={field.value || ''}
-                                  max={new Date().toISOString().split('T')[0]}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value);
-                                  }}
-                                  className="bg-background border-input"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`experience.${index}.endDate`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">End Date</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="date"
-                                  {...field}
-                                  value={field.value || ''}
-                                  disabled={form.watch(`experience.${index}.current`)}
-                                  max={new Date().toISOString().split('T')[0]}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value);
-                                  }}
-                                  className="bg-background border-input disabled:opacity-50"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`experience.${index}.current`}
-                          render={({ field }) => (
-                            <FormItem className="flex items-center space-x-2">
-                              <FormControl>
-                                <input
-                                  type="checkbox"
-                                  checked={field.value || false}
-                                  onChange={(e) => {
-                                    const isChecked = e.target.checked;
-                                    field.onChange(isChecked);
-
-                                    // Clear end date when "current" is checked
-                                    if (isChecked) {
-                                      form.setValue(`experience.${index}.endDate`, '');
-                                    }
-                                  }}
-                                  className="rounded border-input focus:ring-ring"
-                                />
-                              </FormControl>
-                              <FormLabel className="!mt-0 cursor-pointer text-foreground">Current position</FormLabel>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
+                    <div className={responsiveClasses.sectionGrid}>
                       <FormField
                         control={form.control}
-                        name={`experience.${index}.description`}
+                        name={`experience.${index}.company`}
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-foreground">Description</FormLabel>
+                            <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                              Company *
+                            </FormLabel>
                             <FormControl>
-                              <Textarea
-                                placeholder="Describe your responsibilities, achievements, and key contributions..."
-                                rows={3}
+                              <Input
+                                placeholder="Company Name"
                                 {...field}
-                                value={field.value || ''}
-                                className="bg-background border-input text-foreground resize-none"
-                                maxLength={500}
+                                className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
                               />
                             </FormControl>
                             <FormMessage />
@@ -1090,213 +1007,296 @@ const CandidateProfilePage: React.FC = () => {
                         )}
                       />
 
-                      <SkillsInput
+                      <FormField
                         control={form.control}
-                        name={`experience.${index}.skills`}
-                        label="Skills used in this role"
-                        placeholder="Add skills used in this position"
+                        name={`experience.${index}.position`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                              Position *
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="Job Title"
+                                {...field}
+                                className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`experience.${index}.startDate`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                              Start Date *
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="date"
+                                {...field}
+                                max={new Date().toISOString().split('T')[0]}
+                                className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`experience.${index}.endDate`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                              End Date
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="date"
+                                {...field}
+                                disabled={form.watch(`experience.${index}.current`)}
+                                max={new Date().toISOString().split('T')[0]}
+                                className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']} disabled:opacity-50`}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`experience.${index}.current`}
+                        render={({ field }) => (
+                          <FormItem className="flex items-center space-x-2">
+                            <FormControl>
+                              <input
+                                type="checkbox"
+                                checked={field.value}
+                                onChange={field.onChange}
+                                className="rounded border-gray-300 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                              />
+                            </FormControl>
+                            <FormLabel className={`!mt-0 cursor-pointer ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}>
+                              Current position
+                            </FormLabel>
+                          </FormItem>
+                        )}
                       />
                     </div>
-                  );
-                })}
+
+                    <FormField
+                      control={form.control}
+                      name={`experience.${index}.description`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                            Description
+                          </FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Describe your responsibilities, achievements, and key contributions..."
+                              rows={3}
+                              {...field}
+                              className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']} resize-none`}
+                              maxLength={500}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <SkillsInput
+                      control={form.control}
+                      name={`experience.${index}.skills`}
+                      label="Skills used in this role"
+                      placeholder="Add skills used in this position"
+                      themeMode={themeMode}
+                    />
+                  </div>
+                ))}
 
                 {experience.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground border-2 border-dashed border-border rounded-lg">
-                    <Briefcase className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                    <p className="mt-2">No experience entries yet</p>
-                    <p className="text-sm">Add your work experience to showcase your professional background</p>
+                  <div className={`text-center py-8 border-2 border-dashed rounded-lg ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']}`}>
+                    <Briefcase className="mx-auto h-12 w-12 text-gray-400" />
+                    <p className={`mt-2 ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}>
+                      No experience entries yet
+                    </p>
+                    <p className={`text-sm ${colorClasses.text[themeMode === 'dark' ? 'gray100' : 'gray800']}`}>
+                      Add your work experience to showcase your professional background
+                    </p>
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            {/* Certifications & Courses Section */}
-            <Card className="border-border bg-card shadow-sm">
+            {/* Certifications Section */}
+            <Card className={`${colorClasses.bg[themeMode === 'dark' ? 'gray800' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} shadow-sm`}>
               <CardHeader>
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
-                    <CardTitle className="text-foreground">Certifications & Courses</CardTitle>
-                    <CardDescription className="text-muted-foreground">Professional certifications, online courses, and training programs</CardDescription>
+                    <CardTitle className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                      Certifications & Courses
+                    </CardTitle>
+                    <CardDescription className={colorClasses.text[themeMode === 'dark' ? 'gray100' : 'gray800']}>
+                      Professional certifications and training
+                    </CardDescription>
                   </div>
                   <button
                     type="button"
                     onClick={addCertification}
-                    className="flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium transition-all hover:bg-primary/90 hover:shadow-md"
+                    className={`flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-all ${colorClasses.bg.gold} ${colorClasses.text[themeMode === 'dark' ? 'darkNavy' : 'darkNavy']} hover:opacity-90 hover:shadow-md`}
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    Add Certification/Course
+                    Add Certification
                   </button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {certifications.map((cert, index) => {
-                  const dateErrors = validateDate(cert.issueDate, cert.expiryDate, false, 'Certification');
-
-                  return (
-                    <div key={`certification-${index}-${cert.name}`} className="border border-border rounded-lg p-4 space-y-4 bg-card/50">
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center space-x-2">
-                          <Award className="h-5 w-5 text-primary" />
-                          <h4 className="font-medium text-foreground">Certification #{index + 1}</h4>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeCertification(index)}
-                          className="p-2 text-muted-foreground hover:text-destructive transition-colors"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+              <CardContent className={responsiveClasses.cardSpacing}>
+                {certifications.map((cert, index) => (
+                  <div
+                    key={`certification-${index}`}
+                    className={`border rounded-lg p-4 space-y-4 ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'gray100']}`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center space-x-2">
+                        <Award className="h-5 w-5 text-primary" />
+                        <h4 className={`font-medium ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}>
+                          Certification #{index + 1}
+                        </h4>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => removeCertification(index)}
+                        className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
 
-                      {/* Date validation errors */}
-                      {dateErrors.length > 0 && (
-                        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-                          {dateErrors.map((error, errorIndex) => (
-                            <p key={`certification-error-${index}-${errorIndex}`} className="text-sm text-destructive flex items-center">
-                              <span className="w-2 h-2 bg-destructive rounded-full mr-2"></span>
-                              {error}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormField
-                          control={form.control}
-                          name={`certifications.${index}.name`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">Certification/Course Name *</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="e.g., AWS Certified Solutions Architect"
-                                  {...field}
-                                  onChange={(e) => field.onChange(e.target.value)}
-                                  className="bg-background border-input text-foreground"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name={`certifications.${index}.issuer`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">Issuing Organization *</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="e.g., Amazon Web Services, Coursera"
-                                  {...field}
-                                  value={field.value || ''}
-                                  className="bg-background border-input text-foreground"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`certifications.${index}.issueDate`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">Issue Date *</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="date"
-                                  {...field}
-                                  value={field.value || ''}
-                                  max={new Date().toISOString().split('T')[0]}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value);
-                                  }}
-                                  className="bg-background border-input"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`certifications.${index}.expiryDate`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">Expiry Date</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="date"
-                                  {...field}
-                                  value={field.value || ''}
-                                  min={form.watch(`certifications.${index}.issueDate`)}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value);
-                                  }}
-                                  className="bg-background border-input"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`certifications.${index}.credentialId`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">Credential ID</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="e.g., AWS-12345"
-                                  {...field}
-                                  value={field.value || ''}
-                                  className="bg-background border-input text-foreground"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`certifications.${index}.credentialUrl`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-foreground">Credential URL</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="https://example.com/credential"
-                                  {...field}
-                                  value={field.value || ''}
-                                  className="bg-background border-input text-foreground"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
+                    <div className={responsiveClasses.sectionGrid}>
+                      <FormField
+                        control={form.control}
+                        name={`certifications.${index}.name`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                              Name *
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="Certification Name"
+                                {...field}
+                                className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
                       <FormField
                         control={form.control}
-                        name={`certifications.${index}.description`}
+                        name={`certifications.${index}.issuer`}
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-foreground">Description</FormLabel>
+                            <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                              Issuer *
+                            </FormLabel>
                             <FormControl>
-                              <Textarea
-                                placeholder="Describe what you learned, skills gained, or project completed..."
-                                rows={3}
+                              <Input
+                                placeholder="Issuing Organization"
                                 {...field}
-                                value={field.value || ''}
-                                className="bg-background border-input text-foreground resize-none"
-                                maxLength={500}
+                                className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`certifications.${index}.issueDate`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                              Issue Date *
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="date"
+                                {...field}
+                                max={new Date().toISOString().split('T')[0]}
+                                className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`certifications.${index}.expiryDate`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                              Expiry Date
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="date"
+                                {...field}
+                                min={form.watch(`certifications.${index}.issueDate`)}
+                                className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`certifications.${index}.credentialId`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                              Credential ID
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="e.g., AWS-12345"
+                                {...field}
+                                className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`certifications.${index}.credentialUrl`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                              Credential URL
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="https://example.com/credential"
+                                {...field}
+                                className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
                               />
                             </FormControl>
                             <FormMessage />
@@ -1304,31 +1304,58 @@ const CandidateProfilePage: React.FC = () => {
                         )}
                       />
                     </div>
-                  );
-                })}
+
+                    <FormField
+                      control={form.control}
+                      name={`certifications.${index}.description`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                            Description
+                          </FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Describe what you learned, skills gained, or project completed..."
+                              rows={3}
+                              {...field}
+                              className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']} resize-none`}
+                              maxLength={500}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                ))}
 
                 {certifications.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground border-2 border-dashed border-border rounded-lg">
-                    <Award className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                    <p className="mt-2">No certifications or courses yet</p>
-                    <p className="text-sm">Add professional certifications, online courses, or training programs</p>
+                  <div className={`text-center py-8 border-2 border-dashed rounded-lg ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']}`}>
+                    <Award className="mx-auto h-12 w-12 text-gray-400" />
+                    <p className={`mt-2 ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}>
+                      No certifications yet
+                    </p>
+                    <p className={`text-sm ${colorClasses.text[themeMode === 'dark' ? 'gray100' : 'gray800']}`}>
+                      Add professional certifications, online courses, or training programs
+                    </p>
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            <div className="flex justify-end space-x-4 pt-6 border-t border-border">
+            {/* Save Button */}
+            <div className={`flex justify-end space-x-4 pt-6 border-t ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']}`}>
               <button
                 type="button"
                 onClick={() => window.history.back()}
-                className="px-6 py-3 border border-input bg-background text-foreground rounded-xl font-medium hover:bg-accent hover:text-accent-foreground transition-all"
+                className={`px-6 py-3 border rounded-xl font-medium transition-all ${colorClasses.bg[themeMode === 'dark' ? 'gray800' : 'gray100']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} hover:opacity-90`}
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={isSaving}
-                className="flex items-center px-6 py-3 bg-primary text-primary-foreground rounded-xl font-medium transition-all hover:bg-primary/90 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isSaving || isUploading}
+                className={`flex items-center px-6 py-3 rounded-xl font-medium transition-all ${colorClasses.bg.gold} ${colorClasses.text[themeMode === 'dark' ? 'darkNavy' : 'darkNavy']} hover:opacity-90 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {isSaving ? (
                   <>

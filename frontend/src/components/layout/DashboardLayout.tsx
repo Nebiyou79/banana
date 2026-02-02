@@ -30,7 +30,7 @@ export function DashboardLayout({ children, requiredRole }: DashboardLayoutProps
         setSidebarOpen(true);
       }
     };
-    
+
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
@@ -144,22 +144,22 @@ export function DashboardLayout({ children, requiredRole }: DashboardLayoutProps
 
         {/* Main Content */}
         <main className="flex-1 overflow-auto pt-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="max-w-7xl pt-10 mx-auto px-4 sm:px-6 lg:px-8 py-8">
             {/* Page Header */}
             <div className="mb-8">
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className={`text-3xl font-bold ${colorClasses.text.darkNavy} capitalize`}>
+                  <h1 className={`text-2xl font-bold ${colorClasses.text.darkNavy} capitalize`}>
                     {router.pathname.split('/').pop()?.replace(/-/g, ' ') || 'Dashboard'}
                   </h1>
                   <p className={`${colorClasses.text.gray800} mt-2 flex items-center`}>
-                    <span>Welcome back,</span>
+                    <span>Welcome Back,</span>
                     <span className={`font-semibold ${colorClasses.text.blue} ml-1`}>{user?.name}</span>
                     <span className="mx-2">•</span>
                     <span className="capitalize">{user?.role}</span>
                   </p>
                 </div>
-                
+
                 {/* Quick Actions */}
                 <div className="hidden lg:flex items-center space-x-3">
                   <div className={`flex items-center space-x-2 text-sm ${colorClasses.text.gray800} ${colorClasses.bg.white} px-4 py-2 rounded-lg shadow-sm border ${colorClasses.border.gray400}`}>

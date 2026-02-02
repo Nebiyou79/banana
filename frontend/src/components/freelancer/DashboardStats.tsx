@@ -25,57 +25,63 @@ const StatsCard: React.FC<StatsCardProps> = ({ title, value, subtitle, icon, col
     gold: {
       bg: 'bg-gradient-to-br from-amber-400 to-amber-500',
       text: colorClasses.text.gold,
-      border: 'border-amber-200'
+      border: colorClasses.border.gold
     },
     darkNavy: {
       bg: 'bg-gradient-to-br from-slate-700 to-slate-800',
       text: colorClasses.text.darkNavy,
-      border: 'border-slate-200'
+      border: colorClasses.border.darkNavy
     },
     teal: {
       bg: 'bg-gradient-to-br from-teal-500 to-teal-600',
       text: colorClasses.text.teal,
-      border: 'border-teal-200'
+      border: colorClasses.border.teal
     },
     orange: {
       bg: 'bg-gradient-to-br from-orange-500 to-orange-600',
       text: colorClasses.text.orange,
-      border: 'border-orange-200'
+      border: colorClasses.border.orange
     },
     blue: {
       bg: 'bg-gradient-to-br from-blue-500 to-blue-600',
       text: colorClasses.text.blue,
-      border: 'border-blue-200'
+      border: colorClasses.border.blue
     },
     purple: {
       bg: 'bg-gradient-to-br from-purple-500 to-purple-600',
       text: colorClasses.text.darkNavy,
-      border: 'border-purple-200'
+      border: colorClasses.border.gray400
     },
     green: {
       bg: 'bg-gradient-to-br from-green-500 to-green-600',
       text: colorClasses.text.teal,
-      border: 'border-green-200'
+      border: colorClasses.border.teal
     }
   };
 
   const config = colorConfig[color];
 
   return (
-    <div className={`bg-white rounded-2xl p-6 shadow-lg border ${config.border} hover:shadow-xl transition-all duration-300 group hover:scale-105`}>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <p className="text-sm font-semibold text-gray-600 uppercase tracking-wide">{title}</p>
-          <div className={`text-3xl font-bold ${colorClasses.text.darkNavy} mt-2`}>
+    <div className={`rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-sm hover:shadow-md transition-all duration-300 group hover:scale-[1.02] border ${config.border} ${colorClasses.bg.white}`}>
+      <div className="flex items-center justify-between mb-3 sm:mb-4">
+        <div className="flex-1 min-w-0">
+          <p className={`text-xs font-semibold uppercase tracking-wide truncate ${colorClasses.text.gray600}`}>
+            {title}
+          </p>
+          <div className={`text-xl sm:text-2xl md:text-3xl font-bold mt-1 sm:mt-2 truncate ${colorClasses.text.darkNavy}`}>
             {value}
           </div>
         </div>
-        <div className={`p-3 rounded-xl ${config.bg} text-white group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
-          {icon}
+        <div className={`p-2 sm:p-3 rounded-lg sm:rounded-xl ml-3 flex-shrink-0 ${config.bg} ${colorClasses.text.white} group-hover:scale-110 transition-transform duration-300 shadow-md`}>
+          <div className="w-5 h-5 sm:w-6 sm:h-6">
+            {icon}
+          </div>
         </div>
       </div>
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500 font-medium">{subtitle}</p>
+        <p className={`text-xs sm:text-sm truncate ${colorClasses.text.gray600}`}>
+          {subtitle}
+        </p>
       </div>
     </div>
   );
@@ -114,9 +120,10 @@ interface DashboardStatsProps {
       total: number;
     };
   };
+  themeMode?: 'light' | 'dark';
 }
 
-const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
+const DashboardStats: React.FC<DashboardStatsProps> = ({ stats, themeMode = 'light' }) => {
   const certificationsCount = stats.certifications?.total || 0;
 
   // Determine verification status from props or fallback to boolean
@@ -125,13 +132,13 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
     : (stats.profile.verified ? 'full' : 'none');
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
       {/* Profile Views */}
       <StatsCard
         title="Profile Views"
         value={stats.profile.views.toLocaleString()}
         subtitle="Total views"
-        icon={<EyeIcon className="w-6 h-6" />}
+        icon={<EyeIcon className="w-full h-full" />}
         color="teal"
       />
 
@@ -140,7 +147,7 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
         title="Portfolio"
         value={stats.portfolio.total}
         subtitle={`${stats.portfolio.featured} featured`}
-        icon={<StarIcon className="w-6 h-6" />}
+        icon={<StarIcon className="w-full h-full" />}
         color="blue"
       />
 
@@ -149,62 +156,79 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
         title="Skills"
         value={stats.skills.total}
         subtitle={`${stats.skills.categories.length} categories`}
-        icon={<AcademicCapIcon className="w-6 h-6" />}
+        icon={<AcademicCapIcon className="w-full h-full" />}
         color="darkNavy"
       />
 
       {/* Certifications */}
-      <StatsCard
-        title="Certifications"
-        value={certificationsCount}
-        subtitle="Professional credentials"
-        icon={<AcademicCapIcon className="w-6 h-6" />}
-        color="teal"
-      />
+      {certificationsCount > 0 && (
+        <StatsCard
+          title="Certifications"
+          value={certificationsCount}
+          subtitle="Professional credentials"
+          icon={<AcademicCapIcon className="w-full h-full" />}
+          color="teal"
+        />
+      )}
 
       {/* Proposals */}
       <StatsCard
         title="Proposals"
         value={stats.proposals.sent}
         subtitle={`${stats.proposals.accepted} accepted`}
-        icon={<BriefcaseIcon className="w-6 h-6" />}
+        icon={<BriefcaseIcon className="w-full h-full" />}
         color="purple"
       />
 
       {/* Pending Proposals */}
-      <StatsCard
-        title="Active Proposals"
-        value={stats.proposals.pending}
-        subtitle="Waiting for response"
-        icon={<UserGroupIcon className="w-6 h-6" />}
-        color="orange"
-      />
+      {stats.proposals.pending > 0 && (
+        <StatsCard
+          title="Active Proposals"
+          value={stats.proposals.pending}
+          subtitle="Waiting for response"
+          icon={<UserGroupIcon className="w-full h-full" />}
+          color="orange"
+        />
+      )}
 
       {/* Ratings */}
-      <StatsCard
-        title="Rating"
-        value={stats.ratings.average.toFixed(1)}
-        subtitle={`${stats.ratings.count} reviews`}
-        icon={<CheckBadgeIcon className="w-6 h-6" />}
-        color="green"
-      />
+      {stats.ratings.count > 0 && (
+        <StatsCard
+          title="Rating"
+          value={stats.ratings.average.toFixed(1)}
+          subtitle={`${stats.ratings.count} reviews`}
+          icon={<CheckBadgeIcon className="w-full h-full" />}
+          color="green"
+        />
+      )}
 
       {/* Verification Status */}
       <StatsCard
         title="Verification"
         value={
-          <VerificationBadge
-            status={verificationStatus}
-            size="md"
-            showText={true}
-            showTooltip={true}
-            className="text-sm"
-            autoFetch={false}
-          />
+          <div className="flex items-center">
+            <VerificationBadge
+              status={verificationStatus}
+              size="sm"
+              showText={true}
+              showTooltip={true}
+              className="text-xs sm:text-sm"
+              autoFetch={false}
+            />
+          </div>
         }
         subtitle="Profile status"
-        icon={<CheckBadgeIcon className="w-6 h-6" />}
+        icon={<CheckBadgeIcon className="w-full h-full" />}
         color={stats.profile.verified ? "green" : "orange"}
+      />
+
+      {/* Profile Completion */}
+      <StatsCard
+        title="Profile Completion"
+        value={`${stats.profile.completion}%`}
+        subtitle={stats.profile.completion >= 80 ? "Excellent" : "Needs improvement"}
+        icon={<CheckBadgeIcon className="w-full h-full" />}
+        color={stats.profile.completion >= 80 ? "green" : "orange"}
       />
     </div>
   );

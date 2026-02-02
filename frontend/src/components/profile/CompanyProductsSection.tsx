@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ProductCard } from '@/components/Products/ProductCard';
+import { OwnerProductCard, PublicProductCard } from '@/components/Products/ProductCard';
 import { Product, productService } from '@/services/productService';
 import { Card } from '@/components/social/ui/Card';
 import { Button } from '@/components/social/ui/Button';
@@ -32,7 +32,9 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  Check
+  Check,
+  Users,
+  Building
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -44,6 +46,7 @@ interface CompanyProductsSectionProps {
   viewMode?: 'grid' | 'list';
   showFilters?: boolean;
   variant?: 'default' | 'marketplace' | 'storefront';
+  currentUser?: any;
 }
 
 export const CompanyProductsSection: React.FC<CompanyProductsSectionProps> = ({
@@ -54,11 +57,11 @@ export const CompanyProductsSection: React.FC<CompanyProductsSectionProps> = ({
   viewMode: initialViewMode = 'grid',
   showFilters: initialShowFilters = false,
   variant = 'marketplace',
+  currentUser,
 }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(initialViewMode);
-  const [showFilters, setShowFilters] = useState(initialShowFilters);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [totalProducts, setTotalProducts] = useState(0);
@@ -67,9 +70,9 @@ export const CompanyProductsSection: React.FC<CompanyProductsSectionProps> = ({
   const [sortBy, setSortBy] = useState<'newest' | 'popular' | 'price_asc' | 'price_desc'>('newest');
   const [stats, setStats] = useState({
     totalViews: 0,
-    averageRating: 4.5,
     activeProducts: 0,
-    totalRevenue: 0,
+    draftProducts: 0,
+    totalProducts: 0,
   });
 
   const fetchProducts = async (pageNum: number = 1, filter: string = activeFilter) => {
@@ -88,19 +91,29 @@ export const CompanyProductsSection: React.FC<CompanyProductsSectionProps> = ({
       const filters: any = {
         page: pageNum,
         limit,
-        sortBy: sortBy,
-        status: filter === 'draft' ? 'draft' : 'active',
+        sort: sortBy === 'newest' ? 'createdAt:desc' :
+          sortBy === 'popular' ? 'views:desc' :
+            sortBy === 'price_asc' ? 'price.amount:asc' :
+              'price.amount:desc',
       };
 
       // Add status filter based on active tab
       if (filter === 'featured') {
         filters.featured = true;
+        filters.status = 'active';
       } else if (filter === 'draft' && isOwnCompany) {
         filters.status = 'draft';
       } else if (filter === 'active') {
         filters.status = 'active';
       } else if (filter === 'trending') {
-        filters.sortBy = 'popular';
+        filters.sort = 'views:desc';
+        filters.status = 'active';
+      } else if (filter === 'all') {
+        // For owners, show all statuses; for public, only active
+        if (!isOwnCompany) {
+          filters.status = 'active';
+        }
+        // No status filter for owners - they see all
       }
 
       if (searchQuery) {
@@ -126,13 +139,22 @@ export const CompanyProductsSection: React.FC<CompanyProductsSectionProps> = ({
         // Calculate stats from products
         const totalViews = response.products?.reduce((sum, p) => sum + (p.views || 0), 0) || 0;
         const activeProducts = response.products?.filter(p => p.status === 'active').length || 0;
+        const draftProducts = response.products?.filter(p => p.status === 'draft').length || 0;
 
         setStats({
           totalViews,
-          averageRating: 4.5,
           activeProducts,
-          totalRevenue: 0,
+          draftProducts,
+          totalProducts: response.pagination?.total || 0,
         });
+
+        // Update company stats if available in response
+        if (response.stats) {
+          setStats(prev => ({
+            ...prev,
+            ...response.stats
+          }));
+        }
       } catch (error: any) {
         console.error('❌ API Error:', error);
         setProducts([]);
@@ -169,28 +191,9 @@ export const CompanyProductsSection: React.FC<CompanyProductsSectionProps> = ({
     fetchProducts(nextPage);
   };
 
-  const handleProductView = (product: Product) => {
-    window.location.href = `/products/${product._id}`;
-  };
-
-  const handleProductEdit = (product: Product) => {
-    if (isOwnCompany) {
-      window.location.href = `/dashboard/products/edit/${product._id}`;
-    }
-  };
-
-  const handleProductDelete = async (product: Product) => {
-    if (isOwnCompany && confirm('Are you sure you want to delete this product?')) {
-      try {
-        await productService.deleteProduct(product._id);
-        setProducts(prev => prev.filter(p => p._id !== product._id));
-        toast.success('Product deleted successfully');
-        fetchProducts(1, activeFilter);
-      } catch (error) {
-        console.error('Failed to delete product:', error);
-        toast.error('Failed to delete product');
-      }
-    }
+  const handleProductDeleted = () => {
+    toast.success('Product deleted successfully');
+    fetchProducts(1, activeFilter);
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -202,11 +205,12 @@ export const CompanyProductsSection: React.FC<CompanyProductsSectionProps> = ({
   const handleRefresh = () => {
     setPage(1);
     setSearchQuery('');
+    setActiveFilter('all');
     fetchProducts(1, 'all');
   };
 
-  const featuredProducts = products.filter(product => product.featured).slice(0, 4);
-  const trendingProducts = products.filter(product => (product.views || 0) > 100).slice(0, 4);
+  const featuredProducts = products.filter(product => product.featured && product.status === 'active').slice(0, 4);
+  const trendingProducts = products.filter(product => (product.views || 0) > 100 && product.status === 'active').slice(0, 4);
 
   const getContainerClass = () => {
     switch (variant) {
@@ -228,7 +232,7 @@ export const CompanyProductsSection: React.FC<CompanyProductsSectionProps> = ({
           </h1>
           <p className="text-gray-600">
             {totalProducts > 0
-              ? `Showing ${products.length} of ${totalProducts} premium products`
+              ? `Showing ${products.length} of ${totalProducts} products`
               : 'Explore products from this company'
             }
           </p>
@@ -261,10 +265,32 @@ export const CompanyProductsSection: React.FC<CompanyProductsSectionProps> = ({
   const renderStats = () => (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
       {[
-        { label: 'Total Products', value: totalProducts, icon: <Package className="h-4 w-4" />, color: 'bg-blue-50 text-blue-600 border-blue-100' },
-        { label: 'Active', value: stats.activeProducts, icon: <Check className="h-4 w-4" />, color: 'bg-green-50 text-green-600 border-green-100' },
-        { label: 'Total Views', value: stats.totalViews.toLocaleString(), icon: <Eye className="h-4 w-4" />, color: 'bg-purple-50 text-purple-600 border-purple-100' },
-        { label: 'Avg Rating', value: stats.averageRating, icon: <Star className="h-4 w-4" />, color: 'bg-amber-50 text-amber-600 border-amber-100' },
+        {
+          label: 'Total Products',
+          value: stats.totalProducts,
+          icon: <Package className="h-4 w-4" />,
+          color: 'bg-blue-50 text-blue-600 border-blue-100'
+        },
+        {
+          label: 'Active',
+          value: stats.activeProducts,
+          icon: <Check className="h-4 w-4" />,
+          color: 'bg-green-50 text-green-600 border-green-100'
+        },
+        ...(isOwnCompany ? [
+          {
+            label: 'Drafts',
+            value: stats.draftProducts,
+            icon: <Clock className="h-4 w-4" />,
+            color: 'bg-amber-50 text-amber-600 border-amber-100'
+          }
+        ] : []),
+        {
+          label: 'Total Views',
+          value: stats.totalViews.toLocaleString(),
+          icon: <Eye className="h-4 w-4" />,
+          color: 'bg-purple-50 text-purple-600 border-purple-100'
+        },
       ].map((stat, index) => (
         <div
           key={index}
@@ -293,8 +319,8 @@ export const CompanyProductsSection: React.FC<CompanyProductsSectionProps> = ({
             { id: 'all' as const, label: 'All', count: totalProducts },
             { id: 'featured' as const, label: 'Featured', icon: <Star className="h-4 w-4" />, count: featuredProducts.length },
             { id: 'trending' as const, label: 'Trending', icon: <TrendingUp className="h-4 w-4" />, count: trendingProducts.length },
-            { id: 'active' as const, label: 'Active', icon: <Zap className="h-4 w-4" /> },
-            ...(isOwnCompany ? [{ id: 'draft' as const, label: 'Drafts', icon: <Clock className="h-4 w-4" /> }] : []),
+            { id: 'active' as const, label: 'Active', icon: <Zap className="h-4 w-4" />, count: stats.activeProducts },
+            ...(isOwnCompany ? [{ id: 'draft' as const, label: 'Drafts', icon: <Clock className="h-4 w-4" />, count: stats.draftProducts }] : []),
           ].map((tab) => (
             <button
               key={tab.id}
@@ -361,7 +387,7 @@ export const CompanyProductsSection: React.FC<CompanyProductsSectionProps> = ({
 
           {isOwnCompany && (
             <Button
-              onClick={() => window.location.href = '/dashboard/products/create'}
+              onClick={() => window.location.href = '/dashboard/company/products/create'}
               className="bg-blue-600 hover:bg-blue-700 text-white"
               size="sm"
             >
@@ -423,24 +449,25 @@ export const CompanyProductsSection: React.FC<CompanyProductsSectionProps> = ({
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className={`grid gap-4 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
           {featuredProducts.map((product) => (
-            <ProductCard
-              key={product._id}
-              product={product}
-              company={typeof product.companyId === 'string' ? {
-                _id: product.companyId,
-                name: companyName,
-                verified: false,
-                industry: ''
-              } : product.companyId}
-              onView={handleProductView}
-              onEdit={isOwnCompany ? handleProductEdit : undefined}
-              onDelete={isOwnCompany ? handleProductDelete : undefined}
-              currentUser={isOwnCompany ? { role: 'company' } : undefined}
-              showActions={isOwnCompany}
-              className="bg-white border border-gray-200 hover:border-amber-300 transition-colors"
-            />
+            isOwnCompany ? (
+              <OwnerProductCard
+                key={product._id}
+                product={product}
+                theme="light"
+                currentUser={currentUser}
+                onProductDeleted={handleProductDeleted}
+                className="bg-white border border-gray-200 hover:border-amber-300 transition-colors"
+              />
+            ) : (
+              <PublicProductCard
+                key={product._id}
+                product={product}
+                theme="light"
+                className="bg-white border border-gray-200 hover:border-amber-300 transition-colors"
+              />
+            )
           ))}
         </div>
       </div>
@@ -491,7 +518,7 @@ export const CompanyProductsSection: React.FC<CompanyProductsSectionProps> = ({
             )}
             {isOwnCompany && (
               <Button
-                onClick={() => window.location.href = '/dashboard/products/create'}
+                onClick={() => window.location.href = '/dashboard/company/products/create'}
                 className="bg-blue-600 hover:bg-blue-700 text-white"
               >
                 <PlusCircle className="h-4 w-4 mr-2" />
@@ -507,23 +534,23 @@ export const CompanyProductsSection: React.FC<CompanyProductsSectionProps> = ({
       <>
         <div className={`gap-4 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2' : 'flex flex-col'}`}>
           {products.map((product) => (
-            <ProductCard
-              key={product._id}
-              product={product}
-              company={typeof product.companyId === 'string' ? {
-                _id: product.companyId,
-                name: companyName,
-                verified: false,
-                industry: ''
-              } : product.companyId}
-              onView={handleProductView}
-              onEdit={isOwnCompany ? handleProductEdit : undefined}
-              onDelete={isOwnCompany ? handleProductDelete : undefined}
-              currentUser={isOwnCompany ? { role: 'company' } : undefined}
-              showActions={isOwnCompany}
-              className={`bg-white border border-gray-200 hover:border-blue-300 transition-colors ${viewMode === 'list' ? 'flex flex-row' : ''
-                }`}
-            />
+            isOwnCompany ? (
+              <OwnerProductCard
+                key={product._id}
+                product={product}
+                theme="light"
+                currentUser={currentUser}
+                onProductDeleted={handleProductDeleted}
+                className={`bg-white border border-gray-200 hover:border-blue-300 transition-colors`}
+              />
+            ) : (
+              <PublicProductCard
+                key={product._id}
+                product={product}
+                theme="light"
+                className={`bg-white border border-gray-200 hover:border-blue-300 transition-colors`}
+              />
+            )
           ))}
         </div>
 
@@ -568,7 +595,8 @@ export const CompanyProductsSection: React.FC<CompanyProductsSectionProps> = ({
               {activeFilter === 'featured' ? 'Featured Products' :
                 activeFilter === 'trending' ? 'Trending Now' :
                   activeFilter === 'draft' ? 'Draft Products' :
-                    'All Products'}
+                    activeFilter === 'active' ? 'Active Products' :
+                      'All Products'}
             </h2>
             <p className="text-sm text-gray-600">
               {products.length} of {totalProducts} products

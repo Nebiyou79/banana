@@ -14,32 +14,32 @@ const { safeParseJSON, calculateFileHash } = require('../middleware/tenderUpload
 const validateTenderCreationRole = (userRole, tenderCategory) => {
   // Organizations can only create tenders (both types)
   if (userRole === 'organization') return true;
-  
+
   // Companies can create both types
   if (userRole === 'company') return true;
-  
+
   // Freelancers cannot create any tenders
   if (userRole === 'freelancer') return false;
-  
+
   // Admin can create any type
   if (userRole === 'admin') return true;
-  
+
   return false;
 };
 
 const validateTenderApplicationRole = (userRole, tenderCategory) => {
   // Freelancers can only apply to freelance tenders
   if (userRole === 'freelancer') return tenderCategory === 'freelance';
-  
+
   // Companies can only apply to professional tenders
   if (userRole === 'company') return tenderCategory === 'professional';
-  
+
   // Organizations cannot apply to any tenders
   if (userRole === 'organization') return false;
-  
+
   // Admin can apply to any tender (for testing)
   if (userRole === 'admin') return true;
-  
+
   return false;
 };
 
@@ -58,7 +58,7 @@ const getCategories = async (req, res) => {
 
     // Prepare response based on requested type
     let responseData = {};
-    
+
     if (type === 'freelance') {
       if (format === 'flat') {
         // Return flat list for dropdowns
@@ -72,7 +72,7 @@ const getCategories = async (req, res) => {
             });
           });
         });
-        
+
         responseData = {
           categories: flatCategories,
           stats: {
@@ -104,7 +104,7 @@ const getCategories = async (req, res) => {
             });
           });
         });
-        
+
         responseData = {
           categories: flatCategories,
           stats: {
@@ -201,24 +201,16 @@ const createFreelanceTender = async (req, res) => {
       });
     }
 
-    const tenderData = req.parsedBody || {};
-    
+    const tenderData = req.body || {};
+
     // Force freelance category
     tenderData.tenderCategory = 'freelance';
 
     // Validate required fields
     const requiredFields = ['title', 'description', 'procurementCategory', 'deadline'];
     const missingFields = requiredFields.filter(field => !tenderData[field]);
-    
+
     if (missingFields.length > 0) {
-      // Clean up uploaded files
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
       return res.status(400).json({
         success: false,
         message: 'Missing required fields',
@@ -227,17 +219,10 @@ const createFreelanceTender = async (req, res) => {
     }
 
     // Get engagement type
-    let engagementType = tenderData.engagementType || 
-                       (tenderData.freelanceSpecific && tenderData.freelanceSpecific.engagementType);
+    let engagementType = tenderData.engagementType ||
+      (tenderData.freelanceSpecific && tenderData.freelanceSpecific.engagementType);
 
     if (!engagementType) {
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
       return res.status(400).json({
         success: false,
         message: 'Engagement type is required (fixed_price or hourly)'
@@ -247,13 +232,6 @@ const createFreelanceTender = async (req, res) => {
     // Validate deadline
     const deadlineDate = new Date(tenderData.deadline);
     if (deadlineDate <= new Date()) {
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
       return res.status(400).json({
         success: false,
         message: 'Deadline must be in the future'
@@ -265,13 +243,6 @@ const createFreelanceTender = async (req, res) => {
     const organization = await Organization.findOne({ user: req.user._id });
 
     if (!company && !organization) {
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
       return res.status(400).json({
         success: false,
         message: 'You need to create a company or organization profile first'
@@ -283,35 +254,85 @@ const createFreelanceTender = async (req, res) => {
     const ownerRole = company ? 'company' : 'organization';
     const entityModel = company ? 'Company' : 'Organization';
 
-    // Prepare attachments
+    // ==== CLOUDINARY ATTACHMENTS HANDLING ====
     const attachments = [];
-    if (req.files && req.files.length > 0) {
-      req.files.forEach((file, index) => {
-        const description = tenderData.fileDescriptions && tenderData.fileDescriptions[index] 
-          ? tenderData.fileDescriptions[index] 
+    if (req.cloudinaryFiles && req.cloudinaryFiles.success && req.cloudinaryFiles.files) {
+      console.log(`Processing ${req.cloudinaryFiles.files.length} Cloudinary files for freelance tender`);
+
+      req.cloudinaryFiles.files.forEach((cloudinaryFile, index) => {
+        // Skip files that failed to upload
+        if (cloudinaryFile.success === false) {
+          console.warn(`File ${cloudinaryFile.originalName} failed to upload:`, cloudinaryFile.error);
+          return;
+        }
+
+        const description = tenderData.fileDescriptions && tenderData.fileDescriptions[index]
+          ? tenderData.fileDescriptions[index]
           : '';
-        
+
         const documentType = tenderData.fileTypes && tenderData.fileTypes[index]
           ? tenderData.fileTypes[index]
           : 'other';
-        
-        const fileHash = calculateFileHash(file.path);
-        
+
+        // Get Cloudinary data
+        const cloudinaryData = cloudinaryFile.cloudinary;
+
+        if (!cloudinaryData || !cloudinaryData.public_id) {
+          console.error('Missing Cloudinary data for file:', cloudinaryFile.originalName);
+          return;
+        }
+
         attachments.push({
-          filename: file.filename,
-          originalName: file.originalname,
-          path: file.path,
-          fileSize: file.size,
-          fileType: file.mimetype,
+          filename: cloudinaryData.public_id,
+          originalName: cloudinaryFile.originalName,
+          path: cloudinaryData.secure_url,
+          fileSize: cloudinaryFile.size,
+          fileType: cloudinaryFile.mimetype,
           description: description,
           uploadedBy: req.user._id,
           uploadedAt: new Date(),
           documentType: documentType,
           version: 1,
-          fileHash: fileHash
+          fileHash: cloudinaryData.public_id,
+          // Cloudinary metadata
+          cloudinaryPublicId: cloudinaryData.public_id,
+          cloudinaryUrl: cloudinaryData.secure_url,
+          cloudinaryFormat: cloudinaryData.format,
+          cloudinaryResourceType: cloudinaryData.resource_type,
+          cloudinaryCreatedAt: cloudinaryData.created_at,
+          cloudinaryBytes: cloudinaryData.bytes,
+          cloudinaryTags: cloudinaryData.tags || []
         });
       });
+    } else if (req.cloudinaryFile && req.cloudinaryFile.success && req.cloudinaryFile.file) {
+      // Handle single file upload (fallback)
+      const cloudinaryFile = req.cloudinaryFile.file;
+      const cloudinaryData = cloudinaryFile.cloudinary;
+
+      attachments.push({
+        filename: cloudinaryData.public_id,
+        originalName: cloudinaryFile.originalName,
+        path: cloudinaryData.secure_url,
+        fileSize: cloudinaryFile.size,
+        fileType: cloudinaryFile.mimetype,
+        description: tenderData.fileDescriptions?.[0] || '',
+        uploadedBy: req.user._id,
+        uploadedAt: new Date(),
+        documentType: tenderData.fileTypes?.[0] || 'other',
+        version: 1,
+        fileHash: cloudinaryData.public_id,
+        // Cloudinary metadata
+        cloudinaryPublicId: cloudinaryData.public_id,
+        cloudinaryUrl: cloudinaryData.secure_url,
+        cloudinaryFormat: cloudinaryData.format,
+        cloudinaryResourceType: cloudinaryData.resource_type,
+        cloudinaryCreatedAt: cloudinaryData.created_at,
+        cloudinaryBytes: cloudinaryData.bytes,
+        cloudinaryTags: cloudinaryData.tags || []
+      });
     }
+
+    console.log(`Created ${attachments.length} attachments for freelance tender`);
 
     // Parse freelance specific data
     let freelanceSpecific = {};
@@ -327,13 +348,6 @@ const createFreelanceTender = async (req, res) => {
     if (engagementType === 'hourly') {
       const weeklyHours = tenderData.weeklyHours || freelanceSpecific.weeklyHours;
       if (!weeklyHours || weeklyHours <= 0) {
-        if (req.files && req.files.length > 0) {
-          req.files.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
         return res.status(400).json({
           success: false,
           message: 'Weekly hours is required for hourly engagement'
@@ -349,15 +363,8 @@ const createFreelanceTender = async (req, res) => {
       } else if (freelanceSpecific.budget) {
         budget = freelanceSpecific.budget;
       }
-      
+
       if (!budget || !budget.min || !budget.max) {
-        if (req.files && req.files.length > 0) {
-          req.files.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
         return res.status(400).json({
           success: false,
           message: 'Budget range is required for fixed price engagement'
@@ -374,7 +381,7 @@ const createFreelanceTender = async (req, res) => {
 
     // Set default workflowType
     const workflowType = tenderData.workflowType || 'open';
-    
+
     // Build freelanceSpecific object
     const finalFreelanceSpecific = {
       projectType: freelanceSpecific.projectType || tenderData.projectType || 'one_time',
@@ -426,17 +433,10 @@ const createFreelanceTender = async (req, res) => {
 
     // For closed workflow, validate sealed bid confirmation
     if (workflowType === 'closed') {
-      const sealedBidConfirmation = tenderData.sealedBidConfirmation === 'true' || 
-                                   tenderData.sealedBidConfirmation === true;
-      
+      const sealedBidConfirmation = tenderData.sealedBidConfirmation === 'true' ||
+        tenderData.sealedBidConfirmation === true;
+
       if (!sealedBidConfirmation) {
-        if (req.files && req.files.length > 0) {
-          req.files.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
         return res.status(400).json({
           success: false,
           message: 'Sealed bid confirmation is required for closed workflow tenders'
@@ -447,7 +447,7 @@ const createFreelanceTender = async (req, res) => {
     // Create and save tender
     const tender = new Tender(finalTenderData);
     await tender.validate();
-    
+
     // For closed tenders, lock immediately if published
     if (workflowType === 'closed' && tenderData.status === 'published') {
       await tender.lockClosedTender(req.user._id);
@@ -462,7 +462,8 @@ const createFreelanceTender = async (req, res) => {
         title: tender.title,
         category: tender.procurementCategory,
         workflowType: tender.workflowType,
-        engagementType: tender.freelanceSpecific.engagementType
+        engagementType: tender.freelanceSpecific.engagementType,
+        attachmentsCount: attachments.length
       }
     }, req.ip, req.headers['user-agent']);
 
@@ -474,26 +475,14 @@ const createFreelanceTender = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'Freelance tender created successfully',
-      data: { 
-        tender: populatedTender
+      data: {
+        tender: populatedTender,
+        attachmentsCount: attachments.length
       }
     });
 
   } catch (error) {
     console.error('Error creating freelance tender:', error);
-    
-    // Clean up files on error
-    if (req.files && req.files.length > 0) {
-      req.files.forEach(file => {
-        if (fs.existsSync(file.path)) {
-          try {
-            fs.unlinkSync(file.path);
-          } catch (unlinkError) {
-            console.error('Failed to delete file:', unlinkError);
-          }
-        }
-      });
-    }
 
     if (error.code === 11000) {
       return res.status(400).json({
@@ -515,7 +504,8 @@ const createFreelanceTender = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Internal server error while creating freelance tender',
-      error: error.message
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };
@@ -531,29 +521,22 @@ const createProfessionalTender = async (req, res) => {
       });
     }
 
-    const tenderData = req.parsedBody || {};
-    
+    const tenderData = req.body || {};
+
     // Force professional category
     tenderData.tenderCategory = 'professional';
 
     // Validate required fields
     const requiredFields = [
-      'title', 
-      'description', 
-      'procurementCategory', 
+      'title',
+      'description',
+      'procurementCategory',
       'deadline'
     ];
-    
+
     const missingFields = requiredFields.filter(field => !tenderData[field]);
-    
+
     if (missingFields.length > 0) {
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
       return res.status(400).json({
         success: false,
         message: 'Missing required fields',
@@ -577,13 +560,6 @@ const createProfessionalTender = async (req, res) => {
 
     // Validate professional-specific required fields
     if (!referenceNumber) {
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
       return res.status(400).json({
         success: false,
         message: 'Reference number is required for professional tenders'
@@ -591,13 +567,6 @@ const createProfessionalTender = async (req, res) => {
     }
 
     if (!procuringEntity) {
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
       return res.status(400).json({
         success: false,
         message: 'Procuring entity is required for professional tenders'
@@ -607,13 +576,6 @@ const createProfessionalTender = async (req, res) => {
     // Validate deadline
     const deadlineDate = new Date(tenderData.deadline);
     if (deadlineDate <= new Date()) {
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
       return res.status(400).json({
         success: false,
         message: 'Deadline must be in the future'
@@ -625,13 +587,6 @@ const createProfessionalTender = async (req, res) => {
     const organization = await Organization.findOne({ user: req.user._id });
 
     if (!company && !organization) {
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
       return res.status(400).json({
         success: false,
         message: 'You need to create a company or organization profile first'
@@ -643,35 +598,85 @@ const createProfessionalTender = async (req, res) => {
     const ownerRole = company ? 'company' : 'organization';
     const entityModel = company ? 'Company' : 'Organization';
 
-    // Prepare attachments
+    // ==== CLOUDINARY ATTACHMENTS HANDLING ====
     const attachments = [];
-    if (req.files && req.files.length > 0) {
-      req.files.forEach((file, index) => {
-        const description = tenderData.fileDescriptions && tenderData.fileDescriptions[index] 
-          ? tenderData.fileDescriptions[index] 
+    if (req.cloudinaryFiles && req.cloudinaryFiles.success && req.cloudinaryFiles.files) {
+      console.log(`Processing ${req.cloudinaryFiles.files.length} Cloudinary files for professional tender`);
+
+      req.cloudinaryFiles.files.forEach((cloudinaryFile, index) => {
+        // Skip files that failed to upload
+        if (cloudinaryFile.success === false) {
+          console.warn(`File ${cloudinaryFile.originalName} failed to upload:`, cloudinaryFile.error);
+          return;
+        }
+
+        const description = tenderData.fileDescriptions && tenderData.fileDescriptions[index]
+          ? tenderData.fileDescriptions[index]
           : '';
-        
+
         const documentType = tenderData.fileTypes && tenderData.fileTypes[index]
           ? tenderData.fileTypes[index]
           : 'other';
-        
-        const fileHash = calculateFileHash(file.path);
-        
+
+        // Get Cloudinary data
+        const cloudinaryData = cloudinaryFile.cloudinary;
+
+        if (!cloudinaryData || !cloudinaryData.public_id) {
+          console.error('Missing Cloudinary data for file:', cloudinaryFile.originalName);
+          return;
+        }
+
         attachments.push({
-          filename: file.filename,
-          originalName: file.originalname,
-          path: file.path,
-          fileSize: file.size,
-          fileType: file.mimetype,
+          filename: cloudinaryData.public_id,
+          originalName: cloudinaryFile.originalName,
+          path: cloudinaryData.secure_url,
+          fileSize: cloudinaryFile.size,
+          fileType: cloudinaryFile.mimetype,
           description: description,
           uploadedBy: req.user._id,
           uploadedAt: new Date(),
           documentType: documentType,
           version: 1,
-          fileHash: fileHash
+          fileHash: cloudinaryData.public_id,
+          // Cloudinary metadata
+          cloudinaryPublicId: cloudinaryData.public_id,
+          cloudinaryUrl: cloudinaryData.secure_url,
+          cloudinaryFormat: cloudinaryData.format,
+          cloudinaryResourceType: cloudinaryData.resource_type,
+          cloudinaryCreatedAt: cloudinaryData.created_at,
+          cloudinaryBytes: cloudinaryData.bytes,
+          cloudinaryTags: cloudinaryData.tags || []
         });
       });
+    } else if (req.cloudinaryFile && req.cloudinaryFile.success && req.cloudinaryFile.file) {
+      // Handle single file upload (fallback)
+      const cloudinaryFile = req.cloudinaryFile.file;
+      const cloudinaryData = cloudinaryFile.cloudinary;
+
+      attachments.push({
+        filename: cloudinaryData.public_id,
+        originalName: cloudinaryFile.originalName,
+        path: cloudinaryData.secure_url,
+        fileSize: cloudinaryFile.size,
+        fileType: cloudinaryFile.mimetype,
+        description: tenderData.fileDescriptions?.[0] || '',
+        uploadedBy: req.user._id,
+        uploadedAt: new Date(),
+        documentType: tenderData.fileTypes?.[0] || 'other',
+        version: 1,
+        fileHash: cloudinaryData.public_id,
+        // Cloudinary metadata
+        cloudinaryPublicId: cloudinaryData.public_id,
+        cloudinaryUrl: cloudinaryData.secure_url,
+        cloudinaryFormat: cloudinaryData.format,
+        cloudinaryResourceType: cloudinaryData.resource_type,
+        cloudinaryCreatedAt: cloudinaryData.created_at,
+        cloudinaryBytes: cloudinaryData.bytes,
+        cloudinaryTags: cloudinaryData.tags || []
+      });
     }
+
+    console.log(`Created ${attachments.length} attachments for professional tender`);
 
     // Handle skills
     let skillsRequired = safeParseJSON(tenderData.skillsRequired, []);
@@ -696,36 +701,29 @@ const createProfessionalTender = async (req, res) => {
     const visibility = {
       visibilityType: visibilityType
     };
-    
+
     // Handle allowed companies/users for invite-only tenders
     if (visibilityType === 'invite_only') {
       let allowedCompanies = safeParseJSON(tenderData.allowedCompanies, []);
       let allowedUsers = safeParseJSON(tenderData.allowedUsers, []);
-      
+
       visibility.allowedCompanies = allowedCompanies;
       visibility.allowedUsers = allowedUsers;
     }
 
     // Set default workflowType
     const workflowType = tenderData.workflowType || 'open';
-    
-    // Handle CPO requirements - SIMPLE VERSION
-    const cpoRequired = tenderData.cpoRequired === 'true' || 
-                       tenderData.cpoRequired === true || 
-                       tenderData.cpoRequired === '1';
-    
+
+    // Handle CPO requirements
+    const cpoRequired = tenderData.cpoRequired === 'true' ||
+      tenderData.cpoRequired === true ||
+      tenderData.cpoRequired === '1';
+
     let cpoDescription = '';
     if (cpoRequired) {
       cpoDescription = tenderData.cpoDescription || professionalSpecific.cpoDescription || '';
-      
+
       if (!cpoDescription.trim()) {
-        if (req.files && req.files.length > 0) {
-          req.files.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
         return res.status(400).json({
           success: false,
           message: 'CPO description is required when CPO is required'
@@ -742,8 +740,8 @@ const createProfessionalTender = async (req, res) => {
       eligibleBidderType: 'company',
       minimumExperience: professionalSpecific.minimumExperience || tenderData.minimumExperience || 0,
       requiredCertifications: requiredCertifications,
-      legalRegistrationRequired: professionalSpecific.legalRegistrationRequired !== undefined ? 
-                               professionalSpecific.legalRegistrationRequired : true,
+      legalRegistrationRequired: professionalSpecific.legalRegistrationRequired !== undefined ?
+        professionalSpecific.legalRegistrationRequired : true,
       financialCapacity: professionalSpecific.financialCapacity || tenderData.financialCapacity,
       pastProjectReferences: professionalSpecific.pastProjectReferences || tenderData.pastProjectReferences,
       projectObjectives: professionalSpecific.projectObjectives || tenderData.projectObjectives,
@@ -755,15 +753,15 @@ const createProfessionalTender = async (req, res) => {
         technicalWeight: 70,
         financialWeight: 30
       },
-      bidValidityPeriod: professionalSpecific.bidValidityPeriod || tenderData.bidValidityPeriod || { 
-        value: 30, 
-        unit: 'days' 
+      bidValidityPeriod: professionalSpecific.bidValidityPeriod || tenderData.bidValidityPeriod || {
+        value: 30,
+        unit: 'days'
       },
-      clarificationDeadline: professionalSpecific.clarificationDeadline || tenderData.clarificationDeadline ? 
-                            new Date(professionalSpecific.clarificationDeadline || tenderData.clarificationDeadline) : null,
+      clarificationDeadline: professionalSpecific.clarificationDeadline || tenderData.clarificationDeadline ?
+        new Date(professionalSpecific.clarificationDeadline || tenderData.clarificationDeadline) : null,
       preBidMeeting: professionalSpecific.preBidMeeting || tenderData.preBidMeeting,
       sealedBidConfirmation: false,
-      // Simple CPO fields
+      // CPO fields
       cpoRequired: cpoRequired,
       cpoDescription: cpoDescription
     };
@@ -800,30 +798,23 @@ const createProfessionalTender = async (req, res) => {
 
     // Handle sealed bid confirmation for closed workflow
     if (workflowType === 'closed') {
-      const sealedBidConfirmation = tenderData.sealedBidConfirmation === 'true' || 
-                                   tenderData.sealedBidConfirmation === true;
-      
+      const sealedBidConfirmation = tenderData.sealedBidConfirmation === 'true' ||
+        tenderData.sealedBidConfirmation === true;
+
       if (!sealedBidConfirmation) {
-        if (req.files && req.files.length > 0) {
-          req.files.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
         return res.status(400).json({
           success: false,
           message: 'Sealed bid confirmation is required for closed workflow professional tenders'
         });
       }
-      
+
       finalTenderData.professionalSpecific.sealedBidConfirmation = true;
     }
 
     // Create and save tender
     const tender = new Tender(finalTenderData);
     await tender.validate();
-    
+
     // For closed tenders, lock immediately if published
     if (workflowType === 'closed' && tenderData.status === 'published') {
       await tender.lockClosedTender(req.user._id);
@@ -845,7 +836,8 @@ const createProfessionalTender = async (req, res) => {
         referenceNumber: tender.professionalSpecific.referenceNumber,
         workflowType: tender.workflowType,
         visibilityType: tender.visibility.visibilityType,
-        cpoRequired: tender.professionalSpecific.cpoRequired
+        cpoRequired: tender.professionalSpecific.cpoRequired,
+        attachmentsCount: attachments.length
       }
     }, req.ip, req.headers['user-agent']);
 
@@ -859,26 +851,14 @@ const createProfessionalTender = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'Professional tender created successfully',
-      data: { 
-        tender: populatedTender
+      data: {
+        tender: populatedTender,
+        attachmentsCount: attachments.length
       }
     });
 
   } catch (error) {
     console.error('Error creating professional tender:', error);
-    
-    // Clean up files on error
-    if (req.files && req.files.length > 0) {
-      req.files.forEach(file => {
-        if (fs.existsSync(file.path)) {
-          try {
-            fs.unlinkSync(file.path);
-          } catch (unlinkError) {
-            console.error('Failed to delete file:', unlinkError);
-          }
-        }
-      });
-    }
 
     if (error.code === 11000) {
       if (error.keyPattern && error.keyPattern['professionalSpecific.referenceNumber']) {
@@ -905,7 +885,8 @@ const createProfessionalTender = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Internal server error while creating professional tender',
-      error: error.message
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };
@@ -957,12 +938,12 @@ const getTenders = async (req, res) => {
     // ROLE-BASED VISIBILITY FILTERING
     const userId = req.user?._id;
     const userRole = req.user?.role;
-    
+
     // For authenticated users
     if (userId && userRole) {
       // Owner can see their own tenders regardless of status
       filter.$or = [{ owner: userId }];
-      
+
       // Add visibility-based filters for non-owner tenders
       if (userRole === 'freelancer') {
         // Freelancers can see freelance tenders with freelancers_only visibility
@@ -975,7 +956,7 @@ const getTenders = async (req, res) => {
       } else if (userRole === 'company') {
         // Companies can see professional tenders based on visibility
         const visibilityFilters = [];
-        
+
         // Public tenders
         visibilityFilters.push({
           tenderCategory: 'professional',
@@ -983,7 +964,7 @@ const getTenders = async (req, res) => {
           status: { $in: ['published', 'locked'] },
           deadline: { $gt: new Date() }
         });
-        
+
         // Companies-only tenders
         visibilityFilters.push({
           tenderCategory: 'professional',
@@ -991,7 +972,7 @@ const getTenders = async (req, res) => {
           status: { $in: ['published', 'locked'] },
           deadline: { $gt: new Date() }
         });
-        
+
         // Invite-only tenders (check invitations)
         const userCompany = await Company.findOne({ user: userId });
         if (userCompany) {
@@ -1006,7 +987,7 @@ const getTenders = async (req, res) => {
             ]
           });
         }
-        
+
         if (visibilityFilters.length > 0) {
           filter.$or = filter.$or.concat(visibilityFilters);
         }
@@ -1123,10 +1104,10 @@ const getTender = async (req, res) => {
     // Check if user can view this tender
     const userId = req.user?._id || null;
     const userRole = req.user?.role || null;
-    
+
     // For authenticated users, check if they own the tender
     let canView = false;
-    
+
     if (userId && userRole) {
       // Check if user is the owner
       if (tender.owner && tender.owner._id.toString() === userId.toString()) {
@@ -1166,10 +1147,10 @@ const getTender = async (req, res) => {
       const tenderObj = tender.toObject();
       tenderObj.proposals = [];
       tenderObj.metadata.visibleApplications = 0;
-      
+
       return res.status(200).json({
         success: true,
-        data: { 
+        data: {
           tender: tenderObj,
           canViewProposals: false
         }
@@ -1184,7 +1165,7 @@ const getTender = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: { 
+      data: {
         tender,
         canViewProposals: true,
         isOwner: userId && tender.owner._id.toString() === userId.toString()
@@ -1243,7 +1224,7 @@ const getOwnerTender = async (req, res) => {
     // Return all tender details including draft status
     res.status(200).json({
       success: true,
-      data: { 
+      data: {
         tender,
         canViewProposals: true,
         isOwner: true,
@@ -1341,7 +1322,7 @@ const updateTender = async (req, res) => {
       });
     }
 
-    // IMPORTANT: Check update restrictions based on workflow type
+    // Check update restrictions based on workflow type
     let canUpdate = false;
     let restrictionReason = '';
 
@@ -1373,10 +1354,10 @@ const updateTender = async (req, res) => {
     }
 
     const updates = req.body || {};
-    
+
     // Don't allow changing critical fields
     delete updates.tenderCategory;
-    delete updates.workflowType; // Cannot change workflow type after creation
+    delete updates.workflowType;
     delete updates.owner;
     delete updates.ownerRole;
     delete updates.ownerEntity;
@@ -1404,39 +1385,86 @@ const updateTender = async (req, res) => {
       delete updates.visibility;
     }
 
-    // Handle file attachments
-    const attachments = [];
-    if (req.files && req.files.length > 0) {
-      req.files.forEach((file, index) => {
-        const description = updates.fileDescriptions && updates.fileDescriptions[index] 
-          ? updates.fileDescriptions[index] 
+    // ==== CLOUDINARY ATTACHMENTS HANDLING ====
+    if (req.cloudinaryFiles && req.cloudinaryFiles.success && req.cloudinaryFiles.files) {
+      console.log(`Processing ${req.cloudinaryFiles.files.length} Cloudinary files for tender update`);
+
+      req.cloudinaryFiles.files.forEach((cloudinaryFile, index) => {
+        // Skip files that failed to upload
+        if (cloudinaryFile.success === false) {
+          console.warn(`File ${cloudinaryFile.originalName} failed to upload:`, cloudinaryFile.error);
+          return;
+        }
+
+        const description = updates.fileDescriptions && updates.fileDescriptions[index]
+          ? updates.fileDescriptions[index]
           : '';
-        
+
         const documentType = updates.fileTypes && updates.fileTypes[index]
           ? updates.fileTypes[index]
           : 'other';
-        
-        const fileHash = calculateFileHash(file.path);
-        
-        attachments.push({
-          filename: file.filename,
-          originalName: file.originalname,
-          path: file.path,
-          fileSize: file.size,
-          fileType: file.mimetype,
+
+        // Get Cloudinary data
+        const cloudinaryData = cloudinaryFile.cloudinary;
+
+        if (!cloudinaryData || !cloudinaryData.public_id) {
+          console.error('Missing Cloudinary data for file:', cloudinaryFile.originalName);
+          return;
+        }
+
+        const newAttachment = {
+          filename: cloudinaryData.public_id,
+          originalName: cloudinaryFile.originalName,
+          path: cloudinaryData.secure_url,
+          fileSize: cloudinaryFile.size,
+          fileType: cloudinaryFile.mimetype,
           description: description,
           uploadedBy: req.user._id,
           uploadedAt: new Date(),
           documentType: documentType,
           version: 1,
-          fileHash: fileHash
-        });
-      });
-    }
+          fileHash: cloudinaryData.public_id,
+          // Cloudinary metadata
+          cloudinaryPublicId: cloudinaryData.public_id,
+          cloudinaryUrl: cloudinaryData.secure_url,
+          cloudinaryFormat: cloudinaryData.format,
+          cloudinaryResourceType: cloudinaryData.resource_type,
+          cloudinaryCreatedAt: cloudinaryData.created_at,
+          cloudinaryBytes: cloudinaryData.bytes,
+          cloudinaryTags: cloudinaryData.tags || []
+        };
 
-    // Add new attachments to existing ones
-    if (attachments.length > 0) {
-      tender.attachments.push(...attachments);
+        // Add new attachment to existing ones
+        tender.attachments.push(newAttachment);
+      });
+    } else if (req.cloudinaryFile && req.cloudinaryFile.success && req.cloudinaryFile.file) {
+      // Handle single file upload
+      const cloudinaryFile = req.cloudinaryFile.file;
+      const cloudinaryData = cloudinaryFile.cloudinary;
+
+      const newAttachment = {
+        filename: cloudinaryData.public_id,
+        originalName: cloudinaryFile.originalName,
+        path: cloudinaryData.secure_url,
+        fileSize: cloudinaryFile.size,
+        fileType: cloudinaryFile.mimetype,
+        description: updates.fileDescriptions?.[0] || '',
+        uploadedBy: req.user._id,
+        uploadedAt: new Date(),
+        documentType: updates.fileTypes?.[0] || 'other',
+        version: 1,
+        fileHash: cloudinaryData.public_id,
+        // Cloudinary metadata
+        cloudinaryPublicId: cloudinaryData.public_id,
+        cloudinaryUrl: cloudinaryData.secure_url,
+        cloudinaryFormat: cloudinaryData.format,
+        cloudinaryResourceType: cloudinaryData.resource_type,
+        cloudinaryCreatedAt: cloudinaryData.created_at,
+        cloudinaryBytes: cloudinaryData.bytes,
+        cloudinaryTags: cloudinaryData.tags || []
+      };
+
+      tender.attachments.push(newAttachment);
     }
 
     // Update tender fields
@@ -1465,7 +1493,8 @@ const updateTender = async (req, res) => {
       action: 'Tender updated',
       changes: Object.keys(updates),
       workflowType: tender.workflowType,
-      status: tender.status
+      status: tender.status,
+      newAttachmentsCount: req.cloudinaryFiles?.files?.length || req.cloudinaryFile ? 1 : 0
     }, req.ip, req.headers['user-agent']);
 
     // Populate for response
@@ -1476,27 +1505,15 @@ const updateTender = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Tender updated successfully',
-      data: { 
+      data: {
         tender: populatedTender,
-        canEdit: tender.canEdit
+        canEdit: tender.canEdit,
+        attachmentsCount: tender.attachments.length
       }
     });
 
   } catch (error) {
     console.error('Error updating tender:', error);
-
-    // Clean up uploaded files on error
-    if (req.files && req.files.length > 0) {
-      req.files.forEach(file => {
-        if (fs.existsSync(file.path)) {
-          try {
-            fs.unlinkSync(file.path);
-          } catch (unlinkError) {
-            console.error('Failed to delete file:', unlinkError);
-          }
-        }
-      });
-    }
 
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(err => err.message);
@@ -1517,7 +1534,8 @@ const updateTender = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error updating tender',
-      error: error.message
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };
@@ -1562,14 +1580,14 @@ const getTenderForEditing = async (req, res) => {
       procurementCategory: tender.procurementCategory,
       deadline: tender.deadline,
       skillsRequired: tender.skillsRequired,
-      
+
       // Status and workflow
       status: tender.status,
       workflowType: tender.workflowType,
-      
+
       // Category specific
       tenderCategory: tender.tenderCategory,
-      
+
       // Freelance specific
       ...(tender.tenderCategory === 'freelance' && tender.freelanceSpecific ? {
         freelanceSpecific: {
@@ -1589,7 +1607,7 @@ const getTenderForEditing = async (req, res) => {
         },
         sealedBidConfirmation: tender.freelanceSpecific.sealedBidConfirmation
       } : {}),
-      
+
       // Professional specific
       ...(tender.tenderCategory === 'professional' && tender.professionalSpecific ? {
         professionalSpecific: {
@@ -1617,7 +1635,7 @@ const getTenderForEditing = async (req, res) => {
         },
         visibilityType: tender.visibility.visibilityType
       } : {}),
-      
+
       // Attachments
       attachments: tender.attachments,
       maxFileSize: tender.maxFileSize,
@@ -1648,15 +1666,15 @@ const getTenderForEditing = async (req, res) => {
 // Helper function to get edit restriction reason
 const getEditRestrictionReason = (tender) => {
   if (tender.status === 'draft') return null;
-  
+
   if (tender.status === 'published' && tender.workflowType === 'closed') {
     return 'Closed workflow tenders cannot be edited after publishing';
   }
-  
+
   if (['locked', 'deadline_reached', 'revealed', 'closed', 'cancelled'].includes(tender.status)) {
     return `Tender is ${tender.status.replace('_', ' ')}`;
   }
-  
+
   return null;
 };
 // ============ DELETE TENDER ============
@@ -1776,8 +1794,8 @@ const publishTender = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: tender.workflowType === 'closed' 
-        ? 'Tender published and locked as sealed bid' 
+      message: tender.workflowType === 'closed'
+        ? 'Tender published and locked as sealed bid'
         : 'Tender published successfully',
       data: { tender }
     });
@@ -1840,7 +1858,7 @@ const revealProposals = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Proposals revealed successfully',
-      data: { 
+      data: {
         tender,
         revealedAt: tender.revealedAt,
         revealedCount: tender.proposals.length
@@ -1877,7 +1895,6 @@ const downloadAttachment = async (req, res) => {
     }
 
     // Check if user can view/download this attachment
-    // For downloads, we should be more permissive - allow anyone who can view the tender
     const canView = await tender.canUserView(req.user?._id, req.user?.role);
     if (!canView) {
       return res.status(403).json({
@@ -1886,47 +1903,61 @@ const downloadAttachment = async (req, res) => {
       });
     }
 
-    // Check if file exists
-    if (!fs.existsSync(attachment.path)) {
+    // ==== CLOUDINARY HANDLING ====
+    // Check if it's a Cloudinary attachment
+    if (attachment.cloudinaryUrl || attachment.cloudinaryPublicId) {
+      const cloudinaryUrl = attachment.cloudinaryUrl;
+
+      // For direct download, use Cloudinary URL with download parameter
+      let downloadUrl = cloudinaryUrl;
+
+      // If it's a Cloudinary URL and we want to force download
+      if (cloudinaryUrl.includes('cloudinary.com')) {
+        // Add download parameter to Cloudinary URL
+        downloadUrl = cloudinaryUrl.replace('/upload/', '/upload/fl_attachment/');
+      }
+
+      // Redirect to Cloudinary download URL
+      return res.redirect(downloadUrl);
+    }
+
+    // Fallback to local file if exists (backward compatibility)
+    if (attachment.path && fs.existsSync(attachment.path)) {
+      const sanitizedFilename = attachment.originalName.replace(/[^\x20-\x7E]/g, '_');
+
+      res.setHeader('Content-Type', attachment.fileType);
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(sanitizedFilename)}"`);
+      res.setHeader('Content-Length', attachment.fileSize);
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+
+      const fileStream = fs.createReadStream(attachment.path);
+      fileStream.on('error', (error) => {
+        console.error('Error streaming file:', error);
+        if (!res.headersSent) {
+          res.status(500).json({
+            success: false,
+            message: 'Error streaming file'
+          });
+        }
+      });
+
+      fileStream.pipe(res);
+
+      res.on('close', () => {
+        fileStream.destroy();
+      });
+    } else {
       return res.status(404).json({
         success: false,
         message: 'File not found on server'
       });
     }
 
-    // Sanitize filename for header - remove invalid characters
-    const sanitizedFilename = attachment.originalName.replace(/[^\x20-\x7E]/g, '_');
-    
-    // Set headers for download
-    res.setHeader('Content-Type', attachment.fileType);
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(sanitizedFilename)}"`);
-    res.setHeader('Content-Length', attachment.fileSize);
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-
-    // Stream the file
-    const fileStream = fs.createReadStream(attachment.path);
-    fileStream.on('error', (error) => {
-      console.error('Error streaming file:', error);
-      if (!res.headersSent) {
-        res.status(500).json({
-          success: false,
-          message: 'Error streaming file'
-        });
-      }
-    });
-    
-    fileStream.pipe(res);
-    
-    // Handle client disconnect
-    res.on('close', () => {
-      fileStream.destroy();
-    });
-
   } catch (error) {
     console.error('Error downloading attachment:', error);
-    
+
     if (!res.headersSent) {
       res.status(500).json({
         success: false,
@@ -1984,41 +2015,59 @@ const previewAttachment = async (req, res) => {
       });
     }
 
-    // Check if file exists
-    if (!fs.existsSync(attachment.path)) {
+    // ==== CLOUDINARY HANDLING ====
+    // Check if it's a Cloudinary attachment
+    if (attachment.cloudinaryUrl || attachment.cloudinaryPublicId) {
+      const cloudinaryUrl = attachment.cloudinaryUrl;
+      let previewUrl = cloudinaryUrl;
+
+      // Apply Cloudinary transformations for better preview
+      if (cloudinaryUrl.includes('cloudinary.com')) {
+        if (attachment.fileType.startsWith('image/')) {
+          // For images: resize and optimize
+          previewUrl = cloudinaryUrl.replace('/upload/', '/upload/w_800,h_600,c_fill,q_auto,f_auto/');
+        } else if (attachment.fileType === 'application/pdf') {
+          // For PDFs: use Cloudinary's PDF preview (first page as image)
+          previewUrl = cloudinaryUrl.replace('/upload/', '/upload/w_800,h_600,c_fill,q_auto,f_png/page_1/');
+        }
+      }
+
+      // Redirect to Cloudinary preview URL
+      return res.redirect(previewUrl);
+    }
+
+    // Fallback to local file if exists (backward compatibility)
+    if (attachment.path && fs.existsSync(attachment.path)) {
+      res.setHeader('Content-Type', attachment.fileType);
+      res.setHeader('Content-Length', attachment.fileSize);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+
+      if (attachment.fileType === 'application/pdf') {
+        res.setHeader('Content-Disposition', 'inline');
+      }
+
+      const fileStream = fs.createReadStream(attachment.path);
+      fileStream.on('error', (error) => {
+        console.error('Error streaming file:', error);
+        if (!res.headersSent) {
+          res.status(500).json({
+            success: false,
+            message: 'Error previewing file'
+          });
+        }
+      });
+
+      fileStream.pipe(res);
+    } else {
       return res.status(404).json({
         success: false,
         message: 'File not found on server'
       });
     }
 
-    // Set headers for preview
-    res.setHeader('Content-Type', attachment.fileType);
-    res.setHeader('Content-Length', attachment.fileSize);
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    
-    // For PDFs, allow embedding
-    if (attachment.fileType === 'application/pdf') {
-      res.setHeader('Content-Disposition', 'inline');
-    }
-
-    // Stream the file
-    const fileStream = fs.createReadStream(attachment.path);
-    fileStream.on('error', (error) => {
-      console.error('Error streaming file:', error);
-      if (!res.headersSent) {
-        res.status(500).json({
-          success: false,
-          message: 'Error previewing file'
-        });
-      }
-    });
-    
-    fileStream.pipe(res);
-
   } catch (error) {
     console.error('Error previewing attachment:', error);
-    
+
     if (!res.headersSent) {
       res.status(500).json({
         success: false,
@@ -2033,12 +2082,12 @@ const previewAttachment = async (req, res) => {
 // Helper function to handle invitations
 const handleTenderInvitations = async (tender, invitations, invitingUser) => {
   const newInvitations = [];
-  
+
   if (invitations.users && Array.isArray(invitations.users)) {
     for (const userId of invitations.users) {
       const user = await User.findById(userId);
       if (!user || user.role !== 'company') continue;
-      
+
       const token = crypto.randomBytes(32).toString('hex');
       newInvitations.push({
         invitedUser: userId,
@@ -2048,7 +2097,7 @@ const handleTenderInvitations = async (tender, invitations, invitingUser) => {
         token: token,
         tokenExpires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
       });
-      
+
       // Send invitation email
       try {
         await emailService.sendTenderInvitationEmail(
@@ -2062,12 +2111,12 @@ const handleTenderInvitations = async (tender, invitations, invitingUser) => {
       }
     }
   }
-  
+
   if (invitations.companies && Array.isArray(invitations.companies)) {
     for (const companyId of invitations.companies) {
       const company = await Company.findById(companyId);
       if (!company) continue;
-      
+
       const token = crypto.randomBytes(32).toString('hex');
       newInvitations.push({
         invitedCompany: companyId,
@@ -2077,13 +2126,13 @@ const handleTenderInvitations = async (tender, invitations, invitingUser) => {
         token: token,
         tokenExpires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
       });
-      
+
       // Send invitations to company users
-      const companyUsers = await User.find({ 
+      const companyUsers = await User.find({
         _id: company.user,
-        role: 'company' 
+        role: 'company'
       });
-      
+
       for (const user of companyUsers) {
         try {
           await emailService.sendTenderInvitationEmail(
@@ -2098,13 +2147,13 @@ const handleTenderInvitations = async (tender, invitations, invitingUser) => {
       }
     }
   }
-  
+
   if (invitations.emails && Array.isArray(invitations.emails)) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    
+
     for (const email of invitations.emails) {
       if (!emailRegex.test(email)) continue;
-      
+
       const token = crypto.randomBytes(32).toString('hex');
       newInvitations.push({
         email: email.toLowerCase(),
@@ -2114,7 +2163,7 @@ const handleTenderInvitations = async (tender, invitations, invitingUser) => {
         token: token,
         tokenExpires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
       });
-      
+
       // Send email invitation
       try {
         await emailService.sendTenderEmailInvitation(
@@ -2128,7 +2177,7 @@ const handleTenderInvitations = async (tender, invitations, invitingUser) => {
       }
     }
   }
-  
+
   tender.invitations = newInvitations;
   await tender.save();
 };
@@ -2219,10 +2268,10 @@ const respondToInvitation = async (req, res) => {
     }
 
     const invite = tender.invitations[inviteIndex];
-    
+
     // Check if current user is the invited user
     let isInvitedUser = false;
-    
+
     if (invite.invitationType === 'user' && invite.invitedUser) {
       isInvitedUser = invite.invitedUser.toString() === req.user._id.toString();
     } else if (invite.invitationType === 'company' && invite.invitedCompany) {
@@ -2310,7 +2359,7 @@ const getMyInvitations = async (req, res) => {
       // Get user's companies
       const userCompanies = await Company.find({ user: req.user._id });
       const companyIds = userCompanies.map(company => company._id);
-      
+
       invitationFilter = {
         $or: [
           { 'invitations.invitedUser': req.user._id },
@@ -2359,7 +2408,7 @@ const getMyInvitations = async (req, res) => {
         }
         return false;
       });
-      
+
       tenderObj.userInvitation = userInvitations[0] || null;
       return tenderObj;
     });
@@ -2508,9 +2557,9 @@ const getTenderStats = async (req, res) => {
     }
 
     // Check if user owns the tender or can view it
-    const canViewStats = tender.owner.toString() === req.user._id.toString() || 
-                        req.user.role === 'admin' ||
-                        await tender.canUserView(req.user._id, req.user.role);
+    const canViewStats = tender.owner.toString() === req.user._id.toString() ||
+      req.user.role === 'admin' ||
+      await tender.canUserView(req.user._id, req.user.role);
 
     if (!canViewStats) {
       return res.status(403).json({
@@ -2555,7 +2604,7 @@ const getTenderStats = async (req, res) => {
       let cpoSubmissions = 0;
       let cpoVerified = 0;
       let cpoPending = 0;
-      
+
       // Count CPO submissions from proposals
       if (cpoRequired) {
         proposals.forEach(proposal => {
@@ -2569,7 +2618,7 @@ const getTenderStats = async (req, res) => {
           }
         });
       }
-      
+
       cpoStats = {
         required: cpoRequired,
         submissionsCount: cpoSubmissions,
@@ -2594,7 +2643,7 @@ const getTenderStats = async (req, res) => {
         publishedAt: tender.publishedAt,
         deadline: tender.deadline
       },
-      
+
       applications: {
         totalApplications: proposals.length,
         visibleApplications: tender.metadata?.visibleApplications || 0,
@@ -2606,7 +2655,7 @@ const getTenderStats = async (req, res) => {
         sealed: sealedProposals,
         revealed: revealedProposals
       },
-      
+
       invitations: {
         totalInvited: totalInvited,
         accepted: acceptedInvitations,
@@ -2614,13 +2663,13 @@ const getTenderStats = async (req, res) => {
         declined: declinedInvitations,
         expired: expiredInvitations
       },
-      
+
       engagement: {
         updateCount: tender.metadata?.updateCount || 0,
         lastUpdatedAt: tender.metadata?.lastUpdatedAt,
         lastUpdatedBy: tender.metadata?.lastUpdatedBy
       },
-      
+
       cpo: cpoStats
     };
 
@@ -2629,8 +2678,8 @@ const getTenderStats = async (req, res) => {
       stats.financial = {
         budgetRange: tender.freelanceSpecific.budget,
         engagementType: tender.freelanceSpecific.engagementType,
-        averageBid: proposals.length > 0 
-          ? proposals.reduce((sum, p) => sum + (p.bidAmount || 0), 0) / proposals.length 
+        averageBid: proposals.length > 0
+          ? proposals.reduce((sum, p) => sum + (p.bidAmount || 0), 0) / proposals.length
           : 0
       };
     }
@@ -2673,8 +2722,8 @@ const submitCPO = async (req, res) => {
     }
 
     // Check if tender requires CPO
-    if (!tender.professionalSpecific.cpoRequirement || 
-        !tender.professionalSpecific.cpoRequirement.required) {
+    if (!tender.professionalSpecific.cpoRequirement ||
+      !tender.professionalSpecific.cpoRequirement.required) {
       return res.status(400).json({
         success: false,
         message: 'This tender does not require CPO'
@@ -2690,8 +2739,8 @@ const submitCPO = async (req, res) => {
     }
 
     // Check if company has submitted a proposal
-    const hasProposal = tender.proposals.some(p => 
-      p.applicant.toString() === req.user._id.toString() && 
+    const hasProposal = tender.proposals.some(p =>
+      p.applicant.toString() === req.user._id.toString() &&
       p.applicantRole === 'company'
     );
 
@@ -2788,7 +2837,7 @@ const submitCPO = async (req, res) => {
     // Check issuing bank against accepted banks if specified
     const acceptedBanks = tender.professionalSpecific.cpoRequirement.acceptedBanks;
     if (acceptedBanks && acceptedBanks.length > 0) {
-      const bankAccepted = acceptedBanks.some(bank => 
+      const bankAccepted = acceptedBanks.some(bank =>
         bank.bankName.toLowerCase().includes(issuingBank.toLowerCase()) ||
         issuingBank.toLowerCase().includes(bank.bankName.toLowerCase())
       );
@@ -2859,7 +2908,7 @@ const submitCPO = async (req, res) => {
 
   } catch (error) {
     console.error('Error submitting CPO:', error);
-    
+
     // Clean up uploaded file on error
     if (req.file && fs.existsSync(req.file.path)) {
       try {
@@ -3079,12 +3128,12 @@ const checkCPOExpiry = async (req, res) => {
 
     for (const tender of tenders) {
       for (const cpo of tender.professionalSpecific.cpoSubmissions) {
-        if (cpo.expiryDate && cpo.expiryDate < now && 
-            (cpo.status === 'submitted' || cpo.status === 'verified')) {
-          
+        if (cpo.expiryDate && cpo.expiryDate < now &&
+          (cpo.status === 'submitted' || cpo.status === 'verified')) {
+
           cpo.status = 'expired';
           expiredCount++;
-          
+
           results.push({
             tenderId: tender._id,
             tenderTitle: tender.title,
@@ -3095,7 +3144,7 @@ const checkCPOExpiry = async (req, res) => {
           });
         }
       }
-      
+
       if (tender.professionalSpecific.cpoSubmissions.some(c => c.isModified())) {
         await tender.save();
       }
@@ -3123,11 +3172,11 @@ module.exports = {
   // Category management
   getCategories,
   getCategoryLabel,
-  
+
   // Tender creation
   createFreelanceTender,
   createProfessionalTender,
-  
+
   // Tender management
   getTenders,
   getTender,
@@ -3135,17 +3184,17 @@ module.exports = {
   deleteTender,
   publishTender,
   getTenderStats,
-  
+
   // User-specific
   getMyTenders,
   toggleSaveTender,
   getSavedTenders,
-  
+
   // Invitation management
   inviteUsersToTender,
   respondToInvitation,
   getMyInvitations,
-  
+
   //Download Mangment
   downloadAttachment,
   previewAttachment,

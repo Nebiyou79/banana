@@ -1,23 +1,32 @@
-// components/social/profile/AvatarUploader.tsx - IMPROVED VERSION
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useRef, useState } from 'react';
-import { profileService } from '@/services/profileService';
-import { Camera, Upload, Loader2, X, Image as ImageIcon, User, Check, AlertCircle } from 'lucide-react';
+import { type CloudinaryImage, profileService } from '@/services/profileService';
+import { Camera, Upload, Loader2, Image as ImageIcon, User, Check, AlertCircle, Cloud, X, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface AvatarUploaderProps {
-  currentAvatar?: string;
-  currentCover?: string;
-  onAvatarComplete: (avatarUrl: string) => void;
-  onCoverComplete: (coverUrl: string) => void;
+  currentAvatar?: string | CloudinaryImage | null;
+  currentCover?: string | CloudinaryImage | null;
+  onAvatarComplete: (avatar: CloudinaryImage, thumbnailUrl?: string) => void;
+  onCoverComplete: (cover: CloudinaryImage, thumbnailUrl?: string) => void;
+  onAvatarDelete?: () => void;
+  onCoverDelete?: () => void;
+  onError?: (type: 'avatar' | 'cover', error: any) => void;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   type?: 'avatar' | 'cover' | 'both';
   showHelperText?: boolean;
-  maxFileSize?: number;
+  showDeleteButtons?: boolean;
+  maxFileSize?: {
+    avatar?: number; // in MB
+    cover?: number; // in MB
+  };
   allowedTypes?: string[];
   aspectRatio?: {
     avatar?: '1:1' | '3:4' | '4:3';
     cover?: '16:9' | '3:1' | '2:1';
   };
+  userId?: string;
+  className?: string;
 }
 
 export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
@@ -25,15 +34,24 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
   currentCover,
   onAvatarComplete,
   onCoverComplete,
+  onAvatarDelete,
+  onCoverDelete,
+  onError,
   size = 'lg',
   type = 'both',
   showHelperText = true,
-  maxFileSize = 5,
+  showDeleteButtons = true,
+  maxFileSize = {
+    avatar: 5, // 5MB for avatars (matches backend)
+    cover: 10  // 10MB for covers (matches backend)
+  },
   allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'],
   aspectRatio = {
     avatar: '1:1',
     cover: '16:9'
-  }
+  },
+  userId,
+  className = ''
 }) => {
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -43,19 +61,13 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<'avatar' | 'cover' | null>(null);
 
   const avatarSize = {
     sm: 'h-20 w-20',
     md: 'h-28 w-28',
     lg: 'h-36 w-36',
     xl: 'h-44 w-44',
-  }[size];
-
-  const coverHeight = {
-    sm: 'h-32',
-    md: 'h-40',
-    lg: 'h-48',
-    xl: 'h-56',
   }[size];
 
   const getAspectRatioClass = (type: 'avatar' | 'cover') => {
@@ -76,258 +88,275 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
     }
   };
 
-  const validateFile = (file: File, fileType: 'avatar' | 'cover'): Promise<boolean> => {
+  const getDisplayUrl = (image: string | CloudinaryImage | null | undefined): string => {
+    if (!image) return '';
+    if (typeof image === 'string') return image;
+    if (image && 'secure_url' in image) return image.secure_url;
+    return '';
+  };
+
+  const validateFile = (file: File, fileType: 'avatar' | 'cover'): { valid: boolean; error?: string } => {
+    console.log(`🔍 Validating ${fileType} file:`, {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      allowedTypes,
+      maxSize: maxFileSize[fileType]
+    });
+
+    // Check file type
+    const normalizedFileType = file.type.toLowerCase();
+    const normalizedAllowedTypes = allowedTypes.map(t => t.toLowerCase());
+    
+    if (!normalizedAllowedTypes.includes(normalizedFileType)) {
+      const error = `Invalid file type. Please select ${allowedTypes.map(t => t.split('/')[1]).join(', ').toUpperCase()} files only.`;
+      console.error('❌ File type validation failed:', error);
+      return { valid: false, error };
+    }
+    
+    // Check file size
+    const maxSize = (fileType === 'avatar' ? maxFileSize.avatar! : maxFileSize.cover!) * 1024 * 1024;
+    if (file.size > maxSize) {
+      const error = `File is too large. Maximum size is ${fileType === 'avatar' ? maxFileSize.avatar : maxFileSize.cover}MB.`;
+      console.error('❌ File size validation failed:', error);
+      return { valid: false, error };
+    }
+    
+    if (file.size === 0) {
+      const error = 'File is empty. Please select a valid image file.';
+      console.error('❌ File empty validation failed');
+      return { valid: false, error };
+    }
+
+    return { valid: true };
+  };
+
+  const validateImageDimensions = (file: File, fileType: 'avatar' | 'cover'): Promise<{ valid: boolean; error?: string }> => {
     return new Promise((resolve) => {
-      console.log(`Validating ${fileType} file:`, {
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        isValidType: allowedTypes.includes(file.type),
-        isWithinSize: file.size <= maxFileSize * 1024 * 1024
-      });
-
-      // Check file type
-      if (!allowedTypes.includes(file.type)) {
-        const errorMsg = `Invalid file type. Please select ${allowedTypes.map(t => t.split('/')[1]).join(', ').toUpperCase()} files only.`;
-        toast.error(errorMsg);
-        resolve(false);
-        return;
-      }
-
-      // Check file size
-      const maxSize = maxFileSize * 1024 * 1024;
-      if (file.size > maxSize) {
-        const errorMsg = `File is too large. Maximum size is ${maxFileSize}MB.`;
-        toast.error(errorMsg);
-        resolve(false);
-        return;
-      }
-
-      if (file.size === 0) {
-        toast.error('File is empty');
-        resolve(false);
-        return;
-      }
-
-      // Create image element to check dimensions
       const img = new Image();
       img.src = URL.createObjectURL(file);
-
+      
       img.onload = () => {
         URL.revokeObjectURL(img.src);
-
+        
+        let warning = '';
         if (fileType === 'avatar') {
-          // Avatar specific validations
           if (img.width < 100 || img.height < 100) {
-            toast.error('Profile picture should be at least 100x100 pixels');
-            resolve(false);
-            return;
-          }
-
-          const aspectRatio = img.width / img.height;
-          if (aspectRatio < 0.8 || aspectRatio > 1.2) {
-            toast.warning('Profile picture should be close to square (1:1 ratio)');
-            // Not blocking, just warning
+            warning = 'Low resolution profile picture - recommended minimum 100x100px';
+            console.warn('⚠️ Low resolution avatar detected');
           }
         } else {
-          // Cover specific validations
           if (img.width < 1200 || img.height < 300) {
-            toast.warning('Cover photo should be at least 1200x300 pixels for best quality');
-            // Not blocking, just warning
+            warning = 'Low resolution cover photo - recommended minimum 1200x300px';
+            console.warn('⚠️ Low resolution cover detected');
           }
         }
-
-        resolve(true);
+        
+        if (warning) {
+          toast.warning(warning, { duration: 5000 });
+        }
+        
+        resolve({ valid: true });
       };
-
+      
       img.onerror = () => {
         URL.revokeObjectURL(img.src);
-        toast.error('Invalid image file. Please try another image.');
-        resolve(false);
+        const error = 'Invalid image file. The selected file may be corrupted.';
+        console.error('❌ Image load error:', error);
+        resolve({ valid: false, error });
       };
     });
   };
 
   const handleFileSelect = async (file: File, fileType: 'avatar' | 'cover') => {
-    if (!file) return;
-
-    try {
-      console.log(`${fileType} file selected:`, {
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        lastModified: file.lastModified
-      });
-
-      const isValid = await validateFile(file, fileType);
-      if (!isValid) {
-        // Reset input
-        if (fileType === 'avatar' && avatarInputRef.current) {
-          avatarInputRef.current.value = '';
-        } else if (fileType === 'cover' && coverInputRef.current) {
-          coverInputRef.current.value = '';
-        }
-        return;
-      }
-
-      // Create preview
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        if (fileType === 'avatar') {
-          setAvatarPreview(e.target?.result as string);
-        } else {
-          setCoverPreview(e.target?.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
-
-      await uploadFile(file, fileType);
-    } catch (error) {
-      console.error(`Error handling ${fileType} file:`, error);
-      toast.error(`Error processing ${fileType === 'avatar' ? 'profile picture' : 'cover photo'}. Please try another file.`);
+    if (!file) {
+      console.error('❌ No file selected');
+      return;
     }
+
+    console.log(`📁 File selected for ${fileType}:`, {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      lastModified: new Date(file.lastModified).toISOString()
+    });
+
+    // Create preview immediately for better UX
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (fileType === 'avatar') {
+        setAvatarPreview(e.target?.result as string);
+      } else {
+        setCoverPreview(e.target?.result as string);
+      }
+    };
+    reader.onerror = () => {
+      console.error('❌ Error reading file for preview');
+      toast.error('Failed to read image file');
+    };
+    reader.readAsDataURL(file);
+
+    // Validate file
+    const basicValidation = validateFile(file, fileType);
+    if (!basicValidation.valid) {
+      toast.error(basicValidation.error || 'Invalid file');
+      clearPreview(fileType);
+      return;
+    }
+
+    // Validate image dimensions
+    const dimensionValidation = await validateImageDimensions(file, fileType);
+    if (!dimensionValidation.valid) {
+      toast.error(dimensionValidation.error || 'Invalid image');
+      clearPreview(fileType);
+      return;
+    }
+
+    // Start upload
+    await uploadFile(file, fileType);
   };
 
   const uploadFile = async (file: File, fileType: 'avatar' | 'cover') => {
+    console.log(`🚀 Starting ${fileType} upload...`);
+    
     setUploadError(null);
     setUploadSuccess(false);
+    setUploading(fileType);
+    setUploadProgress(0);
 
     try {
-      setUploading(fileType);
-      setUploadProgress(10);
-
-      console.log(`Starting ${fileType} upload:`, {
-        name: file.name,
-        size: file.size,
-        type: file.type
-      });
-
-      // Real progress simulation
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 90) { // Stop at 90% for actual upload
-            clearInterval(progressInterval);
-            return prev;
-          }
-          return prev + 10;
-        });
-      }, 300);
-
       let result;
+      const progressHandler = (progressEvent: any) => {
+        if (progressEvent.total) {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
+          setUploadProgress(percentCompleted);
+          console.log(`📊 ${fileType} upload progress: ${percentCompleted}%`);
+        }
+      };
+
       if (fileType === 'avatar') {
-        console.log('Calling profileService.uploadAvatar...');
-        result = await profileService.uploadAvatar(file);
-        console.log('Avatar upload result:', result);
-
-        if (!result || !result.avatarUrl) {
-          throw new Error('Avatar URL not received from server');
-        }
-
-        // Notify parent component
-        onAvatarComplete(result.avatarUrl);
-
-        console.log('Avatar upload completed successfully');
-
+        console.log('📤 Calling profileService.uploadAvatar...');
+        result = await profileService.uploadAvatar(file, progressHandler);
+        console.log('✅ Avatar upload service call successful:', result);
+        onAvatarComplete(result.avatar, result.thumbnailUrl);
       } else {
-        console.log('Calling profileService.uploadCoverPhoto...');
-        result = await profileService.uploadCoverPhoto(file);
-        console.log('Cover photo upload result:', result);
-
-        if (!result || !result.coverPhotoUrl) {
-          throw new Error('Cover photo URL not received from server');
-        }
-
-        // Notify parent component
-        onCoverComplete(result.coverPhotoUrl);
-
-        console.log('Cover photo upload completed successfully');
+        console.log('📤 Calling profileService.uploadCoverPhoto...');
+        result = await profileService.uploadCoverPhoto(file, progressHandler);
+        console.log('✅ Cover upload service call successful:', result);
+        onCoverComplete(result.cover, result.thumbnailUrl);
       }
 
-      clearInterval(progressInterval);
       setUploadProgress(100);
       setUploadSuccess(true);
 
-      // Clear preview and reset after delay
+      toast.success(`${fileType === 'avatar' ? 'Profile picture' : 'Cover photo'} updated successfully!`, {
+        icon: <Cloud className="w-5 h-5 text-blue-500" />,
+        duration: 4000,
+      });
+
+      console.log(`✅ ${fileType} upload completed successfully`);
+
+      // Clear states after success
       setTimeout(() => {
-        if (fileType === 'avatar') {
-          setAvatarPreview(null);
-        } else {
-          setCoverPreview(null);
-        }
+        clearPreview(fileType);
         setUploading(null);
         setUploadProgress(0);
         setUploadSuccess(false);
+        
+        // Clear file input
+        const fileInput = fileType === 'avatar' ? avatarInputRef.current : coverInputRef.current;
+        if (fileInput) {
+          fileInput.value = '';
+          console.log(`🧹 Cleared ${fileType} file input`);
+        }
       }, 2000);
 
     } catch (error: any) {
-      console.error(`${fileType} upload failed:`, error);
-
-      let errorMessage = error.message || `Failed to upload ${fileType === 'avatar' ? 'profile picture' : 'cover photo'}`;
-
-      // Parse error messages
-      if (error.message?.includes('network') || error.code === 'NETWORK_ERROR') {
-        errorMessage = 'Network error. Please check your internet connection and try again.';
-      } else if (error.message?.includes('size') || error.message?.includes('large')) {
-        errorMessage = `File is too large. Maximum size is ${maxFileSize}MB.`;
-      } else if (error.message?.includes('type') || error.message?.includes('format')) {
-        errorMessage = 'Invalid file format. Please use JPG, PNG, or WebP images.';
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      }
-
+      console.error(`❌ ${fileType} upload failed:`, {
+        error: error.message,
+        code: error.code,
+        name: error.name,
+        stack: error.stack
+      });
+      
+      const errorMessage = error.message || "Upload failed. Please try again.";
       setUploadError(errorMessage);
-      toast.error(errorMessage);
-
-      // Reset upload state
-      cancelUpload(fileType);
-    } finally {
-      // Always reset file inputs
-      if (fileType === 'avatar' && avatarInputRef.current) {
-        avatarInputRef.current.value = '';
-      } else if (fileType === 'cover' && coverInputRef.current) {
-        coverInputRef.current.value = '';
+      
+      toast.error(errorMessage, {
+        duration: 5000,
+        icon: <AlertCircle className="w-5 h-5 text-red-500" />,
+      });
+      
+      if (onError) {
+        onError(fileType, error);
       }
+      
+      // Keep preview so user can retry with same file
+    } finally {
+      console.log(`🏁 ${fileType} upload process completed`);
     }
   };
 
-  const handleAvatarClick = () => avatarInputRef.current?.click();
-  const handleCoverClick = () => coverInputRef.current?.click();
+  const handleDelete = async (type: 'avatar' | 'cover') => {
+    if (deleting) return;
+    
+    const confirmMessage = type === 'avatar' 
+      ? 'Are you sure you want to remove your profile picture?' 
+      : 'Are you sure you want to remove your cover photo?';
+    
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
 
-  const cancelUpload = (fileType: 'avatar' | 'cover') => {
-    console.log(`Cancelling ${fileType} upload`);
+    setDeleting(type);
+    
+    try {
+      if (type === 'avatar') {
+        await profileService.deleteAvatar();
+        if (onAvatarDelete) onAvatarDelete();
+        toast.success('Profile picture removed successfully');
+      } else {
+        await profileService.deleteCoverPhoto();
+        if (onCoverDelete) onCoverDelete();
+        toast.success('Cover photo removed successfully');
+      }
+    } catch (error: any) {
+      console.error(`❌ ${type} delete failed:`, error);
+      toast.error(`Failed to remove ${type === 'avatar' ? 'profile picture' : 'cover photo'}`);
+    } finally {
+      setDeleting(null);
+    }
+  };
 
+  const clearPreview = (fileType: 'avatar' | 'cover') => {
     if (fileType === 'avatar') {
       setAvatarPreview(null);
-      if (avatarInputRef.current) avatarInputRef.current.value = '';
     } else {
       setCoverPreview(null);
-      if (coverInputRef.current) coverInputRef.current.value = '';
     }
+  };
+
+  const cancelUpload = (fileType: 'avatar' | 'cover') => {
+    console.log(`❌ Cancelling ${fileType} upload`);
+    clearPreview(fileType);
     setUploading(null);
     setUploadProgress(0);
     setUploadSuccess(false);
     setUploadError(null);
+    
+    const fileInput = fileType === 'avatar' ? avatarInputRef.current : coverInputRef.current;
+    if (fileInput) {
+      fileInput.value = '';
+    }
+    
+    toast.info(`${fileType === 'avatar' ? 'Profile picture' : 'Cover photo'} upload cancelled`);
   };
 
-  const getDisplayUrl = (type: 'avatar' | 'cover'): string => {
-    if (type === 'avatar') {
-      // Priority: preview → current avatar → fallback
-      if (avatarPreview) return avatarPreview;
-      return currentAvatar || '';
-    } else {
-      // Priority: preview → current cover → fallback
-      if (coverPreview) return coverPreview;
-      return currentCover || '';
-    }
-  };
-
-  const getStatusText = (fileType: 'avatar' | 'cover') => {
-    if (uploading === fileType) {
-      if (uploadSuccess) return 'Upload successful!';
-      if (uploadError) return uploadError;
-      return `Uploading... ${uploadProgress}%`;
-    }
-    return '';
+  const getDisplayImageUrl = (type: 'avatar' | 'cover'): string => {
+    if (type === 'avatar') return avatarPreview || getDisplayUrl(currentAvatar);
+    return coverPreview || getDisplayUrl(currentCover);
   };
 
   const renderUploadStatus = (fileType: 'avatar' | 'cover') => {
@@ -335,37 +364,32 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
 
     if (uploadError) {
       return (
-        <div className="absolute inset-0 bg-red-50/95 backdrop-blur-sm flex flex-col items-center justify-center p-4 z-10 rounded-lg">
-          <div className="text-center">
-            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-3 mx-auto">
-              <AlertCircle className="w-6 h-6 text-red-600" />
-            </div>
-            <p className="text-sm font-medium text-red-700 mb-1">Upload Failed</p>
-            <p className="text-xs text-red-600 mb-4 max-w-xs">{uploadError}</p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => cancelUpload(fileType)}
-                className="text-xs text-gray-700 hover:text-gray-900 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setUploadError(null);
-                  // Re-trigger file selection
-                  if (fileType === 'avatar') {
-                    handleAvatarClick();
-                  } else {
-                    handleCoverClick();
-                  }
-                }}
-                className="text-xs text-blue-700 hover:text-blue-800 px-3 py-1.5 bg-blue-100 hover:bg-blue-200 rounded transition-colors"
-              >
-                Try Again
-              </button>
-            </div>
+        <div className="absolute inset-0 bg-red-50/95 backdrop-blur-sm flex flex-col items-center justify-center p-4 z-20 rounded-lg">
+          <AlertCircle className="w-8 h-8 text-red-600 mb-2" />
+          <p className="text-xs text-red-600 text-center mb-3 px-2 line-clamp-2">{uploadError}</p>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => cancelUpload(fileType)} 
+              className="text-[10px] bg-white border border-gray-300 px-2 py-1 rounded hover:bg-gray-50 transition-colors flex items-center gap-1"
+              disabled={!!deleting}
+            >
+              <X className="w-3 h-3" />
+              Cancel
+            </button>
+            <button 
+              onClick={() => {
+                setUploadError(null);
+                const fileInput = fileType === 'avatar' ? avatarInputRef.current : coverInputRef.current;
+                if (fileInput?.files?.[0]) {
+                  uploadFile(fileInput.files[0], fileType);
+                }
+              }} 
+              className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
+              disabled={!!deleting}
+            >
+              <RefreshCw className="w-3 h-3" />
+              Retry
+            </button>
           </div>
         </div>
       );
@@ -373,286 +397,265 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
 
     if (uploadSuccess) {
       return (
-        <div className="absolute inset-0 bg-green-50/95 backdrop-blur-sm flex flex-col items-center justify-center p-4 z-10 rounded-lg">
-          <div className="text-center">
-            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-3 mx-auto">
-              <Check className="w-6 h-6 text-green-600" />
-            </div>
-            <p className="text-sm font-medium text-green-700">Upload Successful!</p>
-            <p className="text-xs text-green-600 mt-1">Your {fileType === 'avatar' ? 'profile picture' : 'cover photo'} has been updated.</p>
-          </div>
+        <div className="absolute inset-0 bg-green-50/95 backdrop-blur-sm flex flex-col items-center justify-center p-4 z-20 rounded-lg">
+          <Check className="w-8 h-8 text-green-600 mb-1" />
+          <p className="text-xs font-medium text-green-700">Upload Complete!</p>
+          <p className="text-[10px] text-green-600 mt-1">Synced to Cloudinary</p>
         </div>
       );
     }
 
     return (
-      <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center p-4 z-10 rounded-lg">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-3 mx-auto" />
-          <p className="text-sm font-medium text-gray-700 mb-2">
-            Uploading {fileType === 'avatar' ? 'Profile Picture' : 'Cover Photo'}...
-          </p>
-          <div className="w-48 bg-gray-200 rounded-full overflow-hidden mb-2">
-            <div
-              className="h-2 bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300"
-              style={{ width: `${uploadProgress}%` }}
-            />
-          </div>
-          <p className="text-xs text-gray-600 mb-3">
-            {uploadProgress}% • Please don't close this window
-          </p>
-          <button
-            type="button"
-            onClick={() => cancelUpload(fileType)}
-            className="text-xs text-red-600 hover:text-red-700 px-3 py-1.5 bg-red-50 hover:bg-red-100 rounded transition-colors"
-          >
-            Cancel Upload
-          </button>
+      <div className="absolute inset-0 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center p-4 z-20 rounded-lg">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
+        <div className="w-32 bg-gray-200 rounded-full h-1.5 mb-2">
+          <div 
+            className="bg-blue-600 h-1.5 rounded-full transition-all duration-300" 
+            style={{ width: `${uploadProgress}%` }} 
+          />
         </div>
+        <p className="text-[10px] text-gray-500">
+          {uploadProgress}% - {uploadProgress < 100 ? 'Uploading to Cloudinary...' : 'Processing...'}
+        </p>
+        <button 
+          onClick={() => cancelUpload(fileType)}
+          className="text-[10px] text-gray-500 hover:text-gray-700 mt-2 flex items-center gap-1"
+        >
+          <X className="w-3 h-3" />
+          Cancel
+        </button>
       </div>
     );
   };
 
+  const renderDeleteButton = (fileType: 'avatar' | 'cover', hasImage: boolean) => {
+    if (!showDeleteButtons || !hasImage || uploading || deleting) return null;
+
+    return (
+      <button
+        onClick={() => handleDelete(fileType)}
+        disabled={!!deleting}
+        className="absolute top-2 right-2 bg-red-500 text-white p-1.5 rounded-full shadow-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed z-10"
+        title={`Remove ${fileType === 'avatar' ? 'profile picture' : 'cover photo'}`}
+      >
+        {deleting === fileType ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : (
+          <X className="w-3.5 h-3.5" />
+        )}
+      </button>
+    );
+  };
+
+  const hasAvatar = !!getDisplayImageUrl('avatar');
+  const hasCover = !!getDisplayImageUrl('cover');
+
   return (
-    <div className="space-y-8">
-      {/* Cover Photo Uploader */}
+    <div className={`space-y-8 ${className}`}>
+      {/* Cover Photo Section */}
       {(type === 'cover' || type === 'both') && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-gray-900">Cover Photo</h3>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Recommended: 1500×500px (16:9 ratio) • Max {maxFileSize}MB • JPG, PNG, WebP
+              <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
+                Max {maxFileSize.cover}MB • 16:9 
+                <span className="text-blue-600 font-medium flex items-center gap-0.5">
+                  <Cloud className="w-3 h-3" />
+                  Cloud Storage
+                </span>
               </p>
             </div>
-            <button
-              onClick={handleCoverClick}
-              disabled={uploading === 'cover'}
-              type="button"
-              className="px-3 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center gap-2"
+            <button 
+              onClick={() => coverInputRef.current?.click()} 
+              disabled={!!uploading || !!deleting}
+              type="button" 
+              className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Upload className="w-4 h-4" />
-              {currentCover ? 'Change Cover' : 'Upload Cover'}
+              <Upload className="w-3.5 h-3.5" />
+              {hasCover ? 'Change Cover' : 'Upload Cover'}
             </button>
           </div>
 
-          <div className={`relative ${getAspectRatioClass('cover')} rounded-xl overflow-hidden border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors bg-gradient-to-br from-gray-50 to-gray-100 group`}>
-            <div className="absolute inset-0">
-              {getDisplayUrl('cover') ? (
-                <img
-                  src={getDisplayUrl('cover')}
-                  alt="Cover"
+          <div className={`relative ${getAspectRatioClass('cover')} rounded-xl overflow-hidden border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors bg-gray-50 group`}>
+            {getDisplayImageUrl('cover') ? (
+              <>
+                <img 
+                  src={getDisplayImageUrl('cover')} 
+                  alt="Cover" 
                   className="w-full h-full object-cover"
-                  onError={(e) => {
-                    console.error('Cover image failed to load:', getDisplayUrl('cover'));
-                    e.currentTarget.src = '';
-                    e.currentTarget.classList.add('hidden');
-                  }}
                 />
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 p-4">
-                  <ImageIcon className="w-12 h-12 mb-3 opacity-50" />
-                  <p className="text-sm font-medium">No cover photo</p>
-                  <p className="text-xs mt-1">Click to upload a cover photo</p>
-                </div>
-              )}
-            </div>
-
-            {renderUploadStatus('cover')}
-
-            {/* Upload overlay button */}
-            {!uploading && (
-              <button
-                type="button"
-                onClick={handleCoverClick}
-                disabled={uploading === 'cover'}
-                className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-black/20 backdrop-blur-[1px]"
-              >
-                <div className="px-4 py-2.5 bg-white/95 backdrop-blur-sm text-gray-900 text-sm font-medium rounded-lg shadow-lg hover:bg-white transition-colors flex items-center gap-2">
-                  <Upload className="w-4 h-4" />
-                  {currentCover ? 'Change Cover Photo' : 'Upload Cover Photo'}
-                </div>
-              </button>
+                {renderDeleteButton('cover', hasCover)}
+              </>
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 opacity-50">
+                <ImageIcon className="w-10 h-10 mb-2" />
+                <p className="text-xs">No cover photo</p>
+              </div>
             )}
-
-            <input
-              ref={coverInputRef}
-              type="file"
-              accept={allowedTypes.join(',')}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  handleFileSelect(file, 'cover');
+            {renderUploadStatus('cover')}
+            
+            {/* Upload Overlay */}
+            {!uploading && !hasCover && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/5 cursor-pointer">
+                <Upload className="w-8 h-8 text-gray-500 mb-1" />
+                <p className="text-xs text-gray-600">Click to upload cover</p>
+                <p className="text-[10px] text-gray-500">Max {maxFileSize.cover}MB</p>
+              </div>
+            )}
+            
+            <input 
+              ref={coverInputRef} 
+              type="file" 
+              accept={allowedTypes.join(',')} 
+              onChange={(e) => { 
+                if (e.target.files?.[0]) {
+                  handleFileSelect(e.target.files[0], 'cover'); 
                 }
-                // Clear input for same file selection
-                e.target.value = '';
-              }}
-              className="hidden"
-              disabled={uploading === 'cover'}
+              }} 
+              className="hidden" 
+              disabled={!!uploading || !!deleting}
+              aria-label="Upload cover photo"
+            />
+            
+            {/* Hidden label for better accessibility */}
+            <label 
+              htmlFor="cover-upload"
+              className="absolute inset-0 cursor-pointer"
+              aria-label="Upload cover photo"
             />
           </div>
-
-          {getStatusText('cover') && (
-            <div className={`px-3 py-2 rounded-lg text-sm ${uploadSuccess ? 'bg-green-50 text-green-700 border border-green-200' : uploadError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
-              <div className="flex items-center gap-2">
-                {uploadSuccess ? <Check className="w-4 h-4" /> : uploadError ? <AlertCircle className="w-4 h-4" /> : <Loader2 className="w-4 h-4 animate-spin" />}
-                <span>{getStatusText('cover')}</span>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
-      {/* Avatar Uploader */}
+      {/* Avatar Section */}
       {(type === 'avatar' || type === 'both') && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-gray-900">Profile Picture</h3>
               <p className="text-xs text-gray-500 mt-0.5">
-                Square image recommended • Max {maxFileSize}MB • JPG, PNG, WebP
+                Max {maxFileSize.avatar}MB • Recommended: 300x300px
               </p>
             </div>
-            <button
-              onClick={handleAvatarClick}
-              disabled={uploading === 'avatar'}
-              type="button"
-              className="px-3 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center gap-2"
+            <button 
+              onClick={() => avatarInputRef.current?.click()} 
+              disabled={!!uploading || !!deleting}
+              type="button" 
+              className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Camera className="w-4 h-4" />
-              {currentAvatar ? 'Change Photo' : 'Upload Photo'}
+              <Camera className="w-3.5 h-3.5" />
+              {hasAvatar ? 'Change Photo' : 'Upload Photo'}
             </button>
           </div>
 
           <div className="flex flex-col sm:flex-row items-start gap-6">
-            <div className="relative flex-shrink-0">
-              <div className={`${avatarSize} rounded-full overflow-hidden border-4 border-white shadow-xl ${getAspectRatioClass('avatar')} bg-gradient-to-br from-blue-50 to-purple-50`}>
-                {getDisplayUrl('avatar') ? (
-                  <img
-                    src={getDisplayUrl('avatar')}
-                    alt="Profile"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      console.error('Avatar image failed to load:', getDisplayUrl('avatar'));
-                      e.currentTarget.src = '';
-                      e.currentTarget.classList.add('hidden');
-                    }}
-                  />
+            <div className="relative shrink-0">
+              <div className={`${avatarSize} rounded-full overflow-hidden border-4 border-white shadow-xl bg-gray-100 relative`}>
+                {getDisplayImageUrl('avatar') ? (
+                  <>
+                    <img 
+                      src={getDisplayImageUrl('avatar')} 
+                      alt="Profile" 
+                      className="w-full h-full object-cover"
+                    />
+                    {renderDeleteButton('avatar', hasAvatar)}
+                  </>
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-100 to-purple-100">
-                    <User className="w-12 h-12 text-gray-400" />
+                  <div className="w-full h-full flex items-center justify-center text-gray-400">
+                    <User className="w-10 h-10" />
                   </div>
                 )}
-
                 {renderUploadStatus('avatar')}
               </div>
-
-              {/* Camera icon overlay */}
-              {!uploading && (
-                <button
-                  type="button"
-                  onClick={handleAvatarClick}
-                  disabled={uploading === 'avatar'}
-                  className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full shadow-lg hover:bg-blue-700 transition-colors"
-                  title="Change profile picture"
-                >
-                  <Camera className="w-4 h-4" />
-                </button>
-              )}
+              <button 
+                onClick={() => avatarInputRef.current?.click()} 
+                disabled={!!uploading || !!deleting}
+                className="absolute -bottom-2 -right-2 bg-blue-600 text-white p-2.5 rounded-full shadow-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed z-10"
+                title="Change profile picture"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
             </div>
 
             {showHelperText && (
-              <div className="flex-1">
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-                  <p className="font-medium text-gray-700 mb-2">Best practices for profile pictures:</p>
-                  <ul className="text-xs text-gray-600 space-y-1.5">
-                    <li className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1 flex-shrink-0" />
-                      <span>Use a clear, high-resolution photo (at least 400×400 pixels)</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1 flex-shrink-0" />
-                      <span>Face should be clearly visible and well-lit</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1 flex-shrink-0" />
-                      <span>Square or nearly square images work best (1:1 ratio)</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1 flex-shrink-0" />
-                      <span>Professional or friendly expression recommended</span>
-                    </li>
-                  </ul>
-                </div>
+              <div className="flex-1 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl p-4">
+                <p className="font-medium text-xs text-gray-700 mb-3 flex items-center gap-2">
+                  <Cloud className="w-3.5 h-3.5 text-blue-600" /> 
+                  Cloud Processing Benefits
+                </p>
+                <ul className="text-[10px] text-gray-600 space-y-2">
+                  <li className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-0.5 shrink-0" />
+                    <span className="font-medium text-blue-600">Fast Global Delivery:</span> Images served via Cloudinary`s CDN
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-0.5 shrink-0" />
+                    <span className="font-medium text-blue-600">Automatic Optimization:</span> Smart resizing & format conversion
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-600 mt-0.5 shrink-0" />
+                    <span className="font-medium text-blue-600">Real-time Progress:</span> Watch upload status live
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-600 mt-0.5 shrink-0" />
+                    <span className="font-medium text-blue-600">Secure Storage:</span> Encrypted backups & versioning
+                  </li>
+                </ul>
               </div>
             )}
           </div>
-
-          <input
-            ref={avatarInputRef}
-            type="file"
-            accept={allowedTypes.join(',')}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                handleFileSelect(file, 'avatar');
+          <input 
+            ref={avatarInputRef} 
+            type="file" 
+            accept={allowedTypes.join(',')} 
+            onChange={(e) => { 
+              if (e.target.files?.[0]) {
+                handleFileSelect(e.target.files[0], 'avatar'); 
               }
-              // Clear input for same file selection
-              e.target.value = '';
-            }}
-            className="hidden"
-            disabled={uploading === 'avatar'}
+            }} 
+            className="hidden" 
+            disabled={!!uploading || !!deleting}
+            aria-label="Upload profile picture"
           />
-
-          {getStatusText('avatar') && (
-            <div className={`px-3 py-2 rounded-lg text-sm ${uploadSuccess ? 'bg-green-50 text-green-700 border border-green-200' : uploadError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
-              <div className="flex items-center gap-2">
-                {uploadSuccess ? <Check className="w-4 h-4" /> : uploadError ? <AlertCircle className="w-4 h-4" /> : <Loader2 className="w-4 h-4 animate-spin" />}
-                <span>{getStatusText('avatar')}</span>
-              </div>
-            </div>
-          )}
+          
+          {/* Hidden label for better accessibility */}
+          <label 
+            htmlFor="avatar-upload"
+            className="hidden"
+            aria-label="Upload profile picture"
+          />
         </div>
       )}
 
-      {/* Combined Tips Section */}
+      {/* Cloud Storage Footer */}
       {type === 'both' && showHelperText && (
         <div className="pt-6 border-t border-gray-200">
-          <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-100 rounded-xl p-4">
-            <p className="font-medium text-gray-700 mb-2 flex items-center gap-2">
-              <Check className="w-4 h-4 text-blue-600" />
-              Quick Tips for Best Results:
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-gray-600">
-              <div className="flex items-start gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1 flex-shrink-0" />
-                <span>Profile picture: Use 1:1 ratio (square) for best appearance</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1 flex-shrink-0" />
-                <span>Cover photo: 16:9 ratio works best (e.g., 1500×500px)</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1 flex-shrink-0" />
-                <span>Use high-quality, well-lit images for professional appearance</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1 flex-shrink-0" />
-                <span>Both images will be automatically optimized and cropped</span>
-              </div>
+          <div className="bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100 rounded-xl p-4 flex items-start gap-3">
+            <Cloud className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-medium text-gray-700 mb-1">Cloudinary Integration</p>
+              <p className="text-[10px] text-gray-600">
+                Your profile images are stored securely in Cloudinary`s global CDN with automatic optimization, 
+                ensuring fast loading worldwide. All uploads are encrypted and backed up with version control.
+                {userId && ` User ID: ${userId.substring(0, 8)}...`}
+              </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Debug Information (visible in development only) */}
+      {/* Debug Info (Development Only) */}
       {process.env.NODE_ENV === 'development' && (
-        <div className="mt-4 p-3 bg-gray-100 rounded-lg text-xs text-gray-600">
-          <p className="font-medium mb-1">Debug Information:</p>
-          <p>Current Avatar: {currentAvatar ? 'Set' : 'Not set'}</p>
-          <p>Current Cover: {currentCover ? 'Set' : 'Not set'}</p>
-          <p>Uploading: {uploading || 'None'}</p>
-          <p>Upload Progress: {uploadProgress}%</p>
+        <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+          <p className="text-xs font-medium text-gray-700 mb-2">Debug Info:</p>
+          <div className="text-[10px] text-gray-500 space-y-1">
+            <div>Uploading: {uploading || 'No'}</div>
+            <div>Progress: {uploadProgress}%</div>
+            <div>Has Avatar: {hasAvatar ? 'Yes' : 'No'}</div>
+            <div>Has Cover: {hasCover ? 'Yes' : 'No'}</div>
+            <div>Deleting: {deleting || 'No'}</div>
+          </div>
         </div>
       )}
     </div>

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import { Briefcase, Users, Building, Award, Globe, Shield, Handshake, Target } from 'lucide-react';
+import { Briefcase, Users, Building, Globe, Shield, Handshake, Target } from 'lucide-react';
 import { colors } from '@/utils/color';
 
 export default function Home() {
@@ -170,7 +170,7 @@ export default function Home() {
                 </li>
                 <li className="flex items-start gap-2">
                   <div className="w-2 h-2 rounded-full mt-2" style={{ backgroundColor: colors.teal }}></div>
-                  <span>Build your company's professional brand and visibility</span>
+                  <span>Build your company`s professional brand and visibility</span>
                 </li>
               </ul>
             </div>

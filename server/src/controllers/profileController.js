@@ -1,7 +1,6 @@
 const Profile = require('../models/Profile');
 const User = require('../models/User');
-const Connection = require('../models/Connection');
-const { uploadToCloudinary } = require('../middleware/upload');
+const { deleteFromCloudinary } = require('../config/cloudinary');
 const { validationResult } = require('express-validator');
 const mongoose = require('mongoose');
 
@@ -724,181 +723,457 @@ class ProfileController {
     }
   }
 
-  // Upload avatar
-  async uploadAvatar(req, res) {
-    try {
-      if (!req.file) {
-        return res.status(400).json({
-          success: false,
-          message: 'No file uploaded',
-          code: 'NO_FILE_UPLOADED'
-        });
-      }
-
-      // Validate file type
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-      if (!allowedTypes.includes(req.file.mimetype)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed',
-          code: 'INVALID_FILE_TYPE'
-        });
-      }
-
-      // Validate file size (max 5MB)
-      const maxSize = 5 * 1024 * 1024; // 5MB
-      if (req.file.size > maxSize) {
-        return res.status(400).json({
-          success: false,
-          message: 'File size too large. Maximum size is 5MB',
-          code: 'FILE_TOO_LARGE'
-        });
-      }
-
-      // Get user to ensure they exist
-      const user = await User.findById(req.user.userId);
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: 'User not found',
-          code: 'USER_NOT_FOUND'
-        });
-      }
-
-      const uploadResult = await uploadToCloudinary(req.file, 'avatars');
-
-      if (!uploadResult || !uploadResult.url) {
-        throw new Error('Failed to upload to cloud storage');
-      }
-
-      // Update user's avatar
-      user.avatar = uploadResult.url;
-      user.updatedAt = new Date();
-      await user.save();
-
-      // Update profile's last update timestamp
-      await Profile.findOneAndUpdate(
-        { user: req.user.userId },
-        { lastProfileUpdate: new Date(), lastActive: new Date() },
-        { upsert: true }
-      );
-
-      res.status(200).json({
-        success: true,
-        message: 'Avatar uploaded successfully',
-        data: {
-          avatarUrl: uploadResult.url,
-          publicId: uploadResult.public_id
-        },
-        code: 'AVATAR_UPLOADED'
+// ========== AVATAR UPLOAD (FIXED) ==========
+async uploadAvatar(req, res) {
+  try {
+    console.log('🔄 [DEBUG] uploadAvatar controller called for user:', req.user.userId);
+    
+    // Check if file was uploaded via cloudinaryMediaUpload middleware
+    if (!req.cloudinaryAvatar || !req.cloudinaryAvatar.success) {
+      console.error('❌ Cloudinary avatar data missing:', {
+        hasCloudinaryAvatar: !!req.cloudinaryAvatar,
+        cloudinaryAvatar: req.cloudinaryAvatar
       });
-    } catch (error) {
-      console.error('Upload avatar error:', error);
-
-      if (error.message.includes('cloud storage') || error.message.includes('Cloudinary')) {
-        return res.status(500).json({
-          success: false,
-          message: 'Failed to upload image to storage service',
-          code: 'STORAGE_UPLOAD_ERROR'
-        });
-      }
-
-      res.status(500).json({
+      
+      return res.status(400).json({
         success: false,
-        message: 'Internal server error while uploading avatar',
-        code: 'SERVER_ERROR',
+        message: 'No avatar file provided or upload failed',
+        code: 'NO_FILE_PROVIDED',
+        debug: {
+          hasCloudinaryAvatar: !!req.cloudinaryAvatar,
+          uploadSuccess: req.cloudinaryAvatar?.success || false
+        }
+      });
+    }
+    
+    const userId = req.user.userId;
+    const avatarData = req.cloudinaryAvatar.avatar;
+    
+    console.log('📤 Processing avatar for user:', userId, {
+      name: avatarData.originalName,
+      size: avatarData.size,
+      mimetype: avatarData.mimetype,
+      cloudinaryId: avatarData.cloudinary.public_id
+    });
+    
+    // Get user to ensure they exist
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+    
+    // Check if old avatar exists and should be deleted
+    const profile = await Profile.findOne({ user: userId });
+    if (profile && profile.avatar && profile.avatar.public_id) {
+      try {
+        await deleteFromCloudinary(profile.avatar.public_id, 'image');
+        console.log('🗑️ Deleted old avatar from Cloudinary:', profile.avatar.public_id);
+      } catch (deleteError) {
+        console.warn('⚠️ Failed to delete old avatar:', deleteError.message);
+      }
+    }
+    
+    // Prepare Cloudinary avatar object
+    const avatarCloudinaryData = {
+      public_id: avatarData.cloudinary.public_id,
+      secure_url: avatarData.cloudinary.secure_url,
+      width: avatarData.cloudinary.width || null,
+      height: avatarData.cloudinary.height || null,
+      bytes: avatarData.cloudinary.bytes || null,
+      format: avatarData.cloudinary.format || null,
+      resource_type: avatarData.cloudinary.resource_type || 'image',
+      uploaded_at: new Date()
+    };
+    
+    // Generate thumbnail URL for avatar
+    const thumbnailUrl = avatarData.cloudinary.secure_url.replace(
+      '/upload/', 
+      '/upload/w_150,h_150,c_fill,g_face/'
+    );
+    
+    // Update User model
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          avatar: avatarData.cloudinary.secure_url,
+          avatarPublicId: avatarData.cloudinary.public_id,
+          updatedAt: new Date()
+        }
+      },
+      { new: true, runValidators: false }
+    );
+    
+    // Update or create Profile model
+    const updatedProfile = await Profile.findOneAndUpdate(
+      { user: userId },
+      {
+        $set: {
+          avatar: avatarCloudinaryData,
+          lastProfileUpdate: new Date(),
+          lastActive: new Date()
+        },
+        $setOnInsert: {
+          user: userId,
+          socialLinks: {},
+          privacySettings: {
+            profileVisibility: 'public',
+            allowMessages: true,
+            allowConnections: true
+          }
+        }
+      },
+      { 
+        upsert: true, 
+        new: true, 
+        runValidators: false 
+      }
+    );
+    
+    console.log('✅ Avatar update complete for user:', userId);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Avatar uploaded successfully',
+      data: {
+        avatar: avatarCloudinaryData,
+        thumbnailUrl: thumbnailUrl,
+        user: {
+          id: updatedUser._id,
+          avatar: updatedUser.avatar,
+          name: updatedUser.name,
+          email: updatedUser.email
+        },
+        fileInfo: {
+          originalName: avatarData.originalName,
+          size: avatarData.size,
+          mimetype: avatarData.mimetype,
+          format: avatarData.cloudinary.format
+        }
+      },
+      code: 'AVATAR_UPLOADED'
+    });
+    
+  } catch (error) {
+    console.error('❌ Upload avatar error:', error);
+    
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error occurred',
+        code: 'VALIDATION_ERROR',
         error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
-  }
-
-  // Upload cover photo
-  async uploadCoverPhoto(req, res) {
-    try {
-      if (!req.file) {
-        return res.status(400).json({
-          success: false,
-          message: 'No file uploaded',
-          code: 'NO_FILE_UPLOADED'
-        });
-      }
-
-      // Validate file type
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-      if (!allowedTypes.includes(req.file.mimetype)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid file type. Only JPEG, PNG, and WebP are allowed',
-          code: 'INVALID_FILE_TYPE'
-        });
-      }
-
-      // Validate file size (max 10MB for cover photos)
-      const maxSize = 10 * 1024 * 1024; // 10MB
-      if (req.file.size > maxSize) {
-        return res.status(400).json({
-          success: false,
-          message: 'File size too large. Maximum size is 10MB',
-          code: 'FILE_TOO_LARGE'
-        });
-      }
-
-      // Get user to ensure they exist
-      const user = await User.findById(req.user.userId);
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: 'User not found',
-          code: 'USER_NOT_FOUND'
-        });
-      }
-
-      const uploadResult = await uploadToCloudinary(req.file, 'covers');
-
-      if (!uploadResult || !uploadResult.url) {
-        throw new Error('Failed to upload to cloud storage');
-      }
-
-      user.coverPhoto = uploadResult.url;
-      user.updatedAt = new Date();
-      await user.save();
-
-      // Update profile's last update timestamp
-      await Profile.findOneAndUpdate(
-        { user: req.user.userId },
-        { lastProfileUpdate: new Date(), lastActive: new Date() },
-        { upsert: true }
-      );
-
-      res.status(200).json({
-        success: true,
-        message: 'Cover photo uploaded successfully',
-        data: {
-          coverPhotoUrl: uploadResult.url,
-          publicId: uploadResult.public_id
-        },
-        code: 'COVER_PHOTO_UPLOADED'
-      });
-    } catch (error) {
-      console.error('Upload cover photo error:', error);
-
-      if (error.message.includes('cloud storage') || error.message.includes('Cloudinary')) {
-        return res.status(500).json({
-          success: false,
-          message: 'Failed to upload image to storage service',
-          code: 'STORAGE_UPLOAD_ERROR'
-        });
-      }
-
-      res.status(500).json({
+    
+    if (error.name === 'CastError') {
+      return res.status(400).json({
         success: false,
-        message: 'Internal server error while uploading cover photo',
-        code: 'SERVER_ERROR',
+        message: 'Invalid user ID format',
+        code: 'INVALID_USER_ID'
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while uploading avatar',
+      code: 'SERVER_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+}
+
+// ========== COVER PHOTO UPLOAD (FIXED) ==========
+async uploadCoverPhoto(req, res) {
+  try {
+    console.log('🔄 [DEBUG] uploadCoverPhoto controller called for user:', req.user.userId);
+    
+    // Check if file was uploaded via cloudinaryMediaUpload middleware
+    if (!req.cloudinaryCover || !req.cloudinaryCover.success) {
+      console.error('❌ Cloudinary cover data missing:', {
+        hasCloudinaryCover: !!req.cloudinaryCover,
+        cloudinaryCover: req.cloudinaryCover
+      });
+      
+      return res.status(400).json({
+        success: false,
+        message: 'No cover photo file provided or upload failed',
+        code: 'NO_FILE_PROVIDED',
+        debug: {
+          hasCloudinaryCover: !!req.cloudinaryCover,
+          uploadSuccess: req.cloudinaryCover?.success || false
+        }
+      });
+    }
+    
+    const userId = req.user.userId;
+    const coverData = req.cloudinaryCover.cover;
+    
+    console.log('📤 Processing cover photo for user:', userId, {
+      name: coverData.originalName,
+      size: coverData.size,
+      mimetype: coverData.mimetype,
+      cloudinaryId: coverData.cloudinary.public_id
+    });
+    
+    // Get user to ensure they exist
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+    
+    // Check if old cover exists and should be deleted
+    const profile = await Profile.findOne({ user: userId });
+    if (profile && profile.cover && profile.cover.public_id) {
+      try {
+        await deleteFromCloudinary(profile.cover.public_id, 'image');
+        console.log('🗑️ Deleted old cover from Cloudinary:', profile.cover.public_id);
+      } catch (deleteError) {
+        console.warn('⚠️ Failed to delete old cover:', deleteError.message);
+      }
+    }
+    
+    // Prepare Cloudinary cover object
+    const coverCloudinaryData = {
+      public_id: coverData.cloudinary.public_id,
+      secure_url: coverData.cloudinary.secure_url,
+      width: coverData.cloudinary.width || null,
+      height: coverData.cloudinary.height || null,
+      bytes: coverData.cloudinary.bytes || null,
+      format: coverData.cloudinary.format || null,
+      resource_type: coverData.cloudinary.resource_type || 'image',
+      uploaded_at: new Date()
+    };
+    
+    // Generate thumbnail URL for cover
+    const thumbnailUrl = coverData.cloudinary.secure_url.replace(
+      '/upload/', 
+      '/upload/w_400,h_150,c_fill/'
+    );
+    
+    // Update User model
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          coverPhoto: coverData.cloudinary.secure_url,
+          coverPhotoPublicId: coverData.cloudinary.public_id,
+          updatedAt: new Date()
+        }
+      },
+      { new: true, runValidators: false }
+    );
+    
+    // Update or create Profile model
+    const updatedProfile = await Profile.findOneAndUpdate(
+      { user: userId },
+      {
+        $set: {
+          cover: coverCloudinaryData,
+          lastProfileUpdate: new Date(),
+          lastActive: new Date()
+        },
+        $setOnInsert: {
+          user: userId,
+          socialLinks: {},
+          privacySettings: {
+            profileVisibility: 'public',
+            allowMessages: true,
+            allowConnections: true
+          }
+        }
+      },
+      { 
+        upsert: true, 
+        new: true, 
+        runValidators: false 
+      }
+    );
+    
+    console.log('✅ Cover photo update complete for user:', userId);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Cover photo uploaded successfully',
+      data: {
+        cover: coverCloudinaryData,
+        thumbnailUrl: thumbnailUrl,
+        user: {
+          id: updatedUser._id,
+          coverPhoto: updatedUser.coverPhoto,
+          name: updatedUser.name,
+          email: updatedUser.email
+        },
+        fileInfo: {
+          originalName: coverData.originalName,
+          size: coverData.size,
+          mimetype: coverData.mimetype,
+          format: coverData.cloudinary.format
+        }
+      },
+      code: 'COVER_PHOTO_UPLOADED'
+    });
+    
+  } catch (error) {
+    console.error('❌ Upload cover photo error:', error);
+    
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error occurred',
+        code: 'VALIDATION_ERROR',
         error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
+    
+    if (error.name === 'CastError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID format',
+        code: 'INVALID_USER_ID'
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while uploading cover photo',
+      code: 'SERVER_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
+}
 
+// ========== DELETE AVATAR (FIXED) ==========
+async deleteAvatar(req, res) {
+  try {
+    const userId = req.user.userId;
+    console.log('🗑️ Deleting avatar for user:', userId);
+    
+    const profile = await Profile.findOne({ user: userId });
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Profile not found',
+        code: 'PROFILE_NOT_FOUND'
+      });
+    }
+
+    if (!profile.avatar || !profile.avatar.public_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'No avatar to delete',
+        code: 'NO_AVATAR'
+      });
+    }
+
+    console.log('Deleting avatar from Cloudinary:', profile.avatar.public_id);
+    
+    // Delete from Cloudinary
+    const deleteResult = await deleteFromCloudinary(profile.avatar.public_id, 'image');
+
+    // Delete from User model
+    await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          avatar: null,
+          avatarPublicId: null,
+          updatedAt: new Date()
+        }
+      }
+    );
+
+    // Clear avatar from profile
+    profile.avatar = null;
+    profile.lastProfileUpdate = new Date();
+    await profile.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Avatar deleted successfully',
+      cloudinaryDeleted: deleteResult.success,
+      code: 'AVATAR_DELETED'
+    });
+  } catch (error) {
+    console.error('Delete avatar error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while deleting avatar',
+      code: 'SERVER_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+}
+
+// ========== DELETE COVER PHOTO (FIXED) ==========
+async deleteCoverPhoto(req, res) {
+  try {
+    const userId = req.user.userId;
+    console.log('🗑️ Deleting cover photo for user:', userId);
+    
+    const profile = await Profile.findOne({ user: userId });
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Profile not found',
+        code: 'PROFILE_NOT_FOUND'
+      });
+    }
+
+    if (!profile.cover || !profile.cover.public_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'No cover photo to delete',
+        code: 'NO_COVER_PHOTO'
+      });
+    }
+
+    console.log('Deleting cover from Cloudinary:', profile.cover.public_id);
+    
+    // Delete from Cloudinary
+    const deleteResult = await deleteFromCloudinary(profile.cover.public_id, 'image');
+
+    // Delete from User model
+    await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          coverPhoto: null,
+          coverPhotoPublicId: null,
+          updatedAt: new Date()
+        }
+      }
+    );
+
+    // Clear cover from profile
+    profile.cover = null;
+    profile.lastProfileUpdate = new Date();
+    await profile.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Cover photo deleted successfully',
+      cloudinaryDeleted: deleteResult.success,
+      code: 'COVER_PHOTO_DELETED'
+    });
+  } catch (error) {
+    console.error('Delete cover photo error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while deleting cover photo',
+      code: 'SERVER_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+}
   // Update professional information
   async updateProfessionalInfo(req, res) {
     try {
@@ -1506,8 +1781,6 @@ class ProfileController {
     }
   }
 
-  // Note: All helper methods have been moved outside the class
-  // They are now regular functions that can be called directly
 }
 
 module.exports = new ProfileController();

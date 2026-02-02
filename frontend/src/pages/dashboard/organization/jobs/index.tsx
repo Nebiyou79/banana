@@ -1,33 +1,90 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// pages/dashboard/organization/jobs/index.tsx - UPDATED WITH MODAL
-import React, { useState } from 'react';
+// pages/dashboard/organization/jobs/index.tsx - REFACTORED WITH FIXED PAGINATION
+import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { jobService, Job } from '@/services/jobService';
+import { jobService, Job, JobStatus } from '@/services/jobService';
+import { profileService } from '@/services/profileService';
 import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'next/router';
 import JobCard from '@/components/job/JobCard';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import ConfirmationModal from '@/components/ui/ConfirmationModal';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { toast } from '@/hooks/use-toast';
-import {  Plus } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
+
+// Pagination configuration (same as company page for consistency)
+const PAGE_SIZE = 10;
+const DEFAULT_PAGE = 1;
 
 const OrganizationJobsPage: React.FC = () => {
   const { user } = useAuth();
+  const router = useRouter();
   const queryClient = useQueryClient();
+
+  // State management
+  const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [jobToDelete, setJobToDelete] = useState<string | null>(null);
+  const [totalPages, setTotalPages] = useState(1);
 
-  // Fetch organization opportunities
-  const { 
-    data: jobsData, 
-    isLoading, 
-    error: fetchError 
+  // Get page from URL query params on initial load
+  useEffect(() => {
+    if (router.query.page) {
+      const page = parseInt(router.query.page as string, 10);
+      if (!isNaN(page) && page > 0) {
+        setCurrentPage(page);
+      }
+    }
+  }, [router.query.page]);
+
+  // Update URL when page changes
+  const updatePageInURL = useCallback((page: number) => {
+    router.push({
+      pathname: router.pathname,
+      query: { ...router.query, page }
+    }, undefined, { shallow: true });
+  }, [router]);
+
+  // Fetch current organization's profile
+  const {
+    data: organizationProfile,
+    isLoading: profileLoading
   } = useQuery({
-    queryKey: ['organizationJobs'],
-    queryFn: () => jobService.getOrganizationJobs(),
+    queryKey: ['organizationProfile'],
+    queryFn: () => profileService.getProfile(),
     enabled: !!user && user.role === 'organization',
   });
+
+  // Fetch organization opportunities with pagination
+  const {
+    data: jobsResponse,
+    isLoading: jobsLoading,
+    error: fetchError,
+    refetch: refetchJobs
+  } = useQuery({
+    queryKey: ['organizationJobs', currentPage],
+    queryFn: () => jobService.getOrganizationJobs({
+      page: currentPage,
+      limit: PAGE_SIZE
+    }),
+    enabled: !!user && user.role === 'organization',
+  });
+
+  // Update total pages when data changes
+  useEffect(() => {
+    if (jobsResponse?.pagination?.totalPages) {
+      setTotalPages(jobsResponse.pagination.totalPages);
+
+      // If current page exceeds total pages, reset to last page
+      if (currentPage > jobsResponse.pagination.totalPages && jobsResponse.pagination.totalPages > 0) {
+        const newPage = jobsResponse.pagination.totalPages;
+        setCurrentPage(newPage);
+        updatePageInURL(newPage);
+      }
+    }
+  }, [jobsResponse, currentPage, updatePageInURL]);
 
   // Delete opportunity mutation
   const deleteMutation = useMutation({
@@ -39,6 +96,13 @@ const OrganizationJobsPage: React.FC = () => {
         description: 'The opportunity has been permanently removed',
         variant: 'success',
       });
+
+      // After deletion, if we're on a page that might now be empty, go back one page
+      if (jobsResponse?.data && jobsResponse.data.length === 1 && currentPage > 1) {
+        const newPage = currentPage - 1;
+        setCurrentPage(newPage);
+        updatePageInURL(newPage);
+      }
     },
     onError: (error: any) => {
       toast({
@@ -55,11 +119,10 @@ const OrganizationJobsPage: React.FC = () => {
 
   // Status toggle mutation
   const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { 
-      id: string; 
-      status: "draft" | "active" | "paused" | "closed" | "archived"; 
-    }) =>
-      jobService.updateOrganizationJob(id, { status }),
+    mutationFn: ({ id, status }: {
+      id: string;
+      status: JobStatus;
+    }) => jobService.updateOrganizationJob(id, { status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organizationJobs'] });
       toast({
@@ -77,6 +140,30 @@ const OrganizationJobsPage: React.FC = () => {
     },
   });
 
+  // Toggle application enable/disable mutation
+  const toggleApplyMutation = useMutation({
+    mutationFn: ({ id, enabled }: {
+      id: string;
+      enabled: boolean;
+    }) => jobService.updateOrganizationJob(id, { isApplyEnabled: enabled }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organizationJobs'] });
+      toast({
+        title: 'Applications updated',
+        description: 'Application status has been changed',
+        variant: 'success',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to update applications',
+        description: error.message || 'Please try again',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Handler functions
   const handleDeleteClick = (jobId: string) => {
     setJobToDelete(jobId);
     setDeleteModalOpen(true);
@@ -93,16 +180,102 @@ const OrganizationJobsPage: React.FC = () => {
     setJobToDelete(null);
   };
 
-  const handleToggleStatus = async (
-    jobId: string,
-    newStatus: "draft" | "active" | "paused" | "closed" | "archived"
-  ) => {
+  const handleToggleStatus = async (jobId: string, newStatus: JobStatus) => {
     await statusMutation.mutateAsync({ id: jobId, status: newStatus });
   };
 
+  const handleToggleApply = async (jobId: string, enabled: boolean) => {
+    await toggleApplyMutation.mutateAsync({ id: jobId, enabled });
+  };
+
   const handleViewStats = (jobId: string) => {
-    // Navigate to opportunity stats page or open stats modal
-    console.log('View stats for opportunity:', jobId);
+    router.push(`/dashboard/organization/jobs/${jobId}`);
+  };
+
+  const handleViewApplications = (jobId: string) => {
+    router.push(`/dashboard/organization/jobs/${jobId}/applications`);
+  };
+
+  const handleEditJob = (jobId: string) => {
+    router.push(`/dashboard/organization/jobs/edit/${jobId}`);
+  };
+
+  // Pagination handlers (same logic as company page)
+  const handlePageChange = (page: number) => {
+    if (page < 1 || page > totalPages || page === currentPage) return;
+
+    setCurrentPage(page);
+    updatePageInURL(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      handlePageChange(currentPage + 1);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      handlePageChange(currentPage - 1);
+    }
+  };
+
+  // Generate page numbers for pagination display
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisiblePages = 5;
+
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      const startPage = Math.max(2, currentPage - 1);
+      const endPage = Math.min(totalPages - 1, currentPage + 1);
+
+      pages.push(1);
+
+      if (startPage > 2) {
+        pages.push('...');
+      }
+
+      for (let i = startPage; i <= endPage; i++) {
+        pages.push(i);
+      }
+
+      if (endPage < totalPages - 1) {
+        pages.push('...');
+      }
+
+      pages.push(totalPages);
+    }
+
+    return pages;
+  };
+
+  const isLoading = jobsLoading || profileLoading;
+  const jobs = jobsResponse?.data || [];
+  const pagination = jobsResponse?.pagination || {
+    current: currentPage,
+    totalPages: totalPages,
+    totalResults: 0,
+    resultsPerPage: PAGE_SIZE
+  };
+
+  // Calculate stats from opportunities data
+  const stats = {
+    totalOpportunities: pagination.totalResults || jobs.length,
+    activeOpportunities: jobs.filter((job: Job) => job.status === JobStatus.ACTIVE).length,
+    draftOpportunities: jobs.filter((job: Job) => job.status === JobStatus.DRAFT).length,
+    pausedOpportunities: jobs.filter((job: Job) => job.status === JobStatus.PAUSED).length,
+    closedOpportunities: jobs.filter((job: Job) => job.status === JobStatus.CLOSED).length,
+    totalApplications: jobs.reduce((sum: number, job: Job) => sum + (job.applicationCount || 0), 0),
+    totalViews: jobs.reduce((sum: number, job: Job) => sum + (job.viewCount || 0), 0),
+    volunteerOpportunities: jobs.filter((job: Job) => job.opportunityType === 'volunteer').length,
+    internshipOpportunities: jobs.filter((job: Job) => job.opportunityType === 'internship').length,
+    fellowshipOpportunities: jobs.filter((job: Job) => job.opportunityType === 'fellowship').length,
+    trainingOpportunities: jobs.filter((job: Job) => job.opportunityType === 'training').length,
   };
 
   if (isLoading) {
@@ -115,29 +288,22 @@ const OrganizationJobsPage: React.FC = () => {
     );
   }
 
-  const jobs = jobsData?.data || [];
-  const pagination = jobsData?.pagination;
-
-  // Calculate stats from opportunities data
-  const stats = {
-    totalOpportunities: jobs.length,
-    activeOpportunities: jobs.filter((job: Job) => job.status === 'active').length,
-    draftOpportunities: jobs.filter((job: Job) => job.status === 'draft').length,
-    totalApplications: jobs.reduce((sum: number, job: Job) => sum + (job.applicationCount || 0), 0),
-    totalViews: jobs.reduce((sum: number, job: Job) => sum + (job.viewCount || 0), 0),
-    volunteerOpportunities: jobs.filter((job: Job) => job.opportunityType === 'volunteer').length,
-    internshipOpportunities: jobs.filter((job: Job) => job.opportunityType === 'internship').length,
-  };
-
   return (
     <DashboardLayout requiredRole="organization">
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 py-8">
+      <div className="min-h-screen bg-gradient-to-b from-purple-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}
-          <div className="flex justify-between items-center mb-8">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Opportunity Management</h1>
-              <p className="text-gray-600 mt-2">Create and manage your volunteer positions, internships, and job opportunities</p>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Opportunity Management</h1>
+              <p className="text-gray-600 dark:text-gray-400 mt-2">
+                Create and manage your volunteer positions, internships, and job opportunities
+                {pagination.totalResults > 0 && (
+                  <span className="ml-2 text-sm font-medium">
+                    ({pagination.totalResults} total opportunities)
+                  </span>
+                )}
+              </p>
             </div>
             <Link
               href="/dashboard/organization/jobs/create"
@@ -148,68 +314,91 @@ const OrganizationJobsPage: React.FC = () => {
             </Link>
           </div>
 
-          {/* Stats Overview */}
-          {stats && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-purple-200 text-center">
-                <div className="text-3xl font-bold text-purple-600 mb-2">{stats.totalOpportunities || 0}</div>
-                <div className="text-gray-600">Total Opportunities</div>
+          {/* Stats Overview - Main Row */}
+          {stats.totalOpportunities > 0 && (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg border border-purple-200 dark:border-purple-800 text-center">
+                  <div className="text-2xl font-bold text-purple-600 dark:text-purple-400 mb-1">
+                    {stats.totalOpportunities || 0}
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Total Opportunities</div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg border border-green-200 dark:border-green-800 text-center">
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-400 mb-1">
+                    {stats.activeOpportunities || 0}
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Active</div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg border border-yellow-200 dark:border-yellow-800 text-center">
+                  <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400 mb-1">
+                    {stats.volunteerOpportunities || 0}
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Volunteer</div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg border border-blue-200 dark:border-blue-800 text-center">
+                  <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-1">
+                    {stats.totalApplications || 0}
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Applications</div>
+                </div>
               </div>
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-green-200 text-center">
-                <div className="text-3xl font-bold text-green-600 mb-2">{stats.activeOpportunities || 0}</div>
-                <div className="text-gray-600">Active Opportunities</div>
-              </div>
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-yellow-200 text-center">
-                <div className="text-3xl font-bold text-yellow-600 mb-2">{stats.volunteerOpportunities || 0}</div>
-                <div className="text-gray-600">Volunteer Positions</div>
-              </div>
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-blue-200 text-center">
-                <div className="text-3xl font-bold text-blue-600 mb-2">{stats.totalApplications || 0}</div>
-                <div className="text-gray-600">Total Applications</div>
-              </div>
-            </div>
-          )}
 
-          {/* Additional Stats Row */}
-          {stats && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-orange-200 text-center">
-                <div className="text-2xl font-bold text-orange-600 mb-2">{stats.internshipOpportunities || 0}</div>
-                <div className="text-gray-600">Internships</div>
+              {/* Additional Stats Row */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg border border-orange-200 dark:border-orange-800 text-center">
+                  <div className="text-xl font-bold text-orange-600 dark:text-orange-400 mb-1">
+                    {stats.internshipOpportunities || 0}
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Internships</div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg border border-cyan-200 dark:border-cyan-800 text-center">
+                  <div className="text-xl font-bold text-cyan-600 dark:text-cyan-400 mb-1">
+                    {stats.draftOpportunities || 0}
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Drafts</div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg border border-pink-200 dark:border-pink-800 text-center">
+                  <div className="text-xl font-bold text-pink-600 dark:text-pink-400 mb-1">
+                    {stats.fellowshipOpportunities || 0}
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Fellowships</div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg border border-teal-200 dark:border-teal-800 text-center">
+                  <div className="text-xl font-bold text-teal-600 dark:text-teal-400 mb-1">
+                    {stats.trainingOpportunities || 0}
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Training</div>
+                </div>
               </div>
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-cyan-200 text-center">
-                <div className="text-2xl font-bold text-cyan-600 mb-2">{stats.draftOpportunities || 0}</div>
-                <div className="text-gray-600">Draft Opportunities</div>
-              </div>
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200 text-center">
-                <div className="text-2xl font-bold text-gray-600 mb-2">{stats.totalViews || 0}</div>
-                <div className="text-gray-600">Total Views</div>
-              </div>
-            </div>
+            </>
           )}
 
           {/* Opportunities Grid */}
           <div className="grid gap-6">
-            {jobs && jobs.length > 0 ? (
+            {jobs.length > 0 ? (
               jobs.map((job: Job) => (
                 <JobCard
                   key={job._id}
                   job={job}
+                  ownerProfile={organizationProfile}
                   showActions={true}
+                  onEdit={handleEditJob}
                   onDelete={handleDeleteClick}
                   onViewStats={handleViewStats}
+                  onViewApplications={handleViewApplications}
                   onToggleStatus={handleToggleStatus}
                   isOrganizationView={true}
                 />
               ))
             ) : (
               <div className="text-center py-12">
-                <div className="bg-white rounded-2xl p-8 shadow-lg border border-purple-200">
+                <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg border border-purple-200 dark:border-purple-800">
                   <div className="text-6xl mb-4">🌟</div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
                     No opportunities yet
                   </h3>
-                  <p className="text-gray-600 mb-4">
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
                     Create your first opportunity to attract volunteers, interns, or staff
                   </p>
                   <Link
@@ -224,26 +413,67 @@ const OrganizationJobsPage: React.FC = () => {
             )}
           </div>
 
-          {/* Pagination */}
-          {pagination && pagination.totalPages > 1 && (
-            <div className="flex justify-center mt-8">
+          {/* Pagination - Fixed Implementation */}
+          {pagination.totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                Showing {jobs.length} of {pagination.totalResults} opportunities
+                {pagination.resultsPerPage && (
+                  <span className="ml-2">
+                    (Page {pagination.current} of {pagination.totalPages})
+                  </span>
+                )}
+              </div>
+
               <div className="flex items-center space-x-2">
+                {/* Previous Page Button */}
                 <button
-                  onClick={() => {/* Handle previous page */}}
-                  disabled={pagination.current === 1}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  onClick={handlePrevPage}
+                  disabled={currentPage === 1 || statusMutation.isPending}
+                  className={`p-2 rounded-lg border ${currentPage === 1
+                      ? 'border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed'
+                      : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                    }`}
                 >
-                  Previous
+                  <ChevronLeft className="w-5 h-5" />
                 </button>
-                <span className="text-gray-600">
-                  Page {pagination.current} of {pagination.totalPages}
-                </span>
+
+                {/* Page Numbers */}
+                <div className="flex items-center space-x-1">
+                  {getPageNumbers().map((page, index) => (
+                    page === '...' ? (
+                      <span
+                        key={`ellipsis-${index}`}
+                        className="px-3 py-1 text-gray-500 dark:text-gray-400"
+                      >
+                        ...
+                      </span>
+                    ) : (
+                      <button
+                        key={`page-${page}`}
+                        onClick={() => handlePageChange(page as number)}
+                        className={`px-3 py-1 rounded-lg border text-sm font-medium transition-colors ${currentPage === page
+                            ? 'bg-purple-600 border-purple-600 text-white'
+                            : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                          }`}
+                        disabled={currentPage === page}
+                      >
+                        {page}
+                      </button>
+                    )
+                  ))}
+                </div>
+
+                {/* Next Page Button */}
                 <button
-                  onClick={() => {/* Handle next page */}}
-                  disabled={pagination.current === pagination.totalPages}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  onClick={handleNextPage}
+                  disabled={currentPage === totalPages || statusMutation.isPending}
+                  className={`p-2 rounded-lg border ${currentPage === totalPages
+                      ? 'border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed'
+                      : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                    }`}
                 >
-                  Next
+                  <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
             </div>
@@ -262,12 +492,12 @@ const OrganizationJobsPage: React.FC = () => {
             isLoading={deleteMutation.isPending}
           />
 
-          {/* Loading States */}
-          {(statusMutation.isPending) && (
+          {/* Loading Overlay */}
+          {(deleteMutation.isPending || statusMutation.isPending || toggleApplyMutation.isPending) && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-xl p-6 flex items-center space-x-3">
+              <div className="bg-white dark:bg-gray-800 rounded-xl p-6 flex items-center space-x-3">
                 <LoadingSpinner />
-                <p className="text-gray-600">Processing...</p>
+                <p className="text-gray-600 dark:text-gray-400">Processing...</p>
               </div>
             </div>
           )}

@@ -1,231 +1,271 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// /dashboard/company/social/index.tsx - Company Social Feed (CLEAN VERSION)
+// pages/dashboard/candidate/social/index.tsx - UPDATED WITH THEME & ANIMATIONS
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useToast } from '@/hooks/use-toast';
+import Head from 'next/head';
+import { SocialDashboardLayout } from '@/components/social/layout/SocialDashboard';
+import PostComposer from '@/components/social/post/PostComposer';
+import { PostCard } from '@/components/social/post/PostCard';
+import { Button } from '@/components/social/ui/Button';
+import { Badge } from '@/components/social/ui/Badge';
 import {
   TrendingUp,
   Sparkles,
-  Filter,
-  RefreshCw,
-  Pin,
-  Zap,
-  Users,
-  Globe,
-  Building2,
+  Plus,
   ArrowUp,
+  RefreshCw,
+  Search,
+  Zap,
+  Clock,
+  Flame,
+  MessageSquare,
+  Eye,
+  Share2,
+  Image as ImageIcon,
+  Video,
+  FileText,
+  Link as LinkIcon,
+  Users,
+  Filter,
+  ChevronDown,
+  Loader2
 } from 'lucide-react';
-import { SocialDashboardLayout } from '@/components/social/layout/SocialDashboard';
-import { PostComposer } from '@/components/social/post/PostComposer';
-import { PostCard } from '@/components/social/post/PostCard';
-import { Button } from '@/components/social/ui/Button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
-import { useToast } from '@/hooks/use-toast';
+import { postService, Post, FeedParams } from '@/services/postService';
 import { useAuth } from '@/contexts/AuthContext';
-import { postService, Post } from '@/services/postService';
-import { RoleThemeProvider, useTheme } from '@/components/social/theme/RoleThemeProvider';
-import { colorClasses } from '@/utils/color';
-
-// Custom infinite scroll hook
-const useInfiniteScroll = <T,>(
-  fetchFunction: (page: number) => Promise<{ data: T[]; hasMore: boolean }>,
-  options: { limit?: number; initialPage?: number } = {}
-) => {
-  const [items, setItems] = useState<T[]>([]);
-  const [page, setPage] = useState(options.initialPage || 1);
-  const [hasMore, setHasMore] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const observerRef = useRef<IntersectionObserver | null>(null);
-  const lastItemRef = useRef<HTMLDivElement>(null);
-
-  const loadMore = useCallback(async () => {
-    if (isLoading || !hasMore) return;
-
-    setIsLoading(true);
-    try {
-      const result = await fetchFunction(page);
-      setItems(prev => [...prev, ...result.data]);
-      setHasMore(result.hasMore);
-      if (result.data.length > 0) {
-        setPage(prev => prev + 1);
-      }
-    } catch (error) {
-      console.error('Failed to load more items:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [page, isLoading, hasMore, fetchFunction]);
-
-  const refresh = useCallback(async () => {
-    setIsRefreshing(true);
-    try {
-      const result = await fetchFunction(1);
-      setItems(result.data);
-      setPage(2);
-      setHasMore(result.hasMore);
-    } catch (error) {
-      console.error('Failed to refresh items:', error);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [fetchFunction]);
-
-  useEffect(() => {
-    if (!lastItemRef.current || !hasMore || isLoading) return;
-
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          loadMore();
-        }
-      },
-      { threshold: 0.5 }
-    );
-
-    observerRef.current.observe(lastItemRef.current);
-
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
-    };
-  }, [loadMore, hasMore, isLoading]);
-
-  return {
-    items,
-    loadMore,
-    refresh,
-    isLoading,
-    isRefreshing,
-    hasMore,
-    lastItemRef,
-    reset: () => {
-      setItems([]);
-      setPage(1);
-      setHasMore(true);
-      refresh();
-    }
-  };
-};
-
-type FeedType = 'all' | 'following' | 'trending' | 'announcements';
+import { useMediaQuery } from '@/hooks/use-media-query';
+import { useTheme } from '@/components/social/theme/RoleThemeProvider';
 
 interface FeedFilter {
-  type: FeedType;
-  timeframe?: 'today' | 'week' | 'month';
-  sortBy?: 'recent' | 'popular' | 'trending';
+  type?: 'text' | 'image' | 'video' | 'link' | 'poll' | 'job' | 'achievement' | 'document';
+  sortBy?: 'latest' | 'trending' | 'popular';
+  hashtag?: string;
+  author?: string;
 }
 
-function FreelancerSocialFeedContent() {
+function SocialFeedContent() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<FeedType>('all');
-  const [showFilters, setShowFilters] = useState(false);
-  const [filter, setFilter] = useState<FeedFilter>({
-    type: 'all',
-    timeframe: 'today',
-    sortBy: 'recent'
-  });
-  const [newPostsCount, setNewPostsCount] = useState(0);
-  const [pinnedPosts, setPinnedPosts] = useState<Post[]>([]);
-  const [trendingPosts, setTrendingPosts] = useState<Post[]>([]);
-  const [feedPosts, setFeedPosts] = useState<Post[]>([]);
+  const { getButtonClasses, getTextClasses, getBgClasses, getPageBgStyle, getCardStyle, colors, role } = useTheme();
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isTablet = useMediaQuery('(max-width: 1024px)');
+
+  // State
+  const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [filters, setFilters] = useState<FeedFilter>({
+    sortBy: 'latest'
+  });
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(1);
-  const mainContentRef = useRef<HTMLDivElement>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [stats, setStats] = useState({
+    totalPosts: 0,
+    totalLikes: 0,
+    totalComments: 0,
+    uniqueAuthors: 0
+  });
 
-  // Always show back to top button
+  // Animation states
+  const [pageLoaded, setPageLoaded] = useState(false);
+  const [heroLoaded, setHeroLoaded] = useState(false);
+  const [statsLoaded, setStatsLoaded] = useState(false);
+  const [postsLoaded, setPostsLoaded] = useState(false);
+  const [searchLoaded, setSearchLoaded] = useState(false);
+
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  /* ---------------------- Animation Initialization ---------------------- */
   useEffect(() => {
-    setShowBackToTop(true);
+    setPageLoaded(true);
+
+    // Staggered animations
+    const timer1 = setTimeout(() => setHeroLoaded(true), 300);
+    const timer2 = setTimeout(() => setStatsLoaded(true), 600);
+    const timer3 = setTimeout(() => setSearchLoaded(true), 900);
+    const timer4 = setTimeout(() => setPostsLoaded(true), 1200);
+
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+      clearTimeout(timer4);
+    };
+  }, []);
+
+  /* ---------------------- Scroll to Top Handler ---------------------- */
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowBackToTop(window.scrollY > 300);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Fetch feed posts
-  const fetchFeedPosts = useCallback(async (pageNum: number) => {
+  /* ---------------------- Initial Data Load ---------------------- */
+  useEffect(() => {
+    loadInitialData();
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [filters]);
+
+  /* ---------------------- Infinite Scroll Setup ---------------------- */
+  useEffect(() => {
+    if (!loading && hasMore && loadMoreRef.current) {
+      observerRef.current = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting) {
+            loadMorePosts();
+          }
+        },
+        { threshold: 0.5 }
+      );
+
+      observerRef.current.observe(loadMoreRef.current);
+    }
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [loading, hasMore]);
+
+  /* ---------------------- API Functions ---------------------- */
+  const loadInitialData = async () => {
+    setLoading(true);
+    setPage(1);
     try {
-      const params: any = {
-        page: pageNum,
-        limit: 10,
-        sortBy: filter.sortBy
+      const feedParams: FeedParams = {
+        page: 1,
+        limit: isMobile ? 8 : 12,
+        type: filters.type,
+        hashtag: filters.hashtag,
+        sortBy: filters.sortBy,
+        author: filters.author
       };
 
-      if (activeTab === 'announcements') {
-        params.type = 'job';
-      } else if (activeTab === 'following') {
-        params.following = true;
-      } else if (activeTab === 'trending') {
-        params.sortBy = 'trending';
-      }
+      const response = await postService.getFeedPosts(feedParams, user?._id);
 
-      if (filter.timeframe) {
-        const now = new Date();
-        const timeframeMap: Record<string, Date> = {
-          today: new Date(now.setDate(now.getDate() - 1)),
-          week: new Date(now.setDate(now.getDate() - 7)),
-          month: new Date(now.setDate(now.getDate() - 30))
-        };
-        params.since = timeframeMap[filter.timeframe].toISOString();
-      }
+      if (response.success && response.data) {
+        setPosts(response.data);
+        setHasMore(!!response.pagination && response.pagination.page < response.pagination.pages);
 
-      const response = await postService.getFeedPosts(params);
-      return {
-        data: response.data.filter((post: Post) => !post.pinned),
-        hasMore: response.pagination ? pageNum < response.pagination.pages : false
-      };
-    } catch (error) {
-      console.error('Failed to fetch feed posts:', error);
+        // Calculate stats
+        const totalLikes = response.data.reduce((sum, post) => sum + (post.stats?.likes || 0), 0);
+        const totalComments = response.data.reduce((sum, post) => sum + (post.stats?.comments || 0), 0);
+        const uniqueAuthors = new Set(response.data.map(post => post.author._id)).size;
+
+        setStats({
+          totalPosts: response.data.length,
+          totalLikes,
+          totalComments,
+          uniqueAuthors
+        });
+      } else {
+        throw new Error(response.message || 'Failed to load posts');
+      }
+    } catch (error: any) {
+      console.error('Error loading posts:', error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to load feed posts"
+        description: error.message || "Failed to load feed posts"
       });
-      return { data: [], hasMore: false };
-    }
-  }, [activeTab, filter.timeframe, filter.sortBy, toast]);
-
-  // Load initial data
-  const loadInitialData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await fetchFeedPosts(1);
-      setFeedPosts(result.data);
-      setHasMore(result.hasMore);
-      setPage(2);
-    } catch (error) {
-      console.error('Failed to load initial data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchFeedPosts]);
-
-  // Load more posts
-  const loadMorePosts = async () => {
-    if (loading || !hasMore) return;
-
-    setLoading(true);
-    try {
-      const result = await fetchFeedPosts(page);
-      setFeedPosts(prev => [...prev, ...result.data]);
-      setHasMore(result.hasMore);
-      setPage(prev => prev + 1);
-    } catch (error) {
-      console.error('Failed to load more posts:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Refresh feed
+  const loadMorePosts = async () => {
+    if (loading || !hasMore) return;
+
+    setLoading(true);
+    try {
+      const nextPage = page + 1;
+      const feedParams: FeedParams = {
+        page: nextPage,
+        limit: isMobile ? 8 : 12,
+        type: filters.type,
+        hashtag: filters.hashtag,
+        sortBy: filters.sortBy,
+        author: filters.author
+      };
+
+      const response = await postService.getFeedPosts(feedParams, user?._id);
+
+      if (response.success && response.data && response.data.length > 0) {
+        setPosts(prev => [...prev, ...response.data]);
+        setPage(nextPage);
+        setHasMore(!!response.pagination && response.pagination.page < response.pagination.pages);
+      } else {
+        setHasMore(false);
+      }
+    } catch (error: any) {
+      console.error('Error loading more posts:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load more posts"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ---------------------- Event Handlers ---------------------- */
+  const handlePostCreated = useCallback((newPost: Post) => {
+    setPosts(prev => [newPost, ...prev]);
+    toast({
+      variant: "success",
+      title: "Success",
+      description: "Your post has been published"
+    });
+    setIsCreating(false);
+  }, [toast]);
+
+  const handlePostUpdated = useCallback((updatedPost: Post) => {
+    setPosts(prev => prev.map(post =>
+      post._id === updatedPost._id ? updatedPost : post
+    ));
+  }, []);
+
+  const handlePostDeleted = useCallback((postId: string) => {
+    setPosts(prev => prev.filter(post => post._id !== postId));
+    toast({
+      variant: "success",
+      title: "Success",
+      description: "Post deleted successfully"
+    });
+  }, [toast]);
+
+  const handleViewProfile = (userId: string) => {
+    window.open(`/dashboard/${role}/social/profile/${userId}`, '_blank');
+  };
+
+  const handleFilterChange = (newFilters: Partial<FeedFilter>) => {
+    setFilters(prev => ({ ...prev, ...newFilters }));
+    if (isMobile) {
+      setShowFilters(false);
+    }
+  };
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await loadInitialData();
     setIsRefreshing(false);
-    setNewPostsCount(0);
     toast({
       variant: "default",
       title: "Feed refreshed",
@@ -233,326 +273,707 @@ function FreelancerSocialFeedContent() {
     });
   };
 
-  // Load pinned and trending posts
-  useEffect(() => {
-    const loadSpecialPosts = async () => {
-      try {
-        const pinnedResponse = await postService.getFeedPosts({
-          limit: 3,
-          type: activeTab === 'announcements' ? 'job' : undefined
-        });
-        setPinnedPosts(pinnedResponse.data || []);
-
-        const trendingResponse = await postService.getFeedPosts({
-          limit: 3,
-        });
-        setTrendingPosts(trendingResponse.data || []);
-      } catch (error) {
-        console.error('Failed to load special posts:', error);
-      }
-    };
-
-    loadSpecialPosts();
-  }, [activeTab]);
-
-  // Load initial data on mount and filter change
-  useEffect(() => {
-    loadInitialData();
-  }, [loadInitialData]);
-
-  const handleFilterChange = (key: keyof FeedFilter, value: any) => {
-    setFilter(prev => ({ ...prev, [key]: value }));
-    loadInitialData();
-  };
-
-  const handleViewProfile = (userId: string) => {
-    window.location.href = `/social/profile/${userId}`;
-  };
-
-  const handlePostCreated = (post: Post) => {
-    loadInitialData();
-    toast({
-      variant: "success",
-      title: "Success",
-      description: "Post created successfully"
+  const clearAllFilters = () => {
+    setFilters({
+      sortBy: 'latest'
     });
+    setSearchQuery('');
+    if (isMobile) {
+      setShowFilters(false);
+    }
   };
 
-  return (
-    <div className="min-h-screen" ref={mainContentRef}>
-      {/* Always Visible Back to Top Button */}
-      <button
-        onClick={scrollToTop}
-        className={`fixed bottom-8 right-8 z-50 p-3 ${colorClasses.bg.darkNavy} ${colorClasses.text.white} rounded-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110`}
-        aria-label="Back to top"
-      >
-        <ArrowUp className="w-5 h-5" />
-      </button>
+  /* ---------------------- Filtered Posts ---------------------- */
+  const filteredPosts = searchQuery
+    ? posts.filter(post =>
+      post.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      post.author?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      post.hashtags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+    )
+    : posts;
 
-      {/* Main Content - Clean Layout */}
-      <div className="max-w-4xl mx-auto px-4 py-6">
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-            <div>
-              <h1 className={`text-2xl md:text-3xl font-bold ${colorClasses.text.darkNavy} mb-2`}>
-                🏢 Company Social Feed
-              </h1>
-              <p className={`${colorClasses.text.gray800} text-sm`}>
-                Connect with your industry network and share updates
-              </p>
-            </div>
+  /* ---------------------- Component Rendering ---------------------- */
+  const renderEmptyState = () => (
+    <div className="text-center py-12 px-4 md:py-16 animate-in fade-in-up duration-700">
+      <div className={`w-16 h-16 md:w-20 md:h-20 mx-auto mb-6 rounded-full flex items-center justify-center animate-bounce animate-duration-[3s]`}
+        style={{ background: `linear-gradient(135deg, ${colors.primary}20 0%, ${colors.secondary}20 100%)` }}>
+        <Sparkles className="w-8 h-8 md:w-10 md:h-10" style={{ color: colors.primary }} />
+      </div>
+      <h3 className={`text-lg md:text-xl font-semibold mb-3 animate-in fade-in-up duration-500 ${getTextClasses('primary')}`}>
+        {searchQuery ? "No posts found" : "Welcome to your professional feed"}
+      </h3>
+      <p className={`text-sm md:text-base mb-6 md:mb-8 max-w-md mx-auto animate-in fade-in-up duration-500 animate-delay-200 ${getTextClasses('muted')}`}>
+        {searchQuery
+          ? `No posts found for "${searchQuery}". Try a different search term.`
+          : "Connect with professionals, share insights, and discover opportunities. Start by creating your first post!"}
+      </p>
+      {!searchQuery && (
+        <Button
+          onClick={() => setIsCreating(true)}
+          className={`px-5 py-2.5 md:px-6 md:py-3 rounded-lg font-medium shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 active:scale-95 animate-in fade-in-up duration-500 animate-delay-400 ${getButtonClasses('primary')}`}
+          style={{
+            background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+          }}
+        >
+          <Plus className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+          Create Your First Post
+        </Button>
+      )}
+    </div>
+  );
 
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={handleRefresh}
-                loading={isRefreshing}
-                className={`${colorClasses.border.darkNavy} ${colorClasses.text.darkNavy} hover:${colorClasses.bg.darkNavy} hover:text-white`}
-                size="sm"
-              >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Refresh
-              </Button>
-            </div>
+  const QuickStats = () => (
+    <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 ${statsLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'} transition-all duration-700`}>
+      <div className={`rounded-xl p-4 border animate-in fade-in-up duration-500`} style={getCardStyle()}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className={`text-xs md:text-sm mb-1 ${getTextClasses('muted')}`}>Posts</p>
+            <p className={`text-xl md:text-2xl font-bold ${getTextClasses('primary')}`}>{stats.totalPosts}</p>
           </div>
+          <MessageSquare className="w-6 h-6 md:w-8 md:h-8" style={{ color: colors.primary }} />
         </div>
+      </div>
 
-        {/* Post Composer */}
-        <div className="mb-6">
-          <PostComposer
-            onPostCreated={handlePostCreated}
-            roleContext="company"
-            mode="create"
-          />
-        </div>
-
-        {/* Main Feed */}
-        <div className={`rounded-xl border ${colorClasses.border.gray100} ${colorClasses.bg.white} shadow-sm overflow-hidden`}>
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FeedType)}>
-            <div className="border-b">
-              <div className="px-4 md:px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <TabsList className="bg-transparent flex-wrap">
-                  <TabsTrigger
-                    value="all"
-                    className={`data-[state=active]:${colorClasses.bg.darkNavy} data-[state=active]:${colorClasses.text.white} text-xs md:text-sm`}
-                  >
-                    <Globe className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-                    All
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="following"
-                    className={`data-[state=active]:${colorClasses.bg.darkNavy} data-[state=active]:${colorClasses.text.white} text-xs md:text-sm`}
-                  >
-                    <Users className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-                    Following
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="trending"
-                    className={`data-[state=active]:${colorClasses.bg.darkNavy} data-[state=active]:${colorClasses.text.white} text-xs md:text-sm`}
-                  >
-                    <TrendingUp className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-                    Trending
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="announcements"
-                    className={`data-[state=active]:${colorClasses.bg.darkNavy} data-[state=active]:${colorClasses.text.white} text-xs md:text-sm`}
-                  >
-                    <Building2 className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-                    Announcements
-                  </TabsTrigger>
-                </TabsList>
-
-                {/* Filter Button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`${colorClasses.text.gray800} text-xs md:text-sm`}
-                >
-                  <Filter className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-                  Filters
-                </Button>
-              </div>
-
-              {/* Filter Panel */}
-              {showFilters && (
-                <div className={`px-4 md:px-6 py-4 ${colorClasses.bg.gray100} border-b`}>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className={`block text-xs md:text-sm font-medium ${colorClasses.text.gray800} mb-1`}>
-                        Timeframe
-                      </label>
-                      <select
-                        value={filter.timeframe}
-                        onChange={(e) => handleFilterChange('timeframe', e.target.value)}
-                        className={`w-full rounded-lg border ${colorClasses.border.gray400} px-3 py-2 text-xs md:text-sm focus:outline-none ${colorClasses.border.darkNavy}`}
-                      >
-                        <option value="today">Today</option>
-                        <option value="week">This Week</option>
-                        <option value="month">This Month</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className={`block text-xs md:text-sm font-medium ${colorClasses.text.gray800} mb-1`}>
-                        Sort By
-                      </label>
-                      <select
-                        value={filter.sortBy}
-                        onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-                        className={`w-full rounded-lg border ${colorClasses.border.gray400} px-3 py-2 text-xs md:text-sm focus:outline-none ${colorClasses.border.darkNavy}`}
-                      >
-                        <option value="recent">Most Recent</option>
-                        <option value="popular">Most Popular</option>
-                        <option value="trending">Trending</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Pinned Announcements */}
-            {activeTab === 'announcements' && pinnedPosts.length > 0 && (
-              <div className={`px-4 md:px-6 py-4 ${colorClasses.bg.goldenMustard} bg-opacity-10 border-b`}>
-                <div className="flex items-center gap-2 mb-3">
-                  <Pin className={`w-4 h-4 ${colorClasses.text.goldenMustard}`} />
-                  <h3 className={`font-semibold ${colorClasses.text.darkNavy} text-sm md:text-base`}>
-                    Pinned Announcements
-                  </h3>
-                </div>
-                <div className="space-y-3">
-                  {pinnedPosts.map((post) => (
-                    <div key={post._id} className="transform transition-transform hover:scale-[1.02]">
-                      <PostCard
-                        post={post}
-                        currentUserId={user?._id}
-                        onViewProfile={handleViewProfile}
-                        condensed={true}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Trending Section */}
-            {activeTab === 'trending' && trendingPosts.length > 0 && (
-              <div className={`px-4 md:px-6 py-4 ${colorClasses.bg.blue} bg-opacity-10 border-b`}>
-                <div className="flex items-center gap-2 mb-3">
-                  <TrendingUp className={`w-4 h-4 ${colorClasses.text.blue}`} />
-                  <h3 className={`font-semibold ${colorClasses.text.darkNavy} text-sm md:text-base`}>
-                    Trending Now
-                  </h3>
-                </div>
-                <div className="space-y-3">
-                  {trendingPosts.map((post) => (
-                    <div key={post._id} className="transform transition-transform hover:scale-[1.02]">
-                      <PostCard
-                        post={post}
-                        currentUserId={user?._id}
-                        onViewProfile={handleViewProfile}
-                        condensed={true}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Feed Content */}
-            <TabsContent value={activeTab} className="m-0">
-              <div className="p-4 md:p-6">
-                {feedPosts.length === 0 && !loading ? (
-                  <div className="text-center py-8">
-                    <div className={`w-12 h-12 ${colorClasses.bg.blue} bg-opacity-20 rounded-full flex items-center justify-center mx-auto mb-4`}>
-                      <Sparkles className={`w-6 h-6 ${colorClasses.text.blue}`} />
-                    </div>
-                    <h3 className={`text-base md:text-lg font-semibold ${colorClasses.text.darkNavy} mb-2`}>
-                      No posts yet
-                    </h3>
-                    <p className={`${colorClasses.text.gray800} text-sm mb-4`}>
-                      {activeTab === 'following'
-                        ? 'Follow more people to see their posts here'
-                        : 'Be the first to share something!'}
-                    </p>
-                    {activeTab !== 'following' && (
-                      <Button
-                        onClick={() => document.getElementById('post-composer')?.scrollIntoView({ behavior: 'smooth' })}
-                        variant="default"
-                        className={`${colorClasses.bg.blue} hover:${colorClasses.bg.darkNavy} text-white text-sm`}
-                      >
-                        Create First Post
-                      </Button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {feedPosts.map((post: Post, index) => (
-                      <div
-                        key={post._id}
-                        ref={index === feedPosts.length - 1 ? undefined : undefined}
-                        className="transform transition-transform hover:scale-[1.01]"
-                      >
-                        <PostCard
-                          post={post}
-                          currentUserId={user?._id}
-                          onViewProfile={handleViewProfile}
-                        />
-                      </div>
-                    ))}
-
-                    {/* Load More Button */}
-                    {hasMore && (
-                      <div className="pt-6 text-center">
-                        <Button
-                          variant="outline"
-                          onClick={loadMorePosts}
-                          loading={loading}
-                          className={`${colorClasses.border.darkNavy} ${colorClasses.text.darkNavy} hover:${colorClasses.bg.darkNavy} hover:text-white`}
-                        >
-                          Load More Posts
-                        </Button>
-                      </div>
-                    )}
-
-                    {/* End of Feed */}
-                    {!hasMore && feedPosts.length > 0 && (
-                      <div className="text-center py-6 border-t">
-                        <div className={`w-8 h-8 ${colorClasses.bg.gray100} rounded-full flex items-center justify-center mx-auto mb-3`}>
-                          <Zap className={`w-4 h-4 ${colorClasses.text.gray400}`} />
-                        </div>
-                        <p className={`${colorClasses.text.gray800} text-sm`}>
-                          You`ve reached the end of the feed
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </TabsContent>
-          </Tabs>
-        </div>
-
-        {/* Simple Stats at Bottom */}
-        <div className={`mt-6 text-center ${colorClasses.text.gray800} text-sm`}>
-          <div className="inline-flex items-center gap-4">
-            <span>📊 {feedPosts.length} posts loaded</span>
-            <span>•</span>
-            <span>🔄 Last updated: Just now</span>
+      <div className={`rounded-xl p-4 border animate-in fade-in-up duration-500 animate-delay-100`} style={getCardStyle()}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className={`text-xs md:text-sm mb-1 ${getTextClasses('muted')}`}>Likes</p>
+            <p className={`text-xl md:text-2xl font-bold ${getTextClasses('primary')}`}>{stats.totalLikes}</p>
           </div>
+          <Eye className="w-6 h-6 md:w-8 md:h-8" style={{ color: colors.success || '#10B981' }} />
+        </div>
+      </div>
+
+      <div className={`rounded-xl p-4 border animate-in fade-in-up duration-500 animate-delay-200`} style={getCardStyle()}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className={`text-xs md:text-sm mb-1 ${getTextClasses('muted')}`}>Comments</p>
+            <p className={`text-xl md:text-2xl font-bold ${getTextClasses('primary')}`}>{stats.totalComments}</p>
+          </div>
+          <Share2 className="w-6 h-6 md:w-8 md:h-8" style={{ color: colors.secondary }} />
+        </div>
+      </div>
+
+      <div className={`rounded-xl p-4 border animate-in fade-in-up duration-500 animate-delay-300`} style={getCardStyle()}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className={`text-xs md:text-sm mb-1 ${getTextClasses('muted')}`}>Authors</p>
+            <p className={`text-xl md:text-2xl font-bold ${getTextClasses('primary')}`}>{stats.uniqueAuthors}</p>
+          </div>
+          <Users className="w-6 h-6 md:w-8 md:h-8" style={{ color: colors.accent }} />
         </div>
       </div>
     </div>
   );
+
+  const renderPostSkeleton = () => (
+    <div className={`space-y-4 md:space-y-6 ${isMobile ? 'px-4' : ''}`}>
+      {[1, 2, 3].map((i) => (
+        <div
+          key={i}
+          className={`rounded-xl p-4 md:p-6 animate-pulse ${getBgClasses('card')} border`}
+          style={getCardStyle()}
+        >
+          {/* Header skeleton */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className={`w-10 h-10 rounded-full ${getBgClasses('card')}`} />
+            <div className="flex-1">
+              <div className={`h-4 rounded w-1/4 mb-2 ${getBgClasses('card')}`} />
+              <div className={`h-3 rounded w-1/3 ${getBgClasses('card')}`} />
+            </div>
+          </div>
+
+          {/* Content skeleton */}
+          <div className="space-y-2 mb-4">
+            <div className={`h-4 rounded w-full ${getBgClasses('card')}`} />
+            <div className={`h-4 rounded w-2/3 ${getBgClasses('card')}`} />
+          </div>
+
+          {/* Media skeleton */}
+          <div className={`h-48 rounded-lg ${getBgClasses('card')}`} />
+
+          {/* Actions skeleton */}
+          <div className="flex justify-between mt-4">
+            <div className={`h-8 rounded w-24 ${getBgClasses('card')}`} />
+            <div className={`h-8 rounded w-24 ${getBgClasses('card')}`} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderMobileFilterDrawer = () => {
+    if (!showFilters) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 md:hidden animate-in fade-in duration-300">
+        <div
+          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowFilters(false)}
+        />
+        <div className="absolute right-0 top-0 h-full w-80 shadow-xl animate-in slide-in-from-right-0 duration-300" style={getCardStyle()}>
+          <div className="p-4 border-b" style={{ borderColor: colors.primary + '20' }}>
+            <div className="flex items-center justify-between">
+              <h3 className={`text-lg font-semibold ${getTextClasses('primary')}`}>Filters</h3>
+              <button
+                onClick={() => setShowFilters(false)}
+                className={`p-2 rounded-lg transition-colors ${getButtonClasses('ghost')}`}
+              >
+                <ChevronDown className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4 space-y-4">
+            {/* Sort Options */}
+            <div>
+              <h4 className={`text-sm font-medium mb-2 ${getTextClasses('secondary')}`}>Sort by</h4>
+              <div className="space-y-2">
+                {[
+                  { value: 'latest', label: 'Latest', icon: Clock },
+                  { value: 'trending', label: 'Trending', icon: Flame },
+                  { value: 'popular', label: 'Popular', icon: TrendingUp }
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => handleFilterChange({ sortBy: option.value as any })}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all duration-200 ${filters.sortBy === option.value
+                      ? 'border shadow-sm scale-[1.02]'
+                      : 'hover:scale-[1.01]'
+                      }`}
+                    style={{
+                      background: filters.sortBy === option.value
+                        ? colors.primary + '10'
+                        : 'transparent',
+                      borderColor: filters.sortBy === option.value
+                        ? colors.primary + '30'
+                        : 'transparent',
+                      color: filters.sortBy === option.value
+                        ? colors.primary
+                        : getTextClasses('muted').includes('text-') ? '' : colors.primary + '80'
+                    }}
+                  >
+                    <option.icon className="w-4 h-4" />
+                    <span className="text-sm">{option.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Post Type Filters */}
+            <div>
+              <h4 className={`text-sm font-medium mb-2 ${getTextClasses('secondary')}`}>Post Type</h4>
+              <div className="space-y-2">
+                {[
+                  { value: undefined, label: 'All Posts' },
+                  { value: 'text', label: 'Text', icon: MessageSquare },
+                  { value: 'image', label: 'Images', icon: ImageIcon },
+                  { value: 'video', label: 'Videos', icon: Video },
+                  { value: 'document', label: 'Documents', icon: FileText },
+                  { value: 'link', label: 'Links', icon: LinkIcon }
+                ].map((option) => (
+                  <button
+                    key={option.value || 'all'}
+                    onClick={() => handleFilterChange({ type: option.value as any })}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all duration-200 ${filters.type === option.value
+                      ? 'border shadow-sm scale-[1.02]'
+                      : 'hover:scale-[1.01]'
+                      }`}
+                    style={{
+                      background: filters.type === option.value
+                        ? colors.secondary + '10'
+                        : 'transparent',
+                      borderColor: filters.type === option.value
+                        ? colors.secondary + '30'
+                        : 'transparent',
+                      color: filters.type === option.value
+                        ? colors.secondary
+                        : getTextClasses('muted').includes('text-') ? '' : colors.secondary + '80'
+                    }}
+                  >
+                    {option.icon && <option.icon className="w-4 h-4" />}
+                    <span className="text-sm">{option.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Clear All Button */}
+            <button
+              onClick={clearAllFilters}
+              className={`w-full py-2.5 mt-4 text-sm font-medium rounded-lg border transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${getButtonClasses('outline')}`}
+              style={{ color: colors.error || '#EF4444', borderColor: colors.error || '#EF4444' }}
+            >
+              Clear All Filters
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  /* ---------------------- Main Render ---------------------- */
+  return (
+    <div
+      ref={containerRef}
+      className={`min-h-screen ${isMobile ? getBgClasses('page') : ''} ${pageLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-500`}
+      style={!isMobile ? getPageBgStyle() : {}}
+    >
+      {/* Animated Background Elements */}
+      {!isMobile && (
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div
+            className="absolute top-0 right-1/4 w-64 h-64 rounded-full blur-3xl animate-float animate-duration-[20s] animate-delay-0"
+            style={{ background: `${colors.primary}05` }}
+          />
+          <div
+            className="absolute bottom-0 left-1/4 w-96 h-96 rounded-full blur-3xl animate-float animate-duration-[25s] animate-delay-1000"
+            style={{ background: `${colors.secondary}05` }}
+          />
+          <div
+            className="absolute top-1/2 left-1/3 w-48 h-48 rounded-full blur-3xl animate-float animate-duration-[30s] animate-delay-2000"
+            style={{ background: `${colors.accent}05` }}
+          />
+        </div>
+      )}
+
+      {/* Back to Top Button */}
+      {showBackToTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-6 right-6 z-40 p-3 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 active:scale-95 animate-in bounce-in duration-500"
+          style={{
+            background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+          }}
+          aria-label="Back to top"
+        >
+          <ArrowUp className="w-5 h-5" />
+        </button>
+      )}
+
+      {/* Mobile Filter Drawer */}
+      {renderMobileFilterDrawer()}
+
+      {/* Main Content */}
+      <div className={isMobile ? '' : 'max-w-4xl mx-auto px-4 py-6 md:px-6 lg:px-8'}>
+        {/* Header */}
+        {!isMobile && (
+          <div className="mb-6 md:mb-8">
+            <div className={`flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 ${heroLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'} transition-all duration-700`}>
+              <div>
+                <h1
+                  className={`text-2xl md:text-3xl font-bold mb-2 animate-text bg-gradient-to-r from-primary to-secondary bg-clip-text`}
+                  style={{
+                    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent'
+                  }}
+                >
+                  Professional Network
+                </h1>
+                <p className={`text-sm md:text-base ${getTextClasses('muted')}`}>
+                  Connect, share, and grow with your {role} community
+                </p>
+              </div>
+
+              {/* Desktop Actions */}
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  onClick={handleRefresh}
+                  loading={isRefreshing}
+                  className={`${getButtonClasses('outline')} transform hover:scale-105 active:scale-95`}
+                >
+                  {isRefreshing ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                  )}
+                  Refresh
+                </Button>
+                <Button
+                  onClick={() => setIsCreating(true)}
+                  className={`${getButtonClasses('primary')} shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95`}
+                  style={{
+                    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+                  }}
+                >
+                  <Plus className="w-5 h-5 mr-2" />
+                  Create Post
+                </Button>
+              </div>
+            </div>
+
+            {/* Quick Stats */}
+            {posts.length > 0 && <QuickStats />}
+
+            {/* Search Bar */}
+            <div className={`relative mb-6 ${searchLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'} transition-all duration-700`}>
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: colors.primary }} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search posts, people, or hashtags..."
+                className={`w-full pl-12 pr-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-300 ${getBgClasses('card')} border`}
+                style={{
+                  ...getCardStyle(),
+                  borderColor: colors.primary + '30',
+                  color: getTextClasses('primary').includes('text-') ? '' : colors.primary,
+                }}
+              />
+            </div>
+
+            {/* Filters */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className={`text-sm font-medium ${getTextClasses('secondary')}`}>
+                  Filter by type
+                </h3>
+                <button
+                  onClick={clearAllFilters}
+                  className="text-xs transition-colors hover:underline"
+                  style={{ color: colors.primary }}
+                >
+                  Clear filters
+                </button>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => handleFilterChange({ type: undefined })}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${!filters.type
+                    ? 'text-white shadow-md transform scale-[1.02]'
+                    : `${getButtonClasses('outline')} hover:scale-105`
+                    }`}
+                  style={!filters.type ? {
+                    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+                  } : {}}
+                >
+                  All
+                </button>
+                {[
+                  { value: 'text', label: 'Text', icon: MessageSquare, color: colors.primary },
+                  { value: 'image', label: 'Images', icon: ImageIcon, color: colors.success },
+                  { value: 'video', label: 'Videos', icon: Video, color: colors.warning },
+                  { value: 'document', label: 'Documents', icon: FileText, color: colors.secondary },
+                  { value: 'link', label: 'Links', icon: LinkIcon, color: colors.accent }
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => handleFilterChange({ type: option.value as any })}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 flex items-center gap-2 ${filters.type === option.value
+                      ? 'border shadow-sm transform scale-[1.02]'
+                      : `${getButtonClasses('outline')} hover:scale-105`
+                      }`}
+                    style={filters.type === option.value ? {
+                      background: option.color + '10',
+                      borderColor: option.color + '30',
+                      color: option.color
+                    } : {}}
+                  >
+                    <option.icon className="w-4 h-4" />
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Sort Options */}
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  onClick={() => handleFilterChange({ sortBy: 'latest' })}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-300 ${filters.sortBy === 'latest'
+                    ? 'text-white shadow-sm transform scale-[1.05]'
+                    : `${getBgClasses('card')} ${getTextClasses('muted')} hover:scale-105`
+                    }`}
+                  style={filters.sortBy === 'latest' ? {
+                    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+                  } : {}}
+                >
+                  <Clock className="w-3 h-3 inline mr-1" />
+                  Latest
+                </button>
+                <button
+                  onClick={() => handleFilterChange({ sortBy: 'trending' })}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-300 ${filters.sortBy === 'trending'
+                    ? 'border shadow-sm transform scale-[1.05]'
+                    : `${getBgClasses('card')} ${getTextClasses('muted')} hover:scale-105`
+                    }`}
+                  style={filters.sortBy === 'trending' ? {
+                    background: colors.warning + '10',
+                    borderColor: colors.warning + '30',
+                    color: colors.warning
+                  } : {}}
+                >
+                  <Flame className="w-3 h-3 inline mr-1" />
+                  Trending
+                </button>
+                <button
+                  onClick={() => handleFilterChange({ sortBy: 'popular' })}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-300 ${filters.sortBy === 'popular'
+                    ? 'border shadow-sm transform scale-[1.05]'
+                    : `${getBgClasses('card')} ${getTextClasses('muted')} hover:scale-105`
+                    }`}
+                  style={filters.sortBy === 'popular' ? {
+                    background: colors.success + '10',
+                    borderColor: colors.success + '30',
+                    color: colors.success
+                  } : {}}
+                >
+                  <TrendingUp className="w-3 h-3 inline mr-1" />
+                  Popular
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile Header */}
+        {isMobile && (
+          <div className="sticky top-0 z-30 border-b px-4 py-3 backdrop-blur-sm" style={getCardStyle()}>
+            <div className="flex items-center justify-between mb-3">
+              <h1
+                className={`text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text`}
+                style={{
+                  background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent'
+                }}
+              >
+                Feed
+              </h1>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowFilters(true)}
+                  className={`p-2 rounded-lg transition-all duration-300 ${showFilters ? 'shadow-md scale-110' : 'hover:scale-110'} ${getButtonClasses(showFilters ? 'primary' : 'ghost')}`}
+                  style={showFilters ? {
+                    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+                  } : {}}
+                  aria-label="Filters"
+                >
+                  <Filter className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={handleRefresh}
+                  className={`p-2 rounded-lg transition-all duration-300 hover:scale-110 ${getButtonClasses('ghost')}`}
+                  aria-label="Refresh"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                </button>
+                <Button
+                  onClick={() => setIsCreating(true)}
+                  className={`p-2 transition-all duration-300 hover:scale-110 ${getButtonClasses('primary')}`}
+                  style={{
+                    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+                  }}
+                  aria-label="Create post"
+                >
+                  <Plus className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Mobile Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: colors.primary }} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search posts..."
+                className={`w-full pl-9 pr-3 py-2 rounded-lg focus:outline-none focus:ring-1 transition-all duration-300 ${getBgClasses('card')} border`}
+                style={{
+                  ...getCardStyle(),
+                  borderColor: colors.primary + '30',
+                  color: getTextClasses('primary').includes('text-') ? '' : colors.primary
+                }}
+              />
+            </div>
+
+            {/* Mobile Quick Filters */}
+            <div className="flex items-center gap-2 mt-3 overflow-x-auto pb-1">
+              <button
+                onClick={() => handleFilterChange({ type: undefined })}
+                className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap rounded-lg transition-all duration-300 ${!filters.type
+                  ? 'text-white shadow-sm transform scale-105'
+                  : `${getBgClasses('card')} ${getTextClasses('muted')} hover:scale-105`
+                  }`}
+                style={!filters.type ? {
+                  background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+                } : {}}
+              >
+                All
+              </button>
+              <button
+                onClick={() => handleFilterChange({ sortBy: 'latest' })}
+                className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap rounded-lg transition-all duration-300 ${filters.sortBy === 'latest'
+                  ? 'text-white shadow-sm transform scale-105'
+                  : `${getBgClasses('card')} ${getTextClasses('muted')} hover:scale-105`
+                  }`}
+                style={filters.sortBy === 'latest' ? {
+                  background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+                } : {}}
+              >
+                Latest
+              </button>
+              <button
+                onClick={() => handleFilterChange({ sortBy: 'trending' })}
+                className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap rounded-lg transition-all duration-300 ${filters.sortBy === 'trending'
+                  ? 'border shadow-sm transform scale-105'
+                  : `${getBgClasses('card')} ${getTextClasses('muted')} hover:scale-105`
+                  }`}
+                style={filters.sortBy === 'trending' ? {
+                  background: colors.warning + '10',
+                  borderColor: colors.warning + '30',
+                  color: colors.warning
+                } : {}}
+              >
+                Trending
+              </button>
+              {filters.type && (
+                <Badge
+                  variant="secondary"
+                  className="text-xs px-3 py-1.5 transition-all duration-300 hover:scale-105"
+                  style={{
+                    background: colors.secondary + '10',
+                    borderColor: colors.secondary + '30',
+                    color: colors.secondary
+                  }}
+                >
+                  {filters.type.charAt(0).toUpperCase() + filters.type.slice(1)}
+                </Badge>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Posts Section */}
+        <div className={isMobile ? '' : 'mb-8'}>
+          {loading && posts.length === 0 ? (
+            renderPostSkeleton()
+          ) : filteredPosts.length === 0 ? (
+            <div className={isMobile ? 'p-4' : ''}>
+              {renderEmptyState()}
+            </div>
+          ) : (
+            <div className={isMobile ? 'space-y-4' : 'space-y-4 md:space-y-6'}>
+              {filteredPosts.map((post, index) => (
+                <div
+                  key={post._id}
+                  className={`${isMobile ? 'px-4' : 'transform transition-all duration-300 hover:-translate-y-1'} ${postsLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+                  style={{
+                    transitionDelay: `${index * 50}ms`,
+                    animationDelay: `${index * 50}ms`
+                  }}
+                >
+                  <PostCard
+                    post={post}
+                    currentUserId={user?._id}
+                    onViewProfile={handleViewProfile}
+                    onUpdatePost={handlePostUpdated}
+                    condensed={isMobile}
+                    className={isMobile ? '' : 'shadow-md hover:shadow-xl transition-shadow duration-300'}
+                  />
+                  {isMobile && index < filteredPosts.length - 1 && (
+                    <div className="mt-4" style={{ borderColor: colors.primary + '10' }} />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Load More Indicator */}
+          {filteredPosts.length > 0 && hasMore && (
+            <div ref={loadMoreRef} className="pt-6 md:pt-8 text-center">
+              <div className={`inline-flex items-center gap-2 ${getTextClasses('muted')}`}>
+                <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{
+                  borderColor: colors.primary + '30',
+                  borderTopColor: colors.primary
+                }}></div>
+                <span className="text-sm">Loading more posts...</span>
+              </div>
+            </div>
+          )}
+
+          {/* End of Feed */}
+          {filteredPosts.length > 0 && !hasMore && !loading && (
+            <div className={`pt-6 md:pt-8 text-center ${isMobile ? 'px-4' : 'mt-6 md:mt-8'}`}
+              style={!isMobile ? { borderColor: colors.primary + '10' } : {}}
+            >
+              <div className={`w-10 h-10 md:w-12 md:h-12 mx-auto mb-3 md:mb-4 rounded-full flex items-center justify-center animate-bounce animate-duration-[3s]`}
+                style={{ background: `linear-gradient(135deg, ${colors.primary}10 0%, ${colors.secondary}10 100%)` }}>
+                <Zap className="w-5 h-5 md:w-6 md:h-6" style={{ color: colors.primary }} />
+              </div>
+              <p className={`text-sm ${getTextClasses('muted')}`}>
+                You've reached the end of your feed
+              </p>
+              <p className={`text-xs mt-1 ${getTextClasses('muted')}`}>
+                Check back later for new updates
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer Stats - Desktop Only */}
+        {!isMobile && posts.length > 0 && (
+          <div className={`mt-8 pt-6`} style={{ borderColor: colors.primary + '10' }}>
+            <div className={`flex flex-wrap items-center justify-between text-sm ${getTextClasses('muted')}`}>
+              <div className="flex items-center gap-4">
+                <span>📊 {posts.length} posts loaded</span>
+                <span style={{ color: colors.primary }}>•</span>
+                <span>👥 {stats.uniqueAuthors} authors</span>
+                <span style={{ color: colors.primary }}>•</span>
+                <span>👍 {stats.totalLikes} total likes</span>
+              </div>
+              <div className="flex items-center gap-2 mt-2 md:mt-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={scrollToTop}
+                  className="text-xs transform hover:scale-105"
+                  style={{ color: colors.primary }}
+                >
+                  <ArrowUp className="w-3 h-3 mr-1" />
+                  Back to top
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Post Creation Modal */}
+      {isCreating && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div
+            className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+            onClick={() => setIsCreating(false)}
+          />
+          <div className={`relative ${isMobile ? 'w-full h-full' : 'w-full max-w-2xl max-h-[90vh] overflow-hidden'} animate-in zoom-in duration-300`}>
+            <PostComposer
+              onPostCreated={handlePostCreated}
+              onCancel={() => setIsCreating(false)}
+              isModal={true}
+              className={isMobile ? 'rounded-none h-full' : 'rounded-2xl'}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
-export default function FreelancerSocialFeed() {
+export default function SocialFeedPage() {
   return (
-    <SocialDashboardLayout requiredRole="freelancer">
-      <RoleThemeProvider>
-        <FreelancerSocialFeedContent />
-      </RoleThemeProvider>
-    </SocialDashboardLayout>
+    <>
+      <Head>
+        <title>Feed | Banana Social</title>
+        <meta name="description" content="Connect with professionals, share insights, and grow your network" />
+      </Head>
+
+      <SocialDashboardLayout requiredRole="freelancer">
+        <SocialFeedContent />
+      </SocialDashboardLayout>
+    </>
   );
 }

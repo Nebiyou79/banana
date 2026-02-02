@@ -12,11 +12,11 @@ const postSchema = new mongoose.Schema({
     enum: ['User', 'Company', 'Organization'],
     default: 'User'
   },
-  
+
   // Content
   content: {
     type: String,
-    required: function() {
+    required: function () {
       return !this.media || this.media.length === 0;
     },
     trim: true,
@@ -27,31 +27,55 @@ const postSchema = new mongoose.Schema({
     enum: ['text', 'image', 'video', 'link', 'poll', 'job', 'achievement'],
     default: 'text'
   },
-  
-  // Enhanced Media handling
+
+  // Enhanced Media handling - Updated for Cloudinary support
   media: [{
-    url: {
-      type: String,
-      required: true
-    },
+    // Cloudinary required fields
     type: {
       type: String,
       enum: ['image', 'video', 'document'],
       required: true
     },
+    public_id: {
+      type: String,
+      required: true
+    },
+    secure_url: {
+      type: String,
+      required: true
+    },
+    resource_type: {
+      type: String,
+      enum: ['image', 'video', 'raw'],
+      required: true
+    },
+    format: String,
+    bytes: Number,
+
+    // Media-specific dimensions
+    width: Number,
+    height: Number,
+    duration: Number, // For videos
+
+    // Backward compatibility fields
+    url: String, // Duplicate of secure_url for backward compatibility
     thumbnail: String,
     description: String,
     order: Number,
     filename: String,
     originalName: String,
-    size: Number,
+    size: Number, // Duplicate of bytes for backward compatibility
     mimeType: String,
     dimensions: {
       width: Number,
       height: Number
-    }
+    },
+
+    // Cloudinary metadata
+    created_at: Date,
+    tags: [String]
   }],
-  
+
   // Link preview
   linkPreview: {
     url: String,
@@ -60,7 +84,7 @@ const postSchema = new mongoose.Schema({
     image: String,
     domain: String
   },
-  
+
   // Poll
   poll: {
     question: String,
@@ -76,13 +100,13 @@ const postSchema = new mongoose.Schema({
     multipleChoice: { type: Boolean, default: false },
     totalVotes: { type: Number, default: 0 }
   },
-  
+
   // Job post reference
   job: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Job'
   },
-  
+
   // Hashtags and mentions
   hashtags: [{
     type: String,
@@ -93,7 +117,7 @@ const postSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
-  
+
   // Engagement counters
   stats: {
     likes: { type: Number, default: 0 },
@@ -102,7 +126,7 @@ const postSchema = new mongoose.Schema({
     views: { type: Number, default: 0 },
     saves: { type: Number, default: 0 }
   },
-  
+
   // Privacy and visibility
   visibility: {
     type: String,
@@ -117,7 +141,7 @@ const postSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
-  
+
   // Shared post reference
   sharedPost: {
     type: mongoose.Schema.Types.ObjectId,
@@ -127,7 +151,7 @@ const postSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  
+
   // Moderation
   status: {
     type: String,
@@ -144,7 +168,7 @@ const postSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  
+
   // Location
   location: {
     name: String,
@@ -153,10 +177,10 @@ const postSchema = new mongoose.Schema({
       index: '2dsphere'
     }
   },
-  
+
   // Expiry for temporary posts
   expiresAt: Date,
-  
+
   // Pinned post
   pinned: {
     type: Boolean,
@@ -180,50 +204,100 @@ postSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 postSchema.index({ location: '2dsphere' });
 
 // Virtual for isActive
-postSchema.virtual('isActive').get(function() {
+postSchema.virtual('isActive').get(function () {
   return this.status === 'active';
 });
 
 // Virtual for isExpired
-postSchema.virtual('isExpired').get(function() {
+postSchema.virtual('isExpired').get(function () {
   return this.expiresAt && this.expiresAt < new Date();
 });
 
 // Method to increment engagement counters
-postSchema.methods.incrementStats = async function(field, amount = 1) {
+postSchema.methods.incrementStats = async function (field, amount = 1) {
   this.stats[field] += amount;
   await this.save();
 };
 
 // Method to add media
-postSchema.methods.addMedia = function(mediaData) {
-  this.media.push(mediaData);
+postSchema.methods.addMedia = function (mediaData) {
+  // Ensure backward compatibility
+  const mediaItem = this.formatMediaForStorage(mediaData);
+  this.media.push(mediaItem);
   return this.save();
 };
 
 // Method to remove media
-postSchema.methods.removeMedia = function(mediaId) {
+postSchema.methods.removeMedia = function (mediaId) {
   this.media.id(mediaId).remove();
   return this.save();
 };
 
+// Helper method to format Cloudinary data for storage
+postSchema.methods.formatMediaForStorage = function (cloudinaryData) {
+  const mediaItem = {
+    type: cloudinaryData.resource_type === 'image' ? 'image' :
+      cloudinaryData.resource_type === 'video' ? 'video' : 'document',
+    public_id: cloudinaryData.public_id,
+    secure_url: cloudinaryData.secure_url,
+    resource_type: cloudinaryData.resource_type,
+    format: cloudinaryData.format,
+    bytes: cloudinaryData.bytes,
+    created_at: cloudinaryData.created_at,
+    tags: cloudinaryData.tags || []
+  };
+
+  // Add media-specific fields
+  if (cloudinaryData.width) {
+    mediaItem.width = cloudinaryData.width;
+    mediaItem.dimensions = { width: cloudinaryData.width };
+  }
+
+  if (cloudinaryData.height) {
+    mediaItem.height = cloudinaryData.height;
+    if (mediaItem.dimensions) {
+      mediaItem.dimensions.height = cloudinaryData.height;
+    } else {
+      mediaItem.dimensions = { height: cloudinaryData.height };
+    }
+  }
+
+  if (cloudinaryData.duration) {
+    mediaItem.duration = cloudinaryData.duration;
+  }
+
+  // Backward compatibility fields
+  mediaItem.url = cloudinaryData.secure_url; // Map to existing url field
+  mediaItem.size = cloudinaryData.bytes; // Map to existing size field
+
+  // Preserve existing fields if provided
+  if (cloudinaryData.originalName) mediaItem.originalName = cloudinaryData.originalName;
+  if (cloudinaryData.filename) mediaItem.filename = cloudinaryData.filename;
+  if (cloudinaryData.mimeType) mediaItem.mimeType = cloudinaryData.mimeType;
+  if (cloudinaryData.description) mediaItem.description = cloudinaryData.description;
+  if (cloudinaryData.order) mediaItem.order = cloudinaryData.order;
+  if (cloudinaryData.thumbnail) mediaItem.thumbnail = cloudinaryData.thumbnail;
+
+  return mediaItem;
+};
+
 // Static method to get popular posts
-postSchema.statics.getPopular = function(days = 7, limit = 10) {
+postSchema.statics.getPopular = function (days = 7, limit = 10) {
   const date = new Date();
   date.setDate(date.getDate() - days);
-  
+
   return this.find({
     createdAt: { $gte: date },
     status: 'active'
   })
-  .sort({ 'stats.likes': -1, 'stats.comments': -1 })
-  .limit(limit)
-  .populate('author', 'name avatar headline')
-  .populate('originalAuthor', 'name avatar headline');
+    .sort({ 'stats.likes': -1, 'stats.comments': -1 })
+    .limit(limit)
+    .populate('author', 'name avatar headline')
+    .populate('originalAuthor', 'name avatar headline');
 };
 
 // Pre-save middleware to extract hashtags and determine post type
-postSchema.pre('save', function(next) {
+postSchema.pre('save', function (next) {
   // Extract hashtags
   if (this.isModified('content')) {
     const hashtagRegex = /#(\w+)/g;
@@ -235,7 +309,7 @@ postSchema.pre('save', function(next) {
   if (this.isModified('media') && this.media && this.media.length > 0) {
     const hasImage = this.media.some(m => m.type === 'image');
     const hasVideo = this.media.some(m => m.type === 'video');
-    
+
     if (hasVideo) {
       this.type = 'video';
     } else if (hasImage) {

@@ -1,130 +1,189 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// pages/dashboard/candidate/social/posts.tsx - Unified Posts Management
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/router';
 import { useToast } from '@/hooks/use-toast';
 import { SocialDashboardLayout } from '@/components/social/layout/SocialDashboard';
+import PostComposer from '@/components/social/post/PostComposer';
 import { EditablePostCard } from '@/components/social/post/EditablePostCard';
-import { PostComposer } from '@/components/social/post/PostComposer';
 import { Button } from '@/components/social/ui/Button';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import {
-  Trash2,
-  Pin,
-  Filter,
+  Plus,
   Search,
+  X,
+  Filter,
   Grid,
   List,
-  CheckSquare,
-  X,
-  Archive,
-  Plus,
+  RefreshCw,
   TrendingUp,
-  Sparkles,
+  Eye,
+  Heart,
+  MessageCircle,
+  Share2,
+  BarChart3,
+  Pin,
+  Calendar,
+  Hash,
+  Image as ImageIcon,
+  Video,
   FileText,
+  Link as LinkIcon,
   Loader2,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Sparkles,
+  ArrowUp,
+  Zap,
+  Clock,
+  Flame,
+  Users,
+  Globe,
+  Lock,
+  Star,
+  Target
 } from 'lucide-react';
 import { postService, Post } from '@/services/postService';
 import { useAuth } from '@/contexts/AuthContext';
-import { RoleThemeProvider, useTheme } from '@/components/social/theme/RoleThemeProvider';
+import { useTheme } from '@/components/social/theme/RoleThemeProvider';
+import { useMediaQuery } from '@/hooks/use-media-query';
 
-type PostStatus = 'all' | 'active' | 'hidden' | 'draft';
-type PostType = 'all' | 'text' | 'image' | 'video' | 'link' | 'poll' | 'job' | 'achievement';
-type SortOption = 'newest' | 'oldest' | 'popular' | 'trending';
+type PostStatus = 'all' | 'active' | 'hidden' | 'deleted';
+type PostType = 'all' | 'text' | 'image' | 'video' | 'link' | 'poll' | 'job' | 'achievement' | 'document';
 
 interface PostStats {
+  total: number;
   views: number;
   likes: number;
   comments: number;
   shares: number;
-  engagementRate: number;
+  engagement: number;
+  pinned: number;
+  drafts: number;
 }
 
 function MyPostsPageContent() {
   const { user } = useAuth();
-  const { role } = useTheme();
   const { toast } = useToast();
+  const { colors, getButtonClasses, getTextClasses, getBgClasses, getPageBgStyle, getCardStyle, getBorderClasses, role } = useTheme();
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isTablet = useMediaQuery('(max-width: 1024px)');
 
   // State
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set());
-  const [postStats, setPostStats] = useState<Record<string, PostStats>>({});
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(isMobile ? 'list' : 'list');
   const [statusFilter, setStatusFilter] = useState<PostStatus>('all');
   const [typeFilter, setTypeFilter] = useState<PostType>('all');
-  const [sortOption, setSortOption] = useState<SortOption>('newest');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  const [activeTab, setActiveTab] = useState('all');
-  const [bulkActionLoading, setBulkActionLoading] = useState(false);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [activeTab, setActiveTab] = useState<'all' | 'pinned' | 'popular' | 'drafts'>('all');
   const [showComposer, setShowComposer] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [stats, setStats] = useState<PostStats>({
+    total: 0,
+    views: 0,
+    likes: 0,
+    comments: 0,
+    shares: 0,
+    engagement: 0,
+    pinned: 0,
+    drafts: 0
+  });
+  const [showFilters, setShowFilters] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const [postsLoaded, setPostsLoaded] = useState(false);
+  const [statsLoaded, setStatsLoaded] = useState(false);
+  const [searchLoaded, setSearchLoaded] = useState(false);
 
-  const postsContainerRef = useRef<HTMLDivElement>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Load posts on mount and when filters change
+  // Initialize animations
   useEffect(() => {
-    loadMyPosts(true);
-  }, [statusFilter, typeFilter, sortOption, searchQuery]);
+    const timer1 = setTimeout(() => setSearchLoaded(true), 200);
+    const timer2 = setTimeout(() => setStatsLoaded(true), 400);
+    const timer3 = setTimeout(() => setPostsLoaded(true), 600);
 
-  const loadMyPosts = async (reset = false) => {
-    if (isLoadingMore && !reset) return;
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+    };
+  }, []);
 
-    const loader = reset ? setLoading : setIsLoadingMore;
-    loader(true);
+  // Scroll to top button visibility
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowBackToTop(window.scrollY > 300);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Load posts on mount
+  useEffect(() => {
+    loadMyPosts();
+  }, [statusFilter, typeFilter, activeTab]);
+
+  const loadMyPosts = async () => {
+    setLoading(true);
     try {
-      const currentPage = reset ? 1 : page;
-
-      // Map sort option to backend parameters
-      const sortMap = {
-        'newest': 'createdAt_desc',
-        'oldest': 'createdAt_asc',
-        'popular': 'stats.likes_desc',
-        'trending': 'stats.views_desc'
+      const params: any = {
+        page: 1,
+        limit: isMobile ? 6 : 12
       };
 
-      const response = await postService.getMyPosts({
-        page: currentPage,
-        limit: 12,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-        type: typeFilter !== 'all' ? typeFilter : undefined,
-      });
-
-      const postsData = response.data || [];
-
-      if (reset) {
-        setPosts(postsData);
-        setPage(2);
-      } else {
-        setPosts(prev => [...prev, ...postsData]);
-        setPage(prev => prev + 1);
+      // Add status filter
+      if (statusFilter !== 'all') {
+        params.status = statusFilter;
       }
 
-      setHasMore(!!response.pagination && currentPage < response.pagination.pages);
-      calculatePostsStats(postsData);
+      console.log('📡 Loading my posts with params:', params);
+
+      // Using the correct endpoint from postService
+      const response = await postService.getMyPosts(params);
+
+      const postsData = response.data || [];
+      console.log('✅ Loaded posts:', postsData.length);
+      setPosts(postsData);
+
+      // Calculate stats
+      const totalStats: PostStats = {
+        total: postsData.length,
+        views: postsData.reduce((sum, post) => sum + (post.stats?.views || 0), 0),
+        likes: postsData.reduce((sum, post) => sum + (post.stats?.likes || 0), 0),
+        comments: postsData.reduce((sum, post) => sum + (post.stats?.comments || 0), 0),
+        shares: postsData.reduce((sum, post) => sum + (post.stats?.shares || 0), 0),
+        pinned: postsData.filter(p => p.pinned).length,
+        drafts: postsData.filter(p => p.visibility === 'private').length,
+        engagement: postsData.length > 0 ?
+          (postsData.reduce((sum, post) => {
+            const views = post.stats?.views || 1;
+            const engagement = ((post.stats?.likes || 0) + (post.stats?.comments || 0) + (post.stats?.shares || 0)) / views * 100;
+            return sum + engagement;
+          }, 0) / postsData.length) : 0
+      };
+      setStats(totalStats);
 
     } catch (error: any) {
+      console.error('❌ Failed to load posts:', error);
       toast({
         variant: "destructive",
         title: "Error",
         description: error.message || "Failed to load your posts"
       });
     } finally {
-      loader(false);
+      setLoading(false);
     }
   };
 
   const refreshPosts = async () => {
     setIsRefreshing(true);
     try {
-      await loadMyPosts(true);
+      await loadMyPosts();
       toast({
         variant: "success",
         title: "Refreshed",
@@ -137,70 +196,26 @@ function MyPostsPageContent() {
     }
   };
 
-  const calculatePostsStats = (postsList: Post[]) => {
-    const stats: Record<string, PostStats> = {};
-
-    postsList.forEach(post => {
-      const views = post.stats?.views || 0;
-      const likes = post.stats?.likes || 0;
-      const comments = post.stats?.comments || 0;
-      const shares = post.stats?.shares || 0;
-      const engagementRate = views > 0 ? ((likes + comments + shares) / views) * 100 : 0;
-
-      stats[post._id] = {
-        views,
-        likes,
-        comments,
-        shares,
-        engagementRate
-      };
-    });
-
-    setPostStats(prev => ({ ...prev, ...stats }));
-  };
-
   const handlePostCreated = useCallback((newPost: Post) => {
     setPosts(prev => [newPost, ...prev]);
-    calculatePostsStats([newPost, ...posts]);
     setShowComposer(false);
     toast({
       variant: "success",
       title: "Post Created",
       description: "Your post has been published successfully"
     });
-
-    // Scroll to top to show new post
-    if (postsContainerRef.current) {
-      postsContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  }, [posts, toast]);
+  }, [toast]);
 
   const handlePostUpdated = useCallback((updatedPost: Post) => {
     setPosts(prev => prev.map(post =>
       post._id === updatedPost._id ? updatedPost : post
     ));
-
-    // Update stats for the updated post
-    const stats = postStats[updatedPost._id];
-    if (stats) {
-      setPostStats(prev => ({
-        ...prev,
-        [updatedPost._id]: {
-          ...stats,
-          likes: updatedPost.stats?.likes || stats.likes,
-          comments: updatedPost.stats?.comments || stats.comments,
-          shares: updatedPost.stats?.shares || stats.shares,
-          views: updatedPost.stats?.views || stats.views,
-        }
-      }));
-    }
-
     toast({
       variant: "success",
       title: "Updated",
       description: "Post updated successfully"
     });
-  }, [postStats, toast]);
+  }, [toast]);
 
   const handlePostDeleted = useCallback((postId: string) => {
     setPosts(prev => prev.filter(post => post._id !== postId));
@@ -209,13 +224,6 @@ function MyPostsPageContent() {
       newSet.delete(postId);
       return newSet;
     });
-
-    setPostStats(prev => {
-      const newStats = { ...prev };
-      delete newStats[postId];
-      return newStats;
-    });
-
     toast({
       variant: "success",
       title: "Deleted",
@@ -223,143 +231,7 @@ function MyPostsPageContent() {
     });
   }, [toast]);
 
-  // Bulk Actions
-  const handleBulkDelete = async () => {
-    if (selectedPosts.size === 0) return;
-
-    if (!confirm(`Are you sure you want to delete ${selectedPosts.size} selected posts? This action cannot be undone.`)) {
-      return;
-    }
-
-    setBulkActionLoading(true);
-    try {
-      const deletePromises = Array.from(selectedPosts).map(postId =>
-        postService.deletePost(postId, false)
-      );
-
-      await Promise.all(deletePromises);
-
-      setPosts(prev => prev.filter(post => !selectedPosts.has(post._id)));
-      setSelectedPosts(new Set());
-
-      toast({
-        variant: "success",
-        title: "Bulk Delete",
-        description: `${selectedPosts.size} posts deleted successfully`
-      });
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || 'Failed to delete posts'
-      });
-    } finally {
-      setBulkActionLoading(false);
-    }
-  };
-
-  const handleBulkArchive = async () => {
-    if (selectedPosts.size === 0) return;
-
-    setBulkActionLoading(true);
-    try {
-      const archivePromises = Array.from(selectedPosts).map(postId =>
-        postService.updatePost(postId, {
-          visibility: 'private'
-        }).catch(err => {
-          console.error(`Failed to archive post ${postId}:`, err);
-          return null;
-        })
-      );
-
-      const results = await Promise.all(archivePromises);
-      const successfulArchives = results.filter(r => r !== null);
-
-      setPosts(prev => prev.map(post =>
-        selectedPosts.has(post._id)
-          ? { ...post, visibility: 'private' }
-          : post
-      ));
-
-      setSelectedPosts(new Set());
-
-      toast({
-        variant: "success",
-        title: "Archived",
-        description: `${successfulArchives.length} posts archived successfully`
-      });
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || 'Failed to archive posts'
-      });
-    } finally {
-      setBulkActionLoading(false);
-    }
-  };
-
-  const handleBulkPin = async (pin: boolean) => {
-    if (selectedPosts.size === 0) return;
-
-    setBulkActionLoading(true);
-    try {
-      const pinPromises = Array.from(selectedPosts).map(postId =>
-        postService.updatePost(postId, { pinned: pin })
-      );
-
-      await Promise.all(pinPromises);
-
-      setPosts(prev => prev.map(post =>
-        selectedPosts.has(post._id)
-          ? { ...post, pinned: pin }
-          : post
-      ));
-
-      toast({
-        variant: "success",
-        title: pin ? "Pinned" : "Unpinned",
-        description: `${selectedPosts.size} posts ${pin ? 'pinned' : 'unpinned'}`
-      });
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || `Failed to ${pin ? 'pin' : 'unpin'} posts`
-      });
-    } finally {
-      setBulkActionLoading(false);
-    }
-  };
-
-  const togglePostSelection = (postId: string) => {
-    const newSet = new Set(selectedPosts);
-    if (newSet.has(postId)) {
-      newSet.delete(postId);
-    } else {
-      newSet.add(postId);
-    }
-    setSelectedPosts(newSet);
-  };
-
-  const selectAllPosts = () => {
-    if (selectedPosts.size === filteredPosts.length && filteredPosts.length > 0) {
-      setSelectedPosts(new Set());
-    } else {
-      setSelectedPosts(new Set(filteredPosts.map(p => p._id)));
-    }
-  };
-
-  const handleClearFilters = () => {
-    setStatusFilter('all');
-    setTypeFilter('all');
-    setSortOption('newest');
-    setSearchQuery('');
-    setActiveTab('all');
-    setShowAdvancedFilters(false);
-  };
-
-  // Filtered posts based on search and active tab
+  // Filtered posts
   const filteredPosts = posts.filter(post => {
     // Apply search query
     if (searchQuery) {
@@ -368,541 +240,680 @@ function MyPostsPageContent() {
       const matchesHashtags = post.hashtags?.some(tag =>
         tag.toLowerCase().includes(query.replace('#', ''))
       );
-      const matchesAuthor = post.author.name?.toLowerCase().includes(query);
+      const matchesTitle = post.type === 'achievement' || post.type === 'job' || post.type === 'poll';
 
-      if (!matchesContent && !matchesHashtags && !matchesAuthor) {
+      if (!matchesContent && !matchesHashtags && !matchesTitle) {
         return false;
       }
+    }
+
+    // Apply type filter
+    if (typeFilter !== 'all' && post.type !== typeFilter) {
+      return false;
+    }
+
+    // Apply status filter
+    if (statusFilter !== 'all' && post.status !== statusFilter) {
+      return false;
     }
 
     // Apply tab filters
     if (activeTab === 'pinned') return post.pinned;
     if (activeTab === 'popular') {
-      const stats = postStats[post._id];
-      return stats && stats.engagementRate > 5;
+      const engagement = ((post.stats?.likes || 0) + (post.stats?.comments || 0) + (post.stats?.shares || 0)) / (post.stats?.views || 1);
+      return engagement > 0.1; // 10% engagement rate
     }
     if (activeTab === 'drafts') return post.visibility === 'private';
     return true;
   });
 
-  // Statistics calculation
-  const totalStats = {
-    posts: posts.length,
-    views: Object.values(postStats).reduce((sum, stat) => sum + stat.views, 0),
-    likes: Object.values(postStats).reduce((sum, stat) => sum + stat.likes, 0),
-    comments: Object.values(postStats).reduce((sum, stat) => sum + stat.comments, 0),
-    shares: Object.values(postStats).reduce((sum, stat) => sum + stat.shares, 0),
-    pinned: posts.filter(p => p.pinned).length,
-    engagement: posts.length > 0
-      ? (Object.values(postStats).reduce((sum, stat) => sum + stat.engagementRate, 0) / posts.length).toFixed(1)
-      : '0.0'
+  // Get post type icon
+  const getPostTypeIcon = (type: string) => {
+    switch (type) {
+      case 'image': return <ImageIcon className="w-4 h-4" />;
+      case 'video': return <Video className="w-4 h-4" />;
+      case 'document': return <FileText className="w-4 h-4" />;
+      case 'link': return <LinkIcon className="w-4 h-4" />;
+      case 'poll': return <Target className="w-4 h-4" />;
+      case 'job': return <Star className="w-4 h-4" />;
+      case 'achievement': return <Sparkles className="w-4 h-4" />;
+      default: return <FileText className="w-4 h-4" />;
+    }
   };
 
-  // Empty state
-  const renderEmptyState = () => (
-    <div className="text-center py-12 px-4 bg-white rounded-xl border border-gray-200">
-      <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-r from-blue-100 to-purple-100 flex items-center justify-center">
-        <Sparkles className="w-10 h-10 text-blue-500" />
-      </div>
-      <h3 className="text-xl font-bold text-gray-900 mb-2">
-        {searchQuery ? 'No Posts Found' : 'No Posts Yet'}
-      </h3>
-      <p className="text-gray-600 mb-6 max-w-md mx-auto">
-        {searchQuery
-          ? 'No posts match your search criteria. Try different filters.'
-          : 'Share your thoughts, updates, or achievements with your network.'}
-      </p>
-      {!searchQuery && (
-        <Button
-          onClick={() => setShowComposer(true)}
-          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Create Your First Post
-        </Button>
-      )}
-      {searchQuery && (
-        <Button
-          onClick={handleClearFilters}
-          variant="outline"
-        >
-          Clear Filters
-        </Button>
-      )}
-    </div>
-  );
+  // Format number with abbreviations
+  const formatNumber = (num: number): string => {
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    return num.toString();
+  };
 
-  // Loading skeleton
+  // Loading skeleton with theme colors
   const renderPostSkeleton = () => (
-    <div className="space-y-4">
+    <div className={isMobile ? 'space-y-2' : 'space-y-4'}>
       {[1, 2, 3].map(i => (
-        <div key={i} className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gray-200 rounded-full" />
-              <div>
-                <div className="h-4 bg-gray-200 rounded w-32 mb-2" />
-                <div className="h-3 bg-gray-200 rounded w-24" />
+        <div key={i} className="animate-pulse animate-in fade-in-up duration-300" style={{ animationDelay: `${i * 100}ms` }}>
+          <div className="rounded-xl border p-4 animate-in slide-in-from-left-0 duration-500" style={getCardStyle()}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full" style={{ backgroundColor: colors.primary + '20' }} />
+                <div>
+                  <div className="h-3 rounded w-32 mb-2" style={{ backgroundColor: colors.primary + '20' }} />
+                  <div className="h-2 rounded w-24" style={{ backgroundColor: colors.secondary + '20' }} />
+                </div>
               </div>
+              <div className="w-6 h-6 rounded" style={{ backgroundColor: colors.accent + '20' }} />
             </div>
-            <div className="w-6 h-6 bg-gray-200 rounded" />
-          </div>
-          <div className="space-y-2 mb-4">
-            <div className="h-4 bg-gray-200 rounded w-full" />
-            <div className="h-4 bg-gray-200 rounded w-3/4" />
-          </div>
-          <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-            <div className="flex items-center gap-6">
-              <div className="h-4 bg-gray-200 rounded w-16" />
-              <div className="h-4 bg-gray-200 rounded w-16" />
-              <div className="h-4 bg-gray-200 rounded w-16" />
+            <div className="space-y-2 mb-4">
+              <div className="h-3 rounded w-full" style={{ backgroundColor: colors.primary + '10' }} />
+              <div className="h-3 rounded w-2/3" style={{ backgroundColor: colors.primary + '10' }} />
             </div>
-            <div className="h-8 bg-gray-200 rounded w-24" />
+            <div className="flex items-center gap-4 pt-4 border-t" style={{ borderColor: colors.primary + '20' }}>
+              <div className="h-2 rounded w-12" style={{ backgroundColor: colors.secondary + '20' }} />
+              <div className="h-2 rounded w-12" style={{ backgroundColor: colors.secondary + '20' }} />
+              <div className="h-2 rounded w-12" style={{ backgroundColor: colors.secondary + '20' }} />
+            </div>
           </div>
         </div>
       ))}
     </div>
   );
 
+  // Empty state with theme
+  const renderEmptyState = () => (
+    <div className={`text-center py-12 ${isMobile ? 'px-4' : 'px-4 md:px-8'} animate-in fade-in-up duration-700`}>
+      <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center animate-bounce animate-duration-[3s]"
+        style={{ background: `linear-gradient(135deg, ${colors.primary}20 0%, ${colors.secondary}20 100%)` }}>
+        <Sparkles className="w-8 h-8" style={{ color: colors.primary }} />
+      </div>
+      <h3 className={`text-lg font-bold mb-2 animate-in fade-in-up duration-500 ${getTextClasses('primary')}`}>
+        {searchQuery ? 'No Posts Found' : 'No Posts Yet'}
+      </h3>
+      <p className={`text-sm mb-6 max-w-md mx-auto animate-in fade-in-up duration-500 animate-delay-200 ${getTextClasses('muted')}`}>
+        {searchQuery
+          ? 'No posts match your search criteria. Try different filters.'
+          : `Share your ${role === 'candidate' ? 'achievements' : role === 'company' ? 'company updates' : role === 'freelancer' ? 'portfolio work' : 'organization news'} with your network.`}
+      </p>
+      {!searchQuery && (
+        <Button
+          onClick={() => setShowComposer(true)}
+          className={`px-5 py-2.5 rounded-lg font-medium shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 active:scale-95 animate-in fade-in-up duration-500 animate-delay-400 ${getButtonClasses('primary')}`}
+          style={{
+            background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+          }}
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Create Your First Post
+        </Button>
+      )}
+    </div>
+  );
+
+  // Stat item component with theme animations
+  const StatItem = ({ icon: Icon, label, value, color, delay = 0 }: any) => (
+    <div
+      className={`text-center p-3 rounded-lg border animate-in fade-in-up duration-500`}
+      style={{
+        ...getCardStyle(),
+        animationDelay: `${delay}ms`,
+        borderColor: color + '30'
+      }}
+    >
+      <div className="flex flex-col items-center">
+        <div
+          className="w-7 h-7 rounded-full flex items-center justify-center mb-2 animate-pulse animate-duration-[2000ms]"
+          style={{ backgroundColor: color + '10' }}
+        >
+          <Icon className="w-3 h-3" style={{ color }} />
+        </div>
+        <div
+          className="text-sm md:text-base font-bold animate-countup animate-duration-1000"
+          style={{ color: colors.primary }}
+        >
+          {value}
+        </div>
+        <div className={`text-xs mt-1 ${getTextClasses('muted')}`}>{label}</div>
+      </div>
+    </div>
+  );
+
+  // Tab button with theme
+  const TabButton = ({ active, onClick, icon: Icon, label, count, color }: any) => (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded text-xs font-medium transition-all duration-300 flex items-center gap-1 whitespace-nowrap transform hover:scale-105 active:scale-95 ${active
+        ? `${getButtonClasses('primary')} shadow-md`
+        : `${getBgClasses('card')} ${getTextClasses('muted')} hover:${getTextClasses('primary')}`
+        }`}
+      style={active ? {
+        background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+      } : {}}
+    >
+      {Icon && <Icon className="w-3 h-3" />}
+      <span>{label}</span>
+      {count !== undefined && <span>({count})</span>}
+    </button>
+  );
+
   return (
-    <div className="min-h-screen">
-      {/* Fixed Header */}
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-3">
+    <div
+      className="min-h-screen animate-in fade-in duration-500"
+      style={getPageBgStyle()}
+      ref={containerRef}
+    >
+      {/* Animated background elements */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-0 right-1/4 w-64 h-64 rounded-full blur-3xl animate-float animate-duration-[15s]" style={{ background: `${colors.primary}10` }} />
+        <div className="absolute bottom-0 left-1/4 w-96 h-96 rounded-full blur-3xl animate-float animate-duration-[20s] animate-delay-1000" style={{ background: `${colors.secondary}10` }} />
+        <div className="absolute top-1/2 right-1/3 w-48 h-48 rounded-full blur-3xl animate-float animate-duration-[25s] animate-delay-2000" style={{ background: `${colors.accent}10` }} />
+      </div>
+
+      {/* Back to Top Button */}
+      {showBackToTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-6 right-6 z-50 p-3 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 animate-in bounce-in duration-500"
+          style={{
+            background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+          }}
+          aria-label="Back to top"
+        >
+          <ArrowUp className="w-5 h-5" />
+        </button>
+      )}
+
+      {/* Header */}
+      <div className={`sticky top-0 z-40 border-b backdrop-blur-lg animate-in slide-in-from-top-0 duration-500 ${isMobile ? 'px-4 py-3' : 'px-4 md:px-6 py-4'}`} style={getCardStyle()}>
+        {isMobile ? (
+          <div className="flex items-center justify-between animate-in fade-in-up duration-300">
             <div>
-              <h1 className="text-xl font-bold text-gray-900">My Posts</h1>
-              <p className="text-sm text-gray-600">
-                Manage and track your content performance
+              <h1 className={`text-lg font-bold ${getTextClasses('primary')}`}>
+                My Posts
+              </h1>
+              <p className={`text-xs ${getTextClasses('muted')} animate-in fade-in-up duration-500 animate-delay-200`}>
+                Manage your {role} content
               </p>
             </div>
 
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
+              <button
                 onClick={refreshPosts}
-                disabled={isRefreshing}
-                className="h-9"
+                disabled={isRefreshing || loading}
+                className="p-2 rounded-lg transition-all duration-300 hover:scale-110 active:scale-95"
+                style={getCardStyle()}
+                aria-label="Refresh"
               >
-                {isRefreshing ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  'Refresh'
-                )}
-              </Button>
-
-              <Button
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} style={{ color: colors.primary }} />
+              </button>
+              <button
                 onClick={() => setShowComposer(true)}
-                size="sm"
-                className="h-9 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                className="p-2 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-110 active:scale-95"
+                style={{
+                  background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+                }}
+                aria-label="Create post"
               >
-                <Plus className="w-4 h-4 mr-2" />
-                New Post
-              </Button>
+                <Plus className="w-5 h-5 text-white" />
+              </button>
             </div>
           </div>
-
-          {/* Quick Stats */}
-          <div className="grid grid-cols-5 gap-2 mb-3">
-            <div className="bg-blue-50 rounded-lg p-2 text-center">
-              <div className="text-lg font-bold text-blue-700">{totalStats.posts}</div>
-              <div className="text-xs text-blue-600">Posts</div>
-            </div>
-            <div className="bg-green-50 rounded-lg p-2 text-center">
-              <div className="text-lg font-bold text-green-700">{totalStats.views.toLocaleString()}</div>
-              <div className="text-xs text-green-600">Views</div>
-            </div>
-            <div className="bg-purple-50 rounded-lg p-2 text-center">
-              <div className="text-lg font-bold text-purple-700">{totalStats.likes.toLocaleString()}</div>
-              <div className="text-xs text-purple-600">Likes</div>
-            </div>
-            <div className="bg-amber-50 rounded-lg p-2 text-center">
-              <div className="text-lg font-bold text-amber-700">{totalStats.comments.toLocaleString()}</div>
-              <div className="text-xs text-amber-600">Comments</div>
-            </div>
-            <div className="bg-pink-50 rounded-lg p-2 text-center">
-              <div className="text-lg font-bold text-pink-700">{totalStats.engagement}%</div>
-              <div className="text-xs text-pink-600">Engagement</div>
-            </div>
-          </div>
-
-          {/* Tabs */}
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-2">
-            <TabsList className="w-full bg-transparent border-b border-gray-200 justify-start px-0 h-10">
-              <TabsTrigger
-                value="all"
-                className="px-3 text-sm data-[state=active]:border-b-2 data-[state=active]:border-blue-500 rounded-none"
-              >
-                All ({posts.length})
-              </TabsTrigger>
-              <TabsTrigger
-                value="pinned"
-                className="px-3 text-sm data-[state=active]:border-b-2 data-[state=active]:border-blue-500 rounded-none flex items-center gap-1"
-              >
-                <Pin className="w-3 h-3" />
-                Pinned ({posts.filter(p => p.pinned).length})
-              </TabsTrigger>
-              <TabsTrigger
-                value="popular"
-                className="px-3 text-sm data-[state=active]:border-b-2 data-[state=active]:border-blue-500 rounded-none flex items-center gap-1"
-              >
-                <TrendingUp className="w-3 h-3" />
-                Popular
-              </TabsTrigger>
-              <TabsTrigger
-                value="drafts"
-                className="px-3 text-sm data-[state=active]:border-b-2 data-[state=active]:border-blue-500 rounded-none flex items-center gap-1"
-              >
-                <FileText className="w-3 h-3" />
-                Drafts ({posts.filter(p => p.visibility === 'private').length})
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-      </div>
-
-      {/* Main Content Area */}
-      <div className="px-4 py-6">
-        <div className="max-w-4xl mx-auto">
-          {/* Post Composer (Conditional) */}
-          {showComposer && (
-            <div className="mb-6">
-              <PostComposer
-                onPostCreated={handlePostCreated}
-                onClose={() => setShowComposer(false)}
-                roleContext={role}
-              />
-            </div>
-          )}
-
-          {/* Controls Bar */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              {/* Selection Controls */}
-              <div className="flex items-center gap-3">
-                <div className="flex items-center">
-                  <button
-                    onClick={selectAllPosts}
-                    className={`p-1.5 rounded-lg border transition-colors ${selectedPosts.size === filteredPosts.length && filteredPosts.length > 0
-                      ? 'bg-blue-100 text-blue-700 border-blue-300'
-                      : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
-                      }`}
-                    disabled={filteredPosts.length === 0 || loading}
-                  >
-                    <CheckSquare className="w-4 h-4" />
-                  </button>
-                  {selectedPosts.size > 0 && (
-                    <span className="ml-2 text-sm font-medium text-gray-700">
-                      {selectedPosts.size} selected
-                    </span>
-                  )}
-                </div>
-
-                {selectedPosts.size > 0 && (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleBulkPin(true)}
-                      disabled={bulkActionLoading}
-                      className="h-8 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
-                    >
-                      <Pin className="w-3 h-3 mr-1" />
-                      Pin
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleBulkPin(false)}
-                      disabled={bulkActionLoading}
-                      className="h-8 text-xs border-amber-300 text-amber-700 hover:bg-amber-50"
-                    >
-                      <Pin className="w-3 h-3 mr-1" />
-                      Unpin
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleBulkArchive}
-                      disabled={bulkActionLoading}
-                      className="h-8 text-xs border-gray-300 text-gray-700 hover:bg-gray-50"
-                    >
-                      <Archive className="w-3 h-3 mr-1" />
-                      Archive
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleBulkDelete}
-                      disabled={bulkActionLoading}
-                      className="h-8 text-xs"
-                    >
-                      <Trash2 className="w-3 h-3 mr-1" />
-                      Delete
-                    </Button>
-                  </div>
-                )}
+        ) : (
+          <div className="max-w-7xl mx-auto animate-in fade-in-up duration-300">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className={`text-xl md:text-2xl font-bold ${getTextClasses('primary')} animate-text bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent`}>
+                  My Posts
+                </h1>
+                <p className={`text-sm md:text-base ${getTextClasses('muted')} animate-in fade-in-up duration-500 animate-delay-200`}>
+                  Manage and track your {role} content
+                </p>
               </div>
 
-              {/* Search and Filters */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                {/* Search */}
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search posts..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-
-                {/* View Toggle */}
-                <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-                  <button
-                    onClick={() => setViewMode('list')}
-                    className={`p-1.5 rounded-md transition-colors ${viewMode === 'list'
-                      ? 'bg-white shadow-sm text-gray-900'
-                      : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                  >
-                    <List className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setViewMode('grid')}
-                    className={`p-1.5 rounded-md transition-colors ${viewMode === 'grid'
-                      ? 'bg-white shadow-sm text-gray-900'
-                      : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                  >
-                    <Grid className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Filter Toggle */}
+              <div className="flex items-center gap-2 md:gap-3">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                  className="h-9"
+                  onClick={refreshPosts}
+                  disabled={isRefreshing || loading}
+                  className={`${getButtonClasses('outline')} transform hover:scale-105 active:scale-95 animate-in fade-in-up duration-500`}
                 >
-                  <Filter className="w-4 h-4 mr-2" />
-                  Filter
-                  {showAdvancedFilters ? (
-                    <ChevronUp className="w-4 h-4 ml-1" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 ml-1" />
-                  )}
+                  <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+                <Button
+                  onClick={() => setShowComposer(true)}
+                  size="sm"
+                  className={`${getButtonClasses('primary')} transform hover:scale-105 active:scale-95 animate-in fade-in-up duration-500 animate-delay-100`}
+                  style={{
+                    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+                  }}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Post
                 </Button>
               </div>
             </div>
+          </div>
+        )}
+      </div>
 
-            {/* Advanced Filters */}
-            {showAdvancedFilters && (
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Status Filter */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                    <div className="flex flex-wrap gap-2">
-                      {(['all', 'active', 'hidden', 'draft'] as PostStatus[]).map(status => (
-                        <button
-                          key={status}
-                          onClick={() => setStatusFilter(status)}
-                          className={`px-3 py-1.5 rounded-lg border text-sm font-medium capitalize transition-colors ${statusFilter === status
-                            ? 'bg-blue-100 text-blue-700 border-blue-300'
-                            : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
-                            }`}
-                        >
-                          {status === 'all' ? 'All Status' : status}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+      {/* Main Content */}
+      <div className={isMobile ? 'px-0' : 'px-4 py-4 md:px-6 lg:px-8'}>
+        <div className={isMobile ? '' : 'max-w-7xl mx-auto'}>
+          {/* Stats Overview */}
+          {!isMobile && (
+            <div className="mb-4 md:mb-6 animate-in fade-in-up duration-500">
+              <div className="grid grid-cols-3 md:grid-cols-8 gap-2 md:gap-3">
+                <StatItem
+                  icon={BarChart3}
+                  label="Total"
+                  value={stats.total}
+                  color={colors.primary}
+                  delay={0}
+                />
+                <StatItem
+                  icon={Eye}
+                  label="Views"
+                  value={formatNumber(stats.views)}
+                  color="#10B981"
+                  delay={100}
+                />
+                <StatItem
+                  icon={Heart}
+                  label="Likes"
+                  value={formatNumber(stats.likes)}
+                  color="#EF4444"
+                  delay={200}
+                />
+                <StatItem
+                  icon={MessageCircle}
+                  label="Comments"
+                  value={formatNumber(stats.comments)}
+                  color="#F59E0B"
+                  delay={300}
+                />
+                <StatItem
+                  icon={Share2}
+                  label="Shares"
+                  value={formatNumber(stats.shares)}
+                  color="#8B5CF6"
+                  delay={400}
+                />
+                <StatItem
+                  icon={Pin}
+                  label="Pinned"
+                  value={stats.pinned}
+                  color="#3B82F6"
+                  delay={500}
+                />
+                <StatItem
+                  icon={Lock}
+                  label="Drafts"
+                  value={stats.drafts}
+                  color="#6B7280"
+                  delay={600}
+                />
+                <StatItem
+                  icon={TrendingUp}
+                  label="Engage"
+                  value={`${stats.engagement.toFixed(1)}%`}
+                  color={colors.secondary}
+                  delay={700}
+                />
+              </div>
+            </div>
+          )}
 
-                  {/* Type Filter */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
-                    <div className="flex flex-wrap gap-2">
-                      {(['all', 'text', 'image', 'video', 'poll', 'job', 'achievement', 'link'] as PostType[]).map(type => (
-                        <button
-                          key={type}
-                          onClick={() => setTypeFilter(type)}
-                          className={`px-3 py-1.5 rounded-lg border text-sm font-medium capitalize transition-colors ${typeFilter === type
-                            ? 'bg-blue-100 text-blue-700 border-blue-300'
-                            : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
-                            }`}
-                        >
-                          {type === 'all' ? 'All Types' : type}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+          {/* Mobile Search and Tabs */}
+          {isMobile && (
+            <div className="px-4 space-y-3 mb-4 animate-in fade-in-up duration-300">
+              {/* Mobile Search */}
+              <div className="relative">
+                <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                  <Search className="w-4 h-4" style={{ color: colors.primary + '80' }} />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search posts..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-9 py-2.5 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-1 transition-all duration-300"
+                  style={{
+                    ...getCardStyle(),
+                    border: `1px solid ${colors.primary}20`,
+                    color: colors.primary,
+                    backgroundColor: colors.primary + '05'
+                  }}
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 hover:scale-110 transition-transform duration-200"
+                    style={{ color: colors.primary + '60' }}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
 
-                  {/* Sort Options */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
-                    <div className="flex flex-wrap gap-2">
-                      {(['newest', 'oldest', 'popular', 'trending'] as SortOption[]).map(sort => (
-                        <button
-                          key={sort}
-                          onClick={() => setSortOption(sort)}
-                          className={`px-3 py-1.5 rounded-lg border text-sm font-medium capitalize transition-colors ${sortOption === sort
-                            ? 'bg-blue-100 text-blue-700 border-blue-300'
-                            : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
-                            }`}
-                        >
-                          {sort === 'newest' ? 'Newest' :
-                            sort === 'oldest' ? 'Oldest' :
-                              sort === 'popular' ? 'Popular' : 'Trending'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+              {/* Mobile Tabs */}
+              <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                <TabButton
+                  active={activeTab === 'all'}
+                  onClick={() => setActiveTab('all')}
+                  label={`All`}
+                  count={posts.length}
+                />
+                <TabButton
+                  active={activeTab === 'pinned'}
+                  onClick={() => setActiveTab('pinned')}
+                  icon={Pin}
+                  label="Pinned"
+                  count={posts.filter(p => p.pinned).length}
+                />
+                <TabButton
+                  active={activeTab === 'popular'}
+                  onClick={() => setActiveTab('popular')}
+                  icon={TrendingUp}
+                  label="Popular"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Desktop Search and Controls */}
+          {!isMobile && (
+            <div className="mb-4 md:mb-6 space-y-3 md:space-y-4 animate-in fade-in-up duration-500">
+              {/* Search Bar */}
+              <div className="relative animate-in fade-in-up duration-300">
+                <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                  <Search className="w-4 h-4" style={{ color: colors.primary + '80' }} />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search posts by content, hashtags, or type..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-10 py-2.5 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-300"
+                  style={{
+                    ...getCardStyle(),
+                    border: `1px solid ${colors.primary}30`,
+                    color: colors.primary,
+                    backgroundColor: colors.primary + '05'
+                  }}
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 hover:scale-110 transition-transform duration-200"
+                    style={{ color: colors.primary + '60' }}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Tabs and Controls Row */}
+              <div className="flex items-center justify-between animate-in fade-in-up duration-500 animate-delay-100">
+                {/* Tabs */}
+                <div className="flex items-center gap-1 rounded-lg p-1" style={{ backgroundColor: colors.primary + '10' }}>
+                  <TabButton
+                    active={activeTab === 'all'}
+                    onClick={() => setActiveTab('all')}
+                    label="All Posts"
+                    count={posts.length}
+                  />
+                  <TabButton
+                    active={activeTab === 'pinned'}
+                    onClick={() => setActiveTab('pinned')}
+                    icon={Pin}
+                    label="Pinned"
+                    count={posts.filter(p => p.pinned).length}
+                  />
+                  <TabButton
+                    active={activeTab === 'popular'}
+                    onClick={() => setActiveTab('popular')}
+                    icon={TrendingUp}
+                    label="Popular"
+                  />
+                  <TabButton
+                    active={activeTab === 'drafts'}
+                    onClick={() => setActiveTab('drafts')}
+                    icon={Lock}
+                    label="Drafts"
+                    count={posts.filter(p => p.visibility === 'private').length}
+                  />
                 </div>
 
-                <div className="mt-4 flex justify-end gap-2">
+                {/* View and Filter Controls */}
+                <div className="flex items-center gap-2">
+                  {/* View Toggle */}
+                  <div className="flex items-center gap-1 rounded-lg p-1" style={{ backgroundColor: colors.primary + '10' }}>
+                    <button
+                      onClick={() => setViewMode('list')}
+                      className={`p-1.5 rounded transition-all duration-300 ${viewMode === 'list'
+                        ? `${getButtonClasses('primary')} shadow-sm`
+                        : `${getTextClasses('muted')} hover:${getTextClasses('primary')} hover:scale-110`
+                        }`}
+                      style={viewMode === 'list' ? {
+                        background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+                      } : {}}
+                    >
+                      <List className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={() => setViewMode('grid')}
+                      className={`p-1.5 rounded transition-all duration-300 ${viewMode === 'grid'
+                        ? `${getButtonClasses('primary')} shadow-sm`
+                        : `${getTextClasses('muted')} hover:${getTextClasses('primary')} hover:scale-110`
+                        }`}
+                      style={viewMode === 'grid' ? {
+                        background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+                      } : {}}
+                    >
+                      <Grid className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  {/* Filter Toggle */}
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleClearFilters}
-                    className="h-9"
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={`${getButtonClasses('outline')} transform hover:scale-105 active:scale-95`}
                   >
-                    Clear All
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      loadMyPosts(true);
-                      setShowAdvancedFilters(false);
-                    }}
-                    className="h-9"
-                  >
-                    Apply Filters
+                    <Filter className="w-3 h-3 mr-1" />
+                    Filter
+                    {showFilters ? (
+                      <ChevronUp className="w-3 h-3 ml-1" />
+                    ) : (
+                      <ChevronDown className="w-3 h-3 ml-1" />
+                    )}
                   </Button>
                 </div>
               </div>
-            )}
-          </div>
+
+              {/* Filters Panel */}
+              {showFilters && (
+                <div className="animate-in slide-in-from-top-0 duration-300">
+                  <div className="rounded-lg border p-4" style={getCardStyle()}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Status Filter */}
+                      <div>
+                        <h3 className={`text-sm font-medium mb-2 ${getTextClasses('primary')}`}>Status</h3>
+                        <div className="flex flex-wrap gap-1">
+                          {(['all', 'active', 'hidden', 'deleted'] as PostStatus[]).map((status, index) => (
+                            <button
+                              key={status}
+                              onClick={() => setStatusFilter(status)}
+                              className={`px-2 py-1.5 rounded text-xs font-medium transition-all duration-300 transform hover:scale-105 active:scale-95 animate-in fade-in-up duration-500`}
+                              style={{
+                                animationDelay: `${index * 50}ms`,
+                                ...(statusFilter === status ? {
+                                  background: `linear-gradient(135deg, ${colors.primary}20 0%, ${colors.secondary}20 100%)`,
+                                  color: colors.primary,
+                                  border: `1px solid ${colors.primary}30`
+                                } : {
+                                  ...getCardStyle(),
+                                  color: colors.primary + '80',
+                                  border: `1px solid ${colors.primary}10`
+                                })
+                              }}
+                            >
+                              {status === 'all' ? 'All Status' : status.charAt(0).toUpperCase() + status.slice(1)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Type Filter */}
+                      <div>
+                        <h3 className={`text-sm font-medium mb-2 ${getTextClasses('primary')}`}>Type</h3>
+                        <div className="flex flex-wrap gap-1">
+                          {(['all', 'text', 'image', 'video', 'link', 'poll', 'job', 'achievement', 'document'] as PostType[]).map((type, index) => (
+                            <button
+                              key={type}
+                              onClick={() => setTypeFilter(type)}
+                              className={`px-2 py-1.5 rounded text-xs font-medium transition-all duration-300 flex items-center gap-1 transform hover:scale-105 active:scale-95 animate-in fade-in-up duration-500`}
+                              style={{
+                                animationDelay: `${index * 50}ms`,
+                                ...(typeFilter === type ? {
+                                  background: `linear-gradient(135deg, ${colors.primary}20 0%, ${colors.secondary}20 100%)`,
+                                  color: colors.primary,
+                                  border: `1px solid ${colors.primary}30`
+                                } : {
+                                  ...getCardStyle(),
+                                  color: colors.primary + '80',
+                                  border: `1px solid ${colors.primary}10`
+                                })
+                              }}
+                            >
+                              {type !== 'all' && getPostTypeIcon(type)}
+                              <span>{type === 'all' ? 'All Types' : type.charAt(0).toUpperCase() + type.slice(1)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Posts Content */}
-          <div ref={postsContainerRef} className="min-h-[400px]">
-            {loading && filteredPosts.length === 0 ? (
+          <div className="min-h-[400px]">
+            {loading ? (
               renderPostSkeleton()
             ) : filteredPosts.length === 0 ? (
               renderEmptyState()
-            ) : viewMode === 'list' ? (
-              // List View with EditablePostCard
-              <div className="space-y-4">
-                {filteredPosts.map((post) => (
-                  <div key={post._id} className="relative">
-                    {/* Selection checkbox */}
-                    {selectedPosts.has(post._id) && (
-                      <div className="absolute -left-3 top-4 z-10">
-                        <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                          <CheckSquare className="w-4 h-4 text-white" />
-                        </div>
-                      </div>
-                    )}
-
+            ) : viewMode === 'list' || isMobile ? (
+              // List View - Full width on mobile
+              <div className={isMobile ? 'space-y-2' : 'space-y-4'}>
+                {filteredPosts.map((post, index) => (
+                  <div
+                    key={post._id}
+                    className="animate-in slide-in-from-left-0 duration-500"
+                    style={{ animationDelay: `${index * 100}ms` }}
+                  >
                     <EditablePostCard
                       post={post}
                       currentUserId={user?._id || ''}
                       onUpdate={handlePostUpdated}
                       onDelete={handlePostDeleted}
-                      className={selectedPosts.has(post._id) ? 'ml-2' : ''}
+                      className="transform transition-all duration-300 hover:scale-[1.01] hover:shadow-xl"
                     />
+                    {isMobile && index < filteredPosts.length - 1 && (
+                      <div className="mx-4 h-px animate-in fade-in duration-300" style={{ backgroundColor: colors.primary + '20' }} />
+                    )}
                   </div>
                 ))}
               </div>
             ) : (
-              // Grid View
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredPosts.map((post) => (
-                  <div key={post._id} className="relative">
-                    {/* Selection checkbox */}
-                    <div className="absolute left-2 top-2 z-10">
-                      <button
-                        onClick={() => togglePostSelection(post._id)}
-                        className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selectedPosts.has(post._id)
-                          ? 'bg-blue-500 border-blue-500 text-white'
-                          : 'border-gray-300 hover:border-blue-400 bg-white'
-                          }`}
-                      >
-                        {selectedPosts.has(post._id) && (
-                          <CheckSquare className="w-2.5 h-2.5" />
-                        )}
-                      </button>
-                    </div>
-
+              // Grid View (Desktop only)
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+                {filteredPosts.map((post, index) => (
+                  <div
+                    key={post._id}
+                    className="animate-in fade-in-up duration-500 transform transition-all duration-300 hover:scale-[1.02]"
+                    style={{ animationDelay: `${index * 100}ms` }}
+                  >
                     <EditablePostCard
                       post={post}
                       currentUserId={user?._id || ''}
                       onUpdate={handlePostUpdated}
                       onDelete={handlePostDeleted}
+                      className="h-full"
                     />
                   </div>
                 ))}
               </div>
             )}
-
-            {/* Load More Button */}
-            {filteredPosts.length > 0 && hasMore && (
-              <div className="pt-6 pb-8 text-center">
-                <Button
-                  variant="outline"
-                  onClick={() => loadMyPosts(false)}
-                  disabled={isLoadingMore}
-                  className="px-6 py-2"
-                >
-                  {isLoadingMore ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Loading...
-                    </>
-                  ) : (
-                    'Load More Posts'
-                  )}
-                </Button>
-              </div>
-            )}
           </div>
+
+          {/* Load More Button */}
+          {filteredPosts.length > 0 && !loading && (
+            <div className={`mt-6 md:mt-8 text-center ${isMobile ? 'px-4' : ''} animate-in fade-in-up duration-500 animate-delay-300`}>
+              <Button
+                variant="outline"
+                onClick={loadMyPosts}
+                disabled={isRefreshing}
+                className={`${getButtonClasses('outline')} transform hover:scale-105 active:scale-95`}
+              >
+                {isRefreshing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  'Load More Posts'
+                )}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Quick Action FAB */}
+      {/* Floating Action Button */}
       {!showComposer && (
         <button
           onClick={() => setShowComposer(true)}
-          className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-200 z-50"
+          className="fixed bottom-6 right-6 w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 z-50 animate-in bounce-in duration-500 animate-delay-500 transform hover:scale-110 active:scale-95"
+          style={{
+            background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
+          }}
+          aria-label="Create new post"
         >
-          <Plus className="w-6 h-6 text-white" />
+          <Plus className="w-5 h-5 text-white" />
         </button>
+      )}
+
+      {/* Post Creation Modal */}
+      {showComposer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center animate-in fade-in duration-300">
+          <div
+            className="absolute inset-0 backdrop-blur-sm transition-all duration-300"
+            style={{ backgroundColor: colors.primary + '80' }}
+            onClick={() => setShowComposer(false)}
+          />
+          <div className={`relative animate-in zoom-in duration-300 ${isMobile ? 'w-full h-full max-h-screen overflow-auto' : 'w-full max-w-2xl mx-4'}`}>
+            <PostComposer
+              onPostCreated={handlePostCreated}
+              onCancel={() => setShowComposer(false)}
+              isModal={true}
+              className={isMobile ? 'rounded-none h-full' : 'rounded-2xl'}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
 export default function MyPostsPage() {
-  const router = useRouter();
-  const { role } = router.query;
-
   return (
-    <SocialDashboardLayout requiredRole={role as any || 'candidate'}>
-      <RoleThemeProvider>
-        <MyPostsPageContent />
-      </RoleThemeProvider>
+    <SocialDashboardLayout requiredRole="candidate">
+      <MyPostsPageContent />
     </SocialDashboardLayout>
   );
 }

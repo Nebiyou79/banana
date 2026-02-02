@@ -1,8 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // pages/social/user/[id].tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import { useTheme } from 'next-themes';
 import { profileService, DetailedProfile } from '@/services/profileService';
 import { followService } from '@/services/followService';
 import { companyService } from '@/services/companyService';
@@ -61,6 +61,7 @@ import {
 import { colors } from '@/utils/color';
 import { candidateService } from '@/services/candidateService';
 import { freelancerService } from '@/services/freelancerService';
+import Link from 'next/link';
 
 // Role-specific configuration
 const ROLE_CONFIG = {
@@ -94,26 +95,6 @@ const ROLE_CONFIG = {
     }
 };
 
-// Theme Toggle Component
-const ThemeToggle = () => {
-    const { theme, setTheme } = useTheme();
-
-    return (
-        <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="rounded-full p-2"
-        >
-            {theme === 'dark' ? (
-                <Sun className="h-4 w-4" />
-            ) : (
-                <Moon className="h-4 w-4" />
-            )}
-        </Button>
-    );
-};
-
 // Profile Header Component
 const ProfileHeader = ({ profile, isOwnProfile, onFollow, roleConfig, followLoading }: {
     profile: DetailedProfile;
@@ -122,7 +103,6 @@ const ProfileHeader = ({ profile, isOwnProfile, onFollow, roleConfig, followLoad
     roleConfig: typeof ROLE_CONFIG[keyof typeof ROLE_CONFIG];
     followLoading: boolean;
 }) => {
-    const { theme } = useTheme();
     const [isFollowing, setIsFollowing] = useState(false);
 
     const handleFollowToggle = async () => {
@@ -153,7 +133,7 @@ const ProfileHeader = ({ profile, isOwnProfile, onFollow, roleConfig, followLoad
                 }}
             >
                 {/* Overlay gradient */}
-                <div className={`absolute inset-0 bg-gradient-to-t ${theme === 'dark' ? 'from-black/70 via-black/40' : 'from-black/30 via-transparent'} to-transparent rounded-t-2xl`} />
+                <div className='absolute inset-0 bg-gray' />
             </div>
 
             {/* Profile Info Card */}
@@ -249,7 +229,6 @@ const ProfileHeader = ({ profile, isOwnProfile, onFollow, roleConfig, followLoad
 
                         {/* Actions */}
                         <div className="flex items-center gap-3">
-                            <ThemeToggle />
 
                             <Button
                                 variant="outline"
@@ -332,7 +311,6 @@ const ProfileHeader = ({ profile, isOwnProfile, onFollow, roleConfig, followLoad
 
 // Quick Stats Section
 const QuickStatsSection = ({ profile }: { profile: DetailedProfile }) => {
-    const { theme } = useTheme();
 
     const stats = [
         { label: 'Posts', value: profile.socialStats.postCount, icon: FileText, color: colors.blue },
@@ -353,12 +331,8 @@ const QuickStatsSection = ({ profile }: { profile: DetailedProfile }) => {
                         key={index}
                         className="text-center p-3 rounded-lg border dark:border-gray-600"
                         style={{
-                            backgroundColor: theme === 'dark'
-                                ? `${stat.color}20`
-                                : `${stat.color}10`,
-                            borderColor: theme === 'dark'
-                                ? `${stat.color}40`
-                                : `${stat.color}20`
+                            backgroundColor: 'AccentColor',
+                            borderColor: 'ButtonBorder'
                         }}
                     >
                         <div className="text-2xl font-bold text-gray-900 dark:text-white">{stat.value}</div>
@@ -410,7 +384,6 @@ const BioSection = ({ profile, showFullBio, setShowFullBio }: {
 
 // Skills Section
 const SkillsSection = ({ profile }: { profile: DetailedProfile }) => {
-    const { theme } = useTheme();
 
     if (!profile.roleSpecific?.skills || profile.roleSpecific.skills.length === 0) return null;
 
@@ -426,13 +399,9 @@ const SkillsSection = ({ profile }: { profile: DetailedProfile }) => {
                         key={index}
                         className="px-3 py-1.5 rounded-lg text-sm font-medium"
                         style={{
-                            backgroundColor: theme === 'dark'
-                                ? `${colors.gold}20`
-                                : colors.goldenMustard,
-                            color: theme === 'dark'
-                                ? colors.goldenMustard
-                                : colors.gold,
-                            border: `1px solid ${theme === 'dark' ? colors.gold : colors.goldenMustard}`
+                            backgroundColor: 'whitesmoke',
+                            color: 'burlywood',
+                            border: 'blue'
                         }}
                     >
                         {skill}
@@ -445,7 +414,6 @@ const SkillsSection = ({ profile }: { profile: DetailedProfile }) => {
 
 // Social Links Section
 const SocialLinksSection = ({ profile }: { profile: DetailedProfile }) => {
-    const { theme } = useTheme();
 
     if (!profile.socialLinks || Object.values(profile.socialLinks).every(link => !link)) return null;
 
@@ -479,10 +447,10 @@ const SocialLinksSection = ({ profile }: { profile: DetailedProfile }) => {
                             href={profileService.formatSocialLink(platform, url)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors border ${theme === 'dark' ? 'border-gray-700 hover:border-gray-600' : 'border-gray-200 hover:border-gray-300'}`}
+                            className='flex items-center gap-2 px-4 py-2 rounded-lg transition-colors border'
                             style={{
-                                backgroundColor: theme === 'dark' ? `${config.color}10` : `${config.color}05`,
-                                borderColor: theme === 'dark' ? `${config.color}30` : `${config.color}20`
+                                backgroundColor: 'Menu',
+                                borderColor: 'AccentColor'
                             }}
                         >
                             <span className="text-lg">{config.icon || '🔗'}</span>
@@ -874,7 +842,6 @@ const PublicProfilePage = () => {
                                 Back to Home
                             </Button>
                             <div className="flex items-center gap-4">
-                                <ThemeToggle />
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -906,11 +873,11 @@ const PublicProfilePage = () => {
                                 <p>© {new Date().getFullYear()} Banana Social • All rights reserved</p>
                             </div>
                             <div className="flex items-center gap-4">
-                                <a href="/about" className="hover:text-gray-900 dark:hover:text-white transition-colors">About</a>
+                                <Link href="/about" className="hover:text-gray-900 dark:hover:text-white transition-colors">About</Link>
                                 <span>•</span>
-                                <a href="/privacy" className="hover:text-gray-900 dark:hover:text-white transition-colors">Privacy</a>
+                                <Link href="/privacy" className="hover:text-gray-900 dark:hover:text-white transition-colors">Privacy</Link>
                                 <span>•</span>
-                                <a href="/terms" className="hover:text-gray-900 dark:hover:text-white transition-colors">Terms</a>
+                                <Link href="/terms" className="hover:text-gray-900 dark:hover:text-white transition-colors">Terms</Link>
                             </div>
                         </div>
                     </div>

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// src/services/tenderService.ts
+// src/services/tenderService.ts - UPDATED FOR CLOUDINARY
 import { api } from '@/lib/axios';
 import { handleError, handleSuccess } from '@/lib/error-handler';
 import { z } from 'zod';
@@ -22,7 +22,7 @@ export interface TenderAttachment {
   _id: string;
   filename: string;
   originalName: string;
-  path: string;
+  path: string; // Now contains Cloudinary URL
   fileSize: number;
   fileType: string;
   description?: string;
@@ -32,6 +32,14 @@ export interface TenderAttachment {
   version: number;
   fileHash: string;
   previousVersions?: any[];
+  // ==== CLOUDINARY FIELDS ====
+  cloudinaryPublicId?: string;
+  cloudinaryUrl?: string;
+  cloudinaryFormat?: string;
+  cloudinaryResourceType?: string;
+  cloudinaryCreatedAt?: string;
+  cloudinaryBytes?: number;
+  cloudinaryTags?: string[];
 }
 
 export interface TenderProposal {
@@ -115,6 +123,7 @@ export interface TenderEditableResponse {
     status: TenderStatus;
   };
 }
+
 export interface TenderVisibility {
   visibilityType: VisibilityType;
   allowedCompanies?: string[];
@@ -542,6 +551,7 @@ export interface SingleTenderResponse {
     canViewProposals: boolean;
     isOwner?: boolean;
     canEdit?: boolean;
+    attachmentsCount?: number;
   };
 }
 
@@ -736,6 +746,7 @@ export const formatFileSize = (bytes: number): string => {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
+
 // Add to UTILITIES section in tenderService.ts
 export const getOwnerNavigationPath = (
   tender: Tender,
@@ -765,7 +776,47 @@ export const canEditBasedOnWorkflow = (tender: Tender): boolean => {
   }
   return false;
 };
-// Add to UTILITIES section in tenderService.ts
+
+// ============ CLOUDINARY UTILITIES ============
+export const getCloudinaryDownloadUrl = (attachment: TenderAttachment): string => {
+  // For Cloudinary attachments, add download parameter
+  if (attachment.cloudinaryUrl) {
+    if (attachment.cloudinaryUrl.includes('cloudinary.com')) {
+      return attachment.cloudinaryUrl.replace('/upload/', '/upload/fl_attachment/');
+    }
+    return attachment.cloudinaryUrl;
+  }
+  
+  // For local files (backward compatibility)
+  return attachment.path;
+};
+
+export const getCloudinaryPreviewUrl = (attachment: TenderAttachment): string => {
+  // For Cloudinary attachments, add transformations for preview
+  if (attachment.cloudinaryUrl) {
+    let previewUrl = attachment.cloudinaryUrl;
+    
+    if (previewUrl.includes('cloudinary.com')) {
+      if (attachment.fileType.startsWith('image/')) {
+        // For images: resize and optimize
+        previewUrl = previewUrl.replace('/upload/', '/upload/w_800,h_600,c_fill,q_auto,f_auto/');
+      } else if (attachment.fileType === 'application/pdf') {
+        // For PDFs: use Cloudinary's PDF preview (first page as image)
+        previewUrl = previewUrl.replace('/upload/', '/upload/w_800,h_600,c_fill,q_auto,f_png/page_1/');
+      }
+    }
+    
+    return previewUrl;
+  }
+  
+  // For local files (backward compatibility)
+  return attachment.path;
+};
+
+export const isCloudinaryAttachment = (attachment: TenderAttachment): boolean => {
+  return !!(attachment.cloudinaryUrl || attachment.cloudinaryPublicId);
+};
+
 export interface ViewMode {
   type: 'grid' | 'list';
   cardSize?: 'small' | 'medium' | 'large';
@@ -894,6 +945,7 @@ export const groupTendersByDate = (tenders: Tender[]): {
     older: tenders.filter(t => new Date(t.deadline) < monthAgo),
   };
 };
+
 // ============ VALIDATION SCHEMAS ============
 const baseTenderSchema = z.object({
   title: z.string()
@@ -1122,7 +1174,10 @@ export const tenderService = {
     }
   },
 
-  async createFreelanceTender(data: CreateFreelanceTenderData, files?: File[]): Promise<{ tender: Tender }> {
+  async createFreelanceTender(data: CreateFreelanceTenderData, files?: File[]): Promise<{ 
+    tender: Tender; 
+    attachmentsCount: number 
+  }> {
     try {
       const formData = new FormData();
 
@@ -1191,48 +1246,45 @@ export const tenderService = {
       // Add freelanceSpecific as JSON string
       formData.append('freelanceSpecific', JSON.stringify(freelanceSpecific));
 
-      // Add files if any
+      // Add files if any - use 'files' field for Cloudinary middleware
       if (files && files.length > 0) {
-        files.forEach((file) => {
-          formData.append('attachments', file); // Use 'attachments' field name
+        files.forEach((file, index) => {
+          formData.append('files', file); // Cloudinary middleware expects 'files' field
+          
+          // Add file descriptions and types if they exist
+          if (data.fileDescriptions && data.fileDescriptions[index]) {
+            formData.append('fileDescriptions', data.fileDescriptions[index]);
+          }
+          if (data.fileTypes && data.fileTypes[index]) {
+            formData.append('fileTypes', data.fileTypes[index]);
+          }
         });
-
-        // Add file descriptions and types if they exist
-        if (data.fileDescriptions && data.fileDescriptions.length > 0) {
-          formData.append('fileDescriptions', JSON.stringify(data.fileDescriptions));
-        }
-
-        if (data.fileTypes && data.fileTypes.length > 0) {
-          formData.append('fileTypes', JSON.stringify(data.fileTypes));
-        }
       }
 
-      // Debug: Log form data entries
-      const entries = Array.from(formData.entries());
-      console.log('FormData entries:', entries.map(([key, value]) => ({
-        key,
-        value: value instanceof File ? `File: ${value.name} (${value.size} bytes)` :
-          (typeof value === 'string' && value.length > 100 ?
-            `${value.substring(0, 100)}...` : value)
-      })));
-
       const response = await api.post('/tender/freelance/create', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30000 // 30 second timeout for file uploads
       });
 
       handleSuccess('Freelance tender created successfully');
-      return response.data.data;
-    } catch (error) {
-      if (typeof error === 'object' && error !== null && 'response' in error) {
-        // @ts-expect-error: error is unknown, but we expect response property
-        console.error('Create freelance tender error details:', error.response?.data);
-      }
+      return {
+        tender: response.data.data.tender,
+        attachmentsCount: response.data.data.attachmentsCount || 0
+      };
+    } catch (error: any) {
+      console.error('Create freelance tender error:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
       throw handleError(error, 'createFreelanceTender');
     }
   },
 
-  // In tenderService.ts, update the createProfessionalTender function
-  async createProfessionalTender(data: CreateProfessionalTenderData, files?: File[]): Promise<{ tender: Tender }> {
+  async createProfessionalTender(data: CreateProfessionalTenderData, files?: File[]): Promise<{ 
+    tender: Tender; 
+    attachmentsCount: number 
+  }> {
     try {
       const formData = new FormData();
 
@@ -1242,7 +1294,6 @@ export const tenderService = {
           if (typeof value === 'object' && !(value instanceof File)) {
             // Stringify objects, but handle CPO specially if needed
             if (key === 'cpoRequired' || key === 'cpoDescription') {
-              // These will be sent as separate fields, not stringified in professionalSpecific
               formData.append(key, value.toString());
             } else {
               formData.append(key, JSON.stringify(value));
@@ -1262,10 +1313,10 @@ export const tenderService = {
         formData.append('cpoDescription', data.cpoDescription);
       }
 
-      // Add files if any
+      // Add files if any - use 'files' field for Cloudinary middleware
       if (files && files.length > 0) {
         files.forEach((file, index) => {
-          formData.append('files', file);
+          formData.append('files', file); // Cloudinary middleware expects 'files' field
           if (data.fileDescriptions && data.fileDescriptions[index]) {
             formData.append('fileDescriptions', data.fileDescriptions[index]);
           }
@@ -1276,17 +1327,30 @@ export const tenderService = {
       }
 
       const response = await api.post('/tender/professional/create', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30000
       });
 
       handleSuccess('Professional tender created successfully');
-      return response.data.data;
-    } catch (error) {
+      return {
+        tender: response.data.data.tender,
+        attachmentsCount: response.data.data.attachmentsCount || 0
+      };
+    } catch (error: any) {
+      console.error('Create professional tender error:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
       throw handleError(error, 'createProfessionalTender');
     }
   },
 
-  async updateTender(id: string, data: Partial<Tender>, files?: File[]): Promise<{ tender: Tender }> {
+  async updateTender(id: string, data: Partial<Tender>, files?: File[]): Promise<{ 
+    tender: Tender;
+    canEdit: boolean;
+    attachmentsCount: number 
+  }> {
     try {
       const formData = new FormData();
 
@@ -1301,19 +1365,24 @@ export const tenderService = {
         }
       });
 
-      // Add files if any
+      // Add files if any - use 'files' field for Cloudinary middleware
       if (files && files.length > 0) {
         files.forEach((file) => {
-          formData.append('files', file);
+          formData.append('files', file); // Cloudinary middleware expects 'files' field
         });
       }
 
       const response = await api.put(`/tender/${id}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30000
       });
 
       handleSuccess('Tender updated successfully');
-      return response.data.data;
+      return {
+        tender: response.data.data.tender,
+        canEdit: response.data.data.canEdit,
+        attachmentsCount: response.data.data.attachmentsCount || 0
+      };
     } catch (error) {
       throw handleError(error, 'updateTender');
     }
@@ -1358,174 +1427,161 @@ export const tenderService = {
     }
   },
 
-async getTender(id: string, options?: { isOwner?: boolean }): Promise<SingleTenderResponse> {
-  try {
-    console.log('🔍 [tenderService] Fetching tender with ID:', id, 'isOwner:', options?.isOwner);
-    
-    // Get token from multiple sources
-    const getToken = () => {
-      if (typeof window === 'undefined') return null;
-      
-      // Try localStorage
-      const localStorageToken = localStorage.getItem('token');
-      if (localStorageToken) return localStorageToken;
-      
-      // Try sessionStorage
-      const sessionStorageToken = sessionStorage.getItem('token');
-      if (sessionStorageToken) return sessionStorageToken;
-      
-      // Try cookies
-      const cookies = document.cookie.split('; ');
-      const tokenCookie = cookies.find(row => row.startsWith('token='));
-      if (tokenCookie) return tokenCookie.split('=')[1];
-      
-      return null;
-    };
-    
-    const token = getToken();
-    
-    // Build headers
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
-    
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    
-    // Use owner endpoint if isOwner is true
-    const endpoint = options?.isOwner ? `/tender/owner/${id}` : `/tender/${id}`;
-    
-    console.log('🌐 [tenderService] Making request to:', endpoint);
-    
-    const response = await api.get(endpoint, { 
-      headers,
-      timeout: 10000
-    });
-    
-    console.log('✅ [tenderService] Response received, status:', response.status);
-    return response.data;
-  } catch (error: any) {
-    console.error('❌ [tenderService] Error in getTender:', error.message);
-    
-    if (error.response?.status === 403) {
-      const errorMsg = error.response?.data?.message || 'Access denied. You do not have permission to view this tender.';
-      throw new Error(errorMsg);
-    }
-    
-    throw handleError(error, 'getTender');
-  }
-},
-
-// // Add this method to TenderService
-// async getOwnerTender(id: string): Promise<SingleTenderResponse> {
-//   return this.getTender(id, { isOwner: true });
-// }
-// Get tender for owner editing
-// Get tender for owner editing
-async getTenderForEditing(id: string): Promise<{
-  tender: Partial<Tender>;
-  originalTender: Tender;
-  canEdit: boolean;
-  workflowType?: WorkflowType;
-  status?: TenderStatus;
-  restriction?: string;
-}> {
-  try {
-    const response = await api.get(`/tender/${id}/edit-data`);
-    // The API returns { success: true, data: { ... } }
-    // So we need to extract the data property
-    return response.data.data;
-  } catch (error) {
-    throw handleError(error, 'getTenderForEditing');
-  }
-},
-
-// Check if tender can be edited
-async checkTenderEditable(id: string): Promise<{
-  canEdit: boolean;
-  restriction?: string;
-  workflowType: WorkflowType;
-  status: TenderStatus;
-}> {
-  try {
-    const response = await api.get(`/tender/${id}/edit-data`);
-    // Extract the data property
-    return response.data.data;
-  } catch (error) {
-    throw handleError(error, 'checkTenderEditable');
-  }
-},
-
-// Get owned tenders
-async getOwnedTenders(params?: {
-  page?: number;
-  limit?: number;
-  status?: string;
-  tenderCategory?: string;
-  workflowType?: string;
-}): Promise<{
-  tenders: Tender[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    pages: number;
-  };
-}> {
-  try {
-    const response = await api.get('/tender/user/owned', { params });
-    // Extract data from response
-    return {
-      tenders: response.data.data || [],
-      pagination: response.data.pagination || { page: 1, limit: 10, total: 0, pages: 0 }
-    };
-  } catch (error) {
-    throw handleError(error, 'getOwnedTenders');
-  }
-},
-
-// Get owner-specific tender
-async getOwnerTender(id: string): Promise<any> {
-  try {
-    // Try the owner endpoint first
+  async getTender(id: string, options?: { isOwner?: boolean }): Promise<SingleTenderResponse> {
     try {
-      const response = await api.get(`/tender/owner/${id}`);
-      return response.data.data;
-    } catch (ownerError: any) {
-      // If owner endpoint fails (404 or 403), fall back to regular endpoint
-      if (ownerError.response?.status === 403 || ownerError.response?.status === 404) {
-        console.log('⚠️ Owner endpoint failed, falling back to regular endpoint');
+      console.log('🔍 [tenderService] Fetching tender with ID:', id, 'isOwner:', options?.isOwner);
+      
+      // Get token from multiple sources
+      const getToken = () => {
+        if (typeof window === 'undefined') return null;
         
-        const regularResponse = await api.get(`/tender/${id}`);
-        const tender = regularResponse.data.data.tender;
+        // Try localStorage
+        const localStorageToken = localStorage.getItem('token');
+        if (localStorageToken) return localStorageToken;
         
-        // Check if user is owner using frontend logic
-        const userData = localStorage.getItem('user');
-        const user = userData ? JSON.parse(userData) : null;
-        const isOwner = user && tender.owner && tender.owner._id === user._id;
+        // Try sessionStorage
+        const sessionStorageToken = sessionStorage.getItem('token');
+        if (sessionStorageToken) return sessionStorageToken;
         
-        return {
-          tender,
-          canViewProposals: regularResponse.data.data.canViewProposals || false,
-          isOwner,
-          canEdit: isOwner && (tender.status === 'draft' || 
-                   (tender.status === 'published' && tender.workflowType === 'open'))
-        };
+        // Try cookies
+        const cookies = document.cookie.split('; ');
+        const tokenCookie = cookies.find(row => row.startsWith('token='));
+        if (tokenCookie) return tokenCookie.split('=')[1];
+        
+        return null;
+      };
+      
+      const token = getToken();
+      
+      // Build headers
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
-      throw ownerError;
+      
+      // Use owner endpoint if isOwner is true
+      const endpoint = options?.isOwner ? `/tender/owner/${id}` : `/tender/${id}`;
+      
+      console.log('🌐 [tenderService] Making request to:', endpoint);
+      
+      const response = await api.get(endpoint, { 
+        headers,
+        timeout: 10000
+      });
+      
+      console.log('✅ [tenderService] Response received, status:', response.status);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ [tenderService] Error in getTender:', error.message);
+      
+      if (error.response?.status === 403) {
+        const errorMsg = error.response?.data?.message || 'Access denied. You do not have permission to view this tender.';
+        throw new Error(errorMsg);
+      }
+      
+      throw handleError(error, 'getTender');
     }
-  } catch (error) {
-    throw handleError(error, 'getOwnerTender');
-  }
-},
+  },
 
-// Add separate function for public tenders
-async getPublicTender(id: string): Promise<Tender> {
-  console.log('🌍 [tenderService] Fetching public tender:', id);
-  const response = await this.getTender(id, { isOwner: false });
-  return response.data.tender;
-},
+  async getTenderForEditing(id: string): Promise<{
+    tender: Partial<Tender>;
+    originalTender: Tender;
+    canEdit: boolean;
+    workflowType?: WorkflowType;
+    status?: TenderStatus;
+    restriction?: string;
+  }> {
+    try {
+      const response = await api.get(`/tender/${id}/edit-data`);
+      return response.data.data;
+    } catch (error) {
+      throw handleError(error, 'getTenderForEditing');
+    }
+  },
+
+  async checkTenderEditable(id: string): Promise<{
+    canEdit: boolean;
+    restriction?: string;
+    workflowType: WorkflowType;
+    status: TenderStatus;
+  }> {
+    try {
+      const response = await api.get(`/tender/${id}/edit-data`);
+      return response.data.data;
+    } catch (error) {
+      throw handleError(error, 'checkTenderEditable');
+    }
+  },
+
+  async getOwnedTenders(params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    tenderCategory?: string;
+    workflowType?: string;
+  }): Promise<{
+    tenders: Tender[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+    };
+  }> {
+    try {
+      const response = await api.get('/tender/user/owned', { params });
+      return {
+        tenders: response.data.data || [],
+        pagination: response.data.pagination || { page: 1, limit: 10, total: 0, pages: 0 }
+      };
+    } catch (error) {
+      throw handleError(error, 'getOwnedTenders');
+    }
+  },
+
+  async getOwnerTender(id: string): Promise<any> {
+    try {
+      // Try the owner endpoint first
+      try {
+        const response = await api.get(`/tender/owner/${id}`);
+        return response.data.data;
+      } catch (ownerError: any) {
+        // If owner endpoint fails (404 or 403), fall back to regular endpoint
+        if (ownerError.response?.status === 403 || ownerError.response?.status === 404) {
+          console.log('⚠️ Owner endpoint failed, falling back to regular endpoint');
+          
+          const regularResponse = await api.get(`/tender/${id}`);
+          const tender = regularResponse.data.data.tender;
+          
+          // Check if user is owner using frontend logic
+          const userData = localStorage.getItem('user');
+          const user = userData ? JSON.parse(userData) : null;
+          const isOwner = user && tender.owner && tender.owner._id === user._id;
+          
+          return {
+            tender,
+            canViewProposals: regularResponse.data.data.canViewProposals || false,
+            isOwner,
+            canEdit: isOwner && (tender.status === 'draft' || 
+                     (tender.status === 'published' && tender.workflowType === 'open'))
+          };
+        }
+        throw ownerError;
+      }
+    } catch (error) {
+      throw handleError(error, 'getOwnerTender');
+    }
+  },
+
+  async getPublicTender(id: string): Promise<Tender> {
+    console.log('🌍 [tenderService] Fetching public tender:', id);
+    const response = await tenderService.getTender(id, { isOwner: false });
+    return response.data.tender;
+  },
+
   async toggleSaveTender(id: string): Promise<{ saved: boolean; savedCount: number }> {
     try {
       const response = await api.post(`/tender/${id}/toggle-save`);
@@ -1590,75 +1646,150 @@ async getPublicTender(id: string): Promise<Tender> {
     }
   },
 
-// ============ ATTACHMENT MANAGEMENT ============
-async downloadAttachment(tenderId: string, attachmentId: string): Promise<Blob> {
-  try {
-    // CORRECTED URL - Remove the duplicate /api
-    const response = await api.get(`/tender/${tenderId}/attachments/${attachmentId}/download`, {
-      responseType: 'blob',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+  // ============ ATTACHMENT MANAGEMENT WITH CLOUDINARY ============
+  async downloadAttachment(tenderId: string, attachmentId: string): Promise<Blob> {
+    try {
+      // First get the tender to check attachment type
+      const token = localStorage.getItem('token');
+      const tenderResponse = await api.get(`/tender/${tenderId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      const tender = tenderResponse.data.data.tender;
+      const attachment = tender.attachments.find((att: TenderAttachment) => 
+        att._id === attachmentId
+      );
+      
+      if (!attachment) {
+        throw new Error('Attachment not found');
       }
-    });
-    return response.data;
-  } catch (error) {
-    throw handleError(error, 'downloadAttachment');
-  }
-},
 
-async previewAttachment(tenderId: string, attachmentId: string): Promise<string> {
-  try {
-    const token = localStorage.getItem('token');
-    // CORRECTED URL - Use the correct endpoint
-    return `${api.defaults.baseURL || ''}/tender/${tenderId}/attachments/${attachmentId}/preview?token=${token}`;
-  } catch (error) {
-    throw handleError(error, 'previewAttachment');
-  }
-},
+      // For Cloudinary attachments, fetch directly from Cloudinary
+      if (attachment.cloudinaryUrl) {
+        // Use the download utility function
+        const downloadUrl = getCloudinaryDownloadUrl(attachment);
+        
+        const response = await fetch(downloadUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch from Cloudinary: ${response.statusText}`);
+        }
+        return await response.blob();
+      }
 
-async deleteAttachment(tenderId: string, attachmentId: string): Promise<void> {
-  try {
-    // CORRECTED URL
-    await api.delete(`/tender/${tenderId}/attachments/${attachmentId}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    });
-    handleSuccess('Attachment deleted successfully');
-  } catch (error) {
-    throw handleError(error, 'deleteAttachment');
-  }
-},
+      // Fallback to API download for local files (backward compatibility)
+      const response = await api.get(`/tender/${tenderId}/attachments/${attachmentId}/download`, {
+        responseType: 'blob',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      return response.data;
+    } catch (error) {
+      throw handleError(error, 'downloadAttachment');
+    }
+  },
 
-async uploadAttachments(tenderId: string, files: File[], descriptions?: string[], types?: string[]): Promise<TenderAttachment[]> {
-  try {
-    const formData = new FormData();
-    const token = localStorage.getItem('token');
-    
-    files.forEach((file, index) => {
-      formData.append('files', file);
-      if (descriptions && descriptions[index]) {
-        formData.append('descriptions', descriptions[index]);
+  async previewAttachment(tenderId: string, attachmentId: string): Promise<string> {
+    try {
+      // Get the tender to check attachment type
+      const token = localStorage.getItem('token');
+      const tenderResponse = await api.get(`/tender/${tenderId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      const tender = tenderResponse.data.data.tender;
+      const attachment = tender.attachments.find((att: TenderAttachment) => 
+        att._id === attachmentId
+      );
+      
+      if (!attachment) {
+        throw new Error('Attachment not found');
       }
-      if (types && types[index]) {
-        formData.append('types', types[index]);
-      }
-    });
 
-    // CORRECTED URL
-    const response = await api.post(`/tender/${tenderId}/attachments/upload`, formData, {
-      headers: { 
-        'Content-Type': 'multipart/form-data',
-        'Authorization': `Bearer ${token}`
+      // For Cloudinary attachments, use Cloudinary URL with transformations
+      if (attachment.cloudinaryUrl) {
+        return getCloudinaryPreviewUrl(attachment);
       }
-    });
-    
-    handleSuccess('Files uploaded successfully');
-    return response.data.data.attachments;
-  } catch (error) {
-    throw handleError(error, 'uploadAttachments');
-  }
-},
+
+      // Fallback to API preview for local files (backward compatibility)
+      return `${api.defaults.baseURL}/tender/${tenderId}/attachments/${attachmentId}/preview?token=${token}`;
+    } catch (error) {
+      throw handleError(error, 'previewAttachment');
+    }
+  },
+
+  async deleteAttachment(tenderId: string, attachmentId: string, cloudinaryPublicId?: string): Promise<void> {
+    try {
+      const token = localStorage.getItem('token');
+      
+      // If it's a Cloudinary attachment, we need to pass the public_id
+      if (cloudinaryPublicId) {
+        await api.delete(`/tender/${tenderId}/attachments/${attachmentId}`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+          data: { cloudinaryPublicId }
+        });
+      } else {
+        // Regular attachment deletion
+        await api.delete(`/tender/${tenderId}/attachments/${attachmentId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      }
+      
+      handleSuccess('Attachment deleted successfully');
+    } catch (error) {
+      throw handleError(error, 'deleteAttachment');
+    }
+  },
+
+  async uploadAttachments(tenderId: string, files: File[], descriptions?: string[], types?: string[]): Promise<TenderAttachment[]> {
+    try {
+      const formData = new FormData();
+      const token = localStorage.getItem('token');
+      
+      files.forEach((file, index) => {
+        formData.append('files', file); // Cloudinary middleware expects 'files' field
+        if (descriptions && descriptions[index]) {
+          formData.append('descriptions', descriptions[index]);
+        }
+        if (types && types[index]) {
+          formData.append('types', types[index]);
+        }
+      });
+
+      const response = await api.post(`/tender/${tenderId}/attachments/upload`, formData, {
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${token}`
+        },
+        timeout: 30000
+      });
+      
+      handleSuccess(`${files.length} file(s) uploaded successfully`);
+      return response.data.data.attachments;
+    } catch (error) {
+      throw handleError(error, 'uploadAttachments');
+    }
+  },
+
+  async getAttachmentInfo(tenderId: string, attachmentId: string): Promise<TenderAttachment> {
+    try {
+      const token = localStorage.getItem('token');
+      const tenderResponse = await api.get(`/tender/${tenderId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      const tender = tenderResponse.data.data.tender;
+      const attachment = tender.attachments.find((att: TenderAttachment) => 
+        att._id === attachmentId
+      );
+      
+      if (!attachment) {
+        throw new Error('Attachment not found');
+      }
+      
+      return attachment;
+    } catch (error) {
+      throw handleError(error, 'getAttachmentInfo');
+    }
+  },
 
   // ============ ANALYTICS & EXPORT ============
   async getAnalytics(timeRange?: 'today' | 'week' | 'month' | 'year'): Promise<any> {
@@ -1681,12 +1812,13 @@ async uploadAttachments(tenderId: string, files: File[], descriptions?: string[]
       throw handleError(error, 'exportTenders');
     }
   },
+
   async getNormalizedCategories(type?: TenderCategoryType): Promise<{
     groups: { [key: string]: CategoryGroup };
     allCategories: string[];
   }> {
     try {
-      const categories = await this.getCategories(type);
+      const categories = await tenderService.getCategories(type);
 
       if (type) {
         return {
@@ -1712,6 +1844,7 @@ async uploadAttachments(tenderId: string, files: File[], descriptions?: string[]
       throw handleError(error, 'getNormalizedCategories');
     }
   },
+
   // ============ BULK OPERATIONS ============
   async bulkUpdateStatus(ids: string[], status: TenderStatus): Promise<void> {
     try {
@@ -1720,5 +1853,10 @@ async uploadAttachments(tenderId: string, files: File[], descriptions?: string[]
     } catch (error) {
       throw handleError(error, 'bulkUpdateStatus');
     }
-  }
+  },
+
+  // ============ CLOUDINARY UTILITIES ============
+  getCloudinaryDownloadUrl,
+  getCloudinaryPreviewUrl,
+  isCloudinaryAttachment
 };

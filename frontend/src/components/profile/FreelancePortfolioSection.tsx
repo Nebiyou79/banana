@@ -12,15 +12,14 @@ import {
     DollarSign,
     Clock,
     Eye,
-    Link as LinkIcon,
     Tag
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { PortfolioItem } from '@/services/freelancerService';
+import { PortfolioProject } from '@/services/profileService';
 
 interface FreelancerPortfolioDisplayProps {
-    portfolioItems: PortfolioItem[];
+    portfolioItems: PortfolioProject[];
     freelancerName: string;
     showFullList?: boolean;
     showStats?: boolean;
@@ -97,6 +96,11 @@ export const FreelancerPortfolioDisplay: React.FC<FreelancerPortfolioDisplayProp
             year: 'numeric',
             month: 'short',
         });
+    };
+
+    // Handle image error - use a local fallback or data URL instead of external
+    const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+        e.currentTarget.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="400" height="300" fill="%23FFD700"/><text x="50%" y="50%" font-family="Arial, sans-serif" font-size="16" text-anchor="middle" dy=".3em" fill="%23000">Project Preview</text></svg>`;
     };
 
     return (
@@ -217,9 +221,7 @@ export const FreelancerPortfolioDisplay: React.FC<FreelancerPortfolioDisplayProp
                                         src={item.mediaUrls[0]}
                                         alt={item.title}
                                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                        onError={(e) => {
-                                            e.currentTarget.src = 'https://via.placeholder.com/400x300/FFD700/000000?text=Project+Preview';
-                                        }}
+                                        onError={handleImageError}
                                     />
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                                     {item.mediaUrls.length > 1 && (

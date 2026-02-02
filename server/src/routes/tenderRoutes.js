@@ -1,9 +1,12 @@
+// tenderRoutes.js - COMPLETE UPDATED FILE
 const express = require('express');
 const router = express.Router();
 const { verifyToken, optionalAuth } = require('../middleware/authMiddleware');
 const { restrictTo } = require('../middleware/roleMiddleware');
 const tenderController = require('../controllers/tenderController');
-const { handleTenderUpload } = require('../middleware/tenderUploadMiddleware');
+
+// ==== IMPORT NEW CLOUDINARY MIDDLEWARE ====
+const cloudinaryFileUpload = require('../middleware/cloudinaryFileUpload');
 
 // ============ PUBLIC ROUTES ============
 
@@ -28,7 +31,7 @@ router.use(verifyToken);
 router.post(
   '/freelance/create',
   restrictTo('organization', 'company', 'admin'),
-  handleTenderUpload,
+  cloudinaryFileUpload.multiple, // For multiple document uploads
   tenderController.createFreelanceTender
 );
 
@@ -36,16 +39,16 @@ router.post(
 router.post(
   '/professional/create',
   restrictTo('organization', 'company', 'admin'),
-  handleTenderUpload,
+  cloudinaryFileUpload.multiple, // For multiple document uploads
   tenderController.createProfessionalTender
 );
 
 // ============ TENDER MANAGEMENT ROUTES ============
 
-// Update tender (owner only)
+// Update tender (owner only) - supports file uploads
 router.put(
   '/:id',
-  handleTenderUpload,
+  cloudinaryFileUpload.multiple, // For multiple document uploads
   tenderController.updateTender
 );
 
@@ -92,6 +95,7 @@ router.get(
   '/:id/stats',
   tenderController.getTenderStats
 );
+
 // ============ OWNER-SPECIFIC ROUTES ============
 
 // Get tender for owner (bypasses visibility)
@@ -112,12 +116,150 @@ router.get(
   tenderController.getTenderForEditing
 );
 
-// Update tender route (existing)
-router.put(
-  '/:id',
-  handleTenderUpload,
-  tenderController.updateTender
+// ============ ATTACHMENT MANAGEMENT ROUTES ============
+
+// Download attachment
+router.get(
+  '/:id/attachments/:attachmentId/download',
+  tenderController.downloadAttachment
 );
+
+// Preview attachment
+router.get(
+  '/:id/attachments/:attachmentId/preview',
+  tenderController.previewAttachment
+);
+
+// Upload additional attachments to tender
+router.post(
+  '/:id/attachments/upload',
+  cloudinaryFileUpload.multiple,
+  async (req, res) => {
+    try {
+      const tender = await Tender.findById(req.params.id);
+      if (!tender) {
+        return res.status(404).json({
+          success: false,
+          message: 'Tender not found'
+        });
+      }
+
+      // Check if user owns the tender
+      if (tender.owner.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Not authorized to upload attachments'
+        });
+      }
+
+      const attachments = [];
+      if (req.cloudinaryFiles && req.cloudinaryFiles.success && req.cloudinaryFiles.files) {
+        req.cloudinaryFiles.files.forEach((cloudinaryFile, index) => {
+          if (cloudinaryFile.success === false) return;
+
+          const cloudinaryData = cloudinaryFile.cloudinary;
+
+          attachments.push({
+            filename: cloudinaryData.public_id,
+            originalName: cloudinaryFile.originalName,
+            path: cloudinaryData.secure_url,
+            fileSize: cloudinaryFile.size,
+            fileType: cloudinaryFile.mimetype,
+            description: req.body.descriptions?.[index] || '',
+            uploadedBy: req.user._id,
+            uploadedAt: new Date(),
+            documentType: req.body.types?.[index] || 'other',
+            version: 1,
+            fileHash: cloudinaryData.public_id,
+            cloudinaryPublicId: cloudinaryData.public_id,
+            cloudinaryUrl: cloudinaryData.secure_url,
+            cloudinaryFormat: cloudinaryData.format,
+            cloudinaryResourceType: cloudinaryData.resource_type
+          });
+        });
+      }
+
+      tender.attachments.push(...attachments);
+      await tender.save();
+
+      res.status(200).json({
+        success: true,
+        message: `${attachments.length} attachment(s) uploaded successfully`,
+        data: { attachments }
+      });
+    } catch (error) {
+      console.error('Error uploading attachments:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error uploading attachments',
+        error: error.message
+      });
+    }
+  }
+);
+
+// Delete attachment from tender
+router.delete(
+  '/:id/attachments/:attachmentId',
+  async (req, res) => {
+    try {
+      const tender = await Tender.findById(req.params.id);
+      if (!tender) {
+        return res.status(404).json({
+          success: false,
+          message: 'Tender not found'
+        });
+      }
+
+      // Check if user owns the tender
+      if (tender.owner.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Not authorized to delete attachments'
+        });
+      }
+
+      const attachment = tender.attachments.id(req.params.attachmentId);
+      if (!attachment) {
+        return res.status(404).json({
+          success: false,
+          message: 'Attachment not found'
+        });
+      }
+
+      // If it's a Cloudinary attachment, delete from Cloudinary
+      if (attachment.cloudinaryPublicId) {
+        // You would need to import and use Cloudinary service here
+        const { deleteFromCloudinary } = require('../config/cloudinary');
+        const deleteResult = await deleteFromCloudinary(
+          attachment.cloudinaryPublicId,
+          attachment.cloudinaryResourceType || 'raw'
+        );
+
+        if (!deleteResult.success) {
+          console.warn('Failed to delete from Cloudinary:', deleteResult.error);
+        }
+      }
+
+      // Remove from tender attachments
+      tender.attachments.pull({ _id: req.params.attachmentId });
+      await tender.save();
+
+      res.status(200).json({
+        success: true,
+        message: 'Attachment deleted successfully'
+      });
+    } catch (error) {
+      console.error('Error deleting attachment:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error deleting attachment',
+        error: error.message
+      });
+    }
+  }
+);
+
 // ============ INVITATION MANAGEMENT ROUTES ============
 
 // Invite users to tender (owner only, professional invite-only tenders)
@@ -139,49 +281,6 @@ router.get(
   '/user/invitations',
   restrictTo('company'), // Only companies get professional tender invitations
   tenderController.getMyInvitations
-);
-// In TenderRoutes.js, add this route:
-
-// Download attachment
-router.get(
-  '/:id/attachments/:attachmentId/download',
-  verifyToken,
-  tenderController.downloadAttachment
-);
-
-// Preview attachment (if needed)
-router.get(
-  '/:id/attachments/:attachmentId/preview',
-  verifyToken,
-  tenderController.previewAttachment
-);
-// ============ PROPOSAL ROUTES (FOR FUTURE EXTENSION) ============
-
-// Note: Proposal routes will be added in a separate proposalRoutes.js file
-// These are placeholder routes for future implementation
-
-// Apply to tender
-router.post(
-  '/:id/apply',
-  (req, res, next) => {
-    // This will be implemented in proposal controller
-    res.status(501).json({
-      success: false,
-      message: 'Proposal system not yet implemented'
-    });
-  }
-);
-
-// Get tender proposals (owner only)
-router.get(
-  '/:id/proposals',
-  (req, res, next) => {
-    // This will be implemented in proposal controller
-    res.status(501).json({
-      success: false,
-      message: 'Proposal system not yet implemented'
-    });
-  }
 );
 
 module.exports = router;

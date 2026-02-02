@@ -278,7 +278,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
     };
 
     checkDarkMode();
-    
+
     // Listen for theme changes
     const observer = new MutationObserver(checkDarkMode);
     observer.observe(document.documentElement, {
@@ -315,9 +315,10 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [invitationMethod, setInvitationMethod] = useState<'companies' | 'users' | 'emails'>('companies');
 
-  const defaultDeadline = format(addDays(new Date(), 30), 'yyyy-MM-dd');
-  const defaultStartDate = format(addDays(new Date(), 7), 'yyyy-MM-dd');
-  const defaultEndDate = format(addMonths(new Date(), 6), 'yyyy-MM-dd');
+  // Default dates - only used when no initial data
+  const getDefaultDeadline = () => format(addDays(new Date(), 30), 'yyyy-MM-dd');
+  const getDefaultStartDate = () => format(addDays(new Date(), 7), 'yyyy-MM-dd');
+  const getDefaultEndDate = () => format(addMonths(new Date(), 6), 'yyyy-MM-dd');
 
   const form = useForm<ProfessionalTenderFormValues>({
     resolver: zodResolver(professionalTenderSchema) as any,
@@ -326,7 +327,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
       title: initialData?.title || '',
       description: initialData?.description || '',
       procurementCategory: initialData?.procurementCategory || '',
-      deadline: initialData?.deadline ? format(new Date(initialData.deadline), 'yyyy-MM-dd') : defaultDeadline,
+      deadline: initialData?.deadline ? format(new Date(initialData.deadline), 'yyyy-MM-dd') : getDefaultDeadline(),
       referenceNumber: initialData?.professionalSpecific?.referenceNumber || generateReferenceNumber(),
       procuringEntity: initialData?.professionalSpecific?.procuringEntity || '',
       workflowType: (initialData?.workflowType as WorkflowType) || 'open',
@@ -374,8 +375,8 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
         startDate: format(new Date(initialData.professionalSpecific.timeline.startDate), 'yyyy-MM-dd'),
         endDate: format(new Date(initialData.professionalSpecific.timeline.endDate), 'yyyy-MM-dd'),
       } : {
-        startDate: defaultStartDate,
-        endDate: defaultEndDate,
+        startDate: getDefaultStartDate(),
+        endDate: getDefaultEndDate(),
         duration: {
           value: 6,
           unit: 'months',
@@ -383,7 +384,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
       },
       clarificationDeadline: initialData?.professionalSpecific?.clarificationDeadline
         ? format(new Date(initialData.professionalSpecific.clarificationDeadline), 'yyyy-MM-dd')
-        : format(addDays(new Date(), 15), 'yyyy-MM-dd'),
+        : '',
       preBidMeeting: initialData?.professionalSpecific?.preBidMeeting ? {
         ...initialData.professionalSpecific.preBidMeeting,
         date: format(new Date(initialData.professionalSpecific.preBidMeeting.date), 'yyyy-MM-dd'),
@@ -587,9 +588,9 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
               variant: 'default',
             });
 
-            // Redirect to dashboard
+            // Redirect to company dashboard
             setTimeout(() => {
-              router.push('/dashboard/tenders');
+              router.push('/dashboard/company/my-tenders');
             }, 1500);
           },
           onError: (error: Error) => {
@@ -739,8 +740,8 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
       <React.Fragment key={groupKey}>
         <div className={cn(
           "px-2 py-1.5 text-xs font-semibold border-b",
-          isDarkMode 
-            ? "text-gray-400 bg-gray-800 border-gray-700" 
+          isDarkMode
+            ? "text-gray-400 bg-gray-800 border-gray-700"
             : "text-gray-600 bg-gray-50 border-gray-200"
         )}>
           {group.name}
@@ -758,8 +759,8 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
   const renderCPOSection = () => (
     <Card className={cn(
       "border shadow-sm",
-      isDarkMode 
-        ? "border-gray-700 bg-gray-800" 
+      isDarkMode
+        ? "border-gray-700 bg-gray-800"
         : "border-gray-200 bg-white"
     )}>
       <CardHeader className={cn(
@@ -844,17 +845,19 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
     field,
     label,
     description,
+    required = false,
   }: {
     field: any
     label: string
     description?: string
+    required?: boolean
   }) => {
     const today = new Date().toISOString().split("T")[0]
 
     // Safe date formatting function
     const safeFormatDateDisplay = (dateString: string | undefined) => {
       if (!dateString) return "Pick a date";
-      
+
       try {
         const date = new Date(dateString);
         if (isValid(date)) {
@@ -870,7 +873,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
     return (
       <FormItem>
         <FormLabel className="font-medium">
-          {label}
+          {label} {required && <span className="text-red-500">*</span>}
         </FormLabel>
 
         <Popover>
@@ -920,7 +923,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                 type="date"
                 value={field.value || ""}
                 min={today}
-                onChange={(e) => field.onChange(e.target.value)}
+                onChange={(e) => field.onChange(e.target.value || undefined)}
                 className={cn(
                   "w-full border text-white focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition-all",
                   isDarkMode
@@ -942,6 +945,61 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
       </FormItem>
     )
   }
+
+  // Handle timeline duration calculation
+  const handleTimelineDurationChange = (value: number, unit: 'days' | 'weeks' | 'months' | 'years') => {
+    const startDate = form.getValues('timeline.startDate');
+    if (startDate) {
+      const start = new Date(startDate);
+      let end = new Date(start);
+
+      switch (unit) {
+        case 'days':
+          end.setDate(start.getDate() + value);
+          break;
+        case 'weeks':
+          end.setDate(start.getDate() + (value * 7));
+          break;
+        case 'months':
+          end.setMonth(start.getMonth() + value);
+          break;
+        case 'years':
+          end.setFullYear(start.getFullYear() + value);
+          break;
+      }
+
+      form.setValue('timeline.endDate', format(end, 'yyyy-MM-dd'));
+    }
+
+    form.setValue('timeline.duration', { value, unit });
+  };
+
+  // Handle timeline start/end date changes
+  const handleStartDateChange = (date: string) => {
+    form.setValue('timeline.startDate', date);
+    const duration = form.getValues('timeline.duration');
+    if (duration && duration.value > 0) {
+      handleTimelineDurationChange(duration.value, duration.unit);
+    }
+  };
+
+  const handleEndDateChange = (date: string) => {
+    form.setValue('timeline.endDate', date);
+    const startDate = form.getValues('timeline.startDate');
+    if (startDate) {
+      const start = new Date(startDate);
+      const end = new Date(date);
+      const diffTime = Math.abs(end.getTime() - start.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      // Calculate approximate duration in months
+      const diffMonths = Math.round(diffDays / 30);
+      form.setValue('timeline.duration', {
+        value: diffMonths,
+        unit: 'months'
+      });
+    }
+  };
 
   // Render step content
   const renderStepContent = () => {
@@ -1166,7 +1224,6 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                           onChange={field.onChange}
                           placeholder="Provide a detailed overview of the project, including scope, objectives, requirements..."
                           minHeight={300}
-                          // darkMode={isDarkMode}
                         />
                       </FormControl>
                       <FormDescription>
@@ -1185,10 +1242,10 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                         key={index}
                         variant="secondary"
                         className="gap-1 pl-3 transition-all hover:scale-105"
-                        style={{ 
-                          backgroundColor: isDarkMode ? `${colors.primary}30` : `${colors.primary}15`, 
-                          color: colors.primary, 
-                          borderColor: isDarkMode ? `${colors.primary}50` : `${colors.primary}30` 
+                        style={{
+                          backgroundColor: isDarkMode ? `${colors.primary}30` : `${colors.primary}15`,
+                          color: colors.primary,
+                          borderColor: isDarkMode ? `${colors.primary}50` : `${colors.primary}30`
                         }}
                       >
                         {skill}
@@ -1370,57 +1427,10 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                       field={field}
                       label="Submission Deadline"
                       description="Last date and time for bid submission"
+                      required={true}
                     />
                   )}
                 />
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="timeline.startDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Project Start Date</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="date"
-                            {...field}
-                            className={cn(
-                              "transition-all",
-                              isDarkMode
-                                ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500 focus:ring-blue-500"
-                                : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                            )}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="timeline.endDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Project End Date</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="date"
-                            {...field}
-                            className={cn(
-                              "transition-all",
-                              isDarkMode
-                                ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500 focus:ring-blue-500"
-                                : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                            )}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
               </CardContent>
             </Card>
 
@@ -1446,6 +1456,56 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormField
                     control={form.control}
+                    name="timeline.startDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Project Start Date</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="date"
+                            {...field}
+                            onChange={(e) => handleStartDateChange(e.target.value)}
+                            className={cn(
+                              "transition-all",
+                              isDarkMode
+                                ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500 focus:ring-blue-500"
+                                : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                            )}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="timeline.endDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Project End Date</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="date"
+                            {...field}
+                            onChange={(e) => handleEndDateChange(e.target.value)}
+                            className={cn(
+                              "transition-all",
+                              isDarkMode
+                                ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500 focus:ring-blue-500"
+                                : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                            )}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
                     name="timeline.duration.value"
                     render={({ field }) => (
                       <FormItem>
@@ -1455,7 +1515,11 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                             type="number"
                             min={1}
                             {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                            onChange={(e) => {
+                              const value = parseInt(e.target.value) || 1;
+                              const unit = form.getValues('timeline.duration.unit') || 'months';
+                              handleTimelineDurationChange(value, unit);
+                            }}
                             className={cn(
                               "transition-all",
                               isDarkMode
@@ -1475,7 +1539,11 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Duration Unit</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                        <Select onValueChange={(value) => {
+                          field.onChange(value);
+                          const durationValue = form.getValues('timeline.duration.value') || 1;
+                          handleTimelineDurationChange(durationValue, value as any);
+                        }} value={field.value}>
                           <FormControl>
                             <SelectTrigger className={cn(
                               "transition-all",
@@ -1511,7 +1579,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                     name="bidValidityPeriod.value"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Bid Validity Period (Days)</FormLabel>
+                        <FormLabel>Bid Validity Period</FormLabel>
                         <FormControl>
                           <Input
                             type="number"
@@ -3360,8 +3428,8 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
         <Breadcrumb className="mb-8">
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink 
-                href="/" 
+              <BreadcrumbLink
+                href="/"
                 className={cn(
                   "transition-colors",
                   isDarkMode
@@ -3374,8 +3442,8 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
-              <BreadcrumbLink 
-                href="/tenders" 
+              <BreadcrumbLink
+                href="/tenders"
                 className={cn(
                   "transition-colors",
                   isDarkMode
@@ -3472,10 +3540,9 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                     {calculateProgress()}% complete
                   </span>
                 </div>
-                <Progress 
-                  value={calculateProgress()} 
+                <Progress
+                  value={calculateProgress()}
                   className="h-2 transition-all duration-300"
-                  // style={isDarkMode ? { backgroundColor: '#374151' } : {}}
                 />
               </div>
             </CardContent>
@@ -3709,7 +3776,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
               <Button
                 onClick={() => {
                   setShowPreview(false);
-                  handleFormSubmit(form.getValues());
+                  form.handleSubmit(handleFormSubmit)();
                 }}
                 disabled={creating || isSubmitting}
                 className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white transition-all duration-300"

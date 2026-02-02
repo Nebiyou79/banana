@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// services/profileService.ts
+// services/profileService.ts - COMPLETE FIXED VERSION
 import api from '@/lib/axios';
 import { handleError, handleSuccess } from '@/lib/error-handler';
 
@@ -185,6 +185,17 @@ export interface VolunteerExperience {
   totalHours?: number;
 }
 
+export interface CloudinaryImage {
+  public_id: string;
+  secure_url: string;
+  width?: number;
+  height?: number;
+  bytes?: number;
+  format?: string;
+  resource_type?: string;
+  uploaded_at: string;
+}
+
 export interface RoleSpecific {
   skills: string[];
   education: Education[];
@@ -200,7 +211,9 @@ export interface User {
   email: string;
   role: 'candidate' | 'company' | 'freelancer' | 'organization' | 'admin';
   avatar?: string;
+  avatarPublicId?: string;
   coverPhoto?: string;
+  coverPhotoPublicId?: string;
   dateOfBirth?: string;
   gender?: string;
   isActive: boolean;
@@ -209,8 +222,8 @@ export interface User {
 }
 
 export interface Profile {
-  avatar?: string;
-  coverPhoto?: string | null;
+  avatar?: CloudinaryImage | null;
+  cover?: CloudinaryImage | null;
   _id: string;
   user: User;
   headline?: string;
@@ -226,7 +239,7 @@ export interface Profile {
   verificationStatus: 'none' | 'pending' | 'verified' | 'rejected';
   verificationDetails?: VerificationDetails;
   roleSpecific: RoleSpecific;
-  languages?: Language[];  // Make optional
+  languages?: Language[];
   interests?: string[];
   awards: Award[];
   volunteerExperience: VolunteerExperience[];
@@ -290,8 +303,6 @@ export interface DetailedProfile extends PublicProfile {
   interests: string[];
 }
 
-
-// Base response interface
 interface BaseResponse {
   success: boolean;
   message?: string;
@@ -374,8 +385,6 @@ export interface UpdateProfileData {
   interests?: string[];
   awards?: Award[];
   volunteerExperience?: VolunteerExperience[];
-  avatar?: string;
-  coverPhoto?: string;
 }
 
 export interface UpdateProfessionalInfoData {
@@ -387,11 +396,29 @@ export interface UpdateProfessionalInfoData {
   companyInfo?: CompanyInfo;
 }
 
-export interface UploadResponse extends BaseResponse {
+export interface AvatarUploadResponse extends BaseResponse {
   data: {
-    avatarUrl?: string;
-    coverPhotoUrl?: string;
-    publicId?: string;
+    avatar: CloudinaryImage;
+    thumbnailUrl?: string;
+    fileInfo?: {
+      originalName: string;
+      size: number;
+      mimetype: string;
+      format: string;
+    };
+  };
+}
+
+export interface CoverUploadResponse extends BaseResponse {
+  data: {
+    cover: CloudinaryImage;
+    thumbnailUrl?: string;
+    fileInfo?: {
+      originalName: string;
+      size: number;
+      mimetype: string;
+      format: string;
+    };
   };
 }
 
@@ -413,35 +440,127 @@ class ProfileServiceError extends Error {
   }
 }
 
+// Enhanced error handler with better debugging
 const handleApiError = (error: any, defaultMessage: string): never => {
-  console.error('🔴 Profile Service Error:', {
+  console.error('🔴 Profile Service Error Details:', {
+    timestamp: new Date().toISOString(),
     status: error.response?.status,
-    data: error.response?.data,
-    message: error.message
+    statusText: error.response?.statusText,
+    url: error.config?.url,
+    method: error.config?.method,
+    requestData: error.config?.data,
+    responseData: error.response?.data,
+    headers: error.response?.headers,
+    message: error.message,
+    code: error.code
   });
 
   if (error.response?.data) {
-    const { message, code, errors } = error.response.data;
+    const { message, code, errors, debug } = error.response.data;
     const errorMessage = message || error.message || defaultMessage;
-
+    
+    // Handle specific error codes with user-friendly messages
+    if (code === 'NO_FILE_PROVIDED') {
+      const userMessage = 'No image file was received. Please try selecting the file again.';
+      handleError(userMessage);
+      throw new ProfileServiceError(userMessage, code, errors);
+    }
+    
+    if (code === 'FILE_TOO_LARGE') {
+      const userMessage = 'File is too large. Please select a smaller image.';
+      handleError(userMessage);
+      throw new ProfileServiceError(userMessage, code, errors);
+    }
+    
+    if (code === 'VALIDATION_ERROR') {
+      const userMessage = errors?.[0]?.message || 'Invalid file format. Please use JPEG, PNG, or WebP.';
+      handleError(userMessage);
+      throw new ProfileServiceError(userMessage, code, errors);
+    }
+    
     handleError(errorMessage);
     throw new ProfileServiceError(errorMessage, code, errors);
-  } else if (error.message) {
-    handleError(error.message);
-    throw new ProfileServiceError(error.message);
+  } else if (error.request) {
+    const networkMessage = 'Network error. Please check your internet connection and try again.';
+    handleError(networkMessage);
+    throw new ProfileServiceError(networkMessage, 'NETWORK_ERROR');
   } else {
     handleError(defaultMessage);
     throw new ProfileServiceError(defaultMessage);
   }
 };
 
+// Helper to debug FormData
+const debugFormData = (formData: FormData, action: string) => {
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`🔍 [DEBUG] FormData for ${action}:`);
+    for (const [key, value] of (formData as any).entries()) {
+      if (value instanceof File) {
+        console.log(`  ${key}: File - ${value.name} (${value.type}, ${value.size} bytes)`);
+      } else if (typeof value === 'string' && value.length > 100) {
+        console.log(`  ${key}: ${value.substring(0, 100)}...`);
+      } else {
+        console.log(`  ${key}:`, value);
+      }
+    }
+  }
+};
+
+// Helper to validate file before upload
+const validateImageFile = (file: File, type: 'avatar' | 'cover'): { valid: boolean; error?: string } => {
+  const allowedTypes = [
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/webp',
+    'image/gif'
+  ];
+  
+  const maxSize = type === 'avatar' ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
+  const maxSizeMB = type === 'avatar' ? '5MB' : '10MB';
+  
+  if (!allowedTypes.includes(file.type.toLowerCase())) {
+    return {
+      valid: false,
+      error: `Invalid file type. Please use ${allowedTypes.map(t => t.split('/')[1].toUpperCase()).join(', ')}`
+    };
+  }
+  
+  if (file.size > maxSize) {
+    return {
+      valid: false,
+      error: `File is too large. Maximum size is ${maxSizeMB}`
+    };
+  }
+  
+  if (file.size === 0) {
+    return {
+      valid: false,
+      error: 'File is empty'
+    };
+  }
+  
+  return { valid: true };
+};
+
+// Format file size for display
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 Bytes';
+  
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
 export const profileService = {
   // ========== MAIN PROFILE ENDPOINTS ==========
 
   // Get current user's profile
-  // Update the getProfile method in profileService.ts
   getProfile: async (): Promise<Profile> => {
     try {
+      console.log('🔄 Fetching profile...');
       const response = await api.get<ProfileResponse>('/profile');
 
       if (!response.data.success || !response.data.data) {
@@ -455,6 +574,7 @@ export const profileService = {
         );
       }
 
+      console.log('✅ Profile fetched successfully');
       return response.data.data;
     } catch (error: any) {
       if (error.response?.data?.message?.includes('validation') ||
@@ -469,6 +589,7 @@ export const profileService = {
   // Update profile
   updateProfile: async (data: UpdateProfileData): Promise<Profile> => {
     try {
+      console.log('🔄 Updating profile...', { data: Object.keys(data) });
       const response = await api.put<ProfileResponse>('/profile', data);
 
       if (!response.data.success || !response.data.data) {
@@ -479,6 +600,7 @@ export const profileService = {
       }
 
       handleSuccess('Profile updated successfully');
+      console.log('✅ Profile updated successfully');
       return response.data.data;
     } catch (error: any) {
       return handleApiError(error, 'Failed to update profile') as never;
@@ -492,6 +614,7 @@ export const profileService = {
         throw new ProfileServiceError('User ID is required', 'USER_ID_REQUIRED');
       }
 
+      console.log('🔄 Fetching public profile for user:', userId);
       const response = await api.get<PublicProfileResponse>(`/profile/public/${userId}`);
 
       if (!response.data.success || !response.data.data) {
@@ -501,81 +624,341 @@ export const profileService = {
         );
       }
 
+      console.log('✅ Public profile fetched successfully');
       return response.data.data;
     } catch (error: any) {
       return handleApiError(error, 'Failed to fetch public profile') as never;
     }
   },
 
-  // Upload avatar (FIXED)
-  uploadAvatar: async (file: File): Promise<{ avatarUrl: string; publicId?: string }> => {
-    try {
-      const formData = new FormData();
-      formData.append('avatar', file);
+  // ========== CLOUDINARY UPLOAD ENDPOINTS (FIXED) ==========
 
-      const response = await api.post<UploadResponse>('/profile/avatar', formData, {
+  // UPLOAD AVATAR - FIXED VERSION
+  uploadAvatar: async (file: File, onProgress?: (progressEvent: any) => void): Promise<{
+    avatar: CloudinaryImage;
+    thumbnailUrl?: string;
+    fileInfo?: any;
+  }> => {
+    try {
+      console.log('🔄 Starting avatar upload process...');
+      
+      // 1. Validate file locally first
+      const validation = validateImageFile(file, 'avatar');
+      if (!validation.valid) {
+        throw new ProfileServiceError(validation.error || 'Invalid file', 'INVALID_FILE');
+      }
+
+      // 2. Create FormData with correct field name
+      const formData = new FormData();
+      // ✅ CRITICAL: Field name must be 'avatar' to match backend middleware
+      formData.append('avatar', file);
+      
+      // Add metadata for debugging
+      formData.append('uploadMetadata', JSON.stringify({
+        timestamp: new Date().toISOString(),
+        client: 'bananalink-web',
+        version: '1.0.0'
+      }));
+
+      // 3. Debug FormData
+      debugFormData(formData, 'avatar upload');
+      
+      console.log('📤 Uploading avatar...', {
+        fileName: file.name,
+        fileSize: formatFileSize(file.size),
+        fileType: file.type,
+        fieldName: 'avatar' // Should be 'avatar'
+      });
+
+      // 4. Make API call with progress tracking
+      const response = await api.post<AvatarUploadResponse>('/profile/avatar', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-        timeout: 30000,
+        timeout: 120000, // 2 minutes for upload
+        onUploadProgress: (progressEvent) => {
+          if (onProgress) {
+            onProgress(progressEvent);
+          }
+          
+          if (progressEvent.total) {
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            );
+            console.log(`📊 Avatar upload progress: ${percentCompleted}%`);
+          }
+        },
       });
 
-      if (!response.data.success || !response.data.data) {
+      // 5. Check response
+      if (!response.data.success) {
+        console.error('❌ Avatar upload failed:', response.data);
         throw new ProfileServiceError(
-          response.data.message || 'Failed to upload avatar',
-          response.data.code
+          response.data.message || 'Upload failed',
+          response.data.code || 'UPLOAD_ERROR'
         );
       }
 
-      handleSuccess('Avatar uploaded successfully');
+      if (!response.data.data || !response.data.data.avatar) {
+        throw new ProfileServiceError('No avatar data returned from server', 'NO_DATA_RETURNED');
+      }
 
-      // The backend returns avatarUrl in the response
+      console.log('✅ Avatar uploaded successfully!', {
+        publicId: response.data.data.avatar.public_id,
+        url: response.data.data.avatar.secure_url
+      });
+
+      handleSuccess('Profile picture updated successfully!');
+      
       return {
-        avatarUrl: response.data.data.avatarUrl || '',
-        publicId: response.data.data.publicId
+        avatar: response.data.data.avatar,
+        thumbnailUrl: response.data.data.thumbnailUrl,
+        fileInfo: response.data.data.fileInfo
       };
     } catch (error: any) {
+      console.error('🔥 Avatar upload service error details:', {
+        errorName: error.name,
+        errorMessage: error.message,
+        errorCode: error.code,
+        responseStatus: error.response?.status,
+        responseData: error.response?.data,
+        isAxiosError: error.isAxiosError,
+        requestUrl: error.config?.url
+      });
+
+      // Enhanced error messages for common issues
+      if (error.response?.status === 400) {
+        if (error.response.data?.code === 'NO_FILE_PROVIDED') {
+          throw new ProfileServiceError(
+            'No image file was received. Please try selecting the file again.',
+            'NO_FILE_PROVIDED'
+          );
+        }
+        if (error.response.data?.code === 'FILE_TOO_LARGE') {
+          throw new ProfileServiceError(
+            'Image is too large. Please select a file smaller than 5MB.',
+            'FILE_TOO_LARGE'
+          );
+        }
+      }
+
+      if (error.response?.status === 413) {
+        throw new ProfileServiceError(
+          'File is too large. Maximum size is 5MB for profile pictures.',
+          'FILE_TOO_LARGE'
+        );
+      }
+
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        throw new ProfileServiceError(
+          'Upload timed out. Please check your internet connection and try again.',
+          'TIMEOUT'
+        );
+      }
+
+      if (!error.response) {
+        throw new ProfileServiceError(
+          'Network error. Please check your internet connection.',
+          'NETWORK_ERROR'
+        );
+      }
+
+      // Fallback to generic error handler
       return handleApiError(error, 'Failed to upload avatar') as never;
     }
   },
 
-  // Upload cover photo (FIXED)
-  uploadCoverPhoto: async (file: File): Promise<{ coverPhotoUrl: string; publicId?: string }> => {
+  // UPLOAD COVER PHOTO - FIXED VERSION
+  uploadCoverPhoto: async (file: File, onProgress?: (progressEvent: any) => void): Promise<{
+    cover: CloudinaryImage;
+    thumbnailUrl?: string;
+    fileInfo?: any;
+  }> => {
     try {
-      const formData = new FormData();
-      formData.append('coverPhoto', file);
+      console.log('🔄 Starting cover photo upload process...');
+      
+      // 1. Validate file locally first
+      const validation = validateImageFile(file, 'cover');
+      if (!validation.valid) {
+        throw new ProfileServiceError(validation.error || 'Invalid file', 'INVALID_FILE');
+      }
 
-      const response = await api.post<UploadResponse>('/profile/cover-photo', formData, {
+      // 2. Create FormData with correct field name
+      const formData = new FormData();
+      // ✅ CRITICAL: Field name must be 'cover' to match backend middleware
+      formData.append('cover', file);
+      
+      // Add metadata for debugging
+      formData.append('uploadMetadata', JSON.stringify({
+        timestamp: new Date().toISOString(),
+        client: 'bananalink-web',
+        version: '1.0.0'
+      }));
+
+      // 3. Debug FormData
+      debugFormData(formData, 'cover upload');
+      
+      console.log('📤 Uploading cover photo...', {
+        fileName: file.name,
+        fileSize: formatFileSize(file.size),
+        fileType: file.type,
+        fieldName: 'cover' // Should be 'cover'
+      });
+
+      // 4. Make API call with progress tracking
+      const response = await api.post<CoverUploadResponse>('/profile/cover', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-        timeout: 30000,
+        timeout: 180000, // 3 minutes for larger cover photos
+        onUploadProgress: (progressEvent) => {
+          if (onProgress) {
+            onProgress(progressEvent);
+          }
+          
+          if (progressEvent.total) {
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            );
+            console.log(`📊 Cover upload progress: ${percentCompleted}%`);
+          }
+        },
       });
 
-      if (!response.data.success || !response.data.data) {
+      // 5. Check response
+      if (!response.data.success) {
+        console.error('❌ Cover photo upload failed:', response.data);
         throw new ProfileServiceError(
-          response.data.message || 'Failed to upload cover photo',
+          response.data.message || 'Upload failed',
+          response.data.code || 'UPLOAD_ERROR'
+        );
+      }
+
+      if (!response.data.data || !response.data.data.cover) {
+        throw new ProfileServiceError('No cover data returned from server', 'NO_DATA_RETURNED');
+      }
+
+      console.log('✅ Cover photo uploaded successfully!', {
+        publicId: response.data.data.cover.public_id,
+        url: response.data.data.cover.secure_url
+      });
+
+      handleSuccess('Cover photo updated successfully!');
+      
+      return {
+        cover: response.data.data.cover,
+        thumbnailUrl: response.data.data.thumbnailUrl,
+        fileInfo: response.data.data.fileInfo
+      };
+    } catch (error: any) {
+      console.error('🔥 Cover photo upload service error details:', {
+        errorName: error.name,
+        errorMessage: error.message,
+        errorCode: error.code,
+        responseStatus: error.response?.status,
+        responseData: error.response?.data
+      });
+
+      // Enhanced error messages for common issues
+      if (error.response?.status === 400) {
+        if (error.response.data?.code === 'NO_FILE_PROVIDED') {
+          throw new ProfileServiceError(
+            'No image file was received. Please try selecting the file again.',
+            'NO_FILE_PROVIDED'
+          );
+        }
+        if (error.response.data?.code === 'FILE_TOO_LARGE') {
+          throw new ProfileServiceError(
+            'Image is too large. Please select a file smaller than 10MB.',
+            'FILE_TOO_LARGE'
+          );
+        }
+      }
+
+      if (error.response?.status === 413) {
+        throw new ProfileServiceError(
+          'File is too large. Maximum size is 10MB for cover photos.',
+          'FILE_TOO_LARGE'
+        );
+      }
+
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        throw new ProfileServiceError(
+          'Upload timed out. Please check your internet connection and try again.',
+          'TIMEOUT'
+        );
+      }
+
+      if (!error.response) {
+        throw new ProfileServiceError(
+          'Network error. Please check your internet connection.',
+          'NETWORK_ERROR'
+        );
+      }
+
+      return handleApiError(error, 'Failed to upload cover photo') as never;
+    }
+  },
+
+  // Delete avatar
+  deleteAvatar: async (): Promise<{ success: boolean; cloudinaryDeleted?: boolean }> => {
+    try {
+      console.log('🗑️ Deleting avatar...');
+      const response = await api.delete<BaseResponse>('/profile/avatar');
+
+      if (!response.data.success) {
+        throw new ProfileServiceError(
+          response.data.message || 'Failed to delete avatar',
           response.data.code
         );
       }
 
-      handleSuccess('Cover photo uploaded successfully');
-
-      // The backend returns coverPhotoUrl in the response
+      handleSuccess('Profile picture removed successfully');
+      console.log('✅ Avatar deleted successfully');
+      
       return {
-        coverPhotoUrl: response.data.data.coverPhotoUrl || '',
-        publicId: response.data.data.publicId
+        success: true,
+        cloudinaryDeleted: response.data.code === 'AVATAR_DELETED'
       };
     } catch (error: any) {
-      return handleApiError(error, 'Failed to upload cover photo') as never;
+      console.error('❌ Delete avatar failed:', error);
+      return handleApiError(error, 'Failed to delete avatar') as never;
     }
   },
+
+  // Delete cover photo
+  deleteCoverPhoto: async (): Promise<{ success: boolean; cloudinaryDeleted?: boolean }> => {
+    try {
+      console.log('🗑️ Deleting cover photo...');
+      const response = await api.delete<BaseResponse>('/profile/cover');
+
+      if (!response.data.success) {
+        throw new ProfileServiceError(
+          response.data.message || 'Failed to delete cover photo',
+          response.data.code
+        );
+      }
+
+      handleSuccess('Cover photo removed successfully');
+      console.log('✅ Cover photo deleted successfully');
+      
+      return {
+        success: true,
+        cloudinaryDeleted: response.data.code === 'COVER_PHOTO_DELETED'
+      };
+    } catch (error: any) {
+      console.error('❌ Delete cover photo failed:', error);
+      return handleApiError(error, 'Failed to delete cover photo') as never;
+    }
+  },
+
   // Update professional info
   updateProfessionalInfo: async (data: UpdateProfessionalInfoData): Promise<{
     roleSpecific: RoleSpecific;
     profileCompletion: ProfileCompletion;
   }> => {
     try {
+      console.log('🔄 Updating professional info...');
       const response = await api.put<{
         success: boolean;
         data: {
@@ -584,7 +967,7 @@ export const profileService = {
         };
         message?: string;
         code?: string;
-      }>('/profile/professional-info', data);
+      }>('/profile/professional', data);
 
       if (!response.data.success || !response.data.data) {
         throw new ProfileServiceError(
@@ -594,6 +977,7 @@ export const profileService = {
       }
 
       handleSuccess('Professional information updated successfully');
+      console.log('✅ Professional info updated');
       return response.data.data;
     } catch (error: any) {
       return handleApiError(error, 'Failed to update professional information') as never;
@@ -603,6 +987,7 @@ export const profileService = {
   // Update social links
   updateSocialLinks: async (socialLinks: SocialLinks): Promise<SocialLinks> => {
     try {
+      console.log('🔄 Updating social links...');
       const response = await api.put<{
         success: boolean;
         data: SocialLinks;
@@ -618,6 +1003,7 @@ export const profileService = {
       }
 
       handleSuccess('Social links updated successfully');
+      console.log('✅ Social links updated');
       return response.data.data;
     } catch (error: any) {
       return handleApiError(error, 'Failed to update social links') as never;
@@ -625,7 +1011,6 @@ export const profileService = {
   },
 
   // Get profile completion
-  // Update this method in profileService.ts
   getProfileCompletion: async (): Promise<{
     percentage: number;
     completedSections: string[];
@@ -638,11 +1023,11 @@ export const profileService = {
     completedFields: string[];
   }> => {
     try {
+      console.log('🔄 Fetching profile completion...');
       const response = await api.get<ProfileCompletionResponse>('/profile/completion');
 
       if (!response.data.success || !response.data.data) {
         console.warn('Profile completion fetch failed:', response.data.message);
-        // Return default values instead of throwing
         return {
           percentage: 0,
           completedSections: [],
@@ -656,11 +1041,10 @@ export const profileService = {
         };
       }
 
+      console.log('✅ Profile completion fetched:', response.data.data.percentage + '%');
       return response.data.data;
     } catch (error: any) {
       console.error('Failed to fetch profile completion:', error);
-
-      // Return default values for graceful degradation
       return {
         percentage: 0,
         completedSections: [],
@@ -690,6 +1074,7 @@ export const profileService = {
         throw new ProfileServiceError('At least one document is required', 'DOCUMENTS_REQUIRED');
       }
 
+      console.log('🔄 Submitting verification...', { documentCount: documents.length });
       const response = await api.post<VerificationResponse>('/profile/verification', { documents });
 
       if (!response.data.success || !response.data.data) {
@@ -700,6 +1085,7 @@ export const profileService = {
       }
 
       handleSuccess('Verification submitted successfully');
+      console.log('✅ Verification submitted');
       return response.data.data;
     } catch (error: any) {
       return handleApiError(error, 'Failed to submit verification') as never;
@@ -709,12 +1095,13 @@ export const profileService = {
   // Update privacy settings
   updatePrivacySettings: async (privacySettings: Partial<PrivacySettings>): Promise<PrivacySettings> => {
     try {
+      console.log('🔄 Updating privacy settings...');
       const response = await api.put<{
         success: boolean;
         data: PrivacySettings;
         message?: string;
         code?: string;
-      }>('/profile/privacy-settings', { privacySettings });
+      }>('/profile/privacy', { privacySettings });
 
       if (!response.data.success || !response.data.data) {
         throw new ProfileServiceError(
@@ -724,6 +1111,7 @@ export const profileService = {
       }
 
       handleSuccess('Privacy settings updated successfully');
+      console.log('✅ Privacy settings updated');
       return response.data.data;
     } catch (error: any) {
       return handleApiError(error, 'Failed to update privacy settings') as never;
@@ -733,12 +1121,13 @@ export const profileService = {
   // Update notification preferences
   updateNotificationPreferences: async (notificationPreferences: Partial<NotificationPreferences>): Promise<NotificationPreferences> => {
     try {
+      console.log('🔄 Updating notification preferences...');
       const response = await api.put<{
         success: boolean;
         data: NotificationPreferences;
         message?: string;
         code?: string;
-      }>('/profile/notification-preferences', { notificationPreferences });
+      }>('/profile/notifications', { notificationPreferences });
 
       if (!response.data.success || !response.data.data) {
         throw new ProfileServiceError(
@@ -748,6 +1137,7 @@ export const profileService = {
       }
 
       handleSuccess('Notification preferences updated successfully');
+      console.log('✅ Notification preferences updated');
       return response.data.data;
     } catch (error: any) {
       return handleApiError(error, 'Failed to update notification preferences') as never;
@@ -757,6 +1147,7 @@ export const profileService = {
   // Get profile summary
   getProfileSummary: async (): Promise<ProfileSummary> => {
     try {
+      console.log('🔄 Fetching profile summary...');
       const response = await api.get<ProfileSummaryResponse>('/profile/summary');
 
       if (!response.data.success || !response.data.data) {
@@ -766,15 +1157,17 @@ export const profileService = {
         );
       }
 
+      console.log('✅ Profile summary fetched');
       return response.data.data;
     } catch (error: any) {
       return handleApiError(error, 'Failed to fetch profile summary') as never;
     }
   },
 
-  // Update social stats (admin/internal use)
+  // Update social stats
   updateSocialStats: async (): Promise<SocialStats> => {
     try {
+      console.log('🔄 Updating social stats...');
       const response = await api.put<{
         success: boolean;
         data: SocialStats;
@@ -790,6 +1183,7 @@ export const profileService = {
       }
 
       handleSuccess('Social stats updated successfully');
+      console.log('✅ Social stats updated');
       return response.data.data;
     } catch (error: any) {
       return handleApiError(error, 'Failed to update social stats') as never;
@@ -811,6 +1205,7 @@ export const profileService = {
       if (options?.limit) params.append('limit', options.limit.toString());
       if (options?.role) params.append('role', options.role);
 
+      console.log('🔄 Fetching popular profiles...', { options });
       const response = await api.get<PopularProfilesResponse>(`/profile/popular?${params.toString()}`);
 
       if (!response.data.success || !response.data.data) {
@@ -820,6 +1215,7 @@ export const profileService = {
         );
       }
 
+      console.log('✅ Popular profiles fetched:', response.data.count);
       return {
         profiles: response.data.data,
         count: response.data.count || 0
@@ -855,6 +1251,7 @@ export const profileService = {
       if (options.page) params.append('page', options.page.toString());
       if (options.limit) params.append('limit', options.limit.toString());
 
+      console.log('🔍 Searching profiles...', { options });
       const response = await api.get<SearchProfilesResponse>(`/profile/search?${params.toString()}`);
 
       if (!response.data.success || !response.data.data) {
@@ -864,6 +1261,7 @@ export const profileService = {
         );
       }
 
+      console.log('✅ Profiles search complete:', response.data.meta);
       return {
         profiles: response.data.data,
         meta: response.data.meta
@@ -873,12 +1271,181 @@ export const profileService = {
     }
   },
 
+  // ========== CLOUDINARY HELPER FUNCTIONS ==========
+
+  // Get avatar URL (with fallback to user.avatar)
+  getAvatarUrl: (profile: Profile): string => {
+    if (profile.avatar?.secure_url) {
+      return profile.avatar.secure_url;
+    }
+    return profile.user.avatar || '';
+  },
+
+  // Get cover URL (with fallback to user.coverPhoto)
+  getCoverUrl: (profile: Profile): string => {
+    if (profile.cover?.secure_url) {
+      return profile.cover.secure_url;
+    }
+    return profile.user.coverPhoto || '';
+  },
+
+  // Generate Cloudinary URL with transformations
+  generateCloudinaryUrl: (
+    publicId: string, 
+    options?: {
+      width?: number;
+      height?: number;
+      crop?: string;
+      quality?: string;
+      format?: string;
+    }
+  ): string => {
+    if (!publicId) return '';
+    
+    // Base Cloudinary URL
+    const cloudName = 'dpdkc9upr'; // Replace with your actual cloud name
+    const baseUrl = `https://res.cloudinary.com/${cloudName}/image/upload`;
+    
+    // Build transformations string
+    const transformations: string[] = [];
+    
+    if (options?.width && options?.height && options?.crop) {
+      transformations.push(`c_${options.crop},w_${options.width},h_${options.height}`);
+    } else if (options?.width) {
+      transformations.push(`w_${options.width}`);
+    } else if (options?.height) {
+      transformations.push(`h_${options.height}`);
+    }
+    
+    if (options?.quality) {
+      transformations.push(`q_${options.quality}`);
+    }
+    
+    if (options?.format) {
+      transformations.push(`f_${options.format}`);
+    }
+    
+    const transformStr = transformations.length > 0 ? transformations.join(',') + '/' : '';
+    
+    return `${baseUrl}/${transformStr}${publicId}`;
+  },
+
+  // Get optimized avatar URL with different sizes
+  getOptimizedAvatarUrl: (avatarUrl: string | CloudinaryImage, size: 'small' | 'medium' | 'large' = 'medium'): string => {
+    if (!avatarUrl) return '';
+    
+    // If it's a CloudinaryImage object
+    if (typeof avatarUrl !== 'string' && avatarUrl.secure_url) {
+      const url = avatarUrl.secure_url;
+      const sizes = {
+        small: 'w_50,h_50,c_fill',
+        medium: 'w_150,h_150,c_fill',
+        large: 'w_300,h_300,c_fill'
+      };
+      
+      // Replace the transformation part of the URL
+      return url.replace('/upload/', `/upload/${sizes[size]}/`);
+    }
+    
+    // If it's already a Cloudinary URL string
+    if (typeof avatarUrl === 'string' && avatarUrl.includes('cloudinary.com')) {
+      const sizes = {
+        small: 'w_50,h_50,c_fill',
+        medium: 'w_150,h_150,c_fill',
+        large: 'w_300,h_300,c_fill'
+      };
+      
+      return avatarUrl.replace('/upload/', `/upload/${sizes[size]}/`);
+    }
+    
+    // If not a Cloudinary URL, return as-is
+    return avatarUrl as string;
+  },
+
+  // Get optimized cover photo URL
+  getOptimizedCoverUrl: (coverUrl: string | CloudinaryImage): string => {
+    if (!coverUrl) return '';
+    
+    // If it's a CloudinaryImage object
+    if (typeof coverUrl !== 'string' && coverUrl.secure_url) {
+      const url = coverUrl.secure_url;
+      // Optimize for web display
+      return url.replace('/upload/', '/upload/c_fill,w_1200,h_400,q_auto,f_auto/');
+    }
+    
+    // If it's already a Cloudinary URL string
+    if (typeof coverUrl === 'string' && coverUrl.includes('cloudinary.com')) {
+      // Optimize for web display
+      return coverUrl.replace('/upload/', '/upload/c_fill,w_1200,h_400,q_auto,f_auto/');
+    }
+    
+    return coverUrl as string;
+  },
+
+  // Get thumbnail URL for avatar
+  getAvatarThumbnailUrl: (avatarUrl: string | CloudinaryImage): string => {
+    return profileService.getOptimizedAvatarUrl(avatarUrl, 'small');
+  },
+
+  // Get thumbnail URL for cover
+  getCoverThumbnailUrl: (coverUrl: string | CloudinaryImage): string => {
+    if (!coverUrl) return '';
+    
+    if (typeof coverUrl !== 'string' && coverUrl.secure_url) {
+      return coverUrl.secure_url.replace('/upload/', '/upload/w_400,h_150,c_fill/');
+    }
+    
+    if (typeof coverUrl === 'string' && coverUrl.includes('cloudinary.com')) {
+      return coverUrl.replace('/upload/', '/upload/w_400,h_150,c_fill/');
+    }
+    
+    return coverUrl as string;
+  },
+
+  // Check if URL is from Cloudinary
+  isCloudinaryUrl: (url: string): boolean => {
+    return url?.includes('cloudinary.com') || false;
+  },
+
+  // Extract public_id from Cloudinary URL
+  extractPublicIdFromUrl: (url: string): string | null => {
+    if (!url || !url.includes('cloudinary.com')) return null;
+    
+    try {
+      const urlParts = url.split('/upload/');
+      if (urlParts.length < 2) return null;
+      
+      const afterUpload = urlParts[1];
+      const publicIdWithFormat = afterUpload.includes('/') 
+        ? afterUpload.split('/')[1] 
+        : afterUpload;
+      
+      return publicIdWithFormat.replace(/\.[^/.]+$/, '');
+    } catch {
+      return null;
+    }
+  },
+
+  // ========== FILE VALIDATION ==========
+
+  // Validate avatar file
+  validateAvatarFile: (file: File): { valid: boolean; error?: string } => {
+    return validateImageFile(file, 'avatar');
+  },
+
+  // Validate cover file
+  validateCoverFile: (file: File): { valid: boolean; error?: string } => {
+    return validateImageFile(file, 'cover');
+  },
+
   // ========== HELPER FUNCTIONS ==========
 
+  // Calculate profile strength
   calculateProfileStrength: (profile: Profile): number => {
     return profile.profileCompletion?.percentage || 0;
   },
 
+  // Get user initials
   getInitials: (name: string): string => {
     if (!name) return 'US';
 
@@ -890,10 +1457,10 @@ export const profileService = {
       .slice(0, 2);
   },
 
+  // Format social link
   formatSocialLink: (platform: string, url: string): string => {
     if (!url) return '';
 
-    // Ensure URL has protocol
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       return `https://${url}`;
     }
@@ -901,6 +1468,7 @@ export const profileService = {
     return url;
   },
 
+  // Validate website URL
   validateWebsite: (url: string): boolean => {
     try {
       const urlObj = new URL(url);
@@ -910,11 +1478,13 @@ export const profileService = {
     }
   },
 
+  // Validate phone number
   validatePhone: (phone: string): boolean => {
     const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
     return phoneRegex.test(phone.replace(/\s/g, ''));
   },
 
+  // Get display role
   getDisplayRole: (role: string): string => {
     const roleMap: Record<string, string> = {
       candidate: 'Job Seeker',
@@ -927,14 +1497,16 @@ export const profileService = {
     return roleMap[role] || role.charAt(0).toUpperCase() + role.slice(1);
   },
 
+  // Check if profile is complete
   isProfileComplete: (profile: Profile, threshold: number = 80): boolean => {
     return (profile.profileCompletion?.percentage || 0) >= threshold;
   },
 
+  // Get missing profile fields
   getMissingFields: (profile: Profile): string[] => {
     const missing: string[] = [];
 
-    if (!profile.user.avatar) missing.push('Profile picture');
+    if (!profile.avatar?.secure_url && !profile.user.avatar) missing.push('Profile picture');
     if (!profile.headline) missing.push('Headline');
     if (!profile.bio) missing.push('Bio');
     if (!profile.location) missing.push('Location');
@@ -946,6 +1518,7 @@ export const profileService = {
     return missing;
   },
 
+  // Calculate total experience years
   getExperienceYears: (experience: Experience[]): number => {
     let totalYears = 0;
 
@@ -959,6 +1532,7 @@ export const profileService = {
     return Math.round(totalYears * 10) / 10;
   },
 
+  // Format date
   formatDate: (dateString: string): string => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -968,6 +1542,7 @@ export const profileService = {
     });
   },
 
+  // Get proficiency label
   getProficiencyLabel: (proficiency: string): string => {
     const labels: Record<string, string> = {
       'basic': 'Basic',
@@ -979,7 +1554,8 @@ export const profileService = {
 
     return labels[proficiency] || proficiency;
   },
-  // Add this helper function at the end of the profileService object
+
+  // Create safe profile (fallback)
   createSafeProfile: (): Profile => {
     const userId = 'temp-id';
     const userEmail = 'user@example.com';
@@ -995,7 +1571,8 @@ export const profileService = {
         isActive: true,
         verificationStatus: 'pending'
       },
-      coverPhoto: null,
+      avatar: null,
+      cover: null,
       headline: 'Welcome to Banana Social',
       bio: '',
       location: '',
@@ -1084,10 +1661,89 @@ export const profileService = {
       updatedAt: new Date().toISOString()
     };
   },
+
+  // Format file size for display (reuse)
+  formatFileSize: (bytes: number): string => {
+    return formatFileSize(bytes);
+  },
+
+  // Get image dimensions from Cloudinary URL
+  getImageDimensions: (url: string): { width: number; height: number } | null => {
+    if (!url || !url.includes('cloudinary.com')) return null;
+    
+    try {
+      // Extract from URL pattern like /w_300,h_300/
+      const match = url.match(/w_(\d+),h_(\d+)/);
+      if (match) {
+        return { width: parseInt(match[1]), height: parseInt(match[2]) };
+      }
+    } catch {
+      return null;
+    }
+    
+    return null;
+  },
+
+  // Generate placeholder avatar URL
+  getPlaceholderAvatar: (name: string): string => {
+    const initials = profileService.getInitials(name);
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=random&color=fff&size=150`;
+  },
+
+  // ========== TEST UTILITIES ==========
+  
+  // Test file upload (debugging)
+  testFileUpload: async (file: File, type: 'avatar' | 'cover' = 'avatar'): Promise<any> => {
+    try {
+      const formData = new FormData();
+      formData.append(type, file);
+      formData.append('test', 'true');
+      formData.append('timestamp', Date.now().toString());
+
+      console.log('🧪 Testing file upload...', { type, file: file.name });
+      debugFormData(formData, 'test upload');
+
+      const response = await api.post(`/profile/test-upload`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        }
+      });
+
+      console.log('✅ Test upload response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Test upload failed:', error);
+      throw error;
+    }
+  },
+
+  // Verify upload configuration
+  verifyUploadConfig: async (): Promise<boolean> => {
+    try {
+      console.log('🔧 Verifying upload configuration...');
+      
+      // Test endpoint availability
+      const healthResponse = await api.get('/health');
+      console.log('🌡️ Health check:', healthResponse.data);
+      
+      // Test a small file upload
+      const testBlob = new Blob(['test'], { type: 'text/plain' });
+      const testFile = new File([testBlob], 'test.txt', { type: 'text/plain' });
+      
+      const testFormData = new FormData();
+      testFormData.append('testFile', testFile);
+      
+      const testResponse = await api.post('/profile/test-upload', testFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      console.log('✅ Upload config verified:', testResponse.data);
+      return true;
+    } catch (error: any) {
+      console.error('❌ Upload config verification failed:', error);
+      return false;
+    }
+  }
 };
 
 export default profileService;
-
-function createSafeProfile(): Profile | PromiseLike<Profile> {
-  throw new Error('Function not implemented.');
-}

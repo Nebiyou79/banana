@@ -2,23 +2,31 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const { uploadConfig } = require('../config/uploads');
 
-// Configure multer storage
+/**
+ * TENDER UPLOAD MIDDLEWARE
+ * For tender document uploads
+ */
+
+// Configure storage using centralized config
 const storage = multer.diskStorage({
   destination: function(req, file, cb) {
-    const uploadPath = path.join(__dirname, '..', '..', 'public', 'uploads', 'tender', 'documents');
-    
-    // Create directory if it doesn't exist
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    }
-    
+    const uploadPath = uploadConfig.getPath('tender');
     cb(null, uploadPath);
   },
   filename: function(req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const ext = path.extname(file.originalname);
-    const filename = 'tender-doc-' + uniqueSuffix + ext;
+    
+    // Clean filename
+    const baseName = path.basename(file.originalname, ext)
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '-')
+      .replace(/-+/g, '-')
+      .substring(0, 50);
+    
+    const filename = `tender-${baseName}-${uniqueSuffix}${ext}`;
     cb(null, filename);
   }
 });
@@ -308,9 +316,9 @@ const handleTenderUpload = (req, res, next) => {
       parsedData.preBidMeeting.date = new Date(parsedData.preBidMeeting.date);
     }
     
-    // Calculate file hashes for attachments
+    // Process uploaded files with centralized config
     if (req.files && req.files.length > 0) {
-      parsedData.attachmentsWithHash = req.files.map((file, index) => {
+      parsedData.attachments = req.files.map((file, index) => {
         const description = parsedData.fileDescriptions && parsedData.fileDescriptions[index] 
           ? parsedData.fileDescriptions[index] 
           : '';
@@ -319,8 +327,11 @@ const handleTenderUpload = (req, res, next) => {
           ? parsedData.fileTypes[index]
           : 'other';
         
+        // Generate file info using centralized config
+        const fileInfo = uploadConfig.generateFileInfo(file, 'tender');
+        
         return {
-          fileInfo: file,
+          ...fileInfo,
           description: description,
           documentType: documentType,
           fileHash: calculateFileHash(file.path)
@@ -335,9 +346,15 @@ const handleTenderUpload = (req, res, next) => {
   });
 };
 
+// Get tender document URL
+const getTenderDocumentUrl = (filename) => {
+  return uploadConfig.getUrl(filename, 'tender');
+};
+
 module.exports = {
   handleTenderUpload,
   safeParseJSON,
   upload,
-  calculateFileHash
+  calculateFileHash,
+  getTenderDocumentUrl
 };

@@ -1,43 +1,31 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// pages/dashboard/organization/jobs/[id].tsx - COMPLETELY FIXED VERSION
 import React from 'react';
 import { useRouter } from 'next/router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { jobService } from '@/services/jobService';
+import { jobService, JobStatus } from '@/services/jobService';
 import { applicationService } from '@/services/applicationService';
 import { useAuth } from '@/contexts/AuthContext';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import JobHeader from '@/components/job/JobHeader';
+import TabbedJobDetails from '@/components/job/JobDetails';
 import { toast } from '@/hooks/use-toast';
-import { 
-  Clock, 
-  Heart, 
-  Calendar, 
-  MapPin, 
-  Target, 
-  Share2, 
-  Edit3, 
-  Eye, 
-  Users, 
+import { profileService } from '@/services/profileService';
+import {
+  Users,
   FileText,
   ArrowRight,
-  Star,
+  Trash2,
+  Heart,
   Users2,
   Building,
-  CheckCircle,
-  XCircle,
-  PauseCircle,
-  Archive,
-  DollarSign,
-  GraduationCap,
-  Tag,
-  Award,
-  Home
+  AlertCircle
 } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
+import { Button } from '@/components/social/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
 const OrganizationJobDetailPage: React.FC = () => {
   const router = useRouter();
@@ -45,23 +33,36 @@ const OrganizationJobDetailPage: React.FC = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
+  // Fetch opportunity details
   const { data: job, isLoading, error: fetchError } = useQuery({
     queryKey: ['organizationJob', id],
     queryFn: () => jobService.getJob(id as string),
     enabled: !!id && !!user,
+    select: (data) => jobService.processJobResponse(data),
   });
 
-  // FIXED: Use correct method name - getJobApplications instead of getApplicationsForJob
+  // Fetch owner profile
+  const {
+    data: organizationProfile,
+    isLoading: profileLoading
+  } = useQuery({
+    queryKey: ['organizationProfile'],
+    queryFn: () => profileService.getProfile(),
+    enabled: !!user && user.role === 'organization',
+  });
+
+  // Fetch application stats
   const { data: applicationStats, isLoading: statsLoading } = useQuery({
     queryKey: ['jobApplicationStats', id],
     queryFn: () => applicationService.getJobApplications(id as string, { limit: 5 }),
     enabled: !!id && !!job,
   });
 
+  // Status mutation for opportunities
   const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { 
-      id: string; 
-      status: "draft" | "active" | "paused" | "closed" | "archived"; 
+    mutationFn: ({ id, status }: {
+      id: string;
+      status: JobStatus;
     }) =>
       jobService.updateOrganizationJob(id, { status }),
     onSuccess: () => {
@@ -81,14 +82,32 @@ const OrganizationJobDetailPage: React.FC = () => {
     },
   });
 
-  const handleStatusChange = async (
-    newStatus: "draft" | "active" | "paused" | "closed" | "archived"
-  ) => {
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => jobService.deleteOrganizationJob(id),
+    onSuccess: () => {
+      toast({
+        title: 'Opportunity deleted',
+        description: 'The opportunity has been permanently deleted',
+      });
+      router.push('/dashboard/organization/jobs');
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to delete opportunity',
+        description: error.message || 'Please try again',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Handler for status changes
+  const handleStatusChange = async (status: JobStatus) => {
     if (id && job) {
       try {
         await statusMutation.mutateAsync({
           id: id as string,
-          status: newStatus,
+          status,
         });
       } catch (error) {
         console.error('Failed to update opportunity status:', error);
@@ -96,23 +115,21 @@ const OrganizationJobDetailPage: React.FC = () => {
     }
   };
 
+  // Handler for viewing applications
   const handleViewApplications = () => {
     if (id) {
       router.push(`/dashboard/organization/jobs/${id}/applications`);
     }
   };
 
-  // FIXED: Add proper type for applicationId
-  const handleViewApplicationDetails = (applicationId: string) => {
-    router.push(`/dashboard/organization/applications/${applicationId}`);
-  };
-
+  // Handler for editing opportunity
   const handleEditOpportunity = () => {
     if (job) {
       router.push(`/dashboard/organization/jobs/edit/${job._id}`);
     }
   };
 
+  // Handler for sharing opportunity
   const handleShareOpportunity = async () => {
     if (job) {
       const opportunityUrl = `${window.location.origin}/opportunities/${job._id}`;
@@ -133,39 +150,54 @@ const OrganizationJobDetailPage: React.FC = () => {
     }
   };
 
+  // Handler for deleting opportunity
+  const handleDeleteOpportunity = async () => {
+    if (job && confirm('Are you sure you want to permanently delete this opportunity? This action cannot be undone.')) {
+      try {
+        await deleteMutation.mutateAsync(job._id);
+      } catch (error) {
+        console.error('Failed to delete opportunity:', error);
+      }
+    }
+  };
+
+  // Loading state
   if (isLoading) {
     return (
       <DashboardLayout requiredRole="organization">
-        <div className="min-h-screen flex items-center justify-center">
-          <LoadingSpinner size="lg" />
-          <span className="ml-3 text-gray-600">Loading opportunity details...</span>
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/10 dark:to-teal-900/10">
+          <div className="text-center">
+            <LoadingSpinner size="lg" />
+            <span className="ml-3 text-gray-600 dark:text-gray-300">Loading opportunity details...</span>
+          </div>
         </div>
       </DashboardLayout>
     );
   }
 
+  // Error state
   if (fetchError || !job) {
     return (
       <DashboardLayout requiredRole="organization">
-        <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-100 flex items-center justify-center p-4">
+        <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/10 dark:to-teal-900/10 flex items-center justify-center p-4">
           <div className="text-center max-w-md">
-            <div className="text-6xl mb-4">❌</div>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+            <div className="text-6xl mb-4 text-red-500 dark:text-red-400">❌</div>
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">
               Opportunity Not Found
             </h2>
-            <p className="text-gray-600 mb-6">
-              The opportunity you`re looking for doesn`t exist or you don`t have permission to view it.
+            <p className="text-gray-600 dark:text-gray-300 mb-6">
+              The opportunity you're looking for doesn't exist or you don't have permission to view it.
             </p>
             <div className="space-y-3">
               <Link
                 href="/dashboard/organization/jobs"
-                className="inline-block bg-emerald-600 text-white px-6 py-3 rounded-lg hover:bg-emerald-700 transition-colors w-full"
+                className="inline-block bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-lg transition-colors w-full dark:bg-emerald-700 dark:hover:bg-emerald-800"
               >
                 Back to Opportunities
               </Link>
               <Link
                 href="/dashboard/organization/jobs/create"
-                className="inline-block bg-teal-600 text-white px-6 py-3 rounded-lg hover:bg-teal-700 transition-colors w-full"
+                className="inline-block bg-teal-600 hover:bg-teal-700 text-white px-6 py-3 rounded-lg transition-colors w-full dark:bg-teal-700 dark:hover:bg-teal-800"
               >
                 Create New Opportunity
               </Link>
@@ -176,14 +208,7 @@ const OrganizationJobDetailPage: React.FC = () => {
     );
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
+  // Format date helper
   const formatDateTime = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -194,126 +219,19 @@ const OrganizationJobDetailPage: React.FC = () => {
     });
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-      case 'draft': return 'bg-amber-100 text-amber-800 border-amber-200';
-      case 'closed': return 'bg-rose-100 text-rose-800 border-rose-200';
-      case 'paused': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'archived': return 'bg-gray-100 text-gray-800 border-gray-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
+  // Check if opportunity is expired
+  const isOpportunityExpired = job.applicationDeadline && new Date(job.applicationDeadline) < new Date();
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'active': return <CheckCircle className="w-4 h-4" />;
-      case 'draft': return <Edit3 className="w-4 h-4" />;
-      case 'closed': return <XCircle className="w-4 h-4" />;
-      case 'paused': return <PauseCircle className="w-4 h-4" />;
-      case 'archived': return <Archive className="w-4 h-4" />;
-      default: return <Clock className="w-4 h-4" />;
-    }
-  };
-
-  const getStatusActions = () => {
-    switch (job.status) {
-      case 'draft':
-        return (
-          <Button
-            onClick={() => handleStatusChange('active')}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            // FIXED: Use statusMutation.isPending instead of statusMutation.isLoading
-            disabled={statusMutation.isPending}
-          >
-            <CheckCircle className="w-4 h-4 mr-2" />
-            Publish Opportunity
-          </Button>
-        );
-      case 'active':
-        return (
-          <div className="flex gap-2">
-            <Button
-              onClick={() => handleStatusChange('paused')}
-              className="bg-orange-600 hover:bg-orange-700 text-white"
-              disabled={statusMutation.isPending}
-            >
-              <PauseCircle className="w-4 h-4 mr-2" />
-              Pause Opportunity
-            </Button>
-            <Button
-              onClick={() => handleStatusChange('closed')}
-              className="bg-rose-600 hover:bg-rose-700 text-white"
-              disabled={statusMutation.isPending}
-            >
-              <XCircle className="w-4 h-4 mr-2" />
-              Close Opportunity
-            </Button>
-          </div>
-        );
-      case 'paused':
-        return (
-          <div className="flex gap-2">
-            <Button
-              onClick={() => handleStatusChange('active')}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              disabled={statusMutation.isPending}
-            >
-              <CheckCircle className="w-4 h-4 mr-2" />
-              Resume Opportunity
-            </Button>
-            <Button
-              onClick={() => handleStatusChange('closed')}
-              className="bg-rose-600 hover:bg-rose-700 text-white"
-              disabled={statusMutation.isPending}
-            >
-              <XCircle className="w-4 h-4 mr-2" />
-              Close Opportunity
-            </Button>
-          </div>
-        );
-      case 'closed':
-        return (
-          <Button
-            onClick={() => handleStatusChange('active')}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            disabled={statusMutation.isPending}
-          >
-            <CheckCircle className="w-4 h-4 mr-2" />
-            Reopen Opportunity
-          </Button>
-        );
-      default:
-        return null;
-    }
-  };
-
-  const isInternational = job.location?.region === 'international';
-  const opportunityTypeLabel = jobService.getJobTypeDisplayLabel(job);
-  
-  // FIXED: Access data correctly from applicationStats
+  // Get recent applications
   const totalApplications = applicationStats?.data?.length || 0;
   const recentApplications = applicationStats?.data?.slice(0, 3) || [];
 
-  const isOpportunityExpired = job.applicationDeadline && new Date(job.applicationDeadline) < new Date();
-
-  const getOpportunityTypeIcon = (type?: string) => {
-    switch (type) {
-      case 'volunteer':
-        return <Heart className="h-5 w-5 text-rose-500" />;
-      case 'internship':
-        return <Target className="h-5 w-5 text-cyan-500" />;
-      case 'fellowship':
-        return <Award className="h-5 w-5 text-amber-500" />;
-      case 'training':
-        return <GraduationCap className="h-5 w-5 text-purple-500" />;
-      case 'grant':
-        return <DollarSign className="h-5 w-5 text-green-500" />;
-      default:
-        return <Users2 className="h-5 w-5 text-emerald-500" />;
-    }
+  // Handle viewing application details
+  const handleViewApplicationDetails = (applicationId: string) => {
+    router.push(`/dashboard/organization/applications/${applicationId}`);
   };
 
+  // Get commitment level label for volunteer opportunities
   const getCommitmentLevelLabel = (level?: string) => {
     switch (level) {
       case 'casual': return 'Casual (1-10 hours/week)';
@@ -323,552 +241,402 @@ const OrganizationJobDetailPage: React.FC = () => {
     }
   };
 
+  // Check if this is a volunteer opportunity
+  const isVolunteerOpportunity = job.opportunityType === 'volunteer';
+
   return (
     <DashboardLayout requiredRole="organization">
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header */}
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 mb-8">
-            <div className="space-y-3 flex-1">
-              <Link
-                href="/dashboard/organization/jobs"
-                className="text-emerald-600 hover:text-emerald-800 inline-flex items-center gap-2 transition-colors"
-              >
-                <ArrowRight className="w-4 h-4 rotate-180" />
-                Back to Opportunities
-              </Link>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <h1 className="text-3xl font-bold text-gray-900">{job.title}</h1>
-                  <div className="flex items-center gap-3 mt-2 flex-wrap">
-                    <div className="flex items-center gap-2">
-                      {getOpportunityTypeIcon(job.opportunityType)}
-                      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                        {opportunityTypeLabel}
-                      </Badge>
-                    </div>
-                    <Badge variant="outline" className={getStatusColor(job.status)}>
-                      <span className="flex items-center gap-1">
-                        {getStatusIcon(job.status)}
-                        {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
-                      </span>
-                    </Badge>
-                    <p className="text-gray-600 text-sm">
-                      Posted on {formatDate(job.createdAt)}
-                    </p>
-                    {isOpportunityExpired && (
-                      <Badge variant="outline" className="bg-rose-100 text-rose-800 border-rose-200">
-                        Expired
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              {getStatusActions()}
-              <Button
-                onClick={handleEditOpportunity}
-                variant="outline"
-                className="border-emerald-600 text-emerald-600 hover:bg-emerald-50"
-              >
-                <Edit3 className="w-4 h-4 mr-2" />
-                Edit Opportunity
-              </Button>
-              <Button
-                onClick={handleShareOpportunity}
-                variant="outline"
-                className="border-teal-600 text-teal-600 hover:bg-teal-50"
-              >
-                <Share2 className="w-4 h-4 mr-2" />
-                Share
-              </Button>
-            </div>
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/10 dark:to-teal-900/10">
+        {/* Back Navigation */}
+        <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-b border-emerald-200 dark:border-emerald-800">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <Link
+              href="/dashboard/organization/jobs"
+              className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 inline-flex items-center gap-2 transition-colors"
+            >
+              <ArrowRight className="w-4 h-4 rotate-180" />
+              Back to Opportunities
+            </Link>
           </div>
+        </div>
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <Card className="border border-emerald-200 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-2xl font-bold text-emerald-600 mb-1">{job.viewCount || 0}</div>
-                    <div className="text-gray-600 flex items-center gap-1 text-sm">
-                      <Eye className="w-4 h-4" /> Total Views
-                    </div>
-                  </div>
-                  <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
-                    <Eye className="w-6 h-6 text-emerald-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border border-teal-200 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-2xl font-bold text-teal-600 mb-1">{job.applicationCount || 0}</div>
-                    <div className="text-gray-600 flex items-center gap-1 text-sm">
-                      <Users className="w-4 h-4" /> Total Applications
-                    </div>
-                  </div>
-                  <div className="w-12 h-12 bg-teal-100 rounded-full flex items-center justify-center">
-                    <Users className="w-6 h-6 text-teal-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border border-cyan-200 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-2xl font-bold text-cyan-600 mb-1 capitalize">
-                      {job.remote || 'on-site'}
-                    </div>
-                    <div className="text-gray-600 flex items-center gap-1 text-sm">
-                      <MapPin className="w-4 h-4" /> Work Type
-                    </div>
-                  </div>
-                  <div className="w-12 h-12 bg-cyan-100 rounded-full flex items-center justify-center">
-                    <MapPin className="w-6 h-6 text-cyan-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border border-amber-200 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-2xl font-bold text-amber-600 mb-1 capitalize">
-                      {job.type.replace('-', ' ')}
-                    </div>
-                    <div className="text-gray-600 flex items-center gap-1 text-sm">
-                      <Target className="w-4 h-4" /> Engagement Type
-                    </div>
-                  </div>
-                  <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
-                    <Target className="w-6 h-6 text-amber-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+        {/* Job Header Component - Organization Mode */}
+        <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-b border-emerald-200 dark:border-emerald-800">
+          <div className="max-w-7xl mx-auto">
+            <JobHeader
+              job={job}
+              role="organization"
+              ownerProfile={organizationProfile}
+              onEdit={handleEditOpportunity}
+              onShare={handleShareOpportunity}
+              onStatusChange={handleStatusChange}
+              onDelete={handleDeleteOpportunity}
+              compact={false}
+            />
           </div>
+        </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left Column - Opportunity Details */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Applications Preview Card */}
-              {totalApplications > 0 && (
-                <Card className="border border-emerald-200 shadow-sm bg-white/80 backdrop-blur-sm">
-                  <CardHeader className="pb-4 border-b border-emerald-200">
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="h-5 w-5 text-emerald-600" />
-                      Recent Applications ({totalApplications})
-                    </CardTitle>
-                    <CardDescription>
-                      Latest applications from community members
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-6">
-                    <div className="space-y-4">
-                      {recentApplications.map((application) => (
-                        <div 
-                          key={application._id as string} 
-                          className="flex items-center justify-between p-4 border border-emerald-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/50 transition-all cursor-pointer group"
-                          onClick={() => handleViewApplicationDetails(application._id as string)}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
-                              <Users2 className="h-5 w-5 text-emerald-600" />
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-900">
-                                {application.userInfo?.name || application.candidate?.name || 'Community Member'}
-                              </p>
-                              <p className="text-sm text-gray-500">
-                                Applied {formatDateTime(application.createdAt)}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className={getStatusColor(application.status)}>
-                              {applicationService.getStatusLabel(application.status)}
-                            </Badge>
-                            <ArrowRight className="h-4 w-4 text-emerald-400 group-hover:text-emerald-600 transition-colors" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {totalApplications > 3 && (
-                      <Button 
-                        onClick={handleViewApplications}
-                        variant="outline" 
-                        className="w-full mt-4 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300"
-                      >
-                        View All {totalApplications} Applications
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+        {/* Main Content */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="space-y-8">
+            {/* Tabbed Job Details Component - Organization Mode */}
+            <div className={cn(
+              "bg-white dark:bg-gray-800 rounded-lg border border-emerald-200 dark:border-emerald-800 shadow-sm overflow-hidden",
+              "lg:rounded-xl backdrop-blur-sm"
+            )}>
+              <TabbedJobDetails
+                job={job}
+                role="organization"
+                ownerProfile={organizationProfile}
+                onEditJob={handleEditOpportunity}
+                onStatusChange={handleStatusChange}
+                onViewApplications={handleViewApplications}
+              />
+            </div>
 
-              {/* Basic Info Card */}
-              <Card className="border border-emerald-200 shadow-sm bg-white/80 backdrop-blur-sm">
-                <CardHeader className="pb-4 border-b border-emerald-200">
+            {/* Recent Applications Section */}
+            {totalApplications > 0 && (
+              <Card className="border border-emerald-200 dark:border-emerald-800 shadow-sm bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+                <CardHeader className="pb-4 border-b border-emerald-200 dark:border-emerald-800">
                   <CardTitle className="flex items-center gap-2">
-                    <Target className="h-5 w-5 text-emerald-600" />
-                    Opportunity Details
+                    <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    Recent Applications ({totalApplications})
                   </CardTitle>
+                  <CardDescription className="dark:text-gray-400">
+                    Latest applications from community members
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3">
-                        <MapPin className="w-5 h-5 text-emerald-400" />
-                        <div>
-                          <label className="text-sm font-medium text-gray-600">Location</label>
-                          <p className="text-gray-900 font-medium">
-                            {job.location?.city || 'Not specified'}, {jobService.getEthiopianRegions().find(r => r.slug === job.location?.region)?.name || job.location?.region}
-                            {!isInternational && job.location?.region !== 'international' && (
-                              <span className="text-emerald-600 ml-2">🇪🇹</span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Target className="w-5 h-5 text-emerald-400" />
-                        <div>
-                          <label className="text-sm font-medium text-gray-600">Engagement Type</label>
-                          <p className="text-gray-900 font-medium capitalize">{job.type.replace('-', ' ')}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Users className="w-5 h-5 text-emerald-400" />
-                        <div>
-                          <label className="text-sm font-medium text-gray-600">Experience Level</label>
-                          <p className="text-gray-900 font-medium capitalize">{job.experienceLevel.replace('-', ' ')}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3">
-                        <DollarSign className="w-5 h-5 text-emerald-400" />
-                        <div>
-                          <label className="text-sm font-medium text-gray-600">Compensation</label>
-                          <p className="text-gray-900 font-medium">{jobService.formatSalary(job.salary)}</p>
-                        </div>
-                      </div>
-                      {job.category && (
+                  <div className="space-y-4">
+                    {recentApplications.map((application) => (
+                      <div
+                        key={application._id as string}
+                        className={cn(
+                          "flex items-center justify-between p-4 border rounded-lg transition-all cursor-pointer group",
+                          "border-emerald-200 dark:border-emerald-700 hover:border-emerald-300 dark:hover:border-emerald-600",
+                          "hover:bg-emerald-50/50 dark:hover:bg-emerald-900/20"
+                        )}
+                        onClick={() => handleViewApplicationDetails(application._id as string)}
+                      >
                         <div className="flex items-center gap-3">
-                          <Tag className="w-5 h-5 text-emerald-400" />
-                          <div>
-                            <label className="text-sm font-medium text-gray-600">Category</label>
-                            <p className="text-gray-900 font-medium">
-                              {jobService.getJobCategories().find(cat => cat.value === job.category)?.label || job.category}
+                          <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900 rounded-full flex items-center justify-center group-hover:bg-emerald-200 dark:group-hover:bg-emerald-800 transition-colors">
+                            <Users2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 dark:text-white truncate">
+                              {application.userInfo?.name || application.candidate?.name || 'Community Member'}
+                            </p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                              Applied {formatDateTime(application.createdAt)}
                             </p>
                           </div>
                         </div>
-                      )}
-                      {job.educationLevel && (
-                        <div className="flex items-center gap-3">
-                          <GraduationCap className="w-5 h-5 text-emerald-400" />
-                          <div>
-                            <label className="text-sm font-medium text-gray-600">Education Level</label>
-                            <p className="text-gray-900 font-medium">{jobService.getEducationLabel(job.educationLevel)}</p>
-                          </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className={
+                            application.status === 'approved' ? 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800' :
+                              application.status === 'rejected' ? 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800' :
+                                'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'
+                          }>
+                            {applicationService.getStatusLabel(application.status)}
+                          </Badge>
+                          <ArrowRight className="h-4 w-4 text-emerald-400 dark:text-emerald-500 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" />
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    ))}
                   </div>
-                  
-                  {/* Duration Information */}
-                  {job.duration && (
-                    <div className="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-amber-600" />
-                        <span className="text-sm font-medium text-amber-800">Duration:</span>
-                        <span className="text-sm font-medium text-amber-600">
-                          {job.duration.isOngoing 
-                            ? 'Ongoing' 
-                            : `${job.duration.value} ${job.duration.unit}`
-                          }
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Application Deadline */}
-                  {job.applicationDeadline && (
-                    <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-emerald-600" />
-                        <span className="text-sm font-medium text-emerald-800">Application Deadline:</span>
-                        <span className={`text-sm font-medium ${isOpportunityExpired ? 'text-rose-600' : 'text-emerald-600'}`}>
-                          {formatDate(job.applicationDeadline)}
-                          {isOpportunityExpired && ' (Expired)'}
-                        </span>
-                      </div>
-                    </div>
+                  {totalApplications > 3 && (
+                    <Button
+                      onClick={handleViewApplications}
+                      variant="outline"
+                      className="w-full mt-4 border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:border-emerald-300 dark:hover:border-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                    >
+                      View All {totalApplications} Applications
+                    </Button>
                   )}
                 </CardContent>
               </Card>
+            )}
 
-              {/* Volunteer Information */}
-              {job.volunteerInfo && (
-                <Card className="border border-rose-200 shadow-sm bg-white/80 backdrop-blur-sm">
-                  <CardHeader className="pb-4 border-b border-rose-200">
-                    <CardTitle className="flex items-center gap-2">
-                      <Heart className="h-5 w-5 text-rose-600" />
-                      Volunteer Information
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Quick Stats Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+              <Card className="border border-emerald-200 dark:border-emerald-800 shadow-sm hover:shadow-md transition-shadow bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mb-1">
+                        {job.viewCount || 0}
+                      </div>
+                      <div className="text-gray-600 dark:text-gray-300 flex items-center gap-1 text-sm">
+                        Total Views
+                      </div>
+                    </div>
+                    <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center">
+                      <span className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
+                        👁️
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border border-teal-200 dark:border-teal-800 shadow-sm hover:shadow-md transition-shadow bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold text-teal-600 dark:text-teal-400 mb-1">
+                        {job.applicationCount || 0}
+                      </div>
+                      <div className="text-gray-600 dark:text-gray-300 flex items-center gap-1 text-sm">
+                        Total Applications
+                      </div>
+                    </div>
+                    <div className="w-12 h-12 bg-teal-100 dark:bg-teal-900/30 rounded-full flex items-center justify-center">
+                      <Users className="w-6 h-6 text-teal-600 dark:text-teal-400" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border border-cyan-200 dark:border-cyan-800 shadow-sm hover:shadow-md transition-shadow bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400 mb-1 capitalize">
+                        {job.remote || 'on-site'}
+                      </div>
+                      <div className="text-gray-600 dark:text-gray-300 flex items-center gap-1 text-sm">
+                        Work Type
+                      </div>
+                    </div>
+                    <div className="w-12 h-12 bg-cyan-100 dark:bg-cyan-900/30 rounded-full flex items-center justify-center">
+                      <span className="text-lg font-semibold text-cyan-600 dark:text-cyan-400">
+                        {job.remote === 'remote' ? '🏠' : job.remote === 'hybrid' ? '⚡' : '🏢'}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border border-amber-200 dark:border-amber-800 shadow-sm hover:shadow-md transition-shadow bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold text-amber-600 dark:text-amber-400 mb-1">
+                        {job.candidatesNeeded || 1}
+                      </div>
+                      <div className="text-gray-600 dark:text-gray-300 flex items-center gap-1 text-sm">
+                        Positions Available
+                      </div>
+                    </div>
+                    <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
+                      <span className="text-lg font-semibold text-amber-600 dark:text-amber-400">
+                        👥
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Special Features for Volunteer Opportunities */}
+            {isVolunteerOpportunity && job.volunteerInfo && (
+              <Card className="border border-rose-200 dark:border-rose-800 shadow-sm bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+                <CardHeader className="pb-4 border-b border-rose-200 dark:border-rose-800">
+                  <CardTitle className="flex items-center gap-2">
+                    <Heart className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+                    Volunteer Information
+                  </CardTitle>
+                  <CardDescription className="dark:text-gray-400">
+                    Details specific to this volunteer opportunity
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                    <div className="space-y-4">
                       {job.volunteerInfo.hoursPerWeek && (
                         <div className="flex items-center gap-3">
-                          <Clock className="w-5 h-5 text-rose-400" />
+                          <div className="w-10 h-10 bg-rose-100 dark:bg-rose-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <span className="text-lg font-semibold text-rose-600 dark:text-rose-400">⏱️</span>
+                          </div>
                           <div>
-                            <label className="text-sm font-medium text-gray-600">Hours Per Week</label>
-                            <p className="text-gray-900 font-medium">{job.volunteerInfo.hoursPerWeek} hours</p>
+                            <label className="text-sm font-medium text-gray-600 dark:text-gray-300">Hours Per Week</label>
+                            <p className="text-gray-900 dark:text-white font-medium">{job.volunteerInfo.hoursPerWeek} hours</p>
                           </div>
                         </div>
                       )}
                       {job.volunteerInfo.commitmentLevel && (
                         <div className="flex items-center gap-3">
-                          <Target className="w-5 h-5 text-rose-400" />
+                          <div className="w-10 h-10 bg-rose-100 dark:bg-rose-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <span className="text-lg font-semibold text-rose-600 dark:text-rose-400">🎯</span>
+                          </div>
                           <div>
-                            <label className="text-sm font-medium text-gray-600">Commitment Level</label>
-                            <p className="text-gray-900 font-medium">{getCommitmentLevelLabel(job.volunteerInfo.commitmentLevel)}</p>
+                            <label className="text-sm font-medium text-gray-600 dark:text-gray-300">Commitment Level</label>
+                            <p className="text-gray-900 dark:text-white font-medium">{getCommitmentLevelLabel(job.volunteerInfo.commitmentLevel)}</p>
                           </div>
                         </div>
                       )}
-                      <div className="md:col-span-2">
-                        <label className="text-sm font-medium text-gray-600 mb-2">Support Provided</label>
-                        <div className="flex flex-wrap gap-2">
-                          {job.volunteerInfo.providesAccommodation && (
-                            <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200">
-                              <Home className="w-3 h-3 mr-1" />
-                              Accommodation
-                            </Badge>
-                          )}
-                          {job.volunteerInfo.providesStipend && (
-                            <Badge variant="outline" className="bg-cyan-50 text-cyan-700 border-cyan-200">
-                              <DollarSign className="w-3 h-3 mr-1" />
-                              Stipend
-                            </Badge>
-                          )}
-                          {!job.volunteerInfo.providesAccommodation && !job.volunteerInfo.providesStipend && (
-                            <span className="text-sm text-gray-500">No additional support provided</span>
-                          )}
-                        </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">Support Provided</label>
+                      <div className="flex flex-wrap gap-2">
+                        {job.volunteerInfo.providesAccommodation && (
+                          <div className="flex items-center gap-2 bg-rose-50 dark:bg-rose-900/20 px-3 py-2 rounded-lg">
+                            <div className="w-6 h-6 bg-rose-100 dark:bg-rose-800 rounded-full flex items-center justify-center">
+                              <span className="text-xs text-rose-600 dark:text-rose-400">🏠</span>
+                            </div>
+                            <span className="text-sm text-rose-700 dark:text-rose-300">Accommodation</span>
+                          </div>
+                        )}
+                        {job.volunteerInfo.providesStipend && (
+                          <div className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 px-3 py-2 rounded-lg">
+                            <div className="w-6 h-6 bg-green-100 dark:bg-green-800 rounded-full flex items-center justify-center">
+                              <span className="text-xs text-green-600 dark:text-green-400">💰</span>
+                            </div>
+                            <span className="text-sm text-green-700 dark:text-green-300">Stipend</span>
+                          </div>
+                        )}
+                        {!job.volunteerInfo.providesAccommodation && !job.volunteerInfo.providesStipend && (
+                          <div className="text-sm text-gray-500 dark:text-gray-400 italic">
+                            Volunteers provide their own support
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Description Card */}
-              <Card className="border border-emerald-200 shadow-sm bg-white/80 backdrop-blur-sm">
-                <CardHeader className="pb-4 border-b border-emerald-200">
-                  <CardTitle>Opportunity Description</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <div className="prose prose-emerald max-w-none">
-                    <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{job.description}</p>
                   </div>
                 </CardContent>
               </Card>
+            )}
 
-              {/* Requirements Card */}
-              {job.requirements && job.requirements.length > 0 && (
-                <Card className="border border-emerald-200 shadow-sm bg-white/80 backdrop-blur-sm">
-                  <CardHeader className="pb-4 border-b border-emerald-200">
-                    <CardTitle>Requirements</CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-6">
-                    <ul className="space-y-3">
-                      {job.requirements.map((requirement, index) => (
-                        <li key={index} className="flex items-start">
-                          <span className="text-emerald-500 mr-3 mt-1">•</span>
-                          <span className="text-gray-700 leading-relaxed">{requirement}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Responsibilities Card */}
-              {job.responsibilities && job.responsibilities.length > 0 && (
-                <Card className="border border-emerald-200 shadow-sm bg-white/80 backdrop-blur-sm">
-                  <CardHeader className="pb-4 border-b border-emerald-200">
-                    <CardTitle>Responsibilities</CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-6">
-                    <ul className="space-y-3">
-                      {job.responsibilities.map((responsibility, index) => (
-                        <li key={index} className="flex items-start">
-                          <span className="text-teal-500 mr-3 mt-1">•</span>
-                          <span className="text-gray-700 leading-relaxed">{responsibility}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-
-            {/* Right Column - Actions & Info */}
-            <div className="space-y-6">
-              {/* Quick Actions Card */}
-              <Card className="border border-emerald-200 shadow-sm bg-white/80 backdrop-blur-sm">
-                <CardHeader className="pb-4 border-b border-emerald-200">
-                  <CardTitle>Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <div className="space-y-3">
-                    <Button
-                      onClick={handleViewApplications}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 flex items-center justify-center gap-2"
-                      disabled={totalApplications === 0}
-                    >
-                      <Users className="w-4 h-4" />
-                      View Applications ({job.applicationCount || 0})
-                    </Button>
-                    
-                    <Button
-                      onClick={handleShareOpportunity}
-                      variant="outline"
-                      className="w-full border-teal-600 text-teal-600 hover:bg-teal-50 py-3 flex items-center justify-center gap-2"
-                    >
-                      <Share2 className="w-4 h-4" />
-                      Share Opportunity
-                    </Button>
-                    
-                    <Button
-                      onClick={handleEditOpportunity}
-                      variant="outline"
-                      className="w-full border-emerald-600 text-emerald-600 hover:bg-emerald-50 py-3 flex items-center justify-center gap-2"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                      Edit Opportunity Details
-                    </Button>
-
-                    {getStatusActions() && (
-                      <div className="pt-2 border-t border-emerald-200">
-                        {getStatusActions()}
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Skills Card */}
-              {job.skills && job.skills.length > 0 && (
-                <Card className="border border-emerald-200 shadow-sm bg-white/80 backdrop-blur-sm">
-                  <CardHeader className="pb-4 border-b border-emerald-200">
-                    <CardTitle>Required Skills</CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-6">
-                    <div className="flex flex-wrap gap-2">
-                      {job.skills.map((skill, index) => (
-                        <Badge
-                          key={index}
-                          variant="secondary"
-                          className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-colors"
-                        >
-                          {skill}
-                        </Badge>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Organization Info Card */}
-              <Card className="border border-emerald-200 shadow-sm bg-white/80 backdrop-blur-sm">
-                <CardHeader className="pb-4 border-b border-emerald-200">
+            {/* Duration Information for Non-Volunteer Opportunities */}
+            {!isVolunteerOpportunity && job.duration && (
+              <Card className="border border-amber-200 dark:border-amber-800 shadow-sm bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+                <CardHeader className="pb-4 border-b border-amber-200 dark:border-amber-800">
                   <CardTitle className="flex items-center gap-2">
-                    <Building className="h-5 w-5 text-emerald-600" />
-                    Organization Info
+                    <span className="text-lg text-amber-600 dark:text-amber-400">⏳</span>
+                    Duration Information
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6">
-                  <div className="flex items-center space-x-3 mb-4">
-                    {job.organization?.logoUrl && (
-                      <img
-                        src={job.organization.logoUrl}
-                        alt={job.organization.name}
-                        className="w-12 h-12 rounded-lg object-cover border border-emerald-200"
-                      />
-                    )}
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-xl text-amber-600 dark:text-amber-400">
+                        {job.duration.isOngoing ? '∞' : '📅'}
+                      </span>
+                    </div>
                     <div>
-                      <h3 className="font-semibold text-gray-900">{job.organization?.name}</h3>
-                      {job.organization?.industry && (
-                        <p className="text-sm text-gray-600">{job.organization.industry}</p>
-                      )}
+                      <h4 className="font-medium text-gray-900 dark:text-white">
+                        {job.duration.isOngoing
+                          ? 'Ongoing Opportunity'
+                          : `Fixed Term: ${job.duration.value} ${job.duration.unit}`
+                        }
+                      </h4>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {job.duration.isOngoing
+                          ? 'This is an ongoing opportunity with no fixed end date'
+                          : 'This opportunity has a specific duration'
+                        }
+                      </p>
                     </div>
                   </div>
-                  {job.organization?.verified && (
-                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 mb-3">
-                      <CheckCircle className="w-3 h-3 mr-1" />
-                      Verified Organization
-                    </Badge>
-                  )}
-                  <Link
-                    href="/dashboard/organization/profile"
-                    className="block w-full bg-emerald-50 text-emerald-700 py-2 px-4 rounded-lg hover:bg-emerald-100 transition-colors text-center text-sm font-medium border border-emerald-200"
-                  >
-                    View Organization Profile
-                  </Link>
                 </CardContent>
               </Card>
+            )}
 
-              {/* Opportunity History Card */}
-              <Card className="border border-emerald-200 shadow-sm bg-white/80 backdrop-blur-sm">
-                <CardHeader className="pb-4 border-b border-emerald-200">
-                  <CardTitle>Opportunity History</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <div className="space-y-3 text-sm">
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Created</span>
-                      <span className="text-gray-900 font-medium">{formatDateTime(job.createdAt)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Last Updated</span>
-                      <span className="text-gray-900 font-medium">{formatDateTime(job.updatedAt)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Status</span>
-                      <Badge variant="outline" className={getStatusColor(job.status)}>
+            {/* Warning for expired opportunities */}
+            {isOpportunityExpired && (
+              <div className="p-4 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-rose-100 dark:bg-rose-900 rounded-full flex items-center justify-center flex-shrink-0">
+                    <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-rose-800 dark:text-rose-300">Application Deadline Passed</h3>
+                    <p className="text-sm text-rose-700 dark:text-rose-400 mt-1">
+                      This opportunity's application deadline has expired. Consider updating the deadline or closing the position.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Organization Profile Link */}
+            <Card className="border border-emerald-200 dark:border-emerald-800 shadow-sm bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+              <CardHeader className="pb-4 border-b border-emerald-200 dark:border-emerald-800">
+                <CardTitle className="flex items-center gap-2">
+                  <Building className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  Organization Profile
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="flex items-start sm:items-center space-x-4 mb-6">
+                  {job.organization?.logoUrl && (
+                    <img
+                      src={job.organization.logoUrl}
+                      alt={job.organization.name}
+                      className="w-16 h-16 rounded-xl object-cover border-2 border-emerald-200 dark:border-emerald-700 flex-shrink-0"
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-gray-900 dark:text-white text-lg truncate">{job.organization?.name}</h3>
+                    {job.organization?.organizationType && (
+                      <p className="text-sm text-gray-600 dark:text-gray-400 truncate">{job.organization.organizationType}</p>
+                    )}
+                    {job.organization?.verified && (
+                      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800 mt-2">
                         <span className="flex items-center gap-1">
-                          {getStatusIcon(job.status)}
-                          {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+                          <span className="text-xs">✓</span>
+                          Verified Organization
                         </span>
                       </Badge>
-                    </div>
-                    {job.tags && job.tags.length > 0 && (
-                      <div className="flex justify-between items-start">
-                        <span className="text-gray-600 pt-1">Tags</span>
-                        <div className="flex flex-wrap gap-1 justify-end max-w-[200px]">
-                          {job.tags.slice(0, 3).map((tag, index) => (
-                            <Badge key={index} variant="secondary" className="text-xs bg-teal-50 text-teal-700 border-teal-200">
-                              {tag}
-                            </Badge>
-                          ))}
-                          {job.tags.length > 3 && (
-                            <Badge variant="secondary" className="text-xs bg-teal-50 text-teal-700 border-teal-200">
-                              +{job.tags.length - 3} more
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
                     )}
                   </div>
-                </CardContent>
-              </Card>
-            </div>
+                </div>
+                <Link
+                  href="/dashboard/organization/profile"
+                  className="block w-full bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800 text-white py-3 px-4 rounded-lg transition-colors text-center font-medium"
+                >
+                  View & Manage Organization Profile
+                </Link>
+              </CardContent>
+            </Card>
+
+            {/* Danger Zone - Delete Opportunity */}
+            <Card className="border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10">
+              <CardHeader className="pb-4 border-b border-red-200 dark:border-red-800">
+                <CardTitle className="text-red-800 dark:text-red-300">Danger Zone</CardTitle>
+                <CardDescription className="text-red-700 dark:text-red-400">
+                  Permanent actions cannot be undone
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <h4 className="font-medium text-red-800 dark:text-red-300 mb-1">Delete This Opportunity</h4>
+                    <p className="text-sm text-red-700 dark:text-red-400">
+                      Once deleted, this opportunity and all associated applications will be permanently removed.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleDeleteOpportunity}
+                    variant="destructive"
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                    disabled={deleteMutation.isPending}
+                  >
+                    {deleteMutation.isPending ? (
+                      <div className="flex items-center gap-2">
+                        <LoadingSpinner size="sm" />
+                        <span>Deleting...</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Trash2 className="w-4 h-4" />
+                        <span>Delete Opportunity</span>
+                      </div>
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>

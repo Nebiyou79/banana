@@ -42,26 +42,38 @@ import {
     Download,
     Loader2,
     RefreshCw,
-    AlertCircle
+    AlertCircle,
+    Cloud,
+    Camera,
+    User
 } from 'lucide-react';
-import profileService, { Profile } from '@/services/profileService';
+import { profileService, Profile, CloudinaryImage, Experience, PortfolioProject, Education, Certification, Award as ProfileAward, VolunteerExperience, Language } from '@/services/profileService';
 import { roleProfileService } from '@/services/roleProfileService';
+import { freelancerService, UserProfile as FreelancerUserProfile, FreelancerStats, PortfolioItem, Certification as FreelancerCertification } from '@/services/freelancerService';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import ProfileInfoCard from '@/components/profile/ProfileInfoCard';
-import { PortfolioItem } from '@/services/freelancerService';
 
-interface FreelancerStats {
-    profileStrength: number;
-    jobSuccessScore: number;
-    onTimeDelivery: number;
-    responseRate: number;
-    totalEarnings: number;
-    totalJobs: number;
-    activeProposals: number;
-    profileViews: number;
-    clientReviews: number;
-    averageRating: number;
+// Define interface for enhanced profile
+interface EnhancedProfile extends Omit<Profile, 'roleSpecific'> {
+    roleSpecific: Omit<Profile['roleSpecific'], 'freelancerProfile'> & {
+        freelancerProfile?: {
+            hourlyRate?: number;
+            availability?: string;
+            experienceLevel?: string;
+            englishProficiency?: string;
+            timezone?: string;
+            specialization?: string[];
+            profileCompletion?: number;
+            totalEarnings?: number;
+            successRate?: number;
+            ratings?: {
+                average: number;
+                count: number;
+            };
+            profileViews?: number;
+        };
+    };
 }
 
 export default function FreelancerProfilePage() {
@@ -69,9 +81,15 @@ export default function FreelancerProfilePage() {
     const [activeTab, setActiveTab] = useState('overview');
     const [profile, setProfile] = useState<Profile | null>(null);
     const [roleSpecificData, setRoleSpecificData] = useState<any>(null);
+    const [freelancerProfile, setFreelancerProfile] = useState<FreelancerUserProfile | null>(null);
     const [freelancerStats, setFreelancerStats] = useState<FreelancerStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isUploading, setIsUploading] = useState({
+        avatar: false,
+        cover: false
+    });
+    const [refreshKey, setRefreshKey] = useState(0);
 
     useEffect(() => {
         fetchFreelancerData();
@@ -82,36 +100,121 @@ export default function FreelancerProfilePage() {
             setLoading(true);
             setError(null);
 
-            // Fetch user profile and role-specific data in parallel
-            const [profileResponse, freelancerResponse] = await Promise.all([
+            // Fetch from all three services
+            const [
+                profileData,
+                roleSpecificResponse,
+                freelancerData
+            ] = await Promise.allSettled([
                 profileService.getProfile(),
-                roleProfileService.getFreelancerProfile()
+                roleProfileService.getFreelancerProfile(),
+                freelancerService.getProfile()
             ]);
 
-            setProfile(profileResponse as Profile);
-            setRoleSpecificData(freelancerResponse);
+            // Handle profile service response
+            if (profileData.status === 'fulfilled') {
+                setProfile(profileData.value);
+            } else {
+                console.warn('Profile service failed, using safe profile:', profileData.reason);
+                const safeProfile = profileService.createSafeProfile();
+                setProfile(safeProfile);
+            }
 
-            // Mock freelancer stats (replace with actual API call)
-            const mockStats: FreelancerStats = {
-                profileStrength: 85,
-                jobSuccessScore: 94,
-                onTimeDelivery: 96,
-                responseRate: 98,
-                totalEarnings: 125000,
-                totalJobs: 47,
-                activeProposals: 3,
-                profileViews: 1248,
-                clientReviews: 32,
-                averageRating: 4.8
-            };
-            setFreelancerStats(mockStats);
+            // Handle role-specific service response
+            if (roleSpecificResponse.status === 'fulfilled') {
+                setRoleSpecificData(roleSpecificResponse.value);
+            } else {
+                console.warn('Role profile service failed:', roleSpecificResponse.reason);
+                setRoleSpecificData(null);
+            }
+
+            // Handle freelancer service response
+            if (freelancerData.status === 'fulfilled') {
+                setFreelancerProfile(freelancerData.value);
+            } else {
+                console.warn('Freelancer service failed:', freelancerData.reason);
+                setFreelancerProfile(null);
+            }
+
+            // Try to get freelancer stats
+            try {
+                const stats = await freelancerService.getFreelancerStats();
+                setFreelancerStats(stats);
+            } catch (statsError: any) {
+                console.warn('Stats service error, using mock stats:', statsError);
+                setFreelancerStats({
+                    profileStrength: 85,
+                    jobSuccessScore: 94,
+                    onTimeDelivery: 96,
+                    responseRate: 98,
+                    totalEarnings: 125000,
+                    totalJobs: 47,
+                    activeProposals: 3,
+                    profileViews: 1248,
+                    clientReviews: 32,
+                    averageRating: 4.8
+                });
+            }
 
         } catch (err: any) {
             console.error('Failed to fetch freelancer data:', err);
-            setError(err.message || 'Failed to load profile data');
-            toast.error('Failed to load freelancer profile');
+            const errorMessage = err.message || 'Failed to load profile data';
+            setError(errorMessage);
+            toast.error(errorMessage);
+
+            // Set minimal data for rendering
+            const safeProfile = profileService.createSafeProfile();
+            setProfile(safeProfile);
+            setRoleSpecificData(null);
+            setFreelancerProfile(null);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleAvatarUpload = async (file: File) => {
+        try {
+            setIsUploading(prev => ({ ...prev, avatar: true }));
+            const validation = profileService.validateAvatarFile(file);
+            if (!validation.valid) {
+                toast.error(validation.error || 'Invalid file');
+                return;
+            }
+
+            const result = await profileService.uploadAvatar(file);
+            setRefreshKey(prev => prev + 1);
+            toast.success('Profile picture updated successfully!');
+
+            // Refresh profile data
+            await fetchFreelancerData();
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to upload profile picture');
+            console.error('Avatar upload error:', error);
+        } finally {
+            setIsUploading(prev => ({ ...prev, avatar: false }));
+        }
+    };
+
+    const handleCoverUpload = async (file: File) => {
+        try {
+            setIsUploading(prev => ({ ...prev, cover: true }));
+            const validation = profileService.validateCoverFile(file);
+            if (!validation.valid) {
+                toast.error(validation.error || 'Invalid file');
+                return;
+            }
+
+            const result = await profileService.uploadCoverPhoto(file);
+            setRefreshKey(prev => prev + 1);
+            toast.success('Cover photo updated successfully!');
+
+            // Refresh profile data
+            await fetchFreelancerData();
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to upload cover photo');
+            console.error('Cover upload error:', error);
+        } finally {
+            setIsUploading(prev => ({ ...prev, cover: false }));
         }
     };
 
@@ -121,6 +224,7 @@ export default function FreelancerProfilePage() {
 
     const handleFollow = (isFollowing: boolean) => {
         console.log('Follow status changed:', isFollowing);
+        // Implement follow logic here
     };
 
     const handleAction = (action: string, data?: any) => {
@@ -140,48 +244,193 @@ export default function FreelancerProfilePage() {
         }
     };
 
-    const getEnhancedProfile = (): Profile => {
-        if (!profile) return profileService.createSafeProfile();
-
+    // Helper function to convert freelancer experience to profile experience
+    const convertToExperience = (exp: any): Experience => {
         return {
-            ...profile,
-            headline: roleSpecificData?.headline || profile.headline,
-            bio: roleSpecificData?.bio || profile.bio,
-            roleSpecific: {
-                ...profile.roleSpecific,
-                skills: roleSpecificData?.skills || profile.roleSpecific.skills || [],
-                education: roleSpecificData?.education || profile.roleSpecific.education || [],
-                experience: roleSpecificData?.experience || profile.roleSpecific.experience || [],
-                certifications: roleSpecificData?.certifications || profile.roleSpecific.certifications || [],
-                portfolio: roleSpecificData?.portfolio || profile.roleSpecific.portfolio || [],
-                // languages: roleSpecificData?.languages || [],
-                // interests: roleSpecificData?.interests || [],
-                // awards: roleSpecificData?.awards || [],
-                // volunteerExperience: roleSpecificData?.volunteerExperience || []
-            }
+            _id: exp._id || '',
+            company: exp.company || '',
+            position: exp.position || '',
+            location: exp.location || '',
+            employmentType: exp.employmentType || 'full-time',
+            startDate: exp.startDate || new Date().toISOString(),
+            endDate: exp.endDate,
+            current: exp.current || false,
+            description: exp.description || '',
+            skills: Array.isArray(exp.skills) ? exp.skills : [],
+            achievements: Array.isArray(exp.achievements) ? exp.achievements : []
         };
     };
 
-    const getFreelancerSpecificData = () => {
+    // Helper function to convert freelancer portfolio to profile portfolio
+    const convertToPortfolioProject = (item: any): PortfolioProject => {
         return {
-            hourlyRate: roleSpecificData?.hourlyRate || 'Not specified',
-            availability: roleSpecificData?.availability?.replace('-', ' ') || 'Not specified',
-            experienceLevel: roleSpecificData?.experienceLevel ?
-                roleSpecificData.experienceLevel.charAt(0).toUpperCase() +
-                roleSpecificData.experienceLevel.slice(1) : 'Not specified'
+            _id: item._id || '',
+            title: item.title || '',
+            description: item.description || '',
+            mediaUrl: item.mediaUrl,
+            mediaUrls: Array.isArray(item.mediaUrls) ? item.mediaUrls :
+                (item.mediaUrl ? [item.mediaUrl] : []),
+            projectUrl: item.projectUrl,
+            category: item.category,
+            technologies: Array.isArray(item.technologies) ? item.technologies : [],
+            budget: item.budget,
+            budgetType: item.budgetType,
+            duration: item.duration,
+            client: item.client,
+            completionDate: item.completionDate,
+            teamSize: item.teamSize,
+            role: item.role,
+            featured: item.featured || false,
+            visibility: item.visibility || 'public',
+            createdAt: item.createdAt || new Date().toISOString(),
+            updatedAt: item.updatedAt || new Date().toISOString()
+        };
+    };
+
+    // Helper function to convert freelancer education to profile education
+    const convertToEducation = (edu: any): Education => {
+        return {
+            _id: edu._id || '',
+            institution: edu.institution || '',
+            degree: edu.degree || '',
+            field: edu.field || '',
+            startDate: edu.startDate || new Date().toISOString(),
+            endDate: edu.endDate,
+            current: edu.current || false,
+            description: edu.description || '',
+            grade: edu.grade
+        };
+    };
+
+    // Helper function to convert freelancer certification to profile certification
+    const convertToCertification = (cert: any): Certification => {
+        return {
+            _id: cert._id || '',
+            name: cert.name || '',
+            issuer: cert.issuer || '',
+            issueDate: cert.issueDate || new Date().toISOString(),
+            expiryDate: cert.expiryDate,
+            credentialId: cert.credentialId,
+            credentialUrl: cert.credentialUrl,
+            description: cert.description
+        };
+    };
+
+    const getEnhancedProfile = (): EnhancedProfile => {
+        if (!profile) return profileService.createSafeProfile() as EnhancedProfile;
+
+        // Convert freelancer data to profile format
+        const freelancerSkills = freelancerProfile?.skills?.map(skill =>
+            typeof skill === 'string' ? skill : skill.name
+        ) || [];
+
+        const roleSpecificSkills = roleSpecificData?.skills || [];
+        const profileSkills = profile.roleSpecific.skills || [];
+
+        // Combine skills from all sources
+        const combinedSkills = [...new Set([
+            ...freelancerSkills,
+            ...roleSpecificSkills,
+            ...profileSkills
+        ])];
+
+        // Convert experience from all sources
+        const freelancerExp = freelancerProfile?.experience?.map(convertToExperience) || [];
+        const roleSpecificExp = (roleSpecificData?.experience || []).map(convertToExperience);
+        const profileExp = profile.roleSpecific.experience || [];
+        const combinedExperience = [...freelancerExp, ...roleSpecificExp, ...profileExp];
+
+        // Convert education from all sources
+        const freelancerEdu = freelancerProfile?.education?.map(convertToEducation) || [];
+        const roleSpecificEdu = (roleSpecificData?.education || []).map(convertToEducation);
+        const profileEdu = profile.roleSpecific.education || [];
+        const combinedEducation = [...freelancerEdu, ...roleSpecificEdu, ...profileEdu];
+
+        // Convert certifications from all sources
+        const freelancerCerts = freelancerProfile?.certifications?.map(convertToCertification) || [];
+        const roleSpecificCerts = (roleSpecificData?.certifications || []).map(convertToCertification);
+        const profileCerts = profile.roleSpecific.certifications || [];
+        const combinedCertifications = [...freelancerCerts, ...roleSpecificCerts, ...profileCerts];
+
+        // Convert portfolio from all sources
+        const freelancerPortfolio = freelancerProfile?.portfolio?.map(convertToPortfolioProject) || [];
+        const roleSpecificPortfolio = (roleSpecificData?.portfolio || []).map(convertToPortfolioProject);
+        const profilePortfolio = profile.roleSpecific.portfolio || [];
+        const combinedPortfolio = [...freelancerPortfolio, ...roleSpecificPortfolio, ...profilePortfolio];
+
+        return {
+            ...profile,
+            headline: freelancerProfile?.freelancerProfile?.headline ||
+                roleSpecificData?.headline ||
+                profile.headline,
+            bio: freelancerProfile?.bio ||
+                roleSpecificData?.bio ||
+                profile.bio,
+            location: freelancerProfile?.location ||
+                roleSpecificData?.location ||
+                profile.location,
+            phone: freelancerProfile?.phone ||
+                roleSpecificData?.phone ||
+                profile.phone,
+            website: freelancerProfile?.website ||
+                roleSpecificData?.website ||
+                profile.website,
+            roleSpecific: {
+                ...profile.roleSpecific,
+                skills: combinedSkills,
+                education: combinedEducation,
+                experience: combinedExperience,
+                certifications: combinedCertifications,
+                portfolio: combinedPortfolio,
+                companyInfo: profile.roleSpecific.companyInfo,
+                freelancerProfile: freelancerProfile?.freelancerProfile ? {
+                    hourlyRate: freelancerProfile.freelancerProfile.hourlyRate,
+                    availability: freelancerProfile.freelancerProfile.availability,
+                    experienceLevel: freelancerProfile.freelancerProfile.experienceLevel,
+                    englishProficiency: freelancerProfile.freelancerProfile.englishProficiency,
+                    timezone: freelancerProfile.freelancerProfile.timezone,
+                    specialization: freelancerProfile.freelancerProfile.specialization,
+                    profileCompletion: freelancerProfile.freelancerProfile.profileCompletion,
+                    totalEarnings: freelancerProfile.freelancerProfile.totalEarnings,
+                    successRate: freelancerProfile.freelancerProfile.successRate,
+                    ratings: freelancerProfile.freelancerProfile.ratings,
+                    profileViews: freelancerProfile.freelancerProfile.profileViews
+                } : undefined
+            }
+        } as EnhancedProfile;
+    };
+
+    const getFreelancerSpecificData = () => {
+        const fp = freelancerProfile?.freelancerProfile;
+
+        return {
+            hourlyRate: fp?.hourlyRate ? `$${fp.hourlyRate}/hr` : 'Not specified',
+            availability: fp?.availability?.replace('-', ' ') || 'Not specified',
+            experienceLevel: fp?.experienceLevel ?
+                fp.experienceLevel.charAt(0).toUpperCase() +
+                fp.experienceLevel.slice(1) : 'Not specified',
+            englishProficiency: fp?.englishProficiency ?
+                fp.englishProficiency.charAt(0).toUpperCase() +
+                fp.englishProficiency.slice(1) : 'Not specified',
+            timezone: fp?.timezone || 'Not specified',
+            specialization: fp?.specialization || []
         };
     };
 
     const calculateAge = (dateOfBirth?: string): number | null => {
         if (!dateOfBirth) return null;
-        const birthDate = new Date(dateOfBirth);
-        const today = new Date();
-        let age = today.getFullYear() - birthDate.getFullYear();
-        const monthDiff = today.getMonth() - birthDate.getMonth();
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-            age--;
+        try {
+            const birthDate = new Date(dateOfBirth);
+            const today = new Date();
+            let age = today.getFullYear() - birthDate.getFullYear();
+            const monthDiff = today.getMonth() - birthDate.getMonth();
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                age--;
+            }
+            return age;
+        } catch {
+            return null;
         }
-        return age;
     };
 
     const getGenderLabel = (gender?: string): string => {
@@ -194,10 +443,28 @@ export default function FreelancerProfilePage() {
         return gender ? labels[gender] || gender : 'Not specified';
     };
 
+    const getOptimizedAvatarUrl = (profile: Profile | null): string => {
+        if (!profile) return profileService.getPlaceholderAvatar('User');
+
+        if (profile.avatar?.secure_url) {
+            return profileService.getOptimizedAvatarUrl(profile.avatar, 'large');
+        }
+        return profile.user.avatar || profileService.getPlaceholderAvatar(profile.user.name);
+    };
+
+    const getOptimizedCoverUrl = (profile: Profile | null): string => {
+        if (!profile) return '';
+
+        if (profile.cover?.secure_url) {
+            return profileService.getOptimizedCoverUrl(profile.cover);
+        }
+        return '';
+    };
+
     const renderTabContent = () => {
         const enhancedProfile = getEnhancedProfile();
         const freelancerData = getFreelancerSpecificData();
-        const age = calculateAge(enhancedProfile.user.dateOfBirth);
+        const age = calculateAge(enhancedProfile.user.dateOfBirth || freelancerProfile?.dateOfBirth);
         const isOwnProfile = true;
 
         switch (activeTab) {
@@ -277,7 +544,7 @@ export default function FreelancerProfilePage() {
                                             <div>
                                                 <div className="text-sm text-gray-600">Hourly Rate</div>
                                                 <div className="font-medium text-gray-900">
-                                                    ${freelancerData.hourlyRate}/hr
+                                                    {freelancerData.hourlyRate}
                                                 </div>
                                             </div>
                                         </div>
@@ -336,14 +603,14 @@ export default function FreelancerProfilePage() {
                                             </div>
                                         )}
 
-                                        {enhancedProfile.user.gender && (
+                                        {freelancerProfile?.gender && (
                                             <div className="flex items-center gap-3">
                                                 <div className="p-2 rounded-lg bg-gray-100">
                                                     <Users className="w-4 h-4 text-gray-600" />
                                                 </div>
                                                 <div>
                                                     <div className="text-sm text-gray-600">Gender</div>
-                                                    <div className="font-medium text-gray-900">{getGenderLabel(enhancedProfile.user.gender)}</div>
+                                                    <div className="font-medium text-gray-900">{getGenderLabel(freelancerProfile.gender)}</div>
                                                 </div>
                                             </div>
                                         )}
@@ -368,7 +635,7 @@ export default function FreelancerProfilePage() {
                                 <div className="mt-8 pt-8 border-t border-gray-200">
                                     <h4 className="font-bold text-gray-900 text-lg mb-4">Skills & Expertise</h4>
                                     <div className="flex flex-wrap gap-2">
-                                        {enhancedProfile.roleSpecific.skills.map((skill, index) => (
+                                        {enhancedProfile.roleSpecific.skills.slice(0, 10).map((skill, index) => (
                                             <span
                                                 key={index}
                                                 className="px-4 py-2 backdrop-blur-md bg-amber-100 text-amber-800 rounded-xl text-sm border border-amber-200 hover:border-amber-500 hover:scale-105 transition-all duration-300"
@@ -376,6 +643,11 @@ export default function FreelancerProfilePage() {
                                                 {skill}
                                             </span>
                                         ))}
+                                        {enhancedProfile.roleSpecific.skills.length > 10 && (
+                                            <span className="px-4 py-2 backdrop-blur-md bg-amber-100 text-amber-800 rounded-xl text-sm border border-amber-200">
+                                                +{enhancedProfile.roleSpecific.skills.length - 10} more
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -385,14 +657,7 @@ export default function FreelancerProfilePage() {
                         {enhancedProfile.roleSpecific.portfolio.length > 0 && (
                             <div className="mt-8">
                                 <FreelancerPortfolioDisplay
-                                    portfolioItems={enhancedProfile.roleSpecific.portfolio.slice(0, 6).map(item => ({
-                                        ...item,
-                                        _id: item._id || '',
-                                        description: item.description || '',
-                                        mediaUrls: item.mediaUrls || (item.mediaUrl ? [item.mediaUrl] : []),
-                                        createdAt: item.createdAt || new Date().toISOString(),
-                                        updatedAt: item.updatedAt || new Date().toISOString()
-                                    } as PortfolioItem))}
+                                    portfolioItems={enhancedProfile.roleSpecific.portfolio.slice(0, 6).map(item => convertToPortfolioProject(item))}
                                     freelancerName={enhancedProfile.user.name}
                                     showFullList={false}
                                     showStats={true}
@@ -434,7 +699,7 @@ export default function FreelancerProfilePage() {
                 );
 
             case 'about':
-                return <ProfileAboutSection profile={enhancedProfile} />;
+                return <ProfileAboutSection profile={getEnhancedProfile()} />;
 
             case 'posts':
                 return profile?.user?._id ? (
@@ -457,7 +722,7 @@ export default function FreelancerProfilePage() {
 
                         <ProfilePostsSection
                             userId={profile.user._id}
-                            isOwnProfile={isOwnProfile}
+                            isOwnProfile={true}
                             currentUserId={user?.id}
                             limit={10}
                             showLoadMore={true}
@@ -479,12 +744,13 @@ export default function FreelancerProfilePage() {
 
                         <ProfileConnectionsSection
                             userId={profile.user._id}
-                            isOwnProfile={isOwnProfile}
+                            isOwnProfile={true}
                         />
                     </div>
                 ) : null;
 
             case 'portfolio':
+                const enhancedProfileForPortfolio = getEnhancedProfile();
                 return (
                     <div className="space-y-8">
                         <div className="flex items-center justify-between">
@@ -505,15 +771,8 @@ export default function FreelancerProfilePage() {
                         </div>
 
                         <FreelancerPortfolioDisplay
-                            portfolioItems={enhancedProfile.roleSpecific.portfolio.map(item => ({
-                                ...item,
-                                _id: item._id || '',
-                                description: item.description || '',
-                                mediaUrls: item.mediaUrls || (item.mediaUrl ? [item.mediaUrl] : []),
-                                createdAt: item.createdAt || new Date().toISOString(),
-                                updatedAt: item.updatedAt || new Date().toISOString()
-                            } as PortfolioItem))}
-                            freelancerName={enhancedProfile.user.name}
+                            portfolioItems={enhancedProfileForPortfolio.roleSpecific.portfolio.map(item => convertToPortfolioProject(item))}
+                            freelancerName={enhancedProfileForPortfolio.user.name}
                             showFullList={true}
                             showStats={true}
                         />
@@ -594,14 +853,15 @@ export default function FreelancerProfilePage() {
                 );
 
             default:
+                const defaultProfile = getEnhancedProfile();
                 return (
                     <ProfileTabContent
                         activeTab={activeTab}
                         userRole="freelancer"
                         profileType="freelancer"
-                        isOwnProfile={isOwnProfile}
+                        isOwnProfile={true}
                         isPremium={profile?.premium?.isPremium || false}
-                        profileData={enhancedProfile}
+                        profileData={defaultProfile}
                         socialStats={profile?.socialStats}
                     />
                 );
@@ -641,7 +901,7 @@ export default function FreelancerProfilePage() {
         );
     }
 
-    if (error) {
+    if (error && !profile) {
         return (
             <SocialDashboardLayout requiredRole="freelancer">
                 <RoleThemeProvider>
@@ -693,6 +953,20 @@ export default function FreelancerProfilePage() {
 
     const isOwnProfile = true;
     const enhancedProfile = getEnhancedProfile();
+    const avatarUrl = getOptimizedAvatarUrl(profile);
+    const coverUrl = getOptimizedCoverUrl(profile);
+
+    const getAvatarWithCacheBust = () => {
+        if (!avatarUrl) return profileService.getPlaceholderAvatar(profile.user.name);
+        const separator = avatarUrl.includes('?') ? '&' : '?';
+        return `${avatarUrl}${separator}_t=${refreshKey}`;
+    };
+
+    const getCoverWithCacheBust = () => {
+        if (!coverUrl) return '';
+        const separator = coverUrl.includes('?') ? '&' : '?';
+        return `${coverUrl}${separator}_t=${refreshKey}`;
+    };
 
     return (
         <SocialDashboardLayout requiredRole="freelancer">
@@ -703,6 +977,10 @@ export default function FreelancerProfilePage() {
                         profile={enhancedProfile}
                         isOwnProfile={isOwnProfile}
                         onFollow={handleFollow}
+                        onRefresh={fetchFreelancerData}
+                        onEditProfile={handleEditProfile}
+                        onAvatarUpload={handleAvatarUpload}
+                        onCoverUpload={handleCoverUpload}
                     />
 
                     {/* Profile Tabs */}

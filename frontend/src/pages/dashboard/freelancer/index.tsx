@@ -147,7 +147,7 @@ const FreelancerDashboard = () => {
                   <div>
                     <div className="flex items-center gap-3 mb-2">
                       <h1 className="text-2xl lg:text-3xl font-bold">
-                        Welcome back, {userProfile.name}!
+                        Welcome Back, {userProfile.name}!
                       </h1>
                       {/* Verification Badge */}
                       {!verificationLoading && (

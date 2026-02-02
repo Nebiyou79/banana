@@ -103,6 +103,94 @@ const portfolioItemSchema = new mongoose.Schema({
   completionDate: { type: Date }
 }, { timestamps: true });
 
+// UPDATED: Local storage CV schema (removed Cloudinary fields)
+const cvSchema = new mongoose.Schema({
+  // Local file storage info
+  fileName: {
+    type: String,
+    required: [true, 'File name is required'],
+    trim: true,
+    index: true
+  },
+  originalName: {
+    type: String,
+    required: [true, 'Original filename is required'],
+    trim: true
+  },
+  filePath: {
+    type: String,
+    required: [true, 'File path is required']
+  },
+  fileUrl: {
+    type: String,
+    required: [true, 'File URL is required']
+  },
+  downloadUrl: {
+    type: String,
+    required: [true, 'Download URL is required']
+  },
+  
+  // File metadata
+  mimetype: {
+    type: String,
+    required: [true, 'MIME type is required'],
+    enum: {
+      values: [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.oasis.opendocument.text',
+        'text/plain',
+        'application/rtf'
+      ],
+      message: 'Invalid CV file type. Allowed: PDF, DOC, DOCX, ODT, TXT, RTF'
+    }
+  },
+  size: {
+    type: Number,
+    required: [true, 'File size is required'],
+    min: [100, 'File must be at least 100 bytes'],
+    max: [100 * 1024 * 1024, 'File cannot exceed 100MB'] // Updated to 100MB from env
+  },
+  
+  // File info
+  fileExtension: {
+    type: String,
+    required: [true, 'File extension is required'],
+    enum: ['pdf', 'doc', 'docx', 'odt', 'txt', 'rtf']
+  },
+  
+  // Metadata
+  uploadedAt: {
+    type: Date,
+    default: Date.now,
+    index: true
+  },
+  isPrimary: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  description: {
+    type: String,
+    trim: true,
+    maxlength: 500
+  },
+  
+  // Statistics
+  downloadCount: {
+    type: Number,
+    default: 0
+  },
+  viewCount: {
+    type: Number,
+    default: 0
+  }
+}, {
+  _id: true,
+  timestamps: true
+});
+
 const userSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -198,57 +286,51 @@ const userSchema = new mongoose.Schema({
   education: [educationSchema],
   experience: [experienceSchema],
   certifications: [certificationSchema],
-  cvUrl: {
-    type: String,
-    trim: true,
-    validate: {
-      validator: function (value) {
-        return !value || validator.isURL(value, { protocols: ['http', 'https'], require_protocol: true });
-      },
-      message: 'Invalid CV URL'
-    }
-  },
+
   company: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Company'
   },
-  cvs: [{
-    filename: String,
-    originalName: String,
-    path: String,
-    uploadedAt: {
-      type: Date,
-      default: Date.now
-    },
-    isPrimary: {
-      type: Boolean,
-      default: false
-    }
-  }],
-  portfolio: [portfolioItemSchema],
 
+  portfolio: [portfolioItemSchema],
+  
+  // UPDATED: Local storage CVs array
+  cvs: [cvSchema],
+  
+  // Images still use Cloudinary
   avatar: {
     type: String,
+    default: null
+  },
+  avatarPublicId: {  // NEW FIELD: Store Cloudinary public_id
+    type: String,
+    default: null
   },
   coverPhoto: {
     type: String,
+    default: null
+  },
+  coverPhotoPublicId: {  // NEW FIELD: Store Cloudinary public_id
+    type: String,
+    default: null
   },
   location: {
     type: String,
     trim: true,
     maxlength: 100
   },
-  phone: {
-    type: String,
-    trim: true,
-    validate: {
-      validator: function (value) {
-        if (!value) return true;
-        return /^\+?[1-9]\d{7,14}$/.test(value);
-      },
-      message: 'Invalid phone number'
-    }
-  },
+phone: {
+  type: String,
+  trim: true,
+  validate: {
+    validator: function (value) {
+      if (!value) return true;
+      // Allow numbers starting with 0, and international format with +
+      return /^\+?[0-9]\d{7,14}$/.test(value);
+    },
+    message: 'Invalid phone number. Must be 8-15 digits, can start with 0 or +'
+  }
+},
   website: {
     type: String,
     validate: {
@@ -490,6 +572,7 @@ userSchema.methods.updateSocialStats = async function () {
 
   return this.save();
 };
+
 // Add method to check verification status
 userSchema.methods.updateVerificationStatus = function () {
   const { profileVerified, socialVerified, documentsVerified } = this.verificationDetails;
@@ -525,4 +608,118 @@ userSchema.methods.getVerificationMessage = function () {
       return 'Both The Profile and SocialProfile are not verified. Complete your Verification';
   }
 };
+
+// UPDATED: Helper method to add CV (local storage)
+userSchema.methods.addCV = async function (cvData) {
+  const maxCVs = 10;
+  if (this.cvs.length >= maxCVs) {
+    throw new Error(`Maximum ${maxCVs} CVs allowed per user`);
+  }
+
+  // If this is the first CV, set it as primary
+  if (this.cvs.length === 0) {
+    cvData.isPrimary = true;
+  }
+
+  this.cvs.push(cvData);
+  return this.save();
+};
+
+// UPDATED: Helper method to remove CV (local storage)
+userSchema.methods.removeCV = async function (cvId) {
+  const cvIndex = this.cvs.findIndex(cv => cv._id.toString() === cvId);
+  if (cvIndex === -1) {
+    throw new Error('CV not found');
+  }
+
+  const cvToDelete = this.cvs[cvIndex];
+  const wasPrimary = cvToDelete.isPrimary;
+
+  this.cvs.splice(cvIndex, 1);
+
+  // If we deleted the primary CV and there are other CVs, set the first one as primary
+  if (wasPrimary && this.cvs.length > 0) {
+    this.cvs[0].isPrimary = true;
+  }
+
+  return this.save();
+};
+
+// Helper method to set primary CV
+userSchema.methods.setPrimaryCV = async function (cvId) {
+  this.cvs.forEach(cv => {
+    cv.isPrimary = cv._id.toString() === cvId;
+  });
+
+  return this.save();
+};
+
+// Helper method to get CV by ID
+userSchema.methods.getCVById = function (cvId) {
+  return this.cvs.id(cvId);
+};
+
+// UPDATED: Method to increment CV download count
+userSchema.methods.incrementCVDownloadCount = async function (cvId) {
+  const cv = this.cvs.id(cvId);
+  if (cv) {
+    cv.downloadCount = (cv.downloadCount || 0) + 1;
+    return this.save();
+  }
+  throw new Error('CV not found');
+};
+
+// UPDATED: Method to increment CV view count
+userSchema.methods.incrementCVViewCount = async function (cvId) {
+  const cv = this.cvs.id(cvId);
+  if (cv) {
+    cv.viewCount = (cv.viewCount || 0) + 1;
+    return this.save();
+  }
+  throw new Error('CV not found');
+};
+
+// UPDATED: Method to check if user can add more CVs
+userSchema.methods.canAddCV = function () {
+  const maxCVs = 10;
+  return this.cvs.length < maxCVs;
+};
+
+// UPDATED: Method to get primary CV
+userSchema.methods.getPrimaryCV = function () {
+  return this.cvs.find(cv => cv.isPrimary) || (this.cvs.length > 0 ? this.cvs[0] : null);
+};
+
+// UPDATED: Method to format CVs for response (local storage)
+userSchema.methods.formatCVsForResponse = function () {
+  return this.cvs.map(cv => ({
+    _id: cv._id,
+    fileName: cv.fileName,
+    originalName: cv.originalName,
+    filePath: cv.filePath,
+    fileUrl: cv.fileUrl,
+    downloadUrl: cv.downloadUrl,
+    size: cv.size,
+    uploadedAt: cv.uploadedAt,
+    isPrimary: cv.isPrimary,
+    mimetype: cv.mimetype,
+    fileExtension: cv.fileExtension,
+    description: cv.description,
+    downloadCount: cv.downloadCount || 0,
+    viewCount: cv.viewCount || 0
+  }));
+};
+
+// UPDATED: Method to get CV by ID with URLs (local storage)
+userSchema.methods.getCVByIdWithUrls = function (cvId) {
+  const cv = this.cvs.id(cvId);
+  if (!cv) return null;
+
+  return {
+    ...cv.toObject(),
+    downloadUrl: cv.downloadUrl,
+    viewUrl: cv.fileUrl
+  };
+};
+
 module.exports = mongoose.model('User', userSchema);

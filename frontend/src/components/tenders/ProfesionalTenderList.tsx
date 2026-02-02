@@ -6,10 +6,10 @@ import { TenderFilter } from '@/services/tenderService';
 import ProfessionalTenderCard from './ProfesionalTenderCard';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Alert, AlertDescription } from '@/components/ui/Alert';
-import { 
-  Search, 
-  Filter, 
-  Calendar, 
+import {
+  Search,
+  Filter,
+  Calendar,
   FileText,
   Banknote,
   ChevronLeft,
@@ -28,12 +28,13 @@ import { Badge } from '@/components/ui/Badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Switch } from '@/components/ui/Switch';
 import { Label } from '@/components/ui/Label';
+import { cn } from '@/lib/utils';
 
 const ProfessionalTenderList: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showFilters, setShowFilters] = useState(true);
   const [showStats, setShowStats] = useState(true);
-  
+
   const {
     tenders,
     isLoading,
@@ -43,7 +44,7 @@ const ProfessionalTenderList: React.FC = () => {
     pagination,
     setPage,
     setLimit
-  } = useTenders({ 
+  } = useTenders({
     tenderCategory: 'professional',
     status: 'published',
     sortBy: 'createdAt',
@@ -72,9 +73,9 @@ const ProfessionalTenderList: React.FC = () => {
 
   const hasActiveFilters = () => {
     return !!(
-      filters.search || 
-      filters.workflowType || 
-      filters.procurementMethod || 
+      filters.search ||
+      filters.workflowType ||
+      filters.procurementMethod ||
       filters.visibilityType ||
       filters.cpoRequired !== undefined ||
       filters.dateFrom ||
@@ -87,7 +88,7 @@ const ProfessionalTenderList: React.FC = () => {
     total: pagination.total,
     openBids: tenders.filter(t => t.workflowType === 'open').length,
     cpoRequired: tenders.filter(t => t.professionalSpecific?.cpoRequired).length,
-    urgent: tenders.filter(t => 
+    urgent: tenders.filter(t =>
       new Date(t.deadline).getTime() - Date.now() < 3 * 24 * 60 * 60 * 1000
     ).length,
     sealedBids: tenders.filter(t => t.workflowType === 'closed').length,
@@ -118,27 +119,31 @@ const ProfessionalTenderList: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         {/* Skeleton Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-12 rounded-lg" />
+            <Skeleton key={i} className="h-10 sm:h-12 rounded-lg" />
           ))}
         </div>
-        
+
         {/* Skeleton Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-24 rounded-xl" />
+            <Skeleton key={i} className="h-20 sm:h-24 rounded-xl" />
           ))}
         </div>
-        
+
         {/* Skeleton Grid */}
-        <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
+        <div className={cn(
+          "grid gap-4 sm:gap-6",
+          viewMode === 'grid' ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"
+        )}>
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="space-y-4">
-              <Skeleton className={`${viewMode === 'grid' ? 'h-[450px]' : 'h-[250px]'} rounded-xl`} />
-            </div>
+            <Skeleton key={i} className={cn(
+              "rounded-xl",
+              viewMode === 'grid' ? "h-64 sm:h-[450px]" : "h-32 sm:h-[250px]"
+            )} />
           ))}
         </div>
       </div>
@@ -147,26 +152,26 @@ const ProfessionalTenderList: React.FC = () => {
 
   if (tenders.length === 0) {
     return (
-      <div className="text-center py-16 px-4">
-        <div className="mx-auto w-24 h-24 rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 flex items-center justify-center mb-6">
-          <Search className="h-12 w-12 text-blue-600 dark:text-blue-400" />
+      <div className="text-center py-12 sm:py-16 px-4">
+        <div className="mx-auto w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 flex items-center justify-center mb-6">
+          <Search className="h-10 w-10 sm:h-12 sm:w-12 text-blue-600 dark:text-blue-400" />
         </div>
-        <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">
+        <h3 className="text-xl sm:text-2xl font-bold text-text-primary mb-3">
           {hasActiveFilters() ? 'No Matching Tenders Found' : 'No Procurement Opportunities Available'}
         </h3>
-        <p className="text-gray-600 dark:text-gray-400 max-w-lg mx-auto mb-8">
-          {hasActiveFilters() 
+        <p className="text-text-secondary max-w-lg mx-auto mb-8">
+          {hasActiveFilters()
             ? 'Try adjusting your filters or check back later for new opportunities.'
             : 'There are currently no professional tenders available. New opportunities are added regularly.'
           }
         </p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
           {hasActiveFilters() ? (
             <>
               <Button
                 onClick={handleClearFilters}
                 variant="default"
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
               >
                 <X className="h-4 w-4 mr-2" />
                 Clear All Filters
@@ -174,7 +179,7 @@ const ProfessionalTenderList: React.FC = () => {
               <Button
                 onClick={() => setShowFilters(true)}
                 variant="outline"
-                className="border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                className="border-border-primary text-text-secondary hover:bg-bg-secondary"
               >
                 <Filter className="h-4 w-4 mr-2" />
                 Adjust Filters
@@ -185,17 +190,18 @@ const ProfessionalTenderList: React.FC = () => {
               <Button
                 onClick={() => window.location.reload()}
                 variant="default"
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
               >
                 <Search className="h-4 w-4 mr-2" />
                 Refresh
               </Button>
               <Button
                 variant="outline"
-                className="border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                className="border-border-primary text-text-secondary hover:bg-bg-secondary"
               >
                 <FileText className="h-4 w-4 mr-2" />
-                Subscribe to Notifications
+                <span className="hidden sm:inline">Subscribe to Notifications</span>
+                <span className="sm:hidden">Subscribe</span>
               </Button>
             </>
           )}
@@ -205,40 +211,41 @@ const ProfessionalTenderList: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Procurement Tenders</h2>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
+          <h2 className="text-xl sm:text-2xl font-bold text-text-primary">Procurement Tenders</h2>
+          <p className="text-text-secondary text-sm sm:text-base mt-1">
             Professional bidding opportunities for registered companies
           </p>
         </div>
-        
-        <div className="flex items-center gap-3">
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
           {/* View Controls */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between w-full sm:w-auto gap-4">
             <div className="flex items-center gap-2">
-              <Switch 
-                id="show-stats" 
+              <Switch
+                id="show-stats"
                 checked={showStats}
                 onCheckedChange={setShowStats}
               />
-              <Label htmlFor="show-stats" className="text-sm text-gray-600 dark:text-gray-400">
+              <Label htmlFor="show-stats" className="text-sm text-text-secondary">
                 Show Stats
               </Label>
             </div>
-            
-            <div className="flex items-center gap-2 p-1 rounded-lg bg-gray-100 dark:bg-gray-800">
+
+            <div className="flex items-center gap-1 p-1 rounded-lg bg-bg-secondary">
               <Button
                 variant={viewMode === 'grid' ? 'default' : 'ghost'}
                 size="icon"
                 onClick={() => setViewMode('grid')}
-                className={`h-8 w-8 ${
-                  viewMode === 'grid' 
-                    ? 'bg-white dark:bg-gray-700 shadow-sm' 
-                    : 'text-gray-500 dark:text-gray-400'
-                }`}
+                className={cn(
+                  "h-8 w-8",
+                  viewMode === 'grid'
+                    ? 'bg-bg-primary text-text-primary shadow-sm'
+                    : 'text-text-muted hover:text-text-primary'
+                )}
               >
                 <Grid3x3 className="h-4 w-4" />
               </Button>
@@ -246,23 +253,24 @@ const ProfessionalTenderList: React.FC = () => {
                 variant={viewMode === 'list' ? 'default' : 'ghost'}
                 size="icon"
                 onClick={() => setViewMode('list')}
-                className={`h-8 w-8 ${
-                  viewMode === 'list' 
-                    ? 'bg-white dark:bg-gray-700 shadow-sm' 
-                    : 'text-gray-500 dark:text-gray-400'
-                }`}
+                className={cn(
+                  "h-8 w-8",
+                  viewMode === 'list'
+                    ? 'bg-bg-primary text-text-primary shadow-sm'
+                    : 'text-text-muted hover:text-text-primary'
+                )}
               >
                 <List className="h-4 w-4" />
               </Button>
             </div>
           </div>
-          
+
           {/* Filters Toggle */}
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowFilters(!showFilters)}
-            className="border-gray-200 dark:border-gray-700"
+            className="border-border-primary w-full sm:w-auto"
           >
             <Filter className="h-4 w-4 mr-2" />
             {showFilters ? 'Hide' : 'Show'} Filters
@@ -277,10 +285,10 @@ const ProfessionalTenderList: React.FC = () => {
 
       {/* Filters */}
       {showFilters && (
-        <div className="p-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="p-4 sm:p-6 rounded-xl border border-border-secondary bg-bg-secondary/50 dark:bg-bg-surface/50">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Left Column */}
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {/* Search */}
               <div className="space-y-2">
                 <Label htmlFor="search" className="text-sm font-medium">
@@ -288,19 +296,19 @@ const ProfessionalTenderList: React.FC = () => {
                   Search Tenders
                 </Label>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-text-muted" />
                   <Input
                     id="search"
                     placeholder="Search by title, reference, or entity..."
                     value={filters.search || ''}
                     onChange={(e) => updateFilters({ search: e.target.value })}
-                    className="pl-10 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900"
+                    className="pl-10 border-border-primary bg-bg-primary"
                   />
                 </div>
               </div>
 
               {/* Procurement Method & Workflow */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-2">
                   <Label className="text-sm font-medium flex items-center gap-2">
                     <FileText className="h-4 w-4" />
@@ -308,11 +316,11 @@ const ProfessionalTenderList: React.FC = () => {
                   </Label>
                   <Select
                     value={filters.procurementMethod || 'all'}
-                    onValueChange={(value) => updateFilters({ 
+                    onValueChange={(value) => updateFilters({
                       procurementMethod: value === 'all' ? undefined : value
                     })}
                   >
-                    <SelectTrigger className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900">
+                    <SelectTrigger className="border-border-primary bg-bg-primary">
                       <SelectValue placeholder="All Methods" />
                     </SelectTrigger>
                     <SelectContent>
@@ -332,11 +340,11 @@ const ProfessionalTenderList: React.FC = () => {
                   </Label>
                   <Select
                     value={filters.workflowType || 'all'}
-                    onValueChange={(value) => updateFilters({ 
-                      workflowType: value === 'all' ? undefined : value as any 
+                    onValueChange={(value) => updateFilters({
+                      workflowType: value === 'all' ? undefined : value as any
                     })}
                   >
-                    <SelectTrigger className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900">
+                    <SelectTrigger className="border-border-primary bg-bg-primary">
                       <SelectValue placeholder="All Types" />
                     </SelectTrigger>
                     <SelectContent>
@@ -349,7 +357,7 @@ const ProfessionalTenderList: React.FC = () => {
               </div>
 
               {/* Visibility & CPO */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-2">
                   <Label className="text-sm font-medium flex items-center gap-2">
                     <Globe className="h-4 w-4" />
@@ -357,11 +365,11 @@ const ProfessionalTenderList: React.FC = () => {
                   </Label>
                   <Select
                     value={filters.visibilityType || 'all'}
-                    onValueChange={(value) => updateFilters({ 
+                    onValueChange={(value) => updateFilters({
                       visibilityType: value === 'all' ? undefined : value
                     })}
                   >
-                    <SelectTrigger className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900">
+                    <SelectTrigger className="border-border-primary bg-bg-primary">
                       <SelectValue placeholder="All Visibility" />
                     </SelectTrigger>
                     <SelectContent>
@@ -386,7 +394,7 @@ const ProfessionalTenderList: React.FC = () => {
                       else handleCPOFilter(false);
                     }}
                   >
-                    <SelectTrigger className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900">
+                    <SelectTrigger className="border-border-primary bg-bg-primary">
                       <SelectValue placeholder="CPO Status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -400,23 +408,23 @@ const ProfessionalTenderList: React.FC = () => {
             </div>
 
             {/* Right Column */}
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {/* Status Filter */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Status Filter</Label>
-                <Tabs 
-                  value={filters.status || 'published'} 
+                <Label className="text-sm font-medium text-text-primary">Status Filter</Label>
+                <Tabs
+                  value={filters.status || 'published'}
                   onValueChange={handleStatusFilter}
                   className="w-full"
                 >
-                  <TabsList className="grid grid-cols-3 w-full bg-gray-100 dark:bg-gray-800">
-                    <TabsTrigger value="all" className="data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700">
+                  <TabsList className="grid grid-cols-3 w-full bg-bg-secondary dark:bg-bg-surface">
+                    <TabsTrigger value="all" className="data-[state=active]:bg-bg-primary dark:data-[state=active]:bg-bg-primary">
                       All
                     </TabsTrigger>
-                    <TabsTrigger value="published" className="data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700">
+                    <TabsTrigger value="published" className="data-[state=active]:bg-bg-primary dark:data-[state=active]:bg-bg-primary">
                       Active
                     </TabsTrigger>
-                    <TabsTrigger value="deadline_reached" className="data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700">
+                    <TabsTrigger value="deadline_reached" className="data-[state=active]:bg-bg-primary dark:data-[state=active]:bg-bg-primary">
                       Expired
                     </TabsTrigger>
                   </TabsList>
@@ -424,14 +432,14 @@ const ProfessionalTenderList: React.FC = () => {
               </div>
 
               {/* Results & Sort */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Items per page</Label>
+                  <Label className="text-sm font-medium text-text-primary">Items per page</Label>
                   <Select
                     value={filters.limit?.toString() || '12'}
                     onValueChange={(value) => setLimit(Number(value))}
                   >
-                    <SelectTrigger className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900">
+                    <SelectTrigger className="border-border-primary bg-bg-primary">
                       <SelectValue placeholder="Per page" />
                     </SelectTrigger>
                     <SelectContent>
@@ -444,12 +452,12 @@ const ProfessionalTenderList: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Sort by</Label>
+                  <Label className="text-sm font-medium text-text-primary">Sort by</Label>
                   <Select
                     value={filters.sortBy || 'createdAt'}
                     onValueChange={(value) => updateFilters({ sortBy: value })}
                   >
-                    <SelectTrigger className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900">
+                    <SelectTrigger className="border-border-primary bg-bg-primary">
                       <SelectValue placeholder="Sort by" />
                     </SelectTrigger>
                     <SelectContent>
@@ -464,9 +472,9 @@ const ProfessionalTenderList: React.FC = () => {
 
               {/* Active Filters */}
               {hasActiveFilters() && (
-                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="pt-3 sm:pt-4 border-t border-border-secondary">
                   <div className="flex items-center justify-between mb-2">
-                    <Label className="text-sm font-medium">Active Filters</Label>
+                    <Label className="text-sm font-medium text-text-primary">Active Filters</Label>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -479,12 +487,12 @@ const ProfessionalTenderList: React.FC = () => {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {filters.search && (
-                      <Badge variant="secondary" className="pl-3 pr-1 py-1">
-                        Search: `{filters.search}`
+                      <Badge variant="secondary" className="pl-3 pr-1 py-1 bg-bg-secondary text-text-primary">
+                        Search: `{filters.search.substring(0, 15)}${filters.search.length > 15 ? '...' : ''}`
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-4 w-4 p-0 ml-2"
+                          className="h-4 w-4 p-0 ml-2 hover:bg-transparent"
                           onClick={() => updateFilters({ search: undefined })}
                         >
                           <X className="h-3 w-3" />
@@ -492,12 +500,12 @@ const ProfessionalTenderList: React.FC = () => {
                       </Badge>
                     )}
                     {filters.procurementMethod && (
-                      <Badge variant="secondary" className="pl-3 pr-1 py-1">
+                      <Badge variant="secondary" className="pl-3 pr-1 py-1 bg-bg-secondary text-text-primary">
                         {filters.procurementMethod.replace('_', ' ')}
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-4 w-4 p-0 ml-2"
+                          className="h-4 w-4 p-0 ml-2 hover:bg-transparent"
                           onClick={() => updateFilters({ procurementMethod: undefined })}
                         >
                           <X className="h-3 w-3" />
@@ -505,12 +513,12 @@ const ProfessionalTenderList: React.FC = () => {
                       </Badge>
                     )}
                     {filters.workflowType && (
-                      <Badge variant="secondary" className="pl-3 pr-1 py-1">
+                      <Badge variant="secondary" className="pl-3 pr-1 py-1 bg-bg-secondary text-text-primary">
                         {filters.workflowType === 'open' ? 'Open Bid' : 'Sealed Bid'}
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-4 w-4 p-0 ml-2"
+                          className="h-4 w-4 p-0 ml-2 hover:bg-transparent"
                           onClick={() => updateFilters({ workflowType: undefined })}
                         >
                           <X className="h-3 w-3" />
@@ -518,12 +526,12 @@ const ProfessionalTenderList: React.FC = () => {
                       </Badge>
                     )}
                     {filters.visibilityType && (
-                      <Badge variant="secondary" className="pl-3 pr-1 py-1">
+                      <Badge variant="secondary" className="pl-3 pr-1 py-1 bg-bg-secondary text-text-primary">
                         {filters.visibilityType.replace('_', ' ')}
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-4 w-4 p-0 ml-2"
+                          className="h-4 w-4 p-0 ml-2 hover:bg-transparent"
                           onClick={() => updateFilters({ visibilityType: undefined })}
                         >
                           <X className="h-3 w-3" />
@@ -531,12 +539,12 @@ const ProfessionalTenderList: React.FC = () => {
                       </Badge>
                     )}
                     {filters.cpoRequired !== undefined && (
-                      <Badge variant="secondary" className="pl-3 pr-1 py-1">
+                      <Badge variant="secondary" className="pl-3 pr-1 py-1 bg-bg-secondary text-text-primary">
                         {filters.cpoRequired ? 'CPO Required' : 'No CPO'}
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-4 w-4 p-0 ml-2"
+                          className="h-4 w-4 p-0 ml-2 hover:bg-transparent"
                           onClick={() => updateFilters({ cpoRequired: undefined })}
                         >
                           <X className="h-3 w-3" />
@@ -553,93 +561,93 @@ const ProfessionalTenderList: React.FC = () => {
 
       {/* Stats */}
       {showStats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-3 sm:p-4 rounded-xl border border-blue-100 dark:border-blue-800">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Tenders</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.total}</p>
+                <p className="text-sm font-medium text-text-secondary">Total Tenders</p>
+                <p className="text-xl sm:text-2xl font-bold text-text-primary">{stats.total}</p>
               </div>
-              <div className="p-2 rounded-lg bg-white dark:bg-gray-800 shadow-sm">
-                <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <div className="p-1.5 sm:p-2 rounded-lg bg-bg-primary dark:bg-bg-surface shadow-sm">
+                <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
-            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <div className="mt-1 sm:mt-2 text-xs text-text-muted">
               {stats.openBids} open • {stats.sealedBids} sealed
             </div>
           </div>
-          
-          <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-4 rounded-xl border border-purple-100 dark:border-purple-800">
+
+          <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-3 sm:p-4 rounded-xl border border-purple-100 dark:border-purple-800">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">CPO Required</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.cpoRequired}</p>
+                <p className="text-sm font-medium text-text-secondary">CPO Required</p>
+                <p className="text-xl sm:text-2xl font-bold text-text-primary">{stats.cpoRequired}</p>
               </div>
-              <div className="p-2 rounded-lg bg-white dark:bg-gray-800 shadow-sm">
-                <Banknote className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              <div className="p-1.5 sm:p-2 rounded-lg bg-bg-primary dark:bg-bg-surface shadow-sm">
+                <Banknote className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 dark:text-purple-400" />
               </div>
             </div>
-            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <div className="mt-1 sm:mt-2 text-xs text-text-muted">
               {Math.round((stats.cpoRequired / stats.total) * 100) || 0}% of tenders
             </div>
           </div>
-          
-          <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 p-4 rounded-xl border border-amber-100 dark:border-amber-800">
+
+          <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 p-3 sm:p-4 rounded-xl border border-amber-100 dark:border-amber-800">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Urgent Tenders</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.urgent}</p>
+                <p className="text-sm font-medium text-text-secondary">Urgent Tenders</p>
+                <p className="text-xl sm:text-2xl font-bold text-text-primary">{stats.urgent}</p>
               </div>
-              <div className="p-2 rounded-lg bg-white dark:bg-gray-800 shadow-sm">
-                <Calendar className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <div className="p-1.5 sm:p-2 rounded-lg bg-bg-primary dark:bg-bg-surface shadow-sm">
+                <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 dark:text-amber-400" />
               </div>
             </div>
-            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <div className="mt-1 sm:mt-2 text-xs text-text-muted">
               Ends within 3 days
             </div>
           </div>
-          
-          <div className="bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 p-4 rounded-xl border border-emerald-100 dark:border-emerald-800">
+
+          <div className="bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 p-3 sm:p-4 rounded-xl border border-emerald-100 dark:border-emerald-800">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Avg. Proposals</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.avgProposals}</p>
+                <p className="text-sm font-medium text-text-secondary">Avg. Proposals</p>
+                <p className="text-xl sm:text-2xl font-bold text-text-primary">{stats.avgProposals}</p>
               </div>
-              <div className="p-2 rounded-lg bg-white dark:bg-gray-800 shadow-sm">
-                <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              <div className="p-1.5 sm:p-2 rounded-lg bg-bg-primary dark:bg-bg-surface shadow-sm">
+                <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600 dark:text-emerald-400" />
               </div>
             </div>
-            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <div className="mt-1 sm:mt-2 text-xs text-text-muted">
               {stats.avgViews} avg. views per tender
             </div>
           </div>
-          
+
           {/* Additional Stats */}
-          <div className="md:col-span-2 lg:col-span-4 p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="sm:col-span-2 lg:col-span-4 p-3 sm:p-4 rounded-xl border border-border-secondary bg-bg-secondary/50 dark:bg-bg-surface/50">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
               <div className="text-center">
-                <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                <div className="text-base sm:text-lg font-bold text-text-primary">
                   {stats.mostCommonMethod}
                 </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Most Common Method</div>
+                <div className="text-xs text-text-muted">Most Common Method</div>
               </div>
               <div className="text-center">
-                <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                <div className="text-base sm:text-lg font-bold text-text-primary">
                   {tenders.filter(t => t.visibility.visibilityType === 'public').length}
                 </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Public Tenders</div>
+                <div className="text-xs text-text-muted">Public Tenders</div>
               </div>
               <div className="text-center">
-                <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                <div className="text-base sm:text-lg font-bold text-text-primary">
                   {tenders.filter(t => t.visibility.visibilityType === 'invite_only').length}
                 </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Invite Only</div>
+                <div className="text-xs text-text-muted">Invite Only</div>
               </div>
               <div className="text-center">
-                <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                <div className="text-base sm:text-lg font-bold text-text-primary">
                   {new Set(tenders.map(t => t.ownerEntity._id)).size}
                 </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Unique Entities</div>
+                <div className="text-xs text-text-muted">Unique Entities</div>
               </div>
             </div>
           </div>
@@ -647,13 +655,11 @@ const ProfessionalTenderList: React.FC = () => {
       )}
 
       {/* Tender Grid/List */}
-      <div className={`
-        ${viewMode === 'grid' 
-          ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3' 
-          : 'grid grid-cols-1'
-        } 
-        gap-6
-      `}>
+      <div className={cn(
+        viewMode === 'grid'
+          ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6'
+          : 'grid grid-cols-1 gap-4 sm:gap-6'
+      )}>
         {tenders.map((tender) => (
           <ProfessionalTenderCard key={tender._id} tender={tender} />
         ))}
@@ -661,25 +667,25 @@ const ProfessionalTenderList: React.FC = () => {
 
       {/* Pagination */}
       {pagination.pages > 1 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
-          <div className="text-sm text-gray-600 dark:text-gray-400">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 sm:pt-6 border-t border-border-secondary">
+          <div className="text-sm text-text-secondary">
             Showing <span className="font-semibold">{(pagination.page - 1) * pagination.limit + 1}</span> to{' '}
             <span className="font-semibold">{Math.min(pagination.page * pagination.limit, pagination.total)}</span> of{' '}
             <span className="font-semibold">{pagination.total}</span> results
           </div>
-          
-          <div className="flex items-center gap-2">
+
+          <div className="flex items-center gap-1 sm:gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setPage(pagination.page - 1)}
               disabled={pagination.page === 1}
-              className="border-gray-300 dark:border-gray-600"
+              className="border-border-primary disabled:opacity-50"
             >
               <ChevronLeft className="h-4 w-4 mr-2" />
               Previous
             </Button>
-            
+
             <div className="flex items-center gap-1">
               {[...Array(Math.min(5, pagination.pages))].map((_, i) => {
                 let pageNum;
@@ -692,55 +698,53 @@ const ProfessionalTenderList: React.FC = () => {
                 } else {
                   pageNum = pagination.page - 2 + i;
                 }
-                
+
                 if (pageNum > pagination.pages || pageNum < 1) return null;
-                
+
                 return (
                   <Button
                     key={pageNum}
                     variant={pagination.page === pageNum ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setPage(pageNum)}
-                    className={`
-                      h-8 w-8 p-0
-                      ${pagination.page === pageNum 
-                        ? 'bg-blue-600 hover:bg-blue-700 border-blue-600' 
-                        : 'border-gray-300 dark:border-gray-600'
-                      }
-                    `}
+                    className={cn(
+                      "h-8 w-8 sm:h-9 sm:w-9 p-0",
+                      pagination.page === pageNum
+                        ? 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 text-white'
+                        : 'border-border-primary'
+                    )}
                   >
                     {pageNum}
                   </Button>
                 );
               })}
-              
+
               {pagination.pages > 5 && (
                 <>
-                  <span className="px-2 text-gray-500">...</span>
+                  <span className="px-2 text-text-muted">...</span>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setPage(pagination.pages)}
-                    className={`
-                      h-8 w-8 p-0
-                      ${pagination.page === pagination.pages 
-                        ? 'bg-blue-600 hover:bg-blue-700 border-blue-600' 
-                        : 'border-gray-300 dark:border-gray-600'
-                      }
-                    `}
+                    className={cn(
+                      "h-8 w-8 sm:h-9 sm:w-9 p-0",
+                      pagination.page === pagination.pages
+                        ? 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 text-white'
+                        : 'border-border-primary'
+                    )}
                   >
                     {pagination.pages}
                   </Button>
                 </>
               )}
             </div>
-            
+
             <Button
               variant="outline"
               size="sm"
               onClick={() => setPage(pagination.page + 1)}
               disabled={pagination.page === pagination.pages}
-              className="border-gray-300 dark:border-gray-600"
+              className="border-border-primary disabled:opacity-50"
             >
               Next
               <ChevronRight className="h-4 w-4 ml-2" />
