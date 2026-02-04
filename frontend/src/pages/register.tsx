@@ -319,9 +319,6 @@ export default function RegisterPage() {
                       </FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                            <User className={`w-5 h-5 ${colorClasses.text.gray400}`} />
-                          </div>
                           <Input
                             placeholder="Enter your full name"
                             disabled={isLoading}
@@ -353,9 +350,6 @@ export default function RegisterPage() {
                       </FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                            <Mail className={`w-5 h-5 ${colorClasses.text.gray400}`} />
-                          </div>
                           <Input
                             placeholder="Enter your email address"
                             type="email"
@@ -389,9 +383,6 @@ export default function RegisterPage() {
                       </FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                            <Lock className={`w-5 h-5 ${colorClasses.text.gray400}`} />
-                          </div>
                           <Input
                             placeholder="Create a strong password"
                             type={showPassword ? 'text' : 'password'}
@@ -432,11 +423,11 @@ export default function RegisterPage() {
                               <div
                                 key={i}
                                 className={`h-2 flex-1 rounded-full ${i <= passwordStrength
-                                    ? passwordStrength === 1 ? 'bg-red-400'
-                                      : passwordStrength === 2 ? 'bg-orange-400'
-                                        : passwordStrength === 3 ? 'bg-yellow-400'
-                                          : 'bg-green-400'
-                                    : `${colorClasses.bg.gray400} dark:${colorClasses.bg.gray800}`
+                                  ? passwordStrength === 1 ? 'bg-red-400'
+                                    : passwordStrength === 2 ? 'bg-orange-400'
+                                      : passwordStrength === 3 ? 'bg-yellow-400'
+                                        : 'bg-green-400'
+                                  : `${colorClasses.bg.gray400} dark:${colorClasses.bg.gray800}`
                                   }`}
                               />
                             ))}
@@ -465,9 +456,6 @@ export default function RegisterPage() {
                       </FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                            <Lock className={`w-5 h-5 ${colorClasses.text.gray400}`} />
-                          </div>
                           <Input
                             placeholder="Confirm your password"
                             type={showConfirmPassword ? 'text' : 'password'}
@@ -565,7 +553,7 @@ export default function RegisterPage() {
                 />
 
                 <div className="flex items-start space-x-3">
-                  <div className="relative">
+                  <div className="relative flex items-center">
                     <input
                       type="checkbox"
                       id="terms"
@@ -574,17 +562,20 @@ export default function RegisterPage() {
                       className="sr-only"
                       required
                     />
-                    <div className={`
-                      w-4 h-4 rounded border flex items-center justify-center transition-all duration-200 mt-1
-                      ${acceptedTerms ? `${colorClasses.bg.goldenMustard} ${colorClasses.border.goldenMustard}` : `${colorClasses.border.gray400} ${colorClasses.bg.white}`}
-                      dark:${colorClasses.border.gray700} dark:${colorClasses.bg.darkNavy}
-                    `}>
+                    <label
+                      htmlFor="terms"
+                      className={`
+        w-4 h-4 rounded border flex items-center justify-center transition-all duration-200 cursor-pointer
+        ${acceptedTerms ? `${colorClasses.bg.goldenMustard} ${colorClasses.border.goldenMustard}` : `${colorClasses.border.gray400} ${colorClasses.bg.white}`}
+        dark:${colorClasses.border.gray700} dark:${colorClasses.bg.darkNavy}
+      `}
+                    >
                       {acceptedTerms && (
                         <Check className="w-3 h-3 text-white" />
                       )}
-                    </div>
+                    </label>
                   </div>
-                  <label htmlFor="terms" className={`text-sm font-medium ${colorClasses.text.gray800} dark:${colorClasses.text.gray300}`}>
+                  <label htmlFor="terms" className={`text-sm font-medium ${colorClasses.text.gray800} dark:${colorClasses.text.gray300} cursor-pointer`}>
                     I agree to the{' '}
                     <Link href="/terms" className={`font-semibold ${colorClasses.text.blue} hover:${colorClasses.text.darkNavy}`}>
                       Terms of Service

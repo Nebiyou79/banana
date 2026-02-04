@@ -845,8 +845,8 @@ const JobForm: React.FC<JobFormProps> = ({
             key={option.value}
             onClick={() => handleSalaryModeChange(option.value)}
             className={`p-4 rounded-xl border transition-all duration-200 hover:shadow-md flex flex-col items-center text-center ${formData.salaryMode === option.value
-                ? 'ring-2 ring-offset-2'
-                : 'hover:border-opacity-70'
+              ? 'ring-2 ring-offset-2'
+              : 'hover:border-opacity-70'
               }`}
             style={{
               backgroundColor: theme.bg.primary,
@@ -1096,10 +1096,10 @@ const JobForm: React.FC<JobFormProps> = ({
           Number of candidates you want to hire
         </p>
         <div className={`text-xs font-medium px-2 py-0.5 rounded-full ${formData.candidatesNeeded === 1
-            ? themeMode === 'dark' ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'
-            : formData.candidatesNeeded <= 5
-              ? themeMode === 'dark' ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800'
-              : themeMode === 'dark' ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800'
+          ? themeMode === 'dark' ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'
+          : formData.candidatesNeeded <= 5
+            ? themeMode === 'dark' ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800'
+            : themeMode === 'dark' ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800'
           }`}>
           {formData.candidatesNeeded} candidate{formData.candidatesNeeded !== 1 ? 's' : ''}
         </div>
@@ -1141,8 +1141,8 @@ const JobForm: React.FC<JobFormProps> = ({
           type="button"
           onClick={() => handleApplicationToggle(!formData.isApplyEnabled)}
           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${formData.isApplyEnabled
-              ? themeMode === 'dark' ? 'bg-green-600' : 'bg-green-500'
-              : themeMode === 'dark' ? 'bg-gray-600' : 'bg-gray-300'
+            ? themeMode === 'dark' ? 'bg-green-600' : 'bg-green-500'
+            : themeMode === 'dark' ? 'bg-gray-600' : 'bg-gray-300'
             }`}
         >
           <span
@@ -1158,297 +1158,369 @@ const JobForm: React.FC<JobFormProps> = ({
   // STEP 1: BASIC JOB INFORMATION (INPUT)
   // ============================================
   const renderStep1 = () => (
-    <div
-      className="rounded-xl p-4 sm:p-6"
-      style={{
-        backgroundColor: theme.bg.secondary,
-        border: `1px solid ${theme.border.primary}`
-      }}
-    >
-      <h3 className={`text-lg sm:text-xl font-semibold ${theme.text.primary} mb-4 sm:mb-6 flex items-center`}>
-        <Briefcase className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-        Basic Information
-      </h3>
+    <>
+      {/* Basic Information Section */}
+      <div
+        className="rounded-xl p-4 sm:p-6 mb-6"
+        style={{
+          backgroundColor: theme.bg.secondary,
+          border: `1px solid ${theme.border.primary}`
+        }}
+      >
+        <h3 className={`text-lg sm:text-xl font-semibold ${theme.text.primary} mb-4 sm:mb-6 flex items-center`}>
+          <Briefcase className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+          Basic Information
+        </h3>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        {/* Job Title */}
-        <div className="lg:col-span-2">
-          <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
-            Job Title *
-          </label>
-          <input
-            type="text"
-            name="title"
-            value={formData.title}
-            onChange={handleInputChange}
-            required
-            className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
-            style={{
-              border: `1px solid ${errors.title ? (themeMode === 'dark' ? '#DC2626' : '#EF4444') : theme.border.primary}`,
-              color: theme.text.primary
-            }}
-            placeholder="e.g. Senior Frontend Developer, Marketing Manager..."
-          />
-          {errors.title && (
-            <p className="mt-1 text-xs sm:text-sm" style={{ color: themeMode === 'dark' ? '#FCA5A5' : '#DC2626' }}>
-              {errors.title}
-            </p>
-          )}
-        </div>
-
-        {/* Job Number */}
-        <div>
-          <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
-            Job Number (Optional)
-          </label>
-          <input
-            type="text"
-            name="jobNumber"
-            value={formData.jobNumber}
-            onChange={handleInputChange}
-            className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
-            style={{
-              border: `1px solid ${theme.border.primary}`,
-              color: theme.text.primary
-            }}
-            placeholder="e.g. HR-2024-001"
-          />
-        </div>
-
-        {/* Job Type */}
-        <div>
-          <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
-            Job Type *
-          </label>
-          <select
-            name="type"
-            value={formData.type}
-            onChange={handleInputChange}
-            className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
-            style={{
-              border: `1px solid ${theme.border.primary}`,
-              color: theme.text.primary
-            }}
-          >
-            <option value="full-time">Full Time</option>
-            <option value="part-time">Part Time</option>
-            <option value="contract">Contract</option>
-            <option value="internship">Internship</option>
-            <option value="temporary">Temporary</option>
-            <option value="remote">Remote</option>
-            <option value="hybrid">Hybrid</option>
-          </select>
-        </div>
-
-        {/* Short Description */}
-        <div className="lg:col-span-2">
-          <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
-            Short Description
-          </label>
-          <textarea
-            name="shortDescription"
-            value={formData.shortDescription}
-            onChange={handleInputChange}
-            rows={2}
-            className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
-            style={{
-              border: `1px solid ${theme.border.primary}`,
-              color: theme.text.primary
-            }}
-            placeholder="Brief summary of the job (appears in search results)..."
-            maxLength={200}
-          />
-          <div className={`text-xs ${theme.text.muted} mt-1 text-right`}>
-            {formData.shortDescription.length}/200 characters
-          </div>
-        </div>
-
-        {/* Job Category with Search - FIXED LAYOUT */}
-        <div className="lg:col-span-2 relative">
-          <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
-            Job Category *
-            <span className={`text-xs ${theme.text.muted} ml-1`}>
-              ({allCategories.length} categories available)
-            </span>
-          </label>
-          <div className="relative">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          {/* Job Title */}
+          <div className="lg:col-span-2">
+            <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
+              Job Title *
+            </label>
             <input
               type="text"
-              value={categorySearch}
-              onChange={(e) => handleCategorySearchChange(e.target.value)}
-              onFocus={() => setShowCategoryDropdown(true)}
-              placeholder={`Search from ${allCategories.length} categories...`}
-              className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary} ${errors.category ? 'border-red-300' : ''
-                }`}
+              name="title"
+              value={formData.title}
+              onChange={handleInputChange}
+              required
+              className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
               style={{
-                border: `1px solid ${errors.category ? (themeMode === 'dark' ? '#DC2626' : '#EF4444') : theme.border.primary}`,
+                border: `1px solid ${errors.title ? (themeMode === 'dark' ? '#DC2626' : '#EF4444') : theme.border.primary}`,
                 color: theme.text.primary
               }}
+              placeholder="e.g. Senior Frontend Developer, Marketing Manager..."
             />
-            <Search className="absolute right-3 top-2.5 sm:top-3.5 h-4 w-4" style={{ color: theme.text.muted }} />
+            {errors.title && (
+              <p className="mt-1 text-xs sm:text-sm" style={{ color: themeMode === 'dark' ? '#FCA5A5' : '#DC2626' }}>
+                {errors.title}
+              </p>
+            )}
           </div>
 
-          {/* Show current selection when dropdown is closed */}
-          {!showCategoryDropdown && formData.category && (
-            <div className="mt-1.5 sm:mt-2">
-              <span
-                className="inline-flex items-center px-2 py-0.5 sm:px-2 sm:py-1 rounded-full text-xs"
-                style={{
-                  backgroundColor: themeMode === 'dark' ? '#065F46' : '#D1FAE5',
-                  color: themeMode === 'dark' ? '#34D399' : '#065F46'
-                }}
-              >
-                <Target className="w-3 h-3 mr-1" />
-                Selected: {currentCategoryLabel}
-              </span>
-            </div>
-          )}
-
-          {/* Categories Dropdown - FIXED POSITION AND SCROLLABLE */}
-          {showCategoryDropdown && (
-            <div
-              className="absolute z-10 w-full mt-1 border rounded-lg shadow-lg"
-              style={{
-                backgroundColor: theme.bg.primary,
-                borderColor: theme.border.primary,
-                maxHeight: '400px',
-                overflow: 'hidden'
-              }}
-            >
-              <div className="max-h-[400px] overflow-y-auto">
-                {Object.keys(filteredCategoryGroups).length > 0 ? (
-                  <>
-                    {Object.entries(filteredCategoryGroups).map(([group, categories]) => (
-                      <div key={group}>
-                        <div
-                          className="px-3 sm:px-4 py-2 text-xs font-semibold border-b sticky top-0"
-                          style={{
-                            backgroundColor: theme.bg.secondary,
-                            borderColor: theme.border.primary,
-                            color: theme.text.primary
-                          }}
-                        >
-                          {group} ({categories.length})
-                        </div>
-                        {categories.slice(0, isCategoryExpanded ? undefined : 15).map(category => (
-                          <div
-                            key={category.value}
-                            onClick={() => handleCategorySelect(category.value, category.label)}
-                            className={`px-3 sm:px-4 py-2 hover:cursor-pointer border-b ${theme.border.secondary} last:border-b-0 ${formData.category === category.value ? theme.bg.secondary : ''
-                              }`}
-                            style={{ color: theme.text.primary }}
-                          >
-                            <div className="font-medium">{category.label}</div>
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                    {filteredCategories.length > 15 && !isCategoryExpanded && (
-                      <button
-                        type="button"
-                        onClick={() => setIsCategoryExpanded(true)}
-                        className={`w-full px-3 sm:px-4 py-2 text-sm border-t ${theme.border.secondary} flex items-center justify-center hover:${theme.bg.secondary}`}
-                        style={{ color: theme.text.secondary }}
-                      >
-                        <ChevronDown className="w-4 h-4 mr-1" />
-                        Show more categories
-                      </button>
-                    )}
-                    {isCategoryExpanded && filteredCategories.length > 15 && (
-                      <button
-                        type="button"
-                        onClick={() => setIsCategoryExpanded(false)}
-                        className={`w-full px-3 sm:px-4 py-2 text-sm border-t ${theme.border.secondary} flex items-center justify-center hover:${theme.bg.secondary}`}
-                        style={{ color: theme.text.secondary }}
-                      >
-                        <ChevronUp className="w-4 h-4 mr-1" />
-                        Show less
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <div className={`px-3 sm:px-4 py-2 ${theme.text.muted}`}>No categories found</div>
-                )}
-              </div>
-            </div>
-          )}
-          {errors.category && (
-            <p className="mt-1 text-xs sm:text-sm" style={{ color: themeMode === 'dark' ? '#FCA5A5' : '#DC2626' }}>
-              {errors.category}
-            </p>
-          )}
-        </div>
-
-        {/* Location - Region */}
-        <div>
-          <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
-            Region *
-          </label>
-          <select
-            value={formData.location.region}
-            onChange={(e) => handleLocationChange('region', e.target.value)}
-            className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
-            style={{
-              border: `1px solid ${errors.region ? (themeMode === 'dark' ? '#DC2626' : '#EF4444') : theme.border.primary}`,
-              color: theme.text.primary
-            }}
-          >
-            {ethiopianRegions.map(region => (
-              <option key={region.slug} value={region.slug}>
-                {region.name}
-              </option>
-            ))}
-          </select>
-          {errors.region && (
-            <p className="mt-1 text-xs sm:text-sm" style={{ color: themeMode === 'dark' ? '#FCA5A5' : '#DC2626' }}>
-              {errors.region}
-            </p>
-          )}
-        </div>
-
-        {/* City */}
-        <div>
-          <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
-            {isInternational ? 'Location' : 'City *'}
-          </label>
-          {isInternational ? (
+          {/* Job Number */}
+          <div>
+            <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
+              Job Number (Optional)
+            </label>
             <input
               type="text"
-              value={formData.location.city}
-              onChange={(e) => handleLocationChange('city', e.target.value)}
+              name="jobNumber"
+              value={formData.jobNumber}
+              onChange={handleInputChange}
               className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
               style={{
                 border: `1px solid ${theme.border.primary}`,
                 color: theme.text.primary
               }}
-              placeholder="e.g. Remote Worldwide"
+              placeholder="e.g. HR-2024-001"
             />
-          ) : (
+          </div>
+
+          {/* Job Type */}
+          <div>
+            <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
+              Job Type *
+            </label>
             <select
-              value={formData.location.city}
-              onChange={(e) => handleLocationChange('city', e.target.value)}
+              name="type"
+              value={formData.type}
+              onChange={handleInputChange}
               className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
               style={{
-                border: `1px solid ${errors.city ? (themeMode === 'dark' ? '#DC2626' : '#EF4444') : theme.border.primary}`,
+                border: `1px solid ${theme.border.primary}`,
                 color: theme.text.primary
               }}
             >
-              <option value="">Select a city</option>
-              {selectedRegion?.cities.map(city => (
-                <option key={city} value={city}>
-                  {city}
+              <option value="full-time">Full Time</option>
+              <option value="part-time">Part Time</option>
+              <option value="contract">Contract</option>
+              <option value="internship">Internship</option>
+              <option value="temporary">Temporary</option>
+              <option value="remote">Remote</option>
+              <option value="hybrid">Hybrid</option>
+            </select>
+          </div>
+
+          {/* Job Category with Search - FIXED LAYOUT */}
+          <div className="lg:col-span-2 relative">
+            <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
+              Job Category *
+              <span className={`text-xs ${theme.text.muted} ml-1`}>
+                ({allCategories.length} categories available)
+              </span>
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={categorySearch}
+                onChange={(e) => handleCategorySearchChange(e.target.value)}
+                onFocus={() => setShowCategoryDropdown(true)}
+                placeholder={`Search from ${allCategories.length} categories...`}
+                className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary} ${errors.category ? 'border-red-300' : ''
+                  }`}
+                style={{
+                  border: `1px solid ${errors.category ? (themeMode === 'dark' ? '#DC2626' : '#EF4444') : theme.border.primary}`,
+                  color: theme.text.primary
+                }}
+              />
+              <Search className="absolute right-3 top-2.5 sm:top-3.5 h-4 w-4" style={{ color: theme.text.muted }} />
+            </div>
+
+            {/* Show current selection when dropdown is closed */}
+            {!showCategoryDropdown && formData.category && (
+              <div className="mt-1.5 sm:mt-2">
+                <span
+                  className="inline-flex items-center px-2 py-0.5 sm:px-2 sm:py-1 rounded-full text-xs"
+                  style={{
+                    backgroundColor: themeMode === 'dark' ? '#065F46' : '#D1FAE5',
+                    color: themeMode === 'dark' ? '#34D399' : '#065F46'
+                  }}
+                >
+                  <Target className="w-3 h-3 mr-1" />
+                  Selected: {currentCategoryLabel}
+                </span>
+              </div>
+            )}
+
+            {/* Categories Dropdown - FIXED POSITION AND SCROLLABLE */}
+            {showCategoryDropdown && (
+              <div
+                className="absolute z-10 w-full mt-1 border rounded-lg shadow-lg"
+                style={{
+                  backgroundColor: theme.bg.primary,
+                  borderColor: theme.border.primary,
+                  maxHeight: '400px',
+                  overflow: 'hidden'
+                }}
+              >
+                <div className="max-h-[400px] overflow-y-auto">
+                  {Object.keys(filteredCategoryGroups).length > 0 ? (
+                    <>
+                      {Object.entries(filteredCategoryGroups).map(([group, categories]) => (
+                        <div key={group}>
+                          <div
+                            className="px-3 sm:px-4 py-2 text-xs font-semibold border-b sticky top-0"
+                            style={{
+                              backgroundColor: theme.bg.secondary,
+                              borderColor: theme.border.primary,
+                              color: theme.text.primary
+                            }}
+                          >
+                            {group} ({categories.length})
+                          </div>
+                          {categories.slice(0, isCategoryExpanded ? undefined : 15).map(category => (
+                            <div
+                              key={category.value}
+                              onClick={() => handleCategorySelect(category.value, category.label)}
+                              className={`px-3 sm:px-4 py-2 hover:cursor-pointer border-b ${theme.border.secondary} last:border-b-0 ${formData.category === category.value ? theme.bg.secondary : ''
+                                }`}
+                              style={{ color: theme.text.primary }}
+                            >
+                              <div className="font-medium">{category.label}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                      {filteredCategories.length > 15 && !isCategoryExpanded && (
+                        <button
+                          type="button"
+                          onClick={() => setIsCategoryExpanded(true)}
+                          className={`w-full px-3 sm:px-4 py-2 text-sm border-t ${theme.border.secondary} flex items-center justify-center hover:${theme.bg.secondary}`}
+                          style={{ color: theme.text.secondary }}
+                        >
+                          <ChevronDown className="w-4 h-4 mr-1" />
+                          Show more categories
+                        </button>
+                      )}
+                      {isCategoryExpanded && filteredCategories.length > 15 && (
+                        <button
+                          type="button"
+                          onClick={() => setIsCategoryExpanded(false)}
+                          className={`w-full px-3 sm:px-4 py-2 text-sm border-t ${theme.border.secondary} flex items-center justify-center hover:${theme.bg.secondary}`}
+                          style={{ color: theme.text.secondary }}
+                        >
+                          <ChevronUp className="w-4 h-4 mr-1" />
+                          Show less
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <div className={`px-3 sm:px-4 py-2 ${theme.text.muted}`}>No categories found</div>
+                  )}
+                </div>
+              </div>
+            )}
+            {errors.category && (
+              <p className="mt-1 text-xs sm:text-sm" style={{ color: themeMode === 'dark' ? '#FCA5A5' : '#DC2626' }}>
+                {errors.category}
+              </p>
+            )}
+          </div>
+
+          {/* Short Description */}
+          <div className="lg:col-span-2">
+            <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
+              Short Description
+            </label>
+            <textarea
+              name="shortDescription"
+              value={formData.shortDescription}
+              onChange={handleInputChange}
+              rows={2}
+              className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
+              style={{
+                border: `1px solid ${theme.border.primary}`,
+                color: theme.text.primary
+              }}
+              placeholder="Brief summary of the job (appears in search results)..."
+              maxLength={200}
+            />
+            <div className={`text-xs ${theme.text.muted} mt-1 text-right`}>
+              {formData.shortDescription.length}/200 characters
+            </div>
+          </div>
+
+          {/* Location - Region */}
+          <div>
+            <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
+              Region *
+            </label>
+            <select
+              value={formData.location.region}
+              onChange={(e) => handleLocationChange('region', e.target.value)}
+              className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
+              style={{
+                border: `1px solid ${errors.region ? (themeMode === 'dark' ? '#DC2626' : '#EF4444') : theme.border.primary}`,
+                color: theme.text.primary
+              }}
+            >
+              {ethiopianRegions.map(region => (
+                <option key={region.slug} value={region.slug}>
+                  {region.name}
                 </option>
               ))}
             </select>
-          )}
-          {errors.city && (
-            <p className="mt-1 text-xs sm:text-sm" style={{ color: themeMode === 'dark' ? '#FCA5A5' : '#DC2626' }}>
-              {errors.city}
-            </p>
-          )}
+            {errors.region && (
+              <p className="mt-1 text-xs sm:text-sm" style={{ color: themeMode === 'dark' ? '#FCA5A5' : '#DC2626' }}>
+                {errors.region}
+              </p>
+            )}
+          </div>
+
+          {/* City */}
+          <div>
+            <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
+              {isInternational ? 'Location' : 'City *'}
+            </label>
+            {isInternational ? (
+              <input
+                type="text"
+                value={formData.location.city}
+                onChange={(e) => handleLocationChange('city', e.target.value)}
+                className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
+                style={{
+                  border: `1px solid ${theme.border.primary}`,
+                  color: theme.text.primary
+                }}
+                placeholder="e.g. Remote Worldwide"
+              />
+            ) : (
+              <select
+                value={formData.location.city}
+                onChange={(e) => handleLocationChange('city', e.target.value)}
+                className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
+                style={{
+                  border: `1px solid ${errors.city ? (themeMode === 'dark' ? '#DC2626' : '#EF4444') : theme.border.primary}`,
+                  color: theme.text.primary
+                }}
+              >
+                <option value="">Select a city</option>
+                {selectedRegion?.cities.map(city => (
+                  <option key={city} value={city}>
+                    {city}
+                  </option>
+                ))}
+              </select>
+            )}
+            {errors.city && (
+              <p className="mt-1 text-xs sm:text-sm" style={{ color: themeMode === 'dark' ? '#FCA5A5' : '#DC2626' }}>
+                {errors.city}
+              </p>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Location Details Section - Only show for non-international jobs */}
+      {!isInternational && (
+        <div
+          className="rounded-xl p-4 sm:p-6"
+          style={{
+            backgroundColor: theme.bg.secondary,
+            border: `1px solid ${theme.border.primary}`
+          }}
+        >
+          <h3 className={`text-lg sm:text-xl font-semibold ${theme.text.primary} mb-4 sm:mb-6 flex items-center`}>
+            <MapPin className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+            Location Details
+          </h3>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            <div>
+              <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
+                Sub-City
+              </label>
+              <input
+                type="text"
+                value={formData.location.subCity}
+                onChange={(e) => handleLocationChange('subCity', e.target.value)}
+                className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
+                style={{
+                  border: `1px solid ${theme.border.primary}`,
+                  color: theme.text.primary
+                }}
+                placeholder="e.g. Bole, Kirkos..."
+              />
+            </div>
+
+            <div>
+              <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
+                Woreda
+              </label>
+              <input
+                type="text"
+                value={formData.location.woreda}
+                onChange={(e) => handleLocationChange('woreda', e.target.value)}
+                className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
+                style={{
+                  border: `1px solid ${theme.border.primary}`,
+                  color: theme.text.primary
+                }}
+                placeholder="e.g. Woreda 03..."
+              />
+            </div>
+
+            <div className="lg:col-span-2">
+              <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
+                Specific Location
+              </label>
+              <input
+                type="text"
+                value={formData.location.specificLocation}
+                onChange={(e) => handleLocationChange('specificLocation', e.target.value)}
+                className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
+                style={{
+                  border: `1px solid ${theme.border.primary}`,
+                  color: theme.text.primary
+                }}
+                placeholder="e.g. Bole Road, near Friendship City Center..."
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 
   // ============================================
@@ -1618,6 +1690,14 @@ const JobForm: React.FC<JobFormProps> = ({
         </div>
       </div>
 
+    </div>
+  );
+
+  // ============================================
+  // STEP 3: ADDITIONAL SETTINGS (INPUT)
+  // ============================================
+  const renderStep3 = () => (
+    <div className="space-y-4 sm:space-y-6">
       {/* Salary Information */}
       <div
         className="rounded-xl p-4 sm:p-6"
@@ -1636,82 +1716,6 @@ const JobForm: React.FC<JobFormProps> = ({
           {renderSalaryRangeFields()}
         </div>
       </div>
-    </div>
-  );
-
-  // ============================================
-  // STEP 3: ADDITIONAL SETTINGS (INPUT)
-  // ============================================
-  const renderStep3 = () => (
-    <div className="space-y-4 sm:space-y-6">
-      {/* Location Details */}
-      {!isInternational && (
-        <div
-          className="rounded-xl p-4 sm:p-6"
-          style={{
-            backgroundColor: theme.bg.secondary,
-            border: `1px solid ${theme.border.primary}`
-          }}
-        >
-          <h3 className={`text-lg sm:text-xl font-semibold ${theme.text.primary} mb-4 sm:mb-6 flex items-center`}>
-            <MapPin className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-            Location Details
-          </h3>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-            <div>
-              <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
-                Sub-City
-              </label>
-              <input
-                type="text"
-                value={formData.location.subCity}
-                onChange={(e) => handleLocationChange('subCity', e.target.value)}
-                className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
-                style={{
-                  border: `1px solid ${theme.border.primary}`,
-                  color: theme.text.primary
-                }}
-                placeholder="e.g. Bole, Kirkos..."
-              />
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
-                Woreda
-              </label>
-              <input
-                type="text"
-                value={formData.location.woreda}
-                onChange={(e) => handleLocationChange('woreda', e.target.value)}
-                className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
-                style={{
-                  border: `1px solid ${theme.border.primary}`,
-                  color: theme.text.primary
-                }}
-                placeholder="e.g. Woreda 03..."
-              />
-            </div>
-
-            <div className="lg:col-span-2">
-              <label className={`block text-sm font-medium ${theme.text.secondary} mb-1.5 sm:mb-2`}>
-                Specific Location
-              </label>
-              <input
-                type="text"
-                value={formData.location.specificLocation}
-                onChange={(e) => handleLocationChange('specificLocation', e.target.value)}
-                className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg focus:ring-2 focus:ring-offset-1 ${theme.bg.primary}`}
-                style={{
-                  border: `1px solid ${theme.border.primary}`,
-                  color: theme.text.primary
-                }}
-                placeholder="e.g. Bole Road, near Friendship City Center..."
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Work Arrangement & Demographic Requirements */}
       <div
@@ -2056,10 +2060,10 @@ const JobForm: React.FC<JobFormProps> = ({
                 </dt>
                 <dd className={`text-sm ${theme.text.primary}`}>
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${formData.candidatesNeeded === 1
-                      ? themeMode === 'dark' ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'
-                      : formData.candidatesNeeded <= 5
-                        ? themeMode === 'dark' ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800'
-                        : themeMode === 'dark' ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800'
+                    ? themeMode === 'dark' ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'
+                    : formData.candidatesNeeded <= 5
+                      ? themeMode === 'dark' ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800'
+                      : themeMode === 'dark' ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800'
                     }`}>
                     <UsersIcon className="w-3 h-3 mr-1" />
                     {formData.candidatesNeeded} position{formData.candidatesNeeded !== 1 ? 's' : ''}
@@ -2072,8 +2076,8 @@ const JobForm: React.FC<JobFormProps> = ({
                 </dt>
                 <dd className={`text-sm ${theme.text.primary}`}>
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${formData.isApplyEnabled ?
-                      themeMode === 'dark' ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800' :
-                      themeMode === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-800'
+                    themeMode === 'dark' ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800' :
+                    themeMode === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-800'
                     }`}>
                     {formData.isApplyEnabled ?
                       <>
@@ -2358,8 +2362,8 @@ const JobForm: React.FC<JobFormProps> = ({
             </div>
             <div
               className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium flex items-center gap-1 ${formData.isApplyEnabled !== false ?
-                  themeMode === 'dark' ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800' :
-                  themeMode === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-800'
+                themeMode === 'dark' ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800' :
+                themeMode === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-800'
                 }`}
             >
               {formData.isApplyEnabled !== false ?
@@ -2514,8 +2518,8 @@ const JobForm: React.FC<JobFormProps> = ({
               )}
               <span
                 className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-xs sm:text-sm font-medium flex items-center gap-1 ${formData.isApplyEnabled ?
-                    themeMode === 'dark' ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800' :
-                    themeMode === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-800'
+                  themeMode === 'dark' ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800' :
+                  themeMode === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-800'
                   }`}
               >
                 {formData.isApplyEnabled ?

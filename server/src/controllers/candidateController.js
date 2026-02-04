@@ -388,7 +388,144 @@ exports.uploadCV = async (req, res) => {
     handleControllerError(error, res, 'Error uploading CV');
   }
 };
+/**
+ * @desc    Upload Multiple CVs to Local Storage
+ * @route   POST /api/v1/candidate/cvs/multiple
+ * @access  Private (Candidate)
+ */
+exports.uploadMultipleCVs = async (req, res) => {
+  try {
+    console.log('=== MULTIPLE CV UPLOAD START (LOCAL STORAGE) ===');
+    console.log('Files received:', req.files ? req.files.length : 0);
 
+    const userId = req.user.userId;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if files were uploaded via localFileUpload middleware
+    if (!req.files || req.files.length === 0) {
+      console.log('No files uploaded via localFileUpload middleware');
+      return res.status(400).json({
+        success: false,
+        message: 'No CV files uploaded'
+      });
+    }
+
+    console.log(`Processing ${req.files.length} files`);
+
+    // Calculate available slots
+    const availableSlots = Math.max(0, 10 - user.cvs.length); // Max 10 CVs
+    const filesToProcess = req.files.slice(0, availableSlots);
+
+    if (filesToProcess.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Maximum 10 CVs allowed per user. You already have ${user.cvs.length} CVs.`
+      });
+    }
+
+    // Process each file
+    const uploadedCVs = [];
+    const errors = [];
+
+    for (const file of filesToProcess) {
+      try {
+        // Check if user can add more CVs
+        if (!user.canAddCV()) {
+          errors.push({
+            fileName: file.originalname,
+            error: 'Maximum 10 CVs allowed per user'
+          });
+          continue;
+        }
+
+        // Create CV data for database
+        const cvData = {
+          fileName: file.filename,
+          originalName: file.originalname,
+          filePath: file.path,
+          fileUrl: `/uploads/cv/${file.filename}`,
+          downloadUrl: `${process.env.BACKEND_URL || 'http://localhost:4000'}/uploads/download/cv/${file.filename}`,
+          mimetype: file.mimetype,
+          size: file.size,
+          fileExtension: file.originalname.split('.').pop().toLowerCase(),
+          uploadedAt: new Date(),
+          isPrimary: user.cvs.length === 0 && uploadedCVs.length === 0, // First CV is primary
+          description: `CV uploaded on ${new Date().toLocaleDateString()}`,
+          downloadCount: 0,
+          viewCount: 0
+        };
+
+        // Add CV to user
+        await user.addCV(cvData);
+
+        // Get the newly added CV
+        const newCV = user.cvs[user.cvs.length - 1];
+        uploadedCVs.push(newCV);
+
+        console.log(`CV saved to database: ${newCV._id} - ${file.originalname}`);
+
+      } catch (fileError) {
+        console.error(`Error processing file ${file.originalname}:`, fileError);
+        errors.push({
+          fileName: file.originalname,
+          error: fileError.message || 'Failed to process file'
+        });
+      }
+    }
+
+    // Refresh user data
+    await user.save();
+
+    // Format response
+    const formattedCVs = uploadedCVs.map(cv => ({
+      _id: cv._id,
+      fileName: cv.fileName,
+      originalName: cv.originalName,
+      size: cv.size,
+      uploadedAt: cv.uploadedAt,
+      isPrimary: cv.isPrimary,
+      mimetype: cv.mimetype,
+      fileExtension: cv.fileExtension,
+      description: cv.description,
+      fileUrl: cv.fileUrl,
+      downloadUrl: cv.downloadUrl
+    }));
+
+    // Get primary CV
+    const primaryCV = user.cvs.find(cv => cv.isPrimary);
+
+    const response = {
+      success: true,
+      message: uploadedCVs.length === filesToProcess.length ?
+        `Successfully uploaded ${uploadedCVs.length} CV(s)` :
+        `Uploaded ${uploadedCVs.length} out of ${filesToProcess.length} CV(s)`,
+      data: {
+        cvs: formattedCVs,
+        totalCVs: user.cvs.length,
+        primaryCVId: primaryCV?._id?.toString(),
+        errors: errors.length > 0 ? errors : undefined
+      }
+    };
+
+    // Add warning if there were errors
+    if (errors.length > 0) {
+      response.message += ` (${errors.length} failed)`;
+    }
+
+    res.status(201).json(response);
+
+  } catch (error) {
+    console.error('Multiple CV upload error:', error);
+    handleControllerError(error, res, 'Error uploading CVs');
+  }
+};
 /**
  * @desc    Get all CVs for candidate
  * @route   GET /api/v1/candidate/cvs
@@ -518,7 +655,7 @@ exports.viewCV = async (req, res) => {
     await user.incrementCVViewCount(cvId);
 
     console.log(`Redirecting to view CV: ${cv.fileUrl}`);
-    
+
     // Redirect to the file URL (served by express.static)
     res.redirect(cv.fileUrl);
 

@@ -1,7 +1,8 @@
-// models/Application.js - UPDATED FOR LOCAL FILE UPLOAD
+// models/Application.js - UPDATED WITH PROPER FILE HANDLING
 const mongoose = require('mongoose');
 
 const attachmentSchema = new mongoose.Schema({
+  // ✅ REQUIRED: filename (not fileName)
   filename: {
     type: String,
     required: true
@@ -43,6 +44,12 @@ const attachmentSchema = new mongoose.Schema({
 });
 
 const referenceSchema = new mongoose.Schema({
+  // ✅ ADDED: Temporary ID for frontend-backend matching during upload
+  _tempId: {
+    type: String,
+    required: false
+  },
+
   // Option 1: Upload PDF document
   document: {
     type: attachmentSchema,
@@ -104,6 +111,12 @@ const referenceSchema = new mongoose.Schema({
 });
 
 const workExperienceSchema = new mongoose.Schema({
+  // ✅ ADDED: Temporary ID for frontend-backend matching during upload
+  _tempId: {
+    type: String,
+    required: false
+  },
+
   // Option 1: Upload PDF document
   document: {
     type: attachmentSchema,
@@ -162,6 +175,23 @@ const workExperienceSchema = new mongoose.Schema({
   id: true
 });
 
+const selectedCVSchema = new mongoose.Schema({
+  cvId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true
+  },
+  // ✅ CONSISTENT: Use filename (not fileName)
+  filename: String,
+  originalName: String,
+  url: String,
+  downloadUrl: String,
+  size: Number,
+  mimetype: String,
+  uploadedAt: Date
+}, {
+  _id: false
+});
+
 const applicationSchema = new mongoose.Schema({
   job: {
     type: mongoose.Schema.Types.ObjectId,
@@ -191,20 +221,8 @@ const applicationSchema = new mongoose.Schema({
     }
   },
 
-  // Candidate's selected CVs
-  selectedCVs: [{
-    cvId: {
-      type: mongoose.Schema.Types.ObjectId,
-      required: true
-    },
-    filename: String,
-    originalName: String,
-    url: String,
-    downloadUrl: String,
-    size: Number,
-    mimetype: String,
-    uploadedAt: Date
-  }],
+  // ✅ UPDATED: Candidate's selected CVs (from existing CVs, not uploaded)
+  selectedCVs: [selectedCVSchema],
 
   // Professional cover letter
   coverLetter: {
@@ -234,10 +252,9 @@ const applicationSchema = new mongoose.Schema({
     location: { type: String, trim: true }
   },
 
-  // Additional attachments
+  // ✅ UPDATED: Additional attachments (NO duplicate storage)
   attachments: {
-    referenceDocuments: [attachmentSchema],
-    experienceDocuments: [attachmentSchema],
+    // ❌ REMOVED: referenceDocuments and experienceDocuments (now in references/workExperience)
     portfolioFiles: [attachmentSchema],
     otherDocuments: [attachmentSchema]
   },
@@ -345,6 +362,8 @@ applicationSchema.index({ job: 1, status: 1 });
 applicationSchema.index({ status: 1, updatedAt: -1 });
 applicationSchema.index({ 'statusHistory.changedAt': -1 });
 applicationSchema.index({ 'companyResponse.status': 1 });
+applicationSchema.index({ 'references._tempId': 1 }); // ✅ ADDED: For faster tempId lookups
+applicationSchema.index({ 'workExperience._tempId': 1 }); // ✅ ADDED: For faster tempId lookups
 
 // Virtual for application age
 applicationSchema.virtual('daysSinceApplied').get(function () {
@@ -354,8 +373,6 @@ applicationSchema.virtual('daysSinceApplied').get(function () {
 // Instance method to get all attachments
 applicationSchema.methods.getAllAttachments = function () {
   const attachments = [
-    ...this.attachments.referenceDocuments,
-    ...this.attachments.experienceDocuments,
     ...this.attachments.portfolioFiles,
     ...this.attachments.otherDocuments
   ];
@@ -457,6 +474,26 @@ applicationSchema.methods.addCompanyResponse = function (responseStatus, respond
 // Pre-remove middleware to cleanup files
 applicationSchema.pre('deleteOne', { document: true, query: false }, async function (next) {
   await this.cleanupFiles();
+  next();
+});
+
+// ✅ ADDED: Pre-save middleware to remove _tempId fields
+applicationSchema.pre('save', function (next) {
+  // Remove _tempId from references and work experience after successful save
+  if (this.references) {
+    this.references = this.references.map(ref => {
+      const { _tempId, ...rest } = ref.toObject ? ref.toObject() : ref;
+      return rest;
+    });
+  }
+  
+  if (this.workExperience) {
+    this.workExperience = this.workExperience.map(exp => {
+      const { _tempId, ...rest } = exp.toObject ? exp.toObject() : exp;
+      return rest;
+    });
+  }
+  
   next();
 });
 

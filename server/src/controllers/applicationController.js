@@ -102,19 +102,32 @@ const parseFormDataField = (fieldValue) => {
   return fieldValue;
 };
 
-// Enhanced applyForJob function with local file upload integration
+// Helper to match uploaded files with their references/work experience using _tempId
+const matchFileToEntity = (uploadedFiles, entity, fieldType) => {
+  if (!entity.providedAsDocument || !entity._tempId) {
+    return null;
+  }
+
+  if (!uploadedFiles || !uploadedFiles.files) {
+    return null;
+  }
+
+  // Find file that matches the _tempId
+  const matchedFile = uploadedFiles.files.find(file => 
+    file.metaId === entity._tempId || 
+    (fieldType === 'reference' && file.refId === entity._tempId) ||
+    (fieldType === 'experience' && file.expId === entity._tempId)
+  );
+
+  return matchedFile;
+};
+
+// Enhanced applyForJob function with proper file handling
 exports.applyForJob = async (req, res) => {
   try {
     console.log('🔍 [Backend] ===== APPLICATION SUBMISSION STARTED =====');
     console.log('📦 [Backend] Request body fields:', Object.keys(req.body));
-
-    // Check for uploaded files by field
-    if (req.uploadedFilesByField) {
-      console.log('📁 [Backend] Files uploaded by field:', Object.keys(req.uploadedFilesByField));
-      Object.entries(req.uploadedFilesByField).forEach(([field, data]) => {
-        console.log(`  ${field}: ${data.count} file(s)`);
-      });
-    }
+    console.log('📁 [Backend] Uploaded files by field:', req.uploadedFilesByField ? Object.keys(req.uploadedFilesByField) : 'none');
 
     // Parse form data fields BEFORE validation
     const parsedBody = { ...req.body };
@@ -145,7 +158,6 @@ exports.applyForJob = async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       console.log('❌ [Backend] VALIDATION ERRORS:', errors.array());
-      // Cleanup uploaded files on validation error
       await cleanupUploadedFiles(req.uploadedFiles);
       return res.status(400).json({
         success: false,
@@ -227,29 +239,6 @@ exports.applyForJob = async (req, res) => {
 
     console.log('✅ [Backend] Candidate profile found');
 
-    // Process uploaded files from different fields
-    let uploadedCV = null;
-    let uploadedReferenceDocs = [];
-    let uploadedExperienceDocs = [];
-
-    // Get CV file if uploaded
-    if (req.uploadedFilesByField?.cv?.files?.[0]) {
-      uploadedCV = req.uploadedFilesByField.cv.files[0];
-      console.log('📄 [Backend] CV file uploaded:', uploadedCV.fileName);
-    }
-
-    // Get reference PDFs
-    if (req.uploadedFilesByField?.referencePdfs?.files) {
-      uploadedReferenceDocs = req.uploadedFilesByField.referencePdfs.files;
-      console.log('📁 [Backend] Reference PDFs uploaded:', uploadedReferenceDocs.length);
-    }
-
-    // Get experience PDFs
-    if (req.uploadedFilesByField?.experiencePdfs?.files) {
-      uploadedExperienceDocs = req.uploadedFilesByField.experiencePdfs.files;
-      console.log('📁 [Backend] Experience PDFs uploaded:', uploadedExperienceDocs.length);
-    }
-
     // Use parsed data from earlier
     const {
       coverLetter,
@@ -324,98 +313,159 @@ exports.applyForJob = async (req, res) => {
         throw new Error(`CV not found: ${cvData.cvId}`);
       }
 
+      // Format CV with proper schema fields
       return {
         cvId: userCV._id,
-        filename: userCV.filename,
-        originalName: userCV.originalName || userCV.filename,
-        url: userCV.url || `/api/v1/uploads/cv/${userCV.filename}`,
+        filename: userCV.filename || userCV.fileName,
+        originalName: userCV.originalName || userCV.filename || userCV.fileName,
+        url: userCV.url || `/api/v1/uploads/cv/${userCV.filename || userCV.fileName}`,
         size: userCV.size || 0,
         mimetype: userCV.mimetype || 'application/octet-stream',
         uploadedAt: userCV.uploadedAt || new Date(),
-        downloadUrl: userCV.downloadUrl || `/api/v1/uploads/cv/${userCV.filename}`,
-        viewUrl: userCV.viewUrl || `/api/v1/uploads/cv/view/${userCV.filename}`
+        downloadUrl: userCV.downloadUrl || `/api/v1/uploads/cv/${userCV.filename || userCV.fileName}`,
+        viewUrl: userCV.viewUrl || `/api/v1/uploads/cv/view/${userCV.filename || userCV.fileName}`
       };
     });
 
     console.log('✅ [Backend] Selected CVs processed:', selectedCVsData.length);
 
-    // Process references with uploaded files
+    // Get uploaded files from different fields
+    const referencePdfs = req.uploadedFilesByField?.referencePdfs || {};
+    const experiencePdfs = req.uploadedFilesByField?.experiencePdfs || {};
+
+    // Validate document-based references have _tempId
+    const invalidReferences = references.filter(ref => 
+      ref.providedAsDocument && !ref._tempId
+    );
+    
+    if (invalidReferences.length > 0) {
+      console.log('❌ [Backend] Document references missing _tempId');
+      await cleanupUploadedFiles(req.uploadedFiles);
+      return res.status(400).json({
+        success: false,
+        message: 'Document references must include _tempId for file matching'
+      });
+    }
+
+    // Process references with proper file matching
     const processedReferences = references.map((ref, index) => {
       console.log(`🔍 [Backend] Processing reference ${index}:`, {
         name: ref.name,
-        providedAsDocument: ref.providedAsDocument,
-        hasUploadedFile: !!uploadedReferenceDocs[index]
+        _tempId: ref._tempId,
+        providedAsDocument: ref.providedAsDocument
       });
 
-      // Only attach document if reference has providedAsDocument flag AND we have uploaded files
-      if (ref.providedAsDocument && uploadedReferenceDocs[index]) {
-        const uploadedFile = uploadedReferenceDocs[index];
-        console.log(`✅ [Backend] Attaching document to reference ${index}:`, uploadedFile.fileName);
-
-        return {
-          ...ref,
-          document: {
-            originalName: uploadedFile.originalName,
-            fileName: uploadedFile.fileName,
-            size: uploadedFile.size,
-            mimetype: uploadedFile.mimetype,
-            path: uploadedFile.path,
-            url: uploadedFile.url,
-            downloadUrl: uploadedFile.downloadUrl,
-            uploadedAt: new Date()
-          },
-          providedAsDocument: true
-        };
+      // Only attach document if reference has providedAsDocument flag
+      if (ref.providedAsDocument) {
+        const matchedFile = matchFileToEntity(referencePdfs, ref, 'reference');
+        
+        if (matchedFile) {
+          console.log(`✅ [Backend] Attaching document to reference ${index}:`, matchedFile.fileName);
+          
+          return {
+            ...ref,
+            // Remove _tempId from final document (optional)
+            _tempId: undefined,
+            document: {
+              // ✅ CORRECT: Uses proper schema field names
+              filename: matchedFile.fileName,
+              originalName: matchedFile.originalName,
+              path: matchedFile.path,
+              size: matchedFile.size,
+              mimetype: matchedFile.mimetype,
+              url: matchedFile.url,
+              downloadUrl: matchedFile.downloadUrl,
+              uploadedAt: new Date()
+            },
+            providedAsDocument: true
+          };
+        } else {
+          console.log(`⚠️ [Backend] No file found for reference ${index} with _tempId:`, ref._tempId);
+          return {
+            ...ref,
+            _tempId: undefined,
+            providedAsDocument: false,
+            document: null
+          };
+        }
       } else {
         console.log(`📝 [Backend] Form-based reference ${index} - no document attached`);
-        // For form-only references, don't create any document
         return {
           ...ref,
+          _tempId: undefined,
           providedAsDocument: false,
-          document: null // Explicitly set to null
+          document: null
         };
       }
     });
 
-    // Process work experience with uploaded files
+    // Validate document-based work experience have _tempId
+    const invalidWorkExperience = workExperience.filter(exp => 
+      exp.providedAsDocument && !exp._tempId
+    );
+    
+    if (invalidWorkExperience.length > 0) {
+      console.log('❌ [Backend] Document work experience missing _tempId');
+      await cleanupUploadedFiles(req.uploadedFiles);
+      return res.status(400).json({
+        success: false,
+        message: 'Document work experience must include _tempId for file matching'
+      });
+    }
+
+    // Process work experience with proper file matching
     const processedWorkExperience = workExperience.map((exp, index) => {
       console.log(`🔍 [Backend] Processing work experience ${index}:`, {
         company: exp.company,
-        providedAsDocument: exp.providedAsDocument,
-        hasUploadedFile: !!uploadedExperienceDocs[index]
+        _tempId: exp._tempId,
+        providedAsDocument: exp.providedAsDocument
       });
 
-      // Only attach document if experience has providedAsDocument flag AND we have uploaded files
-      if (exp.providedAsDocument && uploadedExperienceDocs[index]) {
-        const uploadedFile = uploadedExperienceDocs[index];
-        console.log(`✅ [Backend] Attaching document to work experience ${index}:`, uploadedFile.fileName);
-
-        return {
-          ...exp,
-          document: {
-            originalName: uploadedFile.originalName,
-            fileName: uploadedFile.fileName,
-            size: uploadedFile.size,
-            mimetype: uploadedFile.mimetype,
-            path: uploadedFile.path,
-            url: uploadedFile.url,
-            downloadUrl: uploadedFile.downloadUrl,
-            uploadedAt: new Date()
-          },
-          providedAsDocument: true
-        };
+      // Only attach document if experience has providedAsDocument flag
+      if (exp.providedAsDocument) {
+        const matchedFile = matchFileToEntity(experiencePdfs, exp, 'experience');
+        
+        if (matchedFile) {
+          console.log(`✅ [Backend] Attaching document to work experience ${index}:`, matchedFile.fileName);
+          
+          return {
+            ...exp,
+            // Remove _tempId from final document (optional)
+            _tempId: undefined,
+            document: {
+              // ✅ CORRECT: Uses proper schema field names
+              filename: matchedFile.fileName,
+              originalName: matchedFile.originalName,
+              path: matchedFile.path,
+              size: matchedFile.size,
+              mimetype: matchedFile.mimetype,
+              url: matchedFile.url,
+              downloadUrl: matchedFile.downloadUrl,
+              uploadedAt: new Date()
+            },
+            providedAsDocument: true
+          };
+        } else {
+          console.log(`⚠️ [Backend] No file found for work experience ${index} with _tempId:`, exp._tempId);
+          return {
+            ...exp,
+            _tempId: undefined,
+            providedAsDocument: false,
+            document: null
+          };
+        }
       } else {
         console.log(`📝 [Backend] Form-based work experience ${index} - no document attached`);
-        // For form-only experience, don't create any document
         return {
           ...exp,
+          _tempId: undefined,
           providedAsDocument: false,
-          document: null // Explicitly set to null
+          document: null
         };
       }
     });
 
-    // Create application with uploaded file data
+    // Create application WITHOUT duplicate storage
     const applicationData = {
       job: jobId,
       candidate: userId,
@@ -440,27 +490,8 @@ exports.applyForJob = async (req, res) => {
         telegram: contactInfo?.telegram || '',
         location: contactInfo?.location || candidate.location
       },
+      // ✅ CORRECT: No duplicate storage, only portfolio and other documents
       attachments: {
-        referenceDocuments: uploadedReferenceDocs.map(file => ({
-          originalName: file.originalName,
-          filename: file.fileName,
-          path: file.path,
-          size: file.size,
-          mimetype: file.mimetype,
-          url: file.url,
-          downloadUrl: file.downloadUrl,
-          uploadedAt: new Date()
-        })),
-        experienceDocuments: uploadedExperienceDocs.map(file => ({
-          originalName: file.originalName,
-          filename: file.fileName,
-          path: file.path,
-          size: file.size,
-          mimetype: file.mimetype,
-          url: file.url,
-          downloadUrl: file.downloadUrl,
-          uploadedAt: new Date()
-        })),
         portfolioFiles: [],
         otherDocuments: []
       },
@@ -472,19 +503,7 @@ exports.applyForJob = async (req, res) => {
       }]
     };
 
-    // If a new CV file was uploaded, add it to attachments
-    if (uploadedCV) {
-      applicationData.attachments.cvFile = {
-        originalName: uploadedCV.originalName,
-        filename: uploadedCV.fileName,
-        path: uploadedCV.path,
-        size: uploadedCV.size,
-        mimetype: uploadedCV.mimetype,
-        url: uploadedCV.url,
-        downloadUrl: uploadedCV.downloadUrl,
-        uploadedAt: new Date()
-      };
-    }
+    // 🚫 NO CV FILE ATTACHMENT - CVs only from selectedCVs
 
     console.log('📝 [Backend] Creating application:', {
       jobId,
@@ -493,9 +512,8 @@ exports.applyForJob = async (req, res) => {
       skillsCount: skills.length,
       referencesCount: processedReferences.length,
       experienceCount: processedWorkExperience.length,
-      uploadedReferenceDocs: uploadedReferenceDocs.length,
-      uploadedExperienceDocs: uploadedExperienceDocs.length,
-      newCVUploaded: !!uploadedCV
+      referencesWithDocs: processedReferences.filter(ref => ref.document).length,
+      experienceWithDocs: processedWorkExperience.filter(exp => exp.document).length
     });
 
     const application = await Application.create(applicationData);
@@ -511,10 +529,10 @@ exports.applyForJob = async (req, res) => {
 
     console.log('🎉 [Backend] Application created successfully:', application._id);
     console.log('📊 [Backend] Application summary:', {
-      references: populatedApplication.references?.length,
-      workExperience: populatedApplication.workExperience?.length,
-      uploadedReferenceDocs: uploadedReferenceDocs.length,
-      uploadedExperienceDocs: uploadedExperienceDocs.length
+      totalReferences: populatedApplication.references?.length,
+      referencesWithDocuments: populatedApplication.references?.filter(ref => ref.document).length,
+      totalWorkExperience: populatedApplication.workExperience?.length,
+      experienceWithDocuments: populatedApplication.workExperience?.filter(exp => exp.document).length
     });
 
     res.status(201).json({
@@ -546,7 +564,6 @@ exports.applyForJob = async (req, res) => {
     });
   }
 };
-
 // @desc    Get candidate's applications
 // @route   GET /api/v1/applications/my-applications
 // @access  Private (Candidate)

@@ -22,6 +22,17 @@ export interface Experience {
   description?: string;
   skills: string[];
 }
+// Add this interface in candidateService.ts
+export interface MultipleUploadResponse {
+  success: boolean;
+  message: string;
+  data: {
+    cvs: CV[];
+    totalCVs: number;
+    primaryCVId?: string;
+    errors?: Array<{ fileName: string; error: string }>;
+  };
+}
 
 export interface Certification {
   name: string;
@@ -415,7 +426,118 @@ export const candidateService = {
       throw new Error(errorMessage);
     }
   },
+  // Add this method to the candidateService object
+  uploadMultipleCVs: async (files: File[], descriptions?: string[]): Promise<CV[]> => {
+    try {
+      console.log(`Starting multiple CV upload for ${files.length} file(s)...`);
 
+      // Validate files first
+      const validation = candidateService.validateCVFiles(files);
+      if (!validation.valid) {
+        throw new Error(validation.errors.join(', '));
+      }
+
+      // Create FormData for multiple files
+      const formData = new FormData();
+
+      // Add multiple files with field name 'cvs' (matches middleware)
+      files.forEach((file, index) => {
+        formData.append('cvs', file); // Field name 'cvs' for multiple files
+        console.log(`Added file ${index + 1}: ${file.name} (${file.size} bytes)`);
+      });
+
+      // Add descriptions if provided
+      if (descriptions && descriptions.length > 0) {
+        descriptions.forEach((desc, index) => {
+          if (desc) {
+            formData.append(`descriptions[${index}]`, desc);
+          }
+        });
+      }
+
+      console.log('Uploading multiple files to server...');
+
+      // Upload files to the new endpoint
+      const response = await api.post<MultipleUploadResponse>('/candidate/cvs/multiple', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 300000, // 5 minutes for large files
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            console.log(`Upload progress: ${percentCompleted}%`);
+          }
+        }
+      });
+
+      console.log('Server response for multiple upload:', response.data);
+
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Upload failed');
+      }
+
+      if (!response.data.data?.cvs || response.data.data.cvs.length === 0) {
+        throw new Error('No CVs returned from server');
+      }
+
+      // Process uploaded CVs
+      const uploadedCVs = response.data.data.cvs.map(processCVResponse);
+
+      // Show success message
+      let message = `Successfully uploaded ${uploadedCVs.length} CV(s)`;
+      if (response.data.data.errors && response.data.data.errors.length > 0) {
+        message += ` (${response.data.data.errors.length} failed)`;
+      }
+
+      toast({
+        title: 'Success',
+        description: message,
+        variant: 'default',
+      });
+
+      // Show individual errors if any
+      if (response.data.data.errors && response.data.data.errors.length > 0) {
+        response.data.data.errors.forEach(error => {
+          toast({
+            title: 'Upload Warning',
+            description: `${error.fileName}: ${error.error}`,
+            variant: 'warning',
+          });
+        });
+      }
+
+      return uploadedCVs;
+
+    } catch (error: any) {
+      console.error('Failed to upload multiple CVs:', error);
+
+      let errorMessage = 'Failed to upload CVs';
+      if (error.code === 'ERR_NETWORK') {
+        errorMessage = 'Network error. Please check your internet connection.';
+      } else if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Upload timeout. Files might be too large or server is busy.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.errors) {
+        if (Array.isArray(error.response.data.errors)) {
+          errorMessage = error.response.data.errors.join(', ');
+        } else {
+          errorMessage = JSON.stringify(error.response.data.errors);
+        }
+      }
+
+      toast({
+        title: 'Upload Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+
+      throw new Error(errorMessage);
+    }
+  },
   // UPDATED: Upload single CV (convenience method)
   uploadSingleCV: async (file: File, description?: string): Promise<CV> => {
     const cvs = await candidateService.uploadCVs([file], description);

@@ -182,6 +182,7 @@ export const colorClasses = {
     orange: 'text-[#FF8C42] dark:text-[#FF8C42]',
     blue: 'text-[#4DA6FF] dark:text-[#4DA6FF]',
     green: 'text-[#10B981] dark:text-[#10B981]',
+    red: 'text-[#EF4444] dark:text-[#EF4444]',
   },
   bg: {
     gold: 'bg-[#FFD700] dark:bg-[#FFD700]',
@@ -196,6 +197,7 @@ export const colorClasses = {
     orange: 'bg-[#FF8C42] dark:bg-[#FF8C42]',
     blue: 'bg-[#4DA6FF] dark:bg-[#4DA6FF]',
     green: 'bg-[#10B981] dark:bg-[#10B981]',
+    red: 'bg-[#EF4444] dark:bg-[#EF4444]',
   },
   border: {
     gold: 'border-[#FFD700] dark:border-[#FFD700]',
@@ -210,6 +212,7 @@ export const colorClasses = {
     orange: 'border-[#FF8C42] dark:border-[#FF8C42]',
     blue: 'border-[#4DA6FF] dark:border-[#4DA6FF]',
     green: 'border-[#10B981] dark:border-[#10B981]',
+    red: 'border-[#EF4444] dark:border-[#EF4444]',
   },
 };
 

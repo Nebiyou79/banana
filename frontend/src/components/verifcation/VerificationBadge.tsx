@@ -193,18 +193,18 @@ const VerificationBadge: React.FC<VerificationBadgeProps> = ({
                 <div className={`absolute z-50 bottom-full mb-2 left-1/2 transform -translate-x-1/2 ${sizeClasses[size].tooltip}`}>
                     <div className="relative">
                         <div
-                            className={`rounded-lg px-3 py-2 shadow-lg ${theme.bg.secondary}`}
+                            className={`rounded-lg px-3 py-2 shadow-lg ${themeMode === 'dark' ? 'bg-gray-800' : 'bg-gray-900'} ${themeMode === 'dark' ? 'text-white' : 'text-white'}`}
                             style={{
-                                border: `1px solid ${theme.border.primary}`,
-                                color: theme.text.primary
+                                border: `1px solid ${themeMode === 'dark' ? '#4B5563' : '#374151'}`,
                             }}
                         >
-                            <div className={`font-medium ${sizeClasses[size].tooltipText} ${theme.text.primary}`}>
+                            <div className={`font-medium ${sizeClasses[size].tooltipText}`}>
                                 {config.tooltip}
                             </div>
-                            <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent"
+                            <div
+                                className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent"
                                 style={{
-                                    borderTopColor: themeMode === 'dark' ? theme.bg.secondary : theme.bg.secondary
+                                    borderTopColor: themeMode === 'dark' ? '#1F2937' : '#111827'
                                 }}
                             ></div>
                         </div>

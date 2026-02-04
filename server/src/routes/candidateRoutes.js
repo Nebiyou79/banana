@@ -3,6 +3,7 @@ const {
   getProfile,
   updateProfile,
   uploadCV,
+  uploadMultipleCVs,  // Add new function
   setPrimaryCV,
   deleteCV,
   getCV,
@@ -16,7 +17,7 @@ const {
 } = require('../controllers/candidateController');
 const { verifyToken } = require('../middleware/authMiddleware');
 const { restrictTo } = require('../middleware/roleMiddleware');
-const localFileUpload = require('../middleware/localFileUpload'); // Added for local uploads
+const localFileUpload = require('../middleware/localFileUpload');
 const rateLimit = require('express-rate-limit');
 const { body } = require('express-validator');
 
@@ -35,7 +36,7 @@ const candidateLimiter = rateLimit({
 // CV-specific rate limiting
 const cvUploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // Max 10 CV uploads per hour
+  max: 20, // Increased to 20 for multiple uploads
   message: {
     success: false,
     message: 'Too many CV uploads. Please try again later.'
@@ -65,11 +66,18 @@ router.put('/profile', profileValidation, updateProfile);
 // Get all CVs
 router.get('/cvs', getAllCVs);
 
-// Upload CV(s) - USING LOCALFILEUPLOAD MIDDLEWARE
-router.post('/cv', 
-  cvUploadLimiter, 
-  localFileUpload.cv(), // Uses localFileUpload.cv() middleware
+// Upload single CV - USING LOCALFILEUPLOAD CV MIDDLEWARE
+router.post('/cv',
+  cvUploadLimiter,
+  localFileUpload.single('cv', 'cv'), // Changed from .cv() to .single()
   uploadCV
+);
+
+// ✅ NEW: Upload multiple CVs
+router.post('/cvs/multiple',
+  cvUploadLimiter,
+  localFileUpload.multiple('cvs', 10, 'cv'), // Allows up to 10 files at once
+  uploadMultipleCVs  // New controller function
 );
 
 // Get single CV metadata
@@ -87,7 +95,7 @@ router.patch('/cv/:cvId/primary', setPrimaryCV);
 // Delete CV
 router.delete('/cv/:cvId', deleteCV);
 
-// ========== DEBUG ENDPOINT (REMOVED Cloudinary debug) ==========
+// ========== DEBUG ENDPOINT ==========
 router.post('/cv-debug', (req, res) => {
   console.log('=== CV DEBUG ENDPOINT ===');
   console.log('Headers:', req.headers);

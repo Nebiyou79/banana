@@ -70,14 +70,39 @@ const createMulterInstance = (options = {}) => {
     fileFilter: fileFilter,
     limits: {
       fileSize: maxSize,
-      files: options.maxFiles || 10 // Increased for multiple fields
+      files: options.maxFiles || 10
     }
   });
 };
 
+// Helper function to extract metadata from form fields
+const extractMetadata = (req, fieldName, index) => {
+  const metadata = {};
+  
+  // Check for various metadata formats
+  const possibleKeys = [
+    `${fieldName}[${index}][_tempId]`,
+    `${fieldName}[${index}][refId]`,
+    `${fieldName}[${index}][expId]`,
+    `${fieldName}[${index}][metaId]`,
+    `${fieldName}_${index}_tempId`,
+    `${fieldName}_${index}_refId`,
+    `${fieldName}_${index}_expId`
+  ];
+  
+  for (const key of possibleKeys) {
+    if (req.body[key]) {
+      metadata.metaId = req.body[key];
+      break;
+    }
+  }
+  
+  return metadata;
+};
+
 // Middleware factory function
 const localFileUpload = {
-  // Single document upload
+  // Single document upload (preserves existing functionality)
   single: (fieldName = 'document', folder = 'documents') => {
     return (req, res, next) => {
       // Store folder in request for controller access
@@ -133,7 +158,7 @@ const localFileUpload = {
     };
   },
 
-  // Multiple documents upload
+  // Multiple documents upload (preserves existing functionality)
   multiple: (fieldName = 'documents', maxFiles = 5, folder = 'documents') => {
     return (req, res, next) => {
       // Store folder in request for controller access
@@ -190,7 +215,7 @@ const localFileUpload = {
     };
   },
 
-  // NEW: Multiple fields upload (for application with cv, referencePdfs, experiencePdfs)
+  // ✅ ENHANCED: Multiple fields upload with metadata preservation
   fields: (fields = [], folder = 'documents') => {
     return (req, res, next) => {
       // Store folder in request for controller access
@@ -240,16 +265,24 @@ const localFileUpload = {
               success: true,
               fieldName: fieldName,
               folder: folder,
-              files: files.map(file => ({
-                originalName: file.originalname,
-                fileName: file.filename,
-                size: file.size,
-                mimetype: file.mimetype,
-                path: file.path,
-                destination: file.destination,
-                url: `/uploads/${folder}/${file.filename}`,
-                downloadUrl: `${process.env.BACKEND_URL || 'http://localhost:4000'}/uploads/download/${folder}/${file.filename}`
-              })),
+              files: files.map((file, index) => {
+                // Extract metadata for this file
+                const metadata = extractMetadata(req, fieldName, index);
+                
+                return {
+                  originalName: file.originalname,
+                  fileName: file.filename,
+                  size: file.size,
+                  mimetype: file.mimetype,
+                  path: file.path,
+                  destination: file.destination,
+                  url: `/uploads/${folder}/${file.filename}`,
+                  downloadUrl: `${process.env.BACKEND_URL || 'http://localhost:4000'}/uploads/download/${folder}/${file.filename}`,
+                  fieldIndex: index,
+                  // ✅ ADDED: Metadata for file-entity matching
+                  ...metadata
+                };
+              }),
               count: files.length
             };
           }
@@ -264,7 +297,7 @@ const localFileUpload = {
               success: true,
               fieldName: 'multiple',
               folder: folder,
-              files: allFiles.map(file => ({
+              files: allFiles.map((file, index) => ({
                 originalName: file.originalname,
                 fileName: file.filename,
                 size: file.size,
@@ -284,27 +317,90 @@ const localFileUpload = {
     };
   },
 
-  // Specialized uploaders for different document types
+  // ✅ SPECIALIZED UPLOADERS (PRESERVES EXISTING FUNCTIONALITY)
+  
   cv: () => localFileUpload.single('cv', 'cv'),
   application: () => localFileUpload.single('application', 'applications'),
   tender: () => localFileUpload.single('tender', 'tenders'),
   proposal: () => localFileUpload.single('proposal', 'proposals'),
 
-  // NEW: Application upload with multiple file types
+  // ✅ NEW: Application upload with multiple file types and metadata support
   applicationWithFiles: () => {
     return localFileUpload.fields([
-      { name: 'cv', maxCount: 1 }, // CV is required
       { name: 'referencePdfs', maxCount: 5 },
       { name: 'experiencePdfs', maxCount: 5 }
     ], 'applications');
   },
 
-  // Custom upload with options
+  // ✅ NEW: CV upload with metadata (if needed elsewhere)
+  cvWithMetadata: () => {
+    return (req, res, next) => {
+      req.uploadFolder = 'cv';
+      req.uploadFieldName = 'cv';
+      
+      const upload = createMulterInstance({ folder: 'cv' }).single('cv');
+      
+      upload(req, res, (err) => {
+        if (err) {
+          if (err instanceof multer.MulterError) {
+            if (err.code === 'LIMIT_FILE_SIZE') {
+              return res.status(400).json({
+                success: false,
+                error: `File too large. Maximum size is ${process.env.MAX_DOCUMENT_SIZE || '100MB'}`
+              });
+            }
+          }
+          return res.status(400).json({
+            success: false,
+            error: err.message || 'CV upload failed'
+          });
+        }
+        
+        if (req.file) {
+          req.uploadedFile = {
+            success: true,
+            fieldName: 'cv',
+            folder: 'cv',
+            file: {
+              originalName: req.file.originalname,
+              fileName: req.file.filename,
+              size: req.file.size,
+              mimetype: req.file.mimetype,
+              path: req.file.path,
+              destination: req.file.destination,
+              url: `/uploads/cv/${req.file.filename}`,
+              downloadUrl: `${process.env.BACKEND_URL || 'http://localhost:4000'}/uploads/download/cv/${req.file.filename}`,
+              // Extract CV-specific metadata if provided
+              cvType: req.body.cvType || 'general',
+              isPrimary: req.body.isPrimary === 'true'
+            }
+          };
+        }
+        
+        next();
+      });
+    };
+  },
+
+  // Custom upload with options (preserves existing functionality)
   custom: (options = {}) => {
     return localFileUpload.single(
       options.fieldName || 'document',
       options.folder || 'documents'
     );
+  },
+
+  // ✅ NEW: Tender upload with documents (preserves existing)
+  tenderWithDocs: () => {
+    return localFileUpload.multiple('documents', 10, 'tenders');
+  },
+
+  // ✅ NEW: Proposal upload with attachments (preserves existing)
+  proposalWithAttachments: () => {
+    return localFileUpload.fields([
+      { name: 'proposal', maxCount: 1 },
+      { name: 'attachments', maxCount: 10 }
+    ], 'proposals');
   }
 };
 

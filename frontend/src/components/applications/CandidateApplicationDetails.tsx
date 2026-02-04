@@ -28,7 +28,6 @@ import {
   MapPin,
   Building,
   FileText,
-  Download,
   User,
   Mail,
   Phone,

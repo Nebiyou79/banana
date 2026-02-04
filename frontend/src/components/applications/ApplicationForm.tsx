@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// components/ApplicationForm.tsx - MODERN REDESIGN WITH REVIEW STEP (FIXED)
+// components/ApplicationForm.tsx - PROPER 3-STEP FLOW IMPLEMENTATION
 import React, { useState, useEffect } from 'react';
 import {
   applicationService,
@@ -40,7 +40,9 @@ import {
   AlertCircle,
   ClipboardCheck,
   Edit,
+  X,
 } from 'lucide-react';
+import { colorClasses } from '@/utils/color';
 
 interface ApplicationFormProps {
   jobId: string;
@@ -76,6 +78,9 @@ const ALLOWED_FILE_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png
 const MAX_FILE_SIZE_MB = 15;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
+// Generate unique temp ID for form entries
+const generateTempId = () => `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
 export const ApplicationForm: React.FC<ApplicationFormProps> = ({
   jobId,
   jobTitle,
@@ -92,11 +97,9 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
   const [cvs, setCvs] = useState<CV[]>([]);
   const [newSkill, setNewSkill] = useState('');
 
-  // File states - FIXED: Separate states for each file type
-  const [cvFile, setCvFile] = useState<File | null>(null);
-  const [referenceFiles, setReferenceFiles] = useState<File[]>([]);
-  const [experienceFiles, setExperienceFiles] = useState<File[]>([]);
-  const [selectedProfileCV, setSelectedProfileCV] = useState<CV | null>(null);
+  // File states - SEPARATE for each document type
+  const [referenceFiles, setReferenceFiles] = useState<Map<string, File>>(new Map()); // Map tempId -> File
+  const [experienceFiles, setExperienceFiles] = useState<Map<string, File>>(new Map()); // Map tempId -> File
 
   const [formData, setFormData] = useState<FormData>({
     coverLetter: '',
@@ -132,7 +135,7 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
       number: 3,
       title: 'Documents',
       icon: Briefcase,
-      description: 'Files & Attachments',
+      description: 'Experience & References',
       color: 'from-violet-500 to-purple-500'
     },
     {
@@ -154,6 +157,7 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
       const profile = await candidateService.getProfile();
       setCandidateProfile(profile);
 
+      // Initialize form with candidate data
       setFormData(prev => ({
         ...prev,
         contactInfo: {
@@ -175,17 +179,14 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
         coverLetter: generateDefaultCoverLetter(profile, jobTitle, companyName)
       }));
 
+      // Load candidate's existing CVs
       try {
         const candidateCVs = await applicationService.getCandidateCVs();
-        const enhancedCVs = candidateCVs.map(cv => ({
-          ...cv,
-          size: cv.size || 0,
-          mimetype: cv.mimetype || 'application/octet-stream'
-        }));
-        setCvs(enhancedCVs);
+        setCvs(candidateCVs);
 
-        if (enhancedCVs.length > 0) {
-          const firstCV = enhancedCVs[0];
+        if (candidateCVs.length > 0) {
+          // Auto-select the first CV (can be changed by user)
+          const firstCV = candidateCVs[0];
           setFormData(prev => ({
             ...prev,
             selectedCVs: [{
@@ -195,7 +196,6 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
               url: firstCV.url
             }]
           }));
-          setSelectedProfileCV(firstCV);
         }
       } catch (cvError) {
         console.error('CV loading error:', cvError);
@@ -235,14 +235,14 @@ ${profile.name}`;
   };
 
   // File validation function
-  const validateFile = (file: File, type: 'cv' | 'reference' | 'experience'): { valid: boolean; error?: string } => {
+  const validateFile = (file: File): { valid: boolean; error?: string } => {
     // Check file type
     if (!ALLOWED_FILE_TYPES.includes(file.type)) {
       const fileExtension = `.${file.name.toLowerCase().split('.').pop()}`;
       if (!ALLOWED_FILE_EXTENSIONS.includes(fileExtension)) {
         return {
           valid: false,
-          error: `Invalid file type for ${type}. Allowed: ${ALLOWED_FILE_EXTENSIONS.join(', ')}`
+          error: `Invalid file type. Allowed: ${ALLOWED_FILE_EXTENSIONS.join(', ')}`
         };
       }
     }
@@ -282,7 +282,6 @@ ${profile.name}`;
 
       if (selected) {
         if (!prev.selectedCVs.some(selectedCV => selectedCV.cvId === cvId)) {
-          setSelectedProfileCV(cv);
           return {
             ...prev,
             selectedCVs: [
@@ -297,7 +296,6 @@ ${profile.name}`;
           };
         }
       } else {
-        setSelectedProfileCV(null);
         return {
           ...prev,
           selectedCVs: prev.selectedCVs.filter(selectedCV => selectedCV.cvId !== cvId)
@@ -324,20 +322,24 @@ ${profile.name}`;
     }));
   };
 
-  const handleAddReference = () => {
+  // Reference handling with tempId
+  const handleAddReference = (mode: 'form' | 'document' = 'form') => {
+    const tempId = generateTempId();
+    
     setFormData(prev => ({
       ...prev,
       references: [
         ...prev.references,
         {
-          name: '',
-          position: '',
-          company: '',
-          email: '',
-          phone: '',
-          relationship: '',
+          _tempId: tempId,
+          name: mode === 'form' ? '' : undefined,
+          position: mode === 'form' ? '' : undefined,
+          company: mode === 'form' ? '' : undefined,
+          email: mode === 'form' ? '' : undefined,
+          phone: mode === 'form' ? '' : undefined,
+          relationship: mode === 'form' ? '' : undefined,
           allowsContact: true,
-          providedAsDocument: false
+          providedAsDocument: mode === 'document'
         }
       ]
     }));
@@ -352,6 +354,16 @@ ${profile.name}`;
   };
 
   const handleRemoveReference = (index: number) => {
+    const reference = formData.references[index];
+    if (reference._tempId) {
+      // Remove associated file if exists
+      setReferenceFiles(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(reference._tempId!);
+        return newMap;
+      });
+    }
+    
     setFormData(prev => {
       const updatedReferences = [...prev.references];
       updatedReferences.splice(index, 1);
@@ -359,19 +371,23 @@ ${profile.name}`;
     });
   };
 
-  const handleAddExperience = () => {
+  // Experience handling with tempId
+  const handleAddExperience = (mode: 'form' | 'document' = 'form') => {
+    const tempId = generateTempId();
+    
     setFormData(prev => ({
       ...prev,
       workExperience: [
         ...prev.workExperience,
         {
-          company: '',
-          position: '',
+          _tempId: tempId,
+          company: mode === 'form' ? '' : undefined,
+          position: mode === 'form' ? '' : undefined,
           startDate: '',
           endDate: '',
           current: false,
-          description: '',
-          providedAsDocument: false
+          description: mode === 'form' ? '' : undefined,
+          providedAsDocument: mode === 'document'
         }
       ]
     }));
@@ -381,11 +397,27 @@ ${profile.name}`;
     setFormData(prev => {
       const updatedExperience = [...prev.workExperience];
       updatedExperience[index] = { ...updatedExperience[index], [field]: value };
+      
+      // If changing to current, clear endDate
+      if (field === 'current' && value === true) {
+        updatedExperience[index].endDate = '';
+      }
+      
       return { ...prev, workExperience: updatedExperience };
     });
   };
 
   const handleRemoveExperience = (index: number) => {
+    const experience = formData.workExperience[index];
+    if (experience._tempId) {
+      // Remove associated file if exists
+      setExperienceFiles(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(experience._tempId!);
+        return newMap;
+      });
+    }
+    
     setFormData(prev => {
       const updatedExperience = [...prev.workExperience];
       updatedExperience.splice(index, 1);
@@ -393,130 +425,51 @@ ${profile.name}`;
     });
   };
 
-  // CV file handling - SINGLE FILE REQUIRED
-  const handleCVFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const validation = validateFile(file, 'cv');
+  // File upload handling for references
+  const handleReferenceFileUpload = (tempId: string, file: File) => {
+    const validation = validateFile(file);
     if (!validation.valid) {
       toast({
-        title: 'Invalid CV File',
+        title: 'Invalid File',
         description: validation.error,
         variant: 'destructive'
       });
-      return;
+      return false;
     }
 
-    setCvFile(file);
-
-    toast({
-      title: 'CV Uploaded',
-      description: `${file.name} has been added successfully`,
-      variant: 'default'
-    });
-
-    event.target.value = '';
+    setReferenceFiles(prev => new Map(prev).set(tempId, file));
+    return true;
   };
 
-  const removeCVFile = () => {
-    setCvFile(null);
-    toast({
-      title: 'CV Removed',
-      description: 'CV file has been removed',
-      variant: 'default'
+  const removeReferenceFile = (tempId: string) => {
+    setReferenceFiles(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(tempId);
+      return newMap;
     });
   };
 
-  // Reference files handling - MULTIPLE FILES OPTIONAL
-  const handleReferenceFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    if (files.length === 0) return;
-
-    const validFiles: File[] = [];
-    const errors: string[] = [];
-
-    files.forEach(file => {
-      const validation = validateFile(file, 'reference');
-      if (validation.valid) {
-        validFiles.push(file);
-      } else if (validation.error) {
-        errors.push(`${file.name}: ${validation.error}`);
-      }
-    });
-
-    if (errors.length > 0) {
+  // File upload handling for experience
+  const handleExperienceFileUpload = (tempId: string, file: File) => {
+    const validation = validateFile(file);
+    if (!validation.valid) {
       toast({
-        title: 'Invalid Reference Files',
-        description: errors.slice(0, 3).join(', ') + (errors.length > 3 ? `... and ${errors.length - 3} more` : ''),
+        title: 'Invalid File',
+        description: validation.error,
         variant: 'destructive'
       });
+      return false;
     }
 
-    if (validFiles.length > 0) {
-      setReferenceFiles(prev => [...prev, ...validFiles]);
-      toast({
-        title: 'Reference Files Uploaded',
-        description: `${validFiles.length} file(s) added successfully`,
-        variant: 'default'
-      });
-    }
-
-    event.target.value = '';
+    setExperienceFiles(prev => new Map(prev).set(tempId, file));
+    return true;
   };
 
-  const removeReferenceFile = (index: number) => {
-    setReferenceFiles(prev => prev.filter((_, i) => i !== index));
-    toast({
-      title: 'File Removed',
-      description: 'Reference file has been removed',
-      variant: 'default'
-    });
-  };
-
-  // Experience files handling - MULTIPLE FILES OPTIONAL
-  const handleExperienceFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    if (files.length === 0) return;
-
-    const validFiles: File[] = [];
-    const errors: string[] = [];
-
-    files.forEach(file => {
-      const validation = validateFile(file, 'experience');
-      if (validation.valid) {
-        validFiles.push(file);
-      } else if (validation.error) {
-        errors.push(`${file.name}: ${validation.error}`);
-      }
-    });
-
-    if (errors.length > 0) {
-      toast({
-        title: 'Invalid Experience Files',
-        description: errors.slice(0, 3).join(', ') + (errors.length > 3 ? `... and ${errors.length - 3} more` : ''),
-        variant: 'destructive'
-      });
-    }
-
-    if (validFiles.length > 0) {
-      setExperienceFiles(prev => [...prev, ...validFiles]);
-      toast({
-        title: 'Experience Files Uploaded',
-        description: `${validFiles.length} file(s) added successfully`,
-        variant: 'default'
-      });
-    }
-
-    event.target.value = '';
-  };
-
-  const removeExperienceFile = (index: number) => {
-    setExperienceFiles(prev => prev.filter((_, i) => i !== index));
-    toast({
-      title: 'File Removed',
-      description: 'Experience file has been removed',
-      variant: 'default'
+  const removeExperienceFile = (tempId: string) => {
+    setExperienceFiles(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(tempId);
+      return newMap;
     });
   };
 
@@ -530,7 +483,7 @@ ${profile.name}`;
   };
 
   // Helper function to truncate filename
-  const truncateFilename = (filename: string, maxLength: number = 30): string => {
+  const truncateFilename = (filename: string, maxLength: number = 25): string => {
     if (filename.length <= maxLength) return filename;
     const extension = filename.split('.').pop();
     const name = filename.substring(0, filename.lastIndexOf('.'));
@@ -540,17 +493,7 @@ ${profile.name}`;
 
   const handleSubmit = async () => {
     try {
-      // Validate CV file upload (REQUIRED)
-      if (!cvFile) {
-        toast({
-          title: 'CV Upload Required',
-          description: 'You must upload a CV file to submit your application',
-          variant: 'destructive'
-        });
-        return;
-      }
-
-      // Validate other required fields
+      // Validate required fields
       const errors: string[] = [];
 
       if (!formData.contactInfo.email?.trim()) {
@@ -569,6 +512,19 @@ ${profile.name}`;
         errors.push('Cover letter is required');
       }
 
+      // Validate document-based entries have files
+      formData.references.forEach((ref, index) => {
+        if (ref.providedAsDocument && !referenceFiles.has(ref._tempId!)) {
+          errors.push(`Reference ${index + 1} is marked as document but no file is uploaded`);
+        }
+      });
+
+      formData.workExperience.forEach((exp, index) => {
+        if (exp.providedAsDocument && !experienceFiles.has(exp._tempId!)) {
+          errors.push(`Work experience ${index + 1} is marked as document but no file is uploaded`);
+        }
+      });
+
       if (errors.length > 0) {
         errors.forEach((error: any) => {
           toast({
@@ -582,16 +538,19 @@ ${profile.name}`;
 
       setIsSubmitting(true);
 
+      // Prepare application data
       const applicationData: ApplyForJobData = {
         coverLetter: formData.coverLetter,
         skills: formData.skills,
         references: formData.references.map(ref => ({
           ...ref,
-          providedAsDocument: referenceFiles.length > 0
+          // Keep tempId for backend file matching
+          _tempId: ref._tempId
         })),
         workExperience: formData.workExperience.map(exp => ({
           ...exp,
-          providedAsDocument: experienceFiles.length > 0
+          // Keep tempId for backend file matching
+          _tempId: exp._tempId
         })),
         contactInfo: {
           email: formData.contactInfo.email,
@@ -603,20 +562,33 @@ ${profile.name}`;
         userInfo: formData.userInfo
       };
 
-      console.log('📤 Submitting application with files:', {
-        cvFile: cvFile?.name,
-        referenceFiles: referenceFiles.length,
-        experienceFiles: experienceFiles.length
+      console.log('📤 Submitting application:', {
+        jobId,
+        cvCount: formData.selectedCVs.length,
+        referencesCount: formData.references.length,
+        referencesWithDocuments: Array.from(referenceFiles.keys()).length,
+        experienceCount: formData.workExperience.length,
+        experienceWithDocuments: Array.from(experienceFiles.keys()).length
       });
 
-      // Submit application with all files
+      // Convert file maps to arrays with metadata
+      const referenceFilesArray = Array.from(referenceFiles.entries()).map(([tempId, file]) => ({
+        file,
+        tempId
+      }));
+
+      const experienceFilesArray = Array.from(experienceFiles.entries()).map(([tempId, file]) => ({
+        file,
+        tempId
+      }));
+
+      // Submit application with files
       const response = await applicationService.applyForJob(
         jobId,
         applicationData,
         {
-          cvFile: cvFile, // REQUIRED - backend expects "cv" field
-          referenceFiles: referenceFiles, // Optional - backend expects "referencePdfs" field
-          experienceFiles: experienceFiles // Optional - backend expects "experiencePdfs" field
+          referenceFiles: referenceFilesArray,
+          experienceFiles: experienceFilesArray
         }
       );
 
@@ -643,8 +615,6 @@ ${profile.name}`;
         errorMessage = 'Cover letter is required';
       } else if (error.message.includes('At least one CV must be selected')) {
         errorMessage = 'Please select at least one CV from your profile';
-      } else if (error.message.includes('CV file is required')) {
-        errorMessage = 'CV file upload is required for application submission';
       }
 
       toast({
@@ -690,16 +660,6 @@ ${profile.name}`;
       return;
     }
 
-    // Step 3 validation - CV file upload is required
-    if (currentStep === 3 && !cvFile) {
-      toast({
-        title: 'CV Upload Required',
-        description: 'You must upload a CV file to continue',
-        variant: 'destructive'
-      });
-      return;
-    }
-
     setCurrentStep(prev => Math.min(prev + 1, steps.length));
   };
 
@@ -737,7 +697,7 @@ ${profile.name}`;
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mb-8">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-linear-to-br from-blue-600 to-cyan-600 rounded-xl flex items-center justify-center">
+              <div className={`w-12 h-12 ${colorClasses.bg.goldenMustard} rounded-xl flex items-center justify-center`}>
                 <FileText className="h-6 w-6 text-white" />
               </div>
               <div>
@@ -767,12 +727,13 @@ ${profile.name}`;
                   <div className="flex flex-col items-center relative z-10">
                     <button
                       onClick={() => goToStep(step.number)}
-                      className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 ${isCurrent
-                        ? `bg-linear-to-br ${step.color} text-white shadow-lg scale-110`
-                        : isCompleted
+                      className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                        isCurrent
+                          ? `${colorClasses.bg.goldenMustard} text-white shadow-lg scale-110`
+                          : isCompleted
                           ? 'bg-emerald-100 text-emerald-600 border-2 border-emerald-200'
                           : 'bg-slate-100 text-slate-400 border-2 border-slate-200'
-                        }`}
+                      }`}
                     >
                       {isCompleted ? (
                         <CheckCircle className="h-5 w-5" />
@@ -781,8 +742,9 @@ ${profile.name}`;
                       )}
                     </button>
                     <div className="mt-3 text-center">
-                      <p className={`text-sm font-medium ${isCurrent ? 'text-slate-900' : isCompleted ? 'text-emerald-700' : 'text-slate-500'
-                        }`}>
+                      <p className={`text-sm font-medium ${
+                        isCurrent ? 'text-slate-900' : isCompleted ? 'text-emerald-700' : 'text-slate-500'
+                      }`}>
                         {step.title}
                       </p>
                       <p className="text-xs text-slate-500 mt-1">{step.description}</p>
@@ -790,8 +752,9 @@ ${profile.name}`;
                   </div>
 
                   {index < steps.length - 1 && (
-                    <div className={`flex-1 h-0.5 mx-4 ${isCompleted ? 'bg-emerald-500' : 'bg-slate-200'
-                      }`} />
+                    <div className={`flex-1 h-0.5 mx-4 ${
+                      isCompleted ? 'bg-emerald-500' : 'bg-slate-200'
+                    }`} />
                   )}
                 </div>
               );
@@ -808,13 +771,13 @@ ${profile.name}`;
               <Card className="border-slate-200 shadow-sm">
                 <CardHeader className="pb-4 border-b border-slate-100">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <User className="h-5 w-5 text-blue-600" />
+                    <div className={`w-10 h-10 ${colorClasses.bg.goldenMustard} bg-opacity-20 rounded-lg flex items-center justify-center`}>
+                      <User className="h-5 w-5 text-goldenMustard" />
                     </div>
                     <div>
                       <CardTitle className="text-xl text-slate-900">Contact Information</CardTitle>
                       <CardDescription className="text-slate-600">
-                        We`ll use this to contact you about your application
+                        We'll use this to contact you about your application
                       </CardDescription>
                     </div>
                   </div>
@@ -869,13 +832,13 @@ ${profile.name}`;
               <Card className="border-slate-200 shadow-sm">
                 <CardHeader className="pb-4 border-b border-slate-100">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <FileText className="h-5 w-5 text-blue-600" />
+                    <div className={`w-10 h-10 ${colorClasses.bg.goldenMustard} bg-opacity-20 rounded-lg flex items-center justify-center`}>
+                      <FileText className="h-5 w-5 text-goldenMustard" />
                     </div>
                     <div>
-                      <CardTitle className="text-xl text-slate-900">Select Your Resume</CardTitle>
+                      <CardTitle className="text-xl text-slate-900">Select Your CVs</CardTitle>
                       <CardDescription className="text-slate-600">
-                        Choose which resume to use from your profile
+                        Choose which CVs to include from your profile
                       </CardDescription>
                     </div>
                   </div>
@@ -885,10 +848,11 @@ ${profile.name}`;
                     {cvs.length > 0 ? cvs.map((cv) => (
                       <div
                         key={cv._id}
-                        className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${formData.selectedCVs.some(selected => selected.cvId === cv._id)
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-slate-200 bg-white hover:border-slate-300'
-                          }`}
+                        className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
+                          formData.selectedCVs.some(selected => selected.cvId === cv._id)
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
                       >
                         <div className="flex items-center space-x-4 flex-1">
                           <input
@@ -929,15 +893,15 @@ ${profile.name}`;
                     )) : (
                       <div className="text-center py-8">
                         <FileText className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-                        <p className="text-slate-500 font-medium mb-2">No Resume Found</p>
-                        <p className="text-slate-400 text-sm mb-4">Upload your resume to start applying for jobs</p>
+                        <p className="text-slate-500 font-medium mb-2">No CV Found</p>
+                        <p className="text-slate-400 text-sm mb-4">Upload your CV to your profile to start applying for jobs</p>
                         <Button
                           variant="outline"
                           onClick={() => window.open('/dashboard/candidate/profile', '_blank')}
                           className="border-slate-300 text-slate-700"
                         >
                           <Plus className="h-4 w-4 mr-2" />
-                          Upload Resume
+                          Upload CV to Profile
                         </Button>
                       </div>
                     )}
@@ -945,13 +909,8 @@ ${profile.name}`;
                   {formData.selectedCVs.length > 0 && (
                     <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                       <p className="text-sm text-blue-800">
-                        <span className="font-semibold">Note:</span> You`ve selected {formData.selectedCVs.length} CV(s) from your profile.
-                        In the next step, you`ll need to upload a CV file for this application.
-                        {selectedProfileCV && (
-                          <span className="block mt-1">
-                            Consider uploading `{selectedProfileCV.originalName}`` or a different CV.
-                          </span>
-                        )}
+                        <span className="font-semibold">Note:</span> You've selected {formData.selectedCVs.length} CV(s) from your profile.
+                        These will be included in your application.
                       </p>
                     </div>
                   )}
@@ -967,13 +926,13 @@ ${profile.name}`;
               <Card className="border-slate-200 shadow-sm">
                 <CardHeader className="pb-4 border-b border-slate-100">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-                      <BookOpen className="h-5 w-5 text-emerald-600" />
+                    <div className={`w-10 h-10 ${colorClasses.bg.goldenMustard} bg-opacity-20 rounded-lg flex items-center justify-center`}>
+                      <BookOpen className="h-5 w-5 text-goldenMustard" />
                     </div>
                     <div>
                       <CardTitle className="text-xl text-slate-900">Cover Letter</CardTitle>
                       <CardDescription className="text-slate-600">
-                        Tell us why you`re the perfect fit for this position
+                        Tell us why you're the perfect fit for this position
                       </CardDescription>
                     </div>
                   </div>
@@ -1010,8 +969,8 @@ ${profile.name}`;
               <Card className="border-slate-200 shadow-sm">
                 <CardHeader className="pb-4 border-b border-slate-100">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-                      <Award className="h-5 w-5 text-emerald-600" />
+                    <div className={`w-10 h-10 ${colorClasses.bg.goldenMustard} bg-opacity-20 rounded-lg flex items-center justify-center`}>
+                      <Award className="h-5 w-5 text-goldenMustard" />
                     </div>
                     <div>
                       <CardTitle className="text-xl text-slate-900">Skills & Competencies</CardTitle>
@@ -1033,7 +992,7 @@ ${profile.name}`;
                       />
                       <Button
                         onClick={handleAddSkill}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                        className={`${colorClasses.bg.goldenMustard} hover:opacity-90 text-white`}
                       >
                         <Plus className="h-4 w-4 mr-2" />
                         Add
@@ -1052,7 +1011,7 @@ ${profile.name}`;
                             onClick={() => handleRemoveSkill(skill)}
                             className="ml-2 hover:text-emerald-800"
                           >
-                            <Trash2 className="h-3 w-3" />
+                            <X className="h-3 w-3" />
                           </button>
                         </Badge>
                       ))}
@@ -1071,106 +1030,20 @@ ${profile.name}`;
             </div>
           )}
 
-          {/* Step 3: Documents - FIXED with proper file upload sections */}
+          {/* Step 3: Experience & References */}
           {currentStep === 3 && (
             <div className="space-y-6">
-              {/* CV Upload - REQUIRED */}
+              {/* Work Experience */}
               <Card className="border-slate-200 shadow-sm">
                 <CardHeader className="pb-4 border-b border-slate-100">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
-                      <FileText className="h-5 w-5 text-violet-600" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-xl text-slate-900">Upload Your CV *</CardTitle>
-                      <CardDescription className="text-slate-600">
-                        Upload a CV file for this application (Required)
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  {selectedProfileCV && !cvFile && (
-                    <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                      <p className="text-sm text-blue-800">
-                        <span className="font-semibold">Note:</span> You selected `{selectedProfileCV.originalName}` from your profile.
-                        Please upload this or a different CV file.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* CV File Preview */}
-                  {cvFile ? (
-                    <div className="mb-6">
-                      <div className="flex items-center justify-between p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
-                        <div className="flex items-center space-x-3">
-                          <FileText className="h-5 w-5 text-emerald-600" />
-                          <div>
-                            <p className="font-medium text-slate-900">{truncateFilename(cvFile.name)}</p>
-                            <p className="text-sm text-slate-500">{getFileSize(cvFile.size)}</p>
-                          </div>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={removeCVFile}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <p className="text-sm text-emerald-600 mt-2 flex items-center">
-                        <CheckCircle className="h-4 w-4 mr-2" />
-                        CV file uploaded successfully
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="mb-6 p-4 border-2 border-dashed border-slate-300 rounded-lg hover:border-slate-400 transition-colors">
-                      <p className="text-sm text-slate-500 mb-2">
-                        No CV file uploaded yet. This is required for submission.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* CV Upload Area */}
-                  <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 transition-colors">
-                    <Input
-                      type="file"
-                      onChange={handleCVFileUpload}
-                      className="hidden"
-                      id="cv-upload"
-                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt"
-                    />
-                    <Label htmlFor="cv-upload" className="cursor-pointer">
-                      <div className="flex flex-col items-center">
-                        <Upload className="h-8 w-8 text-slate-400 mb-3" />
-                        <p className="text-slate-700 font-medium mb-1">Upload Your CV</p>
-                        <p className="text-slate-500 text-sm mb-2">This file will be sent with your application</p>
-                        <p className="text-slate-400 text-xs">PDF, DOC, DOCX, Images • Max 15MB</p>
-                        <Button
-                          variant="outline"
-                          className="mt-3 border-slate-300 text-slate-700"
-                        >
-                          <Upload className="h-4 w-4 mr-2" />
-                          {cvFile ? 'Replace CV' : 'Select CV File'}
-                        </Button>
-                      </div>
-                    </Label>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Work Experience Forms */}
-              <Card className="border-slate-200 shadow-sm">
-                <CardHeader className="pb-4 border-b border-slate-100">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
-                      <Briefcase className="h-5 w-5 text-violet-600" />
+                    <div className={`w-10 h-10 ${colorClasses.bg.goldenMustard} bg-opacity-20 rounded-lg flex items-center justify-center`}>
+                      <Briefcase className="h-5 w-5 text-goldenMustard" />
                     </div>
                     <div>
                       <CardTitle className="text-xl text-slate-900">Work Experience</CardTitle>
                       <CardDescription className="text-slate-600">
-                        Add your relevant work experience
+                        Add your relevant work experience (form or document)
                       </CardDescription>
                     </div>
                   </div>
@@ -1178,9 +1051,14 @@ ${profile.name}`;
                 <CardContent className="pt-6">
                   <div className="space-y-6">
                     {formData.workExperience.map((experience, index) => (
-                      <div key={index} className="p-6 border border-slate-200 rounded-xl bg-white">
+                      <div key={experience._tempId || index} className="p-6 border border-slate-200 rounded-xl bg-white">
                         <div className="flex items-center justify-between mb-4">
-                          <h4 className="font-semibold text-slate-900">Experience #{index + 1}</h4>
+                          <div className="flex items-center space-x-3">
+                            <h4 className="font-semibold text-slate-900">Work Experience #{index + 1}</h4>
+                            <Badge variant={experience.providedAsDocument ? "default" : "secondary"}>
+                              {experience.providedAsDocument ? 'Document' : 'Form'}
+                            </Badge>
+                          </div>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1190,145 +1068,170 @@ ${profile.name}`;
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                        {experience.providedAsDocument ? (
                           <div>
-                            <Label className="text-sm font-medium text-slate-700 mb-2 block">
-                              Company
+                            <Label className="text-sm font-medium text-slate-700 mb-3 block">
+                              Upload Experience Document
                             </Label>
-                            <Input
-                              value={experience.company || ''}
-                              onChange={(e) => handleExperienceChange(index, 'company', e.target.value)}
-                              placeholder="Company name"
-                            />
+                            {experienceFiles.has(experience._tempId!) ? (
+                              <div className="mb-4">
+                                <div className="flex items-center justify-between p-3 border border-emerald-200 bg-emerald-50 rounded-lg">
+                                  <div className="flex items-center space-x-3">
+                                    <FileText className="h-5 w-5 text-emerald-600" />
+                                    <div>
+                                      <p className="font-medium text-slate-900">
+                                        {truncateFilename(experienceFiles.get(experience._tempId!)!.name)}
+                                      </p>
+                                      <p className="text-sm text-slate-500">
+                                        {getFileSize(experienceFiles.get(experience._tempId!)!.size)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex space-x-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        const file = experienceFiles.get(experience._tempId!);
+                                        if (file) {
+                                          const url = URL.createObjectURL(file);
+                                          window.open(url, '_blank');
+                                        }
+                                      }}
+                                      className="text-blue-600 hover:text-blue-700"
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => removeExperienceFile(experience._tempId!)}
+                                      className="text-red-600 hover:text-red-700"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 transition-colors">
+                                <Input
+                                  type="file"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file && experience._tempId) {
+                                      handleExperienceFileUpload(experience._tempId, file);
+                                    }
+                                    e.target.value = '';
+                                  }}
+                                  className="hidden"
+                                  id={`experience-file-${index}`}
+                                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt"
+                                />
+                                <Label htmlFor={`experience-file-${index}`} className="cursor-pointer">
+                                  <div className="flex flex-col items-center">
+                                    <Upload className="h-8 w-8 text-slate-400 mb-3" />
+                                    <p className="text-slate-700 font-medium mb-1">Upload Experience Document</p>
+                                    <p className="text-slate-500 text-sm mb-2">Supporting document for this work experience</p>
+                                    <p className="text-slate-400 text-xs">PDF, DOC, DOCX, Images • Max 15MB</p>
+                                    <Button
+                                      variant="outline"
+                                      className="mt-3 border-slate-300 text-slate-700"
+                                    >
+                                      <Upload className="h-4 w-4 mr-2" />
+                                      Select File
+                                    </Button>
+                                  </div>
+                                </Label>
+                              </div>
+                            )}
                           </div>
-                          <div>
-                            <Label className="text-sm font-medium text-slate-700 mb-2 block">
-                              Position
-                            </Label>
-                            <Input
-                              value={experience.position || ''}
-                              onChange={(e) => handleExperienceChange(index, 'position', e.target.value)}
-                              placeholder="Your position"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-slate-700 mb-2 block">
-                              Start Date
-                            </Label>
-                            <Input
-                              type="month"
-                              value={experience.startDate || ''}
-                              onChange={(e) => handleExperienceChange(index, 'startDate', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-slate-700 mb-2 block">
-                              End Date
-                            </Label>
-                            <Input
-                              type="month"
-                              value={experience.endDate || ''}
-                              onChange={(e) => handleExperienceChange(index, 'endDate', e.target.value)}
-                              disabled={experience.current}
-                            />
-                            <div className="flex items-center mt-2">
-                              <input
-                                type="checkbox"
-                                checked={experience.current || false}
-                                onChange={(e) => handleExperienceChange(index, 'current', e.target.checked)}
-                                className="h-4 w-4 text-violet-600 rounded"
+                        ) : (
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <Label className="text-sm font-medium text-slate-700 mb-2 block">
+                                  Company
+                                </Label>
+                                <Input
+                                  value={experience.company || ''}
+                                  onChange={(e) => handleExperienceChange(index, 'company', e.target.value)}
+                                  placeholder="Company name"
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-sm font-medium text-slate-700 mb-2 block">
+                                  Position
+                                </Label>
+                                <Input
+                                  value={experience.position || ''}
+                                  onChange={(e) => handleExperienceChange(index, 'position', e.target.value)}
+                                  placeholder="Your position"
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-sm font-medium text-slate-700 mb-2 block">
+                                  Start Date
+                                </Label>
+                                <Input
+                                  type="month"
+                                  value={experience.startDate || ''}
+                                  onChange={(e) => handleExperienceChange(index, 'startDate', e.target.value)}
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-sm font-medium text-slate-700 mb-2 block">
+                                  End Date
+                                </Label>
+                                <Input
+                                  type="month"
+                                  value={experience.endDate || ''}
+                                  onChange={(e) => handleExperienceChange(index, 'endDate', e.target.value)}
+                                  disabled={experience.current}
+                                />
+                                <div className="flex items-center mt-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={experience.current || false}
+                                    onChange={(e) => handleExperienceChange(index, 'current', e.target.checked)}
+                                    className="h-4 w-4 text-blue-600 rounded"
+                                  />
+                                  <Label className="ml-2 text-sm text-slate-700">I currently work here</Label>
+                                </div>
+                              </div>
+                            </div>
+                            <div>
+                              <Label className="text-sm font-medium text-slate-700 mb-2 block">Description</Label>
+                              <Textarea
+                                value={experience.description || ''}
+                                onChange={(e) => handleExperienceChange(index, 'description', e.target.value)}
+                                rows={3}
+                                placeholder="Describe your responsibilities and achievements..."
                               />
-                              <Label className="ml-2 text-sm text-slate-700">I currently work here</Label>
                             </div>
                           </div>
-                        </div>
-                        <div className="mt-4">
-                          <Label className="text-sm font-medium text-slate-700 mb-2 block">Description</Label>
-                          <Textarea
-                            value={experience.description || ''}
-                            onChange={(e) => handleExperienceChange(index, 'description', e.target.value)}
-                            rows={3}
-                            placeholder="Describe your responsibilities and achievements..."
-                          />
-                        </div>
+                        )}
                       </div>
                     ))}
 
-                    <Button
-                      onClick={handleAddExperience}
-                      variant="outline"
-                      className="w-full border-dashed border-slate-300 text-slate-600 hover:bg-slate-50 py-6"
-                    >
-                      <Plus className="h-5 w-5 mr-2" />
-                      Add Another Work Experience
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Experience Documents Upload - OPTIONAL */}
-              <Card className="border-slate-200 shadow-sm">
-                <CardHeader className="pb-4 border-b border-slate-100">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
-                      <File className="h-5 w-5 text-violet-600" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-xl text-slate-900">Experience Documents (Optional)</CardTitle>
-                      <CardDescription className="text-slate-600">
-                        Upload supporting documents for your work experience
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <div className="space-y-4">
-                    {/* Uploaded experience files */}
-                    {experienceFiles.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 border border-emerald-200 bg-emerald-50 rounded-lg">
-                        <div className="flex items-center space-x-3">
-                          <FileText className="h-5 w-5 text-emerald-600" />
-                          <div>
-                            <p className="font-medium text-slate-900">{truncateFilename(file.name)}</p>
-                            <p className="text-sm text-slate-500">{getFileSize(file.size)}</p>
-                          </div>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeExperienceFile(index)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-
-                    {/* Upload area */}
-                    <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 transition-colors">
-                      <Input
-                        type="file"
-                        onChange={handleExperienceFileUpload}
-                        className="hidden"
-                        id="experience-files"
-                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt"
-                        multiple
-                      />
-                      <Label htmlFor="experience-files" className="cursor-pointer">
-                        <div className="flex flex-col items-center">
-                          <Upload className="h-8 w-8 text-slate-400 mb-3" />
-                          <p className="text-slate-700 font-medium mb-1">Upload Experience Documents</p>
-                          <p className="text-slate-500 text-sm mb-2">Supporting documents for your work experience</p>
-                          <p className="text-slate-400 text-xs">PDF, DOC, DOCX, Images • Max 15MB each</p>
-                          <Button
-                            variant="outline"
-                            className="mt-3 border-slate-300 text-slate-700"
-                          >
-                            <Upload className="h-4 w-4 mr-2" />
-                            Select Files
-                          </Button>
-                        </div>
-                      </Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Button
+                        onClick={() => handleAddExperience('form')}
+                        variant="outline"
+                        className="border-dashed border-slate-300 text-slate-600 hover:bg-slate-50 py-6"
+                      >
+                        <Plus className="h-5 w-5 mr-2" />
+                        Add Form-Based Experience
+                      </Button>
+                      <Button
+                        onClick={() => handleAddExperience('document')}
+                        variant="outline"
+                        className="border-dashed border-slate-300 text-slate-600 hover:bg-slate-50 py-6"
+                      >
+                        <File className="h-5 w-5 mr-2" />
+                        Add Document-Based Experience
+                      </Button>
                     </div>
                   </div>
                 </CardContent>
@@ -1338,13 +1241,13 @@ ${profile.name}`;
               <Card className="border-slate-200 shadow-sm">
                 <CardHeader className="pb-4 border-b border-slate-100">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
-                      <Users className="h-5 w-5 text-violet-600" />
+                    <div className={`w-10 h-10 ${colorClasses.bg.goldenMustard} bg-opacity-20 rounded-lg flex items-center justify-center`}>
+                      <Users className="h-5 w-5 text-goldenMustard" />
                     </div>
                     <div>
                       <CardTitle className="text-xl text-slate-900">Professional References</CardTitle>
                       <CardDescription className="text-slate-600">
-                        Add people who can vouch for your work and character
+                        Add people who can vouch for your work (form or document)
                       </CardDescription>
                     </div>
                   </div>
@@ -1352,9 +1255,14 @@ ${profile.name}`;
                 <CardContent className="pt-6">
                   <div className="space-y-6">
                     {formData.references.map((reference, index) => (
-                      <div key={index} className="p-6 border border-slate-200 rounded-xl bg-white">
+                      <div key={reference._tempId || index} className="p-6 border border-slate-200 rounded-xl bg-white">
                         <div className="flex items-center justify-between mb-4">
-                          <h4 className="font-semibold text-slate-900">Reference #{index + 1}</h4>
+                          <div className="flex items-center space-x-3">
+                            <h4 className="font-semibold text-slate-900">Reference #{index + 1}</h4>
+                            <Badge variant={reference.providedAsDocument ? "default" : "secondary"}>
+                              {reference.providedAsDocument ? 'Document' : 'Form'}
+                            </Badge>
+                          </div>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1364,147 +1272,170 @@ ${profile.name}`;
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                        {reference.providedAsDocument ? (
                           <div>
-                            <Label className="text-sm font-medium text-slate-700 mb-2 block">Full Name</Label>
-                            <Input
-                              value={reference.name || ''}
-                              onChange={(e) => handleReferenceChange(index, 'name', e.target.value)}
-                              placeholder="Reference full name"
-                            />
+                            <Label className="text-sm font-medium text-slate-700 mb-3 block">
+                              Upload Reference Document
+                            </Label>
+                            {referenceFiles.has(reference._tempId!) ? (
+                              <div className="mb-4">
+                                <div className="flex items-center justify-between p-3 border border-emerald-200 bg-emerald-50 rounded-lg">
+                                  <div className="flex items-center space-x-3">
+                                    <FileText className="h-5 w-5 text-emerald-600" />
+                                    <div>
+                                      <p className="font-medium text-slate-900">
+                                        {truncateFilename(referenceFiles.get(reference._tempId!)!.name)}
+                                      </p>
+                                      <p className="text-sm text-slate-500">
+                                        {getFileSize(referenceFiles.get(reference._tempId!)!.size)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex space-x-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        const file = referenceFiles.get(reference._tempId!);
+                                        if (file) {
+                                          const url = URL.createObjectURL(file);
+                                          window.open(url, '_blank');
+                                        }
+                                      }}
+                                      className="text-blue-600 hover:text-blue-700"
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => removeReferenceFile(reference._tempId!)}
+                                      className="text-red-600 hover:text-red-700"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 transition-colors">
+                                <Input
+                                  type="file"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file && reference._tempId) {
+                                      handleReferenceFileUpload(reference._tempId, file);
+                                    }
+                                    e.target.value = '';
+                                  }}
+                                  className="hidden"
+                                  id={`reference-file-${index}`}
+                                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt"
+                                />
+                                <Label htmlFor={`reference-file-${index}`} className="cursor-pointer">
+                                  <div className="flex flex-col items-center">
+                                    <Upload className="h-8 w-8 text-slate-400 mb-3" />
+                                    <p className="text-slate-700 font-medium mb-1">Upload Reference Document</p>
+                                    <p className="text-slate-500 text-sm mb-2">Reference letter or recommendation letter</p>
+                                    <p className="text-slate-400 text-xs">PDF, DOC, DOCX, Images • Max 15MB</p>
+                                    <Button
+                                      variant="outline"
+                                      className="mt-3 border-slate-300 text-slate-700"
+                                    >
+                                      <Upload className="h-4 w-4 mr-2" />
+                                      Select File
+                                    </Button>
+                                  </div>
+                                </Label>
+                              </div>
+                            )}
                           </div>
-                          <div>
-                            <Label className="text-sm font-medium text-slate-700 mb-2 block">Position</Label>
-                            <Input
-                              value={reference.position || ''}
-                              onChange={(e) => handleReferenceChange(index, 'position', e.target.value)}
-                              placeholder="Their position"
-                            />
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <Label className="text-sm font-medium text-slate-700 mb-2 block">Full Name</Label>
+                              <Input
+                                value={reference.name || ''}
+                                onChange={(e) => handleReferenceChange(index, 'name', e.target.value)}
+                                placeholder="Reference full name"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-sm font-medium text-slate-700 mb-2 block">Position</Label>
+                              <Input
+                                value={reference.position || ''}
+                                onChange={(e) => handleReferenceChange(index, 'position', e.target.value)}
+                                placeholder="Their position"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-sm font-medium text-slate-700 mb-2 block">Company</Label>
+                              <Input
+                                value={reference.company || ''}
+                                onChange={(e) => handleReferenceChange(index, 'company', e.target.value)}
+                                placeholder="Company name"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-sm font-medium text-slate-700 mb-2 block">Relationship</Label>
+                              <Input
+                                value={reference.relationship || ''}
+                                onChange={(e) => handleReferenceChange(index, 'relationship', e.target.value)}
+                                placeholder="How do you know them?"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-sm font-medium text-slate-700 mb-2 block">Email</Label>
+                              <Input
+                                type="email"
+                                value={reference.email || ''}
+                                onChange={(e) => handleReferenceChange(index, 'email', e.target.value)}
+                                placeholder="email@example.com"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-sm font-medium text-slate-700 mb-2 block">Phone</Label>
+                              <Input
+                                type="tel"
+                                value={reference.phone || ''}
+                                onChange={(e) => handleReferenceChange(index, 'phone', e.target.value)}
+                                placeholder="Phone number"
+                              />
+                            </div>
+                            <div className="md:col-span-2">
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="checkbox"
+                                  checked={reference.allowsContact || false}
+                                  onChange={(e) => handleReferenceChange(index, 'allowsContact', e.target.checked)}
+                                  className="h-4 w-4 text-blue-600 rounded"
+                                />
+                                <Label className="text-sm text-slate-700 font-medium">This reference allows contact</Label>
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <Label className="text-sm font-medium text-slate-700 mb-2 block">Company</Label>
-                            <Input
-                              value={reference.company || ''}
-                              onChange={(e) => handleReferenceChange(index, 'company', e.target.value)}
-                              placeholder="Company name"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-slate-700 mb-2 block">Relationship</Label>
-                            <Input
-                              value={reference.relationship || ''}
-                              onChange={(e) => handleReferenceChange(index, 'relationship', e.target.value)}
-                              placeholder="How do you know them?"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-slate-700 mb-2 block">Email</Label>
-                            <Input
-                              type="email"
-                              value={reference.email || ''}
-                              onChange={(e) => handleReferenceChange(index, 'email', e.target.value)}
-                              placeholder="email@example.com"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-slate-700 mb-2 block">Phone</Label>
-                            <Input
-                              type="tel"
-                              value={reference.phone || ''}
-                              onChange={(e) => handleReferenceChange(index, 'phone', e.target.value)}
-                              placeholder="Phone number"
-                            />
-                          </div>
-                        </div>
-                        <div className="mt-4">
-                          <div className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={reference.allowsContact || false}
-                              onChange={(e) => handleReferenceChange(index, 'allowsContact', e.target.checked)}
-                              className="h-4 w-4 text-violet-600 rounded"
-                            />
-                            <Label className="text-sm text-slate-700 font-medium">This reference allows contact</Label>
-                          </div>
-                        </div>
+                        )}
                       </div>
                     ))}
 
-                    <Button
-                      onClick={handleAddReference}
-                      variant="outline"
-                      className="w-full border-dashed border-slate-300 text-slate-600 hover:bg-slate-50 py-6"
-                    >
-                      <Plus className="h-5 w-5 mr-2" />
-                      Add Another Professional Reference
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Reference Documents Upload - OPTIONAL */}
-              <Card className="border-slate-200 shadow-sm">
-                <CardHeader className="pb-4 border-b border-slate-100">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
-                      <File className="h-5 w-5 text-violet-600" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-xl text-slate-900">Reference Documents (Optional)</CardTitle>
-                      <CardDescription className="text-slate-600">
-                        Upload reference letters or recommendation letters
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <div className="space-y-4">
-                    {/* Uploaded reference files */}
-                    {referenceFiles.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 border border-emerald-200 bg-emerald-50 rounded-lg">
-                        <div className="flex items-center space-x-3">
-                          <FileText className="h-5 w-5 text-emerald-600" />
-                          <div>
-                            <p className="font-medium text-slate-900">{truncateFilename(file.name)}</p>
-                            <p className="text-sm text-slate-500">{getFileSize(file.size)}</p>
-                          </div>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeReferenceFile(index)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-
-                    {/* Upload area */}
-                    <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 transition-colors">
-                      <Input
-                        type="file"
-                        onChange={handleReferenceFileUpload}
-                        className="hidden"
-                        id="reference-files"
-                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt"
-                        multiple
-                      />
-                      <Label htmlFor="reference-files" className="cursor-pointer">
-                        <div className="flex flex-col items-center">
-                          <Upload className="h-8 w-8 text-slate-400 mb-3" />
-                          <p className="text-slate-700 font-medium mb-1">Upload Reference Documents</p>
-                          <p className="text-slate-500 text-sm mb-2">Reference letters or recommendation letters</p>
-                          <p className="text-slate-400 text-xs">PDF, DOC, DOCX, Images • Max 15MB each</p>
-                          <Button
-                            variant="outline"
-                            className="mt-3 border-slate-300 text-slate-700"
-                          >
-                            <Upload className="h-4 w-4 mr-2" />
-                            Select Files
-                          </Button>
-                        </div>
-                      </Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Button
+                        onClick={() => handleAddReference('form')}
+                        variant="outline"
+                        className="border-dashed border-slate-300 text-slate-600 hover:bg-slate-50 py-6"
+                      >
+                        <Plus className="h-5 w-5 mr-2" />
+                        Add Form-Based Reference
+                      </Button>
+                      <Button
+                        onClick={() => handleAddReference('document')}
+                        variant="outline"
+                        className="border-dashed border-slate-300 text-slate-600 hover:bg-slate-50 py-6"
+                      >
+                        <File className="h-5 w-5 mr-2" />
+                        Add Document-Based Reference
+                      </Button>
                     </div>
                   </div>
                 </CardContent>
@@ -1519,8 +1450,8 @@ ${profile.name}`;
               <Card className="border-slate-200 shadow-sm">
                 <CardHeader className="pb-4 border-b border-slate-100">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-                      <ClipboardCheck className="h-5 w-5 text-amber-600" />
+                    <div className={`w-10 h-10 ${colorClasses.bg.goldenMustard} bg-opacity-20 rounded-lg flex items-center justify-center`}>
+                      <ClipboardCheck className="h-5 w-5 text-goldenMustard" />
                     </div>
                     <div>
                       <CardTitle className="text-xl text-slate-900">Application Summary</CardTitle>
@@ -1562,64 +1493,38 @@ ${profile.name}`;
                       </div>
                     </div>
 
-                    {/* CV Files Review */}
+                    {/* CVs Review */}
                     <div>
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-slate-900">CV Files</h3>
+                        <h3 className="text-lg font-semibold text-slate-900">Selected CVs</h3>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => goToStep(3)}
+                          onClick={() => goToStep(1)}
                           className="text-blue-600 hover:text-blue-700"
                         >
                           <Edit className="h-4 w-4 mr-2" />
                           Edit
                         </Button>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Selected Profile CVs */}
-                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                          <p className="text-sm text-slate-500">Profile CVs Selected</p>
-                          <p className="font-medium">{formData.selectedCVs.length} CV(s)</p>
-                          {formData.selectedCVs.length > 0 && (
-                            <div className="mt-2">
-                              {formData.selectedCVs.slice(0, 2).map((cv, index) => (
-                                <p key={index} className="text-xs text-slate-500 truncate">
-                                  • {cv.originalName}
-                                </p>
-                              ))}
-                              {formData.selectedCVs.length > 2 && (
-                                <p className="text-xs text-slate-500">
-                                  +{formData.selectedCVs.length - 2} more
-                                </p>
-                              )}
-                            </div>
-                          )}
+                      <div className="bg-slate-50 p-4 rounded-lg">
+                        <div className="flex flex-wrap gap-2">
+                          {formData.selectedCVs.map((cv, index) => (
+                            <Badge key={index} variant="secondary" className="px-3 py-1">
+                              {cv.originalName}
+                            </Badge>
+                          ))}
                         </div>
-
-                        {/* Uploaded CV File */}
-                        <div className={`p-4 rounded-lg border ${cvFile ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
-                          <p className="text-sm text-slate-500">Uploaded CV File</p>
-                          {cvFile ? (
-                            <>
-                              <p className="font-medium">{truncateFilename(cvFile.name)}</p>
-                              <p className="text-xs text-slate-500 mt-1">{getFileSize(cvFile.size)}</p>
-                              <p className="text-xs text-emerald-600 mt-1 flex items-center">
-                                <CheckCircle className="h-3 w-3 mr-1" />
-                                Ready for submission
-                              </p>
-                            </>
-                          ) : (
-                            <p className="font-medium text-red-600">No CV file uploaded</p>
-                          )}
-                        </div>
+                        <p className="text-sm text-slate-500 mt-2">
+                          {formData.selectedCVs.length} CV(s) selected from your profile
+                        </p>
                       </div>
                     </div>
 
                     {/* Uploaded Files Review */}
                     <div>
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-slate-900">Additional Files</h3>
+                        <h3 className="text-lg font-semibold text-slate-900">Uploaded Documents</h3>
                         <Button
                           variant="outline"
                           size="sm"
@@ -1631,40 +1536,37 @@ ${profile.name}`;
                         </Button>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Experience Files */}
-                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                          <p className="text-sm text-slate-500">Experience Documents</p>
-                          <p className="font-medium">{experienceFiles.length} file(s)</p>
-                          {experienceFiles.length > 0 && (
-                            <div className="mt-2">
-                              {experienceFiles.slice(0, 2).map((file, index) => (
-                                <p key={index} className="text-xs text-slate-500 truncate">
-                                  • {truncateFilename(file.name, 25)}
+                        <div className="bg-slate-50 p-4 rounded-lg">
+                          <p className="text-sm text-slate-500">Reference Documents</p>
+                          <p className="font-medium text-xl mb-2">{referenceFiles.size}</p>
+                          {referenceFiles.size > 0 && (
+                            <div className="space-y-1">
+                              {Array.from(referenceFiles.values()).slice(0, 2).map((file, index) => (
+                                <p key={index} className="text-xs text-slate-600 truncate">
+                                  • {truncateFilename(file.name, 30)}
                                 </p>
                               ))}
-                              {experienceFiles.length > 2 && (
+                              {referenceFiles.size > 2 && (
                                 <p className="text-xs text-slate-500">
-                                  +{experienceFiles.length - 2} more
+                                  +{referenceFiles.size - 2} more
                                 </p>
                               )}
                             </div>
                           )}
                         </div>
-
-                        {/* Reference Files */}
-                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                          <p className="text-sm text-slate-500">Reference Documents</p>
-                          <p className="font-medium">{referenceFiles.length} file(s)</p>
-                          {referenceFiles.length > 0 && (
-                            <div className="mt-2">
-                              {referenceFiles.slice(0, 2).map((file, index) => (
-                                <p key={index} className="text-xs text-slate-500 truncate">
-                                  • {truncateFilename(file.name, 25)}
+                        <div className="bg-slate-50 p-4 rounded-lg">
+                          <p className="text-sm text-slate-500">Experience Documents</p>
+                          <p className="font-medium text-xl mb-2">{experienceFiles.size}</p>
+                          {experienceFiles.size > 0 && (
+                            <div className="space-y-1">
+                              {Array.from(experienceFiles.values()).slice(0, 2).map((file, index) => (
+                                <p key={index} className="text-xs text-slate-600 truncate">
+                                  • {truncateFilename(file.name, 30)}
                                 </p>
                               ))}
-                              {referenceFiles.length > 2 && (
+                              {experienceFiles.size > 2 && (
                                 <p className="text-xs text-slate-500">
-                                  +{referenceFiles.length - 2} more
+                                  +{experienceFiles.size - 2} more
                                 </p>
                               )}
                             </div>
@@ -1676,7 +1578,7 @@ ${profile.name}`;
                     {/* Cover Letter Review */}
                     <div>
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-slate-900">Cover Letter Preview</h3>
+                        <h3 className="text-lg font-semibold text-slate-900">Cover Letter</h3>
                         <Button
                           variant="outline"
                           size="sm"
@@ -1688,9 +1590,8 @@ ${profile.name}`;
                         </Button>
                       </div>
                       <div className="bg-slate-50 p-6 rounded-lg">
-                        <p className="text-sm text-slate-500 mb-2">First 500 characters:</p>
-                        <div className="text-slate-700 whitespace-pre-line">
-                          {truncateText(formData.coverLetter, 500)}
+                        <div className="text-slate-700 whitespace-pre-line max-h-60 overflow-y-auto">
+                          {truncateText(formData.coverLetter, 1000)}
                         </div>
                         <p className="text-xs text-slate-500 mt-2">
                           Total length: {formData.coverLetter.length} characters
@@ -1745,15 +1646,26 @@ ${profile.name}`;
                       <div className="space-y-4">
                         {formData.workExperience.map((exp, index) => (
                           <div key={index} className="p-4 border border-slate-200 rounded-lg">
-                            <p className="font-medium text-slate-900">
-                              {exp.position} at {exp.company}
-                            </p>
-                            <p className="text-sm text-slate-600">
-                              {exp.startDate} - {exp.current ? 'Present' : exp.endDate}
-                            </p>
-                            {exp.description && (
-                              <p className="text-sm text-slate-700 mt-2">{exp.description}</p>
-                            )}
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <p className="font-medium text-slate-900">
+                                  {exp.providedAsDocument ? 'Document' : `${exp.position || 'Position'} at ${exp.company || 'Company'}`}
+                                </p>
+                                {!exp.providedAsDocument && exp.startDate && (
+                                  <p className="text-sm text-slate-600">
+                                    {exp.startDate} - {exp.current ? 'Present' : exp.endDate || 'Not specified'}
+                                  </p>
+                                )}
+                                {exp.providedAsDocument && experienceFiles.has(exp._tempId!) && (
+                                  <p className="text-sm text-slate-600">
+                                    File: {truncateFilename(experienceFiles.get(exp._tempId!)!.name)}
+                                  </p>
+                                )}
+                              </div>
+                              <Badge variant={exp.providedAsDocument ? "default" : "secondary"}>
+                                {exp.providedAsDocument ? 'Document' : 'Form'}
+                              </Badge>
+                            </div>
                           </div>
                         ))}
                         {formData.workExperience.length === 0 && (
@@ -1779,15 +1691,22 @@ ${profile.name}`;
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {formData.references.map((ref, index) => (
                           <div key={index} className="p-4 border border-slate-200 rounded-lg">
-                            <p className="font-medium text-slate-900">{ref.name}</p>
-                            <p className="text-sm text-slate-600">{ref.position} at {ref.company}</p>
-                            <p className="text-sm text-slate-500">Relationship: {ref.relationship}</p>
-                            <div className="flex items-center space-x-2 mt-2">
-                              <span className={`inline-block w-2 h-2 rounded-full ${ref.allowsContact ? 'bg-green-500' : 'bg-red-500'}`} />
-                              <span className="text-xs text-slate-500">
-                                {ref.allowsContact ? 'Allows contact' : 'Does not allow contact'}
-                              </span>
+                            <div className="flex items-start justify-between mb-2">
+                              <p className="font-medium text-slate-900">
+                                {ref.providedAsDocument ? 'Reference Document' : ref.name || 'Unnamed Reference'}
+                              </p>
+                              <Badge variant={ref.providedAsDocument ? "default" : "secondary"}>
+                                {ref.providedAsDocument ? 'Document' : 'Form'}
+                              </Badge>
                             </div>
+                            {!ref.providedAsDocument && ref.position && ref.company && (
+                              <p className="text-sm text-slate-600">{ref.position} at {ref.company}</p>
+                            )}
+                            {ref.providedAsDocument && referenceFiles.has(ref._tempId!) && (
+                              <p className="text-sm text-slate-600">
+                                File: {truncateFilename(referenceFiles.get(ref._tempId!)!.name)}
+                              </p>
+                            )}
                           </div>
                         ))}
                         {formData.references.length === 0 && (
@@ -1817,18 +1736,16 @@ ${profile.name}`;
                       <div className="text-sm text-slate-600">Profile CVs</div>
                     </div>
                     <div className="bg-white p-4 rounded-lg border border-slate-200">
-                      <div className={`text-2xl font-bold ${cvFile ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {cvFile ? '✓' : '0'}
-                      </div>
-                      <div className="text-sm text-slate-600">Uploaded CV</div>
+                      <div className="text-2xl font-bold text-violet-600">{referenceFiles.size}</div>
+                      <div className="text-sm text-slate-600">Reference Files</div>
                     </div>
                     <div className="bg-white p-4 rounded-lg border border-slate-200">
-                      <div className="text-2xl font-bold text-violet-600">{experienceFiles.length}</div>
+                      <div className="text-2xl font-bold text-emerald-600">{experienceFiles.size}</div>
                       <div className="text-sm text-slate-600">Experience Files</div>
                     </div>
                     <div className="bg-white p-4 rounded-lg border border-slate-200">
-                      <div className="text-2xl font-bold text-amber-600">{referenceFiles.length}</div>
-                      <div className="text-sm text-slate-600">Reference Files</div>
+                      <div className="text-2xl font-bold text-amber-600">{formData.skills.length}</div>
+                      <div className="text-sm text-slate-600">Skills</div>
                     </div>
                   </div>
 
@@ -1837,28 +1754,49 @@ ${profile.name}`;
                     <h4 className="font-medium text-slate-900 mb-3">Application Checklist:</h4>
                     <div className="space-y-2">
                       <div className="flex items-center">
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-3 ${formData.contactInfo.email && formData.contactInfo.phone && formData.contactInfo.location ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-3 ${
+                          formData.contactInfo.email && formData.contactInfo.phone && formData.contactInfo.location 
+                          ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                        }`}>
                           {formData.contactInfo.email && formData.contactInfo.phone && formData.contactInfo.location ? '✓' : '✗'}
                         </div>
                         <span className="text-sm">Contact information complete</span>
                       </div>
                       <div className="flex items-center">
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-3 ${formData.selectedCVs.length > 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-3 ${
+                          formData.selectedCVs.length > 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                        }`}>
                           {formData.selectedCVs.length > 0 ? '✓' : '✗'}
                         </div>
-                        <span className="text-sm">CV selected from profile</span>
+                        <span className="text-sm">CVs selected from profile</span>
                       </div>
                       <div className="flex items-center">
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-3 ${cvFile ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                          {cvFile ? '✓' : '✗'}
-                        </div>
-                        <span className="text-sm">CV file uploaded (Required)</span>
-                      </div>
-                      <div className="flex items-center">
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-3 ${formData.coverLetter.trim().length > 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-3 ${
+                          formData.coverLetter.trim().length > 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                        }`}>
                           {formData.coverLetter.trim().length > 0 ? '✓' : '✗'}
                         </div>
                         <span className="text-sm">Cover letter provided</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-3 ${
+                          formData.references.every(ref => 
+                            !ref.providedAsDocument || 
+                            (ref.providedAsDocument && referenceFiles.has(ref._tempId!))
+                          ) && formData.workExperience.every(exp => 
+                            !exp.providedAsDocument || 
+                            (exp.providedAsDocument && experienceFiles.has(exp._tempId!))
+                          ) ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                        }`}>
+                          {formData.references.every(ref => 
+                            !ref.providedAsDocument || 
+                            (ref.providedAsDocument && referenceFiles.has(ref._tempId!))
+                          ) && formData.workExperience.every(exp => 
+                            !exp.providedAsDocument || 
+                            (exp.providedAsDocument && experienceFiles.has(exp._tempId!))
+                          ) ? '✓' : '✗'}
+                        </div>
+                        <span className="text-sm">All document-based entries have files</span>
                       </div>
                     </div>
                   </div>
@@ -1892,7 +1830,7 @@ ${profile.name}`;
           {!isLastStep ? (
             <Button
               onClick={nextStep}
-              className="bg-linear-to-br from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white"
+              className={`${colorClasses.bg.goldenMustard} hover:opacity-90 text-white`}
             >
               Next
               <ChevronRight className="h-4 w-4 ml-2" />
@@ -1900,8 +1838,8 @@ ${profile.name}`;
           ) : (
             <Button
               onClick={handleSubmit}
-              disabled={isSubmitting || !cvFile}
-              className="bg-linear-to-br from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isSubmitting}
+              className={`${colorClasses.bg.goldenMustard} hover:opacity-90 text-white disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               {isSubmitting ? (
                 <>

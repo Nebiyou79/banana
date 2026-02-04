@@ -109,7 +109,27 @@ export interface Reference {
   notes?: string;
   providedAsDocument: boolean;
 }
+// Add these new interfaces at the top
+export interface FileWithTempId {
+  file: File;
+  tempId: string;
+}
 
+// Update the ApplyForJobData interface to include _tempId
+export interface ApplyForJobData {
+  coverLetter: string;
+  skills: string[];
+  references: (Reference & { _tempId?: string })[];
+  workExperience: (WorkExperience & { _tempId?: string })[];
+  contactInfo: ContactInfo;
+  selectedCVs: Array<{
+    cvId: string;
+    filename?: string;
+    originalName?: string;
+    url?: string;
+  }>;
+  userInfo?: UserInfo;
+}
 export interface WorkExperience {
   _id?: string;
   document?: Attachment;
@@ -288,21 +308,6 @@ export interface StatisticsResponse {
   data: {
     statistics: ApplicationStats;
   };
-}
-
-export interface ApplyForJobData {
-  coverLetter: string;
-  skills: string[];
-  references: Reference[];
-  workExperience: WorkExperience[];
-  contactInfo: ContactInfo;
-  selectedCVs: Array<{
-    cvId: string;
-    filename?: string;
-    originalName?: string;
-    url?: string;
-  }>;
-  userInfo?: UserInfo;
 }
 
 export interface UpdateStatusData {
@@ -1059,194 +1064,93 @@ export const cvService = {
 export const applicationService = {
   getCandidateCVs,
 
-  async applyForJob(jobId: string, data: ApplyForJobData, files?: {
-    cvFile?: File; // Optional - user can upload new CV or use existing
-    referenceFiles?: File[];
-    experienceFiles?: File[];
-  }): Promise<ApplicationResponse> {
-    try {
-      console.log('📤 [Frontend] Submitting application for job:', jobId);
-      console.log('📁 [Frontend] Files to upload:', {
-        cvFile: files?.cvFile ? { name: files.cvFile.name, size: files.cvFile.size } : 'No CV file',
-        referenceFiles: files?.referenceFiles?.map(f => ({ name: f.name, size: f.size })) || 'No reference files',
-        experienceFiles: files?.experienceFiles?.map(f => ({ name: f.name, size: f.size })) || 'No experience files'
-      });
-
-      // Validate application data before proceeding
-      const validationErrors = validateApplicationData(data);
-      if (validationErrors.length > 0) {
-        throw new Error(validationErrors.join(', '));
-      }
-
-      const formData = new FormData();
-
-      // Add JSON data fields
-      formData.append('coverLetter', data.coverLetter);
-      formData.append('skills', JSON.stringify(data.skills || []));
-      formData.append('references', JSON.stringify(data.references || []));
-      formData.append('workExperience', JSON.stringify(data.workExperience || []));
-      formData.append('contactInfo', JSON.stringify(data.contactInfo || {}));
-      formData.append('selectedCVs', JSON.stringify(data.selectedCVs || []));
-
-      if (data.userInfo) {
-        formData.append('userInfo', JSON.stringify(data.userInfo));
-      }
-
-      // CRITICAL: Add CV file if provided (OPTIONAL - backend can use selectedCVs)
-      if (files?.cvFile) {
-        formData.append('cv', files.cvFile);
-        console.log(`📎 [Frontend] Appended CV file: ${files.cvFile.name} as 'cv'`);
-      } else {
-        console.log('ℹ️ [Frontend] No CV file uploaded - using selectedCVs from profile');
-      }
-
-      // Add reference documents with field name 'referencePdfs'
-      if (files?.referenceFiles && files.referenceFiles.length > 0) {
-        files.referenceFiles.forEach((file, index) => {
-          formData.append('referencePdfs', file);
-          console.log(`📎 [Frontend] Appended reference document ${index + 1}: ${file.name} as 'referencePdfs'`);
-        });
-      }
-
-      // Add experience documents with field name 'experiencePdfs'
-      if (files?.experienceFiles && files.experienceFiles.length > 0) {
-        files.experienceFiles.forEach((file, index) => {
-          formData.append('experiencePdfs', file);
-          console.log(`📎 [Frontend] Appended experience document ${index + 1}: ${file.name} as 'experiencePdfs'`);
-        });
-      }
-
-      // Debug form data contents
-      debugFormData(formData);
-
-      console.log('🚀 [Frontend] Sending request to backend...');
-      const response = await api.post<ApplicationResponse>(
-        `/applications/apply/${jobId}`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-          timeout: 60000,
-        }
-      );
-
-      console.log('✅ [Frontend] Application submitted successfully!');
-      handleSuccess('Application submitted successfully!');
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ [Frontend] Application submission error:', error);
-
-      // Log the actual error response from backend
-      if (error.response?.data) {
-        console.error('🔴 Backend Response:', error.response.data);
-
-        // If it's a validation error, extract the specific field errors
-        if (error.response.data.errors) {
-          console.error('🔴 Field Errors:', error.response.data.errors);
-        }
-      }
-
-      throw handleApiError(error, 'Failed to submit application');
-    }
-  },
-
-  // // Alternative method that accepts the old format and adapts it
-  // async applyForJobWithLegacyFormat(
-  //   jobId: string,
-  //   data: ApplyForJobData,
-  //   files?: File[]
-  // ): Promise<ApplicationResponse> {
-  //   try {
-  //     console.log('📤 [Frontend] Submitting application with legacy format for job:', jobId);
-
-  //     // Convert legacy files array to new format
-  //     const newFiles = this.convertLegacyFilesToNewFormat(files, data);
-
-  //     // Use the new applyForJob method
-  //     return this.applyForJob(jobId, data, newFiles);
-  //    } catch (error: any) {
-  //     console.error('❌ [Frontend] Application submission error:', error);
-  //     throw handleApiError(error, 'Failed to submit application');
-  //   }
-  // },
-
-  // Helper to convert legacy files array to new format with correct field names
-  convertLegacyFilesToNewFormat(files?: File[], data?: ApplyForJobData): {
-    cvFile?: File;
-    referenceFiles?: File[];
-    experienceFiles?: File[];
-  } {
-    if (!files || files.length === 0) {
-      return {};
-    }
-
-    const result: {
-      cvFile?: File;
-      referenceFiles?: File[];
-      experienceFiles?: File[];
-    } = {
-      referenceFiles: [],
-      experienceFiles: []
-    };
-
-    console.log('🔄 Converting legacy files to new format:', files.map(f => f.name));
-
-    // CRITICAL FIX: Categorize files based on backend expectations
-
-    // First, check if we have data about references and experiences
-    const hasReferenceDocuments = data?.references?.some(ref => ref.providedAsDocument) || false;
-    const hasExperienceDocuments = data?.workExperience?.some(exp => exp.providedAsDocument) || false;
-
-    // Categorize files based on naming patterns and context
-    files.forEach((file) => {
-      const fileName = file.name.toLowerCase();
-
-      // 1. Identify CV file - should be first file or has CV in name
-      if (!result.cvFile && (
-        fileName.includes('cv') ||
-        fileName.includes('resume') ||
-        fileName.includes('curriculum') ||
-        // If it's the first file and we haven't identified a CV yet, assume it's the CV
-        (files.length > 0 && file === files[0])
-      )) {
-        result.cvFile = file;
-        console.log(`✅ Identified as CV: ${file.name}`);
-      }
-      // 2. Identify reference documents
-      else if (fileName.includes('reference') ||
-        fileName.includes('recommendation') ||
-        fileName.includes('letter') ||
-        fileName.includes('ref-') ||
-        fileName.includes('rec-') ||
-        // If we know there should be reference documents from data context
-        hasReferenceDocuments) {
-        result.referenceFiles!.push(file);
-        console.log(`✅ Identified as reference document: ${file.name}`);
-      }
-      // 3. Identify experience documents
-      else {
-        result.experienceFiles!.push(file);
-        console.log(`✅ Identified as experience document: ${file.name}`);
-      }
+async applyForJob(
+  jobId: string, 
+  data: ApplyForJobData, 
+  files?: {
+    referenceFiles?: FileWithTempId[];
+    experienceFiles?: FileWithTempId[];
+  }
+): Promise<ApplicationResponse> {
+  try {
+    console.log('📤 [Frontend] Submitting application for job:', jobId);
+    console.log('📁 [Frontend] Files to upload:', {
+      referenceFiles: files?.referenceFiles?.length || 0,
+      experienceFiles: files?.experienceFiles?.length || 0
     });
 
-    // IMPORTANT: CV file is REQUIRED - if none identified, use first file
-    if (!result.cvFile && files.length > 0) {
-      result.cvFile = files[0];
-      console.log(`⚠️ No CV identified, using first file as CV: ${files[0].name}`);
+    // Validate application data
+    const validationErrors = validateApplicationData(data);
+    if (validationErrors.length > 0) {
+      throw new Error(validationErrors.join(', '));
+    }
 
-      // Remove this file from other categories if it was added there
-      if (result.referenceFiles?.includes(files[0])) {
-        result.referenceFiles = result.referenceFiles.filter(f => f !== files[0]);
+    const formData = new FormData();
+
+    // Add JSON data fields
+    formData.append('coverLetter', data.coverLetter);
+    formData.append('skills', JSON.stringify(data.skills || []));
+    formData.append('references', JSON.stringify(data.references || []));
+    formData.append('workExperience', JSON.stringify(data.workExperience || []));
+    formData.append('contactInfo', JSON.stringify(data.contactInfo || {}));
+    formData.append('selectedCVs', JSON.stringify(data.selectedCVs || []));
+
+    if (data.userInfo) {
+      formData.append('userInfo', JSON.stringify(data.userInfo));
+    }
+
+    // Add reference documents with metadata
+    if (files?.referenceFiles && files.referenceFiles.length > 0) {
+      files.referenceFiles.forEach(({ file, tempId }, index) => {
+        formData.append('referencePdfs', file);
+        // Add metadata for backend file matching
+        formData.append(`referencePdfs[${index}][_tempId]`, tempId);
+        console.log(`📎 [Frontend] Appended reference document: ${file.name} with tempId: ${tempId}`);
+      });
+    }
+
+    // Add experience documents with metadata
+    if (files?.experienceFiles && files.experienceFiles.length > 0) {
+      files.experienceFiles.forEach(({ file, tempId }, index) => {
+        formData.append('experiencePdfs', file);
+        // Add metadata for backend file matching
+        formData.append(`experiencePdfs[${index}][_tempId]`, tempId);
+        console.log(`📎 [Frontend] Appended experience document: ${file.name} with tempId: ${tempId}`);
+      });
+    }
+
+    // Debug form data contents
+    debugFormData(formData);
+
+    console.log('🚀 [Frontend] Sending request to backend...');
+    const response = await api.post<ApplicationResponse>(
+      `/applications/apply/${jobId}`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 60000,
       }
-      if (result.experienceFiles?.includes(files[0])) {
-        result.experienceFiles = result.experienceFiles.filter(f => f !== files[0]);
+    );
+
+    console.log('✅ [Frontend] Application submitted successfully!');
+    handleSuccess('Application submitted successfully!');
+    return response.data;
+  } catch (error: any) {
+    console.error('❌ [Frontend] Application submission error:', error);
+
+    if (error.response?.data) {
+      console.error('🔴 Backend Response:', error.response.data);
+
+      if (error.response.data.errors) {
+        console.error('🔴 Field Errors:', error.response.data.errors);
       }
     }
 
-    return result;
-  },
+    throw handleApiError(error, 'Failed to submit application');
+  }
+},
 
   // Get candidate's applications
   async getMyApplications(params?: ApplicationFilters): Promise<ApplicationsListResponse> {
@@ -1674,7 +1578,12 @@ export const applicationService = {
 
     return icons[fileType] || '📎';
   },
-
+convertMapToFileWithTempIdArray(map: Map<string, File>): FileWithTempId[] {
+  return Array.from(map.entries()).map(([tempId, file]) => ({
+    file,
+    tempId
+  }));
+},
   // Enhanced helper to check if file is downloadable
   isFileDownloadable: (file: Attachment | any): boolean => {
     if (!file) return false;

@@ -1,4 +1,4 @@
-// components/attachments/ApplicationAttachments.tsx
+// components/applications/ApplicationAttachments.tsx
 import React, { ReactNode, useMemo, useCallback } from 'react';
 import { Application, Reference, WorkExperience, Attachment, CV } from '@/services/applicationService';
 import { applicationService } from '@/services/applicationService';

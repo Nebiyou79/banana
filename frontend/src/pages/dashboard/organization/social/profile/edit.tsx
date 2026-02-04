@@ -99,7 +99,7 @@ export default function OrganizationEditProfilePage() {
         // If we were in create mode and now have an organization, redirect to view profile
         if (mode === 'create') {
             setTimeout(() => {
-                router.push('/social/organization/profile');
+                router.push('/dashboard/organization/social/profile/edit');
             }, 1500);
         }
     };
@@ -109,7 +109,7 @@ export default function OrganizationEditProfilePage() {
     };
 
     const handleBackToProfile = () => {
-        router.push('/social/organization/profile');
+        router.push('/dashboard/organization/social/profile/edit');
     };
 
     // Show authorization check loading

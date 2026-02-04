@@ -33,8 +33,8 @@ const JobsPage: React.FC = () => {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const themeMode = 'light'; // Default theme
-  
-  // Local filter state for the JobFilter component
+
+  // Local filter state for the JobFilter component - UPDATED STRUCTURE
   const [filterState, setFilterState] = useState<JobFilterState>({
     search: '',
     category: null,
@@ -42,9 +42,13 @@ const JobsPage: React.FC = () => {
     location: null,
     experienceLevel: null,
     salaryMode: null,
-    applicationsOpen: false
+    datePosted: null,
+    workArrangement: null,
+    remote: null,
+    featured: false,
+    urgent: false
   });
-  
+
   // API filter state for job queries
   const [apiFilters, setApiFilters] = useState<JobFilters>({
     page: 1,
@@ -55,7 +59,6 @@ const JobsPage: React.FC = () => {
   });
 
   const [savedJobs, setSavedJobs] = useState<Set<string>>(new Set());
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [isFiltering, setIsFiltering] = useState(false);
   const [showFilters, setShowFilters] = useState(true); // Default to showing filters on desktop
 
@@ -115,7 +118,11 @@ const JobsPage: React.FC = () => {
         ...apiFilterParams,
         page: 1 // Reset to first page on filter change
       }));
-      // Don't close filters after applying on desktop
+      toast({
+        title: 'Filters Applied',
+        description: 'Your filters have been applied successfully',
+        variant: 'default'
+      });
     } catch (error) {
       toast({
         title: 'Filter error',
@@ -124,11 +131,10 @@ const JobsPage: React.FC = () => {
       });
     } finally {
       setIsFiltering(false);
-      setMobileFiltersOpen(false);
     }
   }, [filterState, toast]);
 
-  // Clear all filters
+  // Clear all filters - UPDATED TO MATCH NEW STRUCTURE
   const handleClearFilters = useCallback(() => {
     setFilterState({
       search: '',
@@ -137,7 +143,11 @@ const JobsPage: React.FC = () => {
       location: null,
       experienceLevel: null,
       salaryMode: null,
-      applicationsOpen: false
+      datePosted: null,
+      workArrangement: null,
+      remote: null,
+      featured: false,
+      urgent: false
     });
     setApiFilters({
       page: 1,
@@ -146,8 +156,12 @@ const JobsPage: React.FC = () => {
       sortBy: 'createdAt',
       sortOrder: 'desc'
     });
-    // Don't close filters after clearing on desktop
-  }, []);
+    toast({
+      title: 'Filters Cleared',
+      description: 'All filters have been cleared',
+      variant: 'default'
+    });
+  }, [toast]);
 
   // Handle save/unsave job
   const handleSaveJob = async (jobId: string, saved: boolean) => {
@@ -155,12 +169,22 @@ const JobsPage: React.FC = () => {
       if (saved) {
         await candidateService.saveJob(jobId);
         setSavedJobs(prev => new Set(prev.add(jobId)));
+        toast({
+          title: 'Job Saved',
+          description: 'Job has been saved to your favorites',
+          variant: 'default'
+        });
       } else {
         await candidateService.unsaveJob(jobId);
         setSavedJobs(prev => {
           const newSet = new Set(prev);
           newSet.delete(jobId);
           return newSet;
+        });
+        toast({
+          title: 'Job Removed',
+          description: 'Job has been removed from your favorites',
+          variant: 'default'
         });
       }
     } catch (error: any) {
@@ -210,7 +234,7 @@ const JobsPage: React.FC = () => {
 
     const jobs = jobsData.data;
     const pagination = jobsData.pagination;
-    
+
     return {
       jobsByRegion: [
         {
@@ -289,6 +313,56 @@ const JobsPage: React.FC = () => {
     }
 
     return pages;
+  };
+
+  // Get filter label for display
+  const getFilterLabel = (type: keyof JobFilterState, value: any): string => {
+    switch (type) {
+      case 'category':
+        const category = jobService.getJobCategories().find(c => c.value === value);
+        return category ? `Category: ${category.label}` : `Category: ${value}`;
+      case 'location':
+        const region = jobService.getEthiopianRegions().find(r => r.slug === value);
+        return region ? `Location: ${region.name}` : `Location: ${value}`;
+      case 'experienceLevel':
+        const experienceLevels = [
+          { value: 'fresh-graduate', label: 'Fresh Graduate' },
+          { value: 'entry-level', label: 'Entry Level' },
+          { value: 'mid-level', label: 'Mid Level' },
+          { value: 'senior-level', label: 'Senior Level' },
+          { value: 'managerial', label: 'Managerial' },
+          { value: 'director', label: 'Director' },
+          { value: 'executive', label: 'Executive' }
+        ];
+        const exp = experienceLevels.find(e => e.value === value);
+        return exp ? `Experience: ${exp.label}` : `Experience: ${value}`;
+      case 'salaryMode':
+        const salaryModes = [
+          { value: 'range', label: 'Salary Range' },
+          { value: 'hidden', label: 'Salary Hidden' },
+          { value: 'negotiable', label: 'Negotiable' },
+          { value: 'company-scale', label: 'Company Scale' }
+        ];
+        const mode = salaryModes.find(m => m.value === value);
+        return mode ? `Salary: ${mode.label}` : `Salary: ${value}`;
+      case 'datePosted':
+        const dateOptions = [
+          { value: '24h', label: 'Last 24 hours' },
+          { value: '7d', label: 'Last 7 days' },
+          { value: '30d', label: 'Last 30 days' },
+          { value: 'all', label: 'All time' }
+        ];
+        const date = dateOptions.find(d => d.value === value);
+        return date ? `Date: ${date.label}` : `Date: ${value}`;
+      case 'workArrangement':
+        return `Work: ${value}`;
+      case 'remote':
+        return `Remote: ${value}`;
+      case 'search':
+        return `Search: ${value}`;
+      default:
+        return `${type}: ${value}`;
+    }
   };
 
   // Loading and error states
@@ -404,7 +478,7 @@ const JobsPage: React.FC = () => {
                     <h2 className={`text-lg sm:text-xl font-bold ${colorClasses.text.gray800} dark:${colorClasses.text.white} sm:mr-4`}>
                       Job Opportunities
                     </h2>
-                    
+
                     {/* Results count - desktop */}
                     {jobsData && (
                       <p className={`text-sm hidden sm:block ${colorClasses.text.gray800} dark:${colorClasses.text.gray400}`}>
@@ -413,7 +487,7 @@ const JobsPage: React.FC = () => {
                       </p>
                     )}
                   </div>
-                  
+
                   {/* Filter Toggle Button - Both Mobile & Desktop */}
                   <button
                     onClick={() => setShowFilters(!showFilters)}
@@ -449,265 +523,315 @@ const JobsPage: React.FC = () => {
               </div>
 
               {/* Active Filters Badges - Show even when filters are collapsed */}
-              {Object.values(filterState).some(val => 
-                val !== null && val !== '' && val !== false && 
-                (!Array.isArray(val) || val.length > 0)
-              ) && (
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {filterState.search && (
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
-                      Search: {filterState.search}
-                      <button
-                        onClick={() => {
-                          handleFilterChange({ ...filterState, search: '' });
-                          handleApplyFilters();
-                        }}
-                        className="ml-2 hover:text-blue-900 dark:hover:text-blue-200"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  )}
-                  {filterState.category && (
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
-                      Category: {jobService.getJobCategories().find(c => c.value === filterState.category)?.label}
-                      <button
-                        onClick={() => {
-                          handleFilterChange({ ...filterState, category: null });
-                          handleApplyFilters();
-                        }}
-                        className="ml-2 hover:text-green-900 dark:hover:text-green-200"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  )}
-                  {filterState.location && (
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300">
-                      Location: {jobService.getEthiopianRegions().find(r => r.slug === filterState.location)?.name}
-                      <button
-                        onClick={() => {
-                          handleFilterChange({ ...filterState, location: null });
-                          handleApplyFilters();
-                        }}
-                        className="ml-2 hover:text-purple-900 dark:hover:text-purple-200"
-                      >
-                        <X className="w-3 h-3" />
-                    </button>
-                  </span>
+              {(filterState.search ||
+                filterState.category ||
+                filterState.location ||
+                filterState.experienceLevel ||
+                filterState.salaryMode ||
+                filterState.datePosted ||
+                filterState.workArrangement ||
+                filterState.remote ||
+                filterState.types?.length > 0 ||
+                filterState.featured ||
+                filterState.urgent) && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {Object.entries(filterState).map(([key, value]) => {
+                      if (!value || (Array.isArray(value) && value.length === 0)) return null;
+
+                      if (key === 'search' && value) {
+                        return (
+                          <span key={key} className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
+                            {getFilterLabel('search', value)}
+                            <button
+                              onClick={() => {
+                                const newFilters = { ...filterState, search: '' };
+                                setFilterState(newFilters);
+                                handleApplyFilters();
+                              }}
+                              className="ml-2 hover:text-blue-900 dark:hover:text-blue-200"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      }
+
+                      if (key === 'types' && Array.isArray(value) && value.length > 0) {
+                        return (
+                          <span key={key} className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300">
+                            Types: {value.length} selected
+                            <button
+                              onClick={() => {
+                                const newFilters = { ...filterState, types: [] };
+                                setFilterState(newFilters);
+                                handleApplyFilters();
+                              }}
+                              className="ml-2 hover:text-orange-900 dark:hover:text-orange-200"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      }
+
+                      if (key === 'featured' && value === true) {
+                        return (
+                          <span key={key} className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300">
+                            Featured Only
+                            <button
+                              onClick={() => {
+                                const newFilters = { ...filterState, featured: false };
+                                setFilterState(newFilters);
+                                handleApplyFilters();
+                              }}
+                              className="ml-2 hover:text-purple-900 dark:hover:text-purple-200"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      }
+
+                      if (key === 'urgent' && value === true) {
+                        return (
+                          <span key={key} className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
+                            Urgent Only
+                            <button
+                              onClick={() => {
+                                const newFilters = { ...filterState, urgent: false };
+                                setFilterState(newFilters);
+                                handleApplyFilters();
+                              }}
+                              className="ml-2 hover:text-red-900 dark:hover:text-red-200"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      }
+
+                      if (typeof value === 'string' && key !== 'search') {
+                        return (
+                          <span key={key} className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
+                            {getFilterLabel(key as keyof JobFilterState, value)}
+                            <button
+                              onClick={() => {
+                                const newFilters = { ...filterState, [key]: null };
+                                setFilterState(newFilters);
+                                handleApplyFilters();
+                              }}
+                              className="ml-2 hover:text-green-900 dark:hover:text-green-200"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      }
+
+                      return null;
+                    })}
+
+                    {Object.values(filterState).some(val =>
+                      val !== null && val !== '' && val !== false &&
+                      (!Array.isArray(val) || val.length > 0)
+                    ) && (
+                        <button
+                          onClick={handleClearFilters}
+                          className={`text-xs underline ${colorClasses.text.gray800} dark:${colorClasses.text.gray400} hover:text-gray-900 dark:hover:text-gray-200`}
+                        >
+                          Clear all
+                        </button>
+                      )}
+                  </div>
                 )}
-                {filterState.types && filterState.types.length > 0 && (
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300">
-                    Types: {filterState.types.length} selected
-                    <button
-                      onClick={() => {
-                        handleFilterChange({ ...filterState, types: [] });
-                        handleApplyFilters();
-                      }}
-                      className="ml-2 hover:text-orange-900 dark:hover:text-orange-200"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                )}
-                <button
-                  onClick={handleClearFilters}
-                  className={`text-xs underline ${colorClasses.text.gray800} dark:${colorClasses.text.gray400} hover:text-gray-900 dark:hover:text-gray-200`}
-                >
-                  Clear all
-                </button>
+            </div>
+
+            {/* Filter Component - Collapsible on Both Mobile & Desktop */}
+            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${showFilters ? 'max-h-[2000px] opacity-100 mb-6' : 'max-h-0 opacity-0'
+              }`}>
+              <div className={`p-4 sm:p-6 rounded-xl border ${colorClasses.bg.white} dark:${colorClasses.bg.darkNavy} ${colorClasses.border.gray400} dark:${colorClasses.border.gray800}`}>
+                <JobFilter
+                  filters={filterState}
+                  onChange={handleFilterChange}
+                  onApply={handleApplyFilters}
+                  onClear={handleClearFilters}
+                  isLoading={isFiltering}
+                  themeMode={themeMode}
+                />
               </div>
+            </div>
+          </div>
+
+          {/* =============================================
+                MAIN CONTENT - JOBS LISTING
+          ============================================= */}
+          <div className="mb-8">
+            {/* Jobs Grid */}
+            {isLoadingPage ? (
+              <div className="flex justify-center py-16">
+                <div className="text-center">
+                  <LoadingSpinner size="lg" />
+                  <p className={`mt-4 ${colorClasses.text.gray800} dark:${colorClasses.text.gray400}`}>
+                    Loading job opportunities...
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Empty State */}
+                {(!jobsData?.data || jobsData.data.length === 0) ? (
+                  <div className="text-center py-12 sm:py-16">
+                    <div className={`rounded-xl sm:rounded-2xl p-6 sm:p-12 shadow-lg border max-w-2xl mx-auto ${colorClasses.bg.white} dark:${colorClasses.bg.darkNavy} ${colorClasses.border.gray400} dark:${colorClasses.border.gray800}`}>
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Search className="w-8 h-8 sm:w-10 sm:h-10 text-gray-400 dark:text-gray-500" />
+                      </div>
+                      <h3 className={`text-xl sm:text-2xl font-bold mb-3 ${colorClasses.text.gray800} dark:${colorClasses.text.white}`}>
+                        No jobs found
+                      </h3>
+                      <p className={`mb-8 max-w-md mx-auto text-sm sm:text-base ${colorClasses.text.gray800} dark:${colorClasses.text.gray400}`}>
+                        We couldn`t find any jobs matching your criteria. Try adjusting your filters or search terms.
+                      </p>
+                      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                        <button
+                          onClick={handleClearFilters}
+                          className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors text-sm sm:text-base"
+                        >
+                          Clear All Filters
+                        </button>
+                        <button
+                          onClick={() => setShowFilters(true)}
+                          className="px-6 py-3 border border-blue-600 text-blue-600 hover:bg-blue-50 rounded-lg font-medium transition-colors text-sm sm:text-base"
+                        >
+                          Show Filters
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Jobs List */}
+                    <div className="grid gap-3 sm:gap-6 px-1 sm:px-0">
+                      {jobsData.data.map((job: Job) => (
+                        <div key={job._id} className="overflow-hidden">
+                          <CandidateJobCard
+                            job={job}
+                            ownerProfile={currentUserProfile}
+                            onSave={handleSaveJob}
+                            onShare={handleShareJob}
+                            onApply={handleApplyJob}
+                            isSaved={savedJobs.has(job._id)}
+                            userApplications={[]}
+                            showSaveButton={true}
+                            themeMode={themeMode}
+                            variant="default"
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* =============================================
+                          PAGINATION SECTION
+                    ============================================= */}
+                    {totalPages > 1 && (
+                      <div className="mt-8 sm:mt-12">
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4">
+                          <p className={`text-sm ${colorClasses.text.gray800} dark:${colorClasses.text.gray400}`}>
+                            Page {currentPage} of {totalPages} • {totalItems} total jobs
+                          </p>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                              disabled={currentPage === 1}
+                              className={`px-3 sm:px-4 py-2 rounded-lg border flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${colorClasses.border.gray400} dark:${colorClasses.border.gray800} ${colorClasses.text.gray800} dark:${colorClasses.text.white} hover:bg-gray-50 dark:hover:bg-gray-700`}
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                              <span className="hidden sm:inline">Previous</span>
+                              <span className="sm:hidden">Prev</span>
+                            </button>
+
+                            {/* Desktop Pagination Numbers */}
+                            <div className="hidden sm:flex items-center space-x-1">
+                              {generatePagination().map((page, index) => (
+                                page === '...' ? (
+                                  <span key={`ellipsis-${index}`} className="px-3 py-2 text-gray-400 dark:text-gray-500">
+                                    ...
+                                  </span>
+                                ) : (
+                                  <button
+                                    key={page}
+                                    onClick={() => handlePageChange(Number(page))}
+                                    className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm min-w-[40px] ${currentPage === page
+                                        ? 'bg-blue-600 dark:bg-blue-700 text-white shadow-lg'
+                                        : `${colorClasses.text.gray800} dark:${colorClasses.text.white} hover:bg-gray-100 dark:hover:bg-gray-700 border ${colorClasses.border.gray400} dark:${colorClasses.border.gray800}`
+                                      }`}
+                                  >
+                                    {page}
+                                  </button>
+                                )
+                              ))}
+                            </div>
+
+                            {/* Mobile pagination info */}
+                            <div className="sm:hidden flex items-center space-x-2">
+                              <span className={`text-sm ${colorClasses.text.gray800} dark:${colorClasses.text.gray400}`}>
+                                {currentPage} / {totalPages}
+                              </span>
+                            </div>
+
+                            <button
+                              onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
+                              disabled={currentPage === totalPages}
+                              className={`px-3 sm:px-4 py-2 rounded-lg border flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${colorClasses.border.gray400} dark:${colorClasses.border.gray800} ${colorClasses.text.gray800} dark:${colorClasses.text.white} hover:bg-gray-50 dark:hover:bg-gray-700`}
+                            >
+                              <span className="hidden sm:inline">Next</span>
+                              <span className="sm:hidden">Next</span>
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
             )}
           </div>
 
-          {/* Filter Component - Collapsible on Both Mobile & Desktop */}
-          <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
-            showFilters ? 'max-h-[2000px] opacity-100 mb-6' : 'max-h-0 opacity-0'
-          }`}>
-            <div className={`p-4 sm:p-6 rounded-xl border ${colorClasses.bg.white} dark:${colorClasses.bg.darkNavy} ${colorClasses.border.gray400} dark:${colorClasses.border.gray800}`}>
-              <JobFilter
-                filters={filterState}
-                onChange={handleFilterChange}
-                onApply={handleApplyFilters}
-                onClear={handleClearFilters}
-                isLoading={isFiltering}
-                themeMode={themeMode}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* =============================================
-              MAIN CONTENT - JOBS LISTING
-        ============================================= */}
-        <div className="mb-8">
-          {/* Jobs Grid */}
-          {isLoadingPage ? (
-            <div className="flex justify-center py-16">
-              <div className="text-center">
-                <LoadingSpinner size="lg" />
-                <p className={`mt-4 ${colorClasses.text.gray800} dark:${colorClasses.text.gray400}`}>
-                  Loading job opportunities...
+          {/* =============================================
+                FEATURED CALLOUT
+          ============================================= */}
+          {!isLoadingPage && jobsData?.data && jobsData.data.length > 0 && (
+            <div className="mt-8 sm:mt-12 mx-3 sm:mx-0">
+              <div className="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-800 dark:to-blue-900 rounded-xl sm:rounded-2xl p-6 sm:p-8 text-white text-center">
+                <div className="flex items-center justify-center mb-4">
+                  <Sparkles className="w-5 h-5 sm:w-8 sm:h-8 mr-2" />
+                  <h3 className="text-lg sm:text-2xl font-bold">
+                    Ready to take the next step in your career?
+                  </h3>
+                </div>
+                <p className="text-blue-100 dark:text-blue-200 mb-6 max-w-2xl mx-auto text-xs sm:text-base">
+                  Join thousands of professionals who found their dream jobs through our platform.
+                  Create your profile and let employers find you!
                 </p>
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
+                  <Link href="/dashboard/candidate/profile">
+                    <button className="px-4 sm:px-8 py-3 bg-white text-blue-600 dark:text-blue-700 rounded-lg font-semibold hover:bg-blue-50 dark:hover:bg-blue-100 transition-colors shadow-lg text-sm sm:text-base w-full sm:w-auto">
+                      Complete Your Profile
+                    </button>
+                  </Link>
+                  <Link href="/dashboard/candidate/saved-jobs">
+                    <button className="px-4 sm:px-8 py-3 bg-transparent border-2 border-white text-white rounded-lg font-semibold hover:bg-white hover:text-blue-600 dark:hover:text-blue-700 transition-colors text-sm sm:text-base w-full sm:w-auto">
+                      View Saved Jobs
+                    </button>
+                  </Link>
+                </div>
               </div>
             </div>
-          ) : (
-            <>
-              {/* Empty State */}
-              {(!jobsData?.data || jobsData.data.length === 0) ? (
-                <div className="text-center py-12 sm:py-16">
-                  <div className={`rounded-xl sm:rounded-2xl p-6 sm:p-12 shadow-lg border max-w-2xl mx-auto ${colorClasses.bg.white} dark:${colorClasses.bg.darkNavy} ${colorClasses.border.gray400} dark:${colorClasses.border.gray800}`}>
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <Search className="w-8 h-8 sm:w-10 sm:h-10 text-gray-400 dark:text-gray-500" />
-                    </div>
-                    <h3 className={`text-xl sm:text-2xl font-bold mb-3 ${colorClasses.text.gray800} dark:${colorClasses.text.white}`}>
-                      No jobs found
-                    </h3>
-                    <p className={`mb-8 max-w-md mx-auto text-sm sm:text-base ${colorClasses.text.gray800} dark:${colorClasses.text.gray400}`}>
-                      We couldn`t find any jobs matching your criteria. Try adjusting your filters or search terms.
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                      <button
-                        onClick={handleClearFilters}
-                        className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors text-sm sm:text-base"
-                      >
-                        Clear All Filters
-                      </button>
-                      <button
-                        onClick={() => setShowFilters(true)}
-                        className="px-6 py-3 border border-blue-600 text-blue-600 hover:bg-blue-50 rounded-lg font-medium transition-colors text-sm sm:text-base"
-                      >
-                        Show Filters
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Jobs List */}
-                  <div className="grid gap-3 sm:gap-6 px-1 sm:px-0">
-                    {jobsData.data.map((job: Job) => (
-                      <div key={job._id} className="overflow-hidden">
-                        <CandidateJobCard
-                          job={job}
-                          ownerProfile={currentUserProfile}
-                          onSave={handleSaveJob}
-                          onShare={handleShareJob}
-                          onApply={handleApplyJob}
-                          isSaved={savedJobs.has(job._id)}
-                          userApplications={[]}
-                          showSaveButton={true}
-                          themeMode={themeMode}
-                          variant="default"
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* =============================================
-                        PAGINATION SECTION
-                  ============================================= */}
-                  {totalPages > 1 && (
-                    <div className="mt-8 sm:mt-12">
-                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4">
-                        <p className={`text-sm ${colorClasses.text.gray800} dark:${colorClasses.text.gray400}`}>
-                          Page {currentPage} of {totalPages} • {totalItems} total jobs
-                        </p>
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-                            disabled={currentPage === 1}
-                            className={`px-3 sm:px-4 py-2 rounded-lg border flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${colorClasses.border.gray400} dark:${colorClasses.border.gray800} ${colorClasses.text.gray800} dark:${colorClasses.text.white} hover:bg-gray-50 dark:hover:bg-gray-700`}
-                          >
-                            <ChevronLeft className="w-4 h-4" />
-                            <span className="hidden sm:inline">Previous</span>
-                            <span className="sm:hidden">Prev</span>
-                          </button>
-
-                          {/* Desktop Pagination Numbers */}
-                          <div className="hidden sm:flex items-center space-x-1">
-                            {generatePagination().map((page, index) => (
-                              page === '...' ? (
-                                <span key={`ellipsis-${index}`} className="px-3 py-2 text-gray-400 dark:text-gray-500">
-                                  ...
-                                </span>
-                              ) : (
-                                <button
-                                  key={page}
-                                  onClick={() => handlePageChange(Number(page))}
-                                  className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm min-w-[40px] ${
-                                    currentPage === page
-                                      ? 'bg-blue-600 dark:bg-blue-700 text-white shadow-lg'
-                                      : `${colorClasses.text.gray800} dark:${colorClasses.text.white} hover:bg-gray-100 dark:hover:bg-gray-700 border ${colorClasses.border.gray400} dark:${colorClasses.border.gray800}`
-                                  }`}
-                                >
-                                  {page}
-                                </button>
-                              )
-                            ))}
-                          </div>
-
-                          {/* Mobile pagination info */}
-                          <div className="sm:hidden flex items-center space-x-2">
-                            <span className={`text-sm ${colorClasses.text.gray800} dark:${colorClasses.text.gray400}`}>
-                              {currentPage} / {totalPages}
-                            </span>
-                          </div>
-
-                          <button
-                            onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
-                            disabled={currentPage === totalPages}
-                            className={`px-3 sm:px-4 py-2 rounded-lg border flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${colorClasses.border.gray400} dark:${colorClasses.border.gray800} ${colorClasses.text.gray800} dark:${colorClasses.text.white} hover:bg-gray-50 dark:hover:bg-gray-700`}
-                          >
-                            <span className="hidden sm:inline">Next</span>
-                            <span className="sm:hidden">Next</span>
-                            <ChevronRight className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </>
           )}
         </div>
-
-        {/* =============================================
-              FEATURED CALLOUT
-        ============================================= */}
-        {!isLoadingPage && jobsData?.data && jobsData.data.length > 0 && (
-          <div className="mt-8 sm:mt-12 mx-3 sm:mx-0">
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-800 dark:to-blue-900 rounded-xl sm:rounded-2xl p-6 sm:p-8 text-white text-center">
-              <div className="flex items-center justify-center mb-4">
-                <Sparkles className="w-5 h-5 sm:w-8 sm:h-8 mr-2" />
-                <h3 className="text-lg sm:text-2xl font-bold">
-                  Ready to take the next step in your career?
-                </h3>
-              </div>
-              <p className="text-blue-100 dark:text-blue-200 mb-6 max-w-2xl mx-auto text-xs sm:text-base">
-                Join thousands of professionals who found their dream jobs through our platform.
-                Create your profile and let employers find you!
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
-                <Link href="/dashboard/candidate/profile">
-                  <button className="px-4 sm:px-8 py-3 bg-white text-blue-600 dark:text-blue-700 rounded-lg font-semibold hover:bg-blue-50 dark:hover:bg-blue-100 transition-colors shadow-lg text-sm sm:text-base w-full sm:w-auto">
-                    Complete Your Profile
-                  </button>
-                </Link>
-                <Link href="/dashboard/candidate/saved-jobs">
-                  <button className="px-4 sm:px-8 py-3 bg-transparent border-2 border-white text-white rounded-lg font-semibold hover:bg-white hover:text-blue-600 dark:hover:text-blue-700 transition-colors text-sm sm:text-base w-full sm:w-auto">
-                    View Saved Jobs
-                  </button>
-                </Link>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
-    </div>
-  </DashboardLayout>
-);
+    </DashboardLayout>
+  );
 };
 
 export default JobsPage;
