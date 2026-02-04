@@ -12,6 +12,9 @@ const {
 // Apply authentication middleware to protected routes
 router.use(verifyToken);
 
+// ✅ BULK STATUS ROUTE MUST COME BEFORE DYNAMIC ROUTe
+router.post('/bulk-status', verifyToken, followController.getBulkFollowStatus);
+
 // Apply DIFFERENT rate limiters to different endpoints
 router.post('/:targetId', 
   socialLimiter, // More permissive for follow/unfollow actions
@@ -72,5 +75,4 @@ router.get('/public/following/:targetId',
   followListLimiter,
   followController.getFollowing
 );
-
 module.exports = router;

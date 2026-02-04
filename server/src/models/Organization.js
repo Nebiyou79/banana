@@ -1,4 +1,4 @@
-// server/src/models/Organization.js
+// In Organization.js - Replace the entire file
 const mongoose = require('mongoose');
 
 const organizationSchema = new mongoose.Schema({
@@ -15,9 +15,8 @@ const organizationSchema = new mongoose.Schema({
     unique: true,
     sparse: true,
     index: true,
-     validate: {
+    validate: {
       validator: function (v) {
-        // Must be exactly 10 digits
         return /^[0-9]{10}$/.test(v);
       },
       message: 'TIN number must be exactly 10 digits'
@@ -36,6 +35,7 @@ const organizationSchema = new mongoose.Schema({
     trim: true,
     index: true
   },
+  // DEPRECATED: Now used as fallback only
   logoUrl: {
     type: String,
     default: null,
@@ -46,6 +46,7 @@ const organizationSchema = new mongoose.Schema({
       message: 'Logo URL must be a valid upload path or HTTP URL'
     }
   },
+  // DEPRECATED: Now used as fallback only
   bannerUrl: {
     type: String,
     default: null,
@@ -67,12 +68,11 @@ const organizationSchema = new mongoose.Schema({
     country: String,
     zipCode: String
   },
-phone: {
+  phone: {
     type: String,
     trim: true,
-        validate: {
+    validate: {
       validator: function (v) {
-        // Allow only digits, optional "+" at start
         return /^\+?[0-9]{7,15}$/.test(v);
       },
       message: 'Phone number must contain only digits (7–15 digits allowed)'
@@ -81,22 +81,22 @@ phone: {
   website: {
     type: String,
     trim: true,
-  },  email: {
+  },
+  email: {
     type: String,
     trim: true,
     lowercase: true,
   },
   secondaryPhone: {
-  type: String,
-  trim: true,
-      validate: {
+    type: String,
+    trim: true,
+    validate: {
       validator: function (v) {
-        // Allow only digits, optional "+" at start
         return /^\+?[0-9]{7,15}$/.test(v);
       },
       message: 'Phone number must contain only digits (7–15 digits allowed)'
     }
-},
+  },
   mission: {
     type: String,
     trim: true,
@@ -129,7 +129,7 @@ phone: {
     verifiedAt: Date,
     rejectionReason: String,
     documents: [{
-      type: { type: String }, // registration, tax, license
+      type: { type: String },
       url: String,
       uploadedAt: { type: Date, default: Date.now }
     }]
@@ -147,6 +147,12 @@ phone: {
     unique: true,
     index: true
   },
+  // Profile reference for primary avatar
+  userProfile: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Profile',
+    required: false
+  },
   isActive: {
     type: Boolean,
     default: true,
@@ -163,10 +169,45 @@ phone: {
   toObject: { virtuals: true }
 });
 
-// Indexes for better query performance
-organizationSchema.index({ createdAt: -1 });
-organizationSchema.index({ 'address.country': 1, 'address.state': 1 });
-organizationSchema.index({ organizationType: 1, industry: 1 });
+// ========== VIRTUALS ==========
+
+// Primary: Get logo from user's profile avatar
+organizationSchema.virtual('profileLogo').get(function() {
+  // If we have a populated profile with avatar
+  if (this.userProfile?.avatar?.secure_url) {
+    return this.userProfile.avatar.secure_url;
+  }
+  
+  return null;
+});
+
+// Fallback: Get logo from legacy logoUrl field
+organizationSchema.virtual('legacyLogo').get(function () {
+  if (!this.logoUrl) return null;
+  if (this.logoUrl.startsWith('http')) return this.logoUrl;
+  return `${process.env.BASE_URL || 'http://localhost:4000'}${this.logoUrl}`;
+});
+
+// Primary virtual that clients should use
+organizationSchema.virtual('logo').get(function () {
+  // 1. Try profile avatar first (PRIMARY)
+  const profileLogo = this.profileLogo;
+  if (profileLogo) return profileLogo;
+  
+  // 2. Try legacy logo as fallback
+  const legacyLogo = this.legacyLogo;
+  if (legacyLogo) return legacyLogo;
+  
+  // 3. Return null if no logo available
+  return null;
+});
+
+// Banner virtual
+organizationSchema.virtual('banner').get(function () {
+  if (!this.bannerUrl) return null;
+  if (this.bannerUrl.startsWith('http')) return this.bannerUrl;
+  return `${process.env.BASE_URL || 'http://localhost:4000'}${this.bannerUrl}`;
+});
 
 // Virtual for job count
 organizationSchema.virtual('jobCount', {
@@ -185,42 +226,51 @@ organizationSchema.virtual('activeJobCount', {
   match: { status: 'active' }
 });
 
-// Virtual for full logo URL
-organizationSchema.virtual('logoFullUrl').get(function() {
-  if (!this.logoUrl) return null;
-  if (this.logoUrl.startsWith('http')) return this.logoUrl;
-  return `${process.env.BASE_URL || 'http://localhost:4000'}${this.logoUrl}`;
-});
+// ========== METHODS ==========
 
-// Virtual for full banner URL
-organizationSchema.virtual('bannerFullUrl').get(function() {
-  if (!this.bannerUrl) return null;
-  if (this.bannerUrl.startsWith('http')) return this.bannerUrl;
-  return `${process.env.BASE_URL || 'http://localhost:4000'}${this.bannerUrl}`;
-});
-
-// Instance method to check if organization can post jobs
+// Method to check if organization can post jobs
 organizationSchema.methods.canPostJobs = function() {
   return this.verified && this.isActive;
 };
 
-// Instance method to get public profile
+// Method to get public profile
 organizationSchema.methods.getPublicProfile = function() {
-  const publicFields = [
-    '_id', 'name', 'organizationType', 'industry', 'logoUrl', 'bannerUrl',
-    'description', 'mission', 'size', 'foundedYear', 'verified',
-    'socialMedia', 'address', 'contact', 'createdAt'
-  ];
-  
-  const profile = {};
-  publicFields.forEach(field => {
-    if (this[field] !== undefined) {
-      profile[field] = this[field];
-    }
-  });
+  const profile = {
+    _id: this._id,
+    name: this.name,
+    organizationType: this.organizationType,
+    industry: this.industry,
+    logo: this.logo, // Use the primary logo virtual
+    banner: this.banner,
+    description: this.description,
+    mission: this.mission,
+    size: this.size,
+    foundedYear: this.foundedYear,
+    verified: this.verified,
+    socialMedia: this.socialMedia,
+    address: this.address,
+    createdAt: this.createdAt
+  };
   
   return profile;
 };
+
+// Method to sync profile reference
+organizationSchema.methods.syncProfile = async function() {
+  const User = mongoose.model('User');
+  const Profile = mongoose.model('Profile');
+  
+  const user = await User.findById(this.user).populate('profile');
+  if (user?.profile) {
+    this.userProfile = user.profile._id;
+    await this.save();
+    return true;
+  }
+  
+  return false;
+};
+
+// ========== STATIC METHODS ==========
 
 // Static method to find active organizations
 organizationSchema.statics.findActive = function() {
@@ -231,6 +281,8 @@ organizationSchema.statics.findActive = function() {
 organizationSchema.statics.findVerified = function() {
   return this.find({ verified: true, isActive: true });
 };
+
+// ========== MIDDLEWARE ==========
 
 // Middleware to update verification timestamp
 organizationSchema.pre('save', function(next) {
@@ -245,6 +297,18 @@ organizationSchema.pre('save', function(next) {
 organizationSchema.pre('save', function(next) {
   if (this.isModified('verificationStatus') && this.verificationStatus === 'rejected') {
     this.verified = false;
+  }
+  next();
+});
+
+// Middleware to sync profile reference on save
+organizationSchema.pre('save', async function(next) {
+  if (!this.userProfile && this.user) {
+    const User = mongoose.model('User');
+    const user = await User.findById(this.user).populate('profile');
+    if (user?.profile) {
+      this.userProfile = user.profile._id;
+    }
   }
   next();
 });

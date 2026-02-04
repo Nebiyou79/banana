@@ -400,54 +400,9 @@ class FollowService {
     }
   }
 
-  // Bulk follow status check - optimized with caching
-  async getBulkFollowStatus(userIds: string[]): Promise<Record<string, { following: boolean; status?: string }>> {
-    try {
-      const results: Record<string, { following: boolean; status?: string }> = {};
-      const uncachedIds: string[] = [];
-
-      // Check cache first
-      for (const userId of userIds) {
-        const cacheKey = `${userId}_User`;
-        const cached = this.followStatusCache.get(cacheKey);
-        if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
-          results[userId] = cached;
-        } else {
-          uncachedIds.push(userId);
-        }
-      }
-
-      // Only fetch uncached items in batches
-      if (uncachedIds.length > 0) {
-        const batchSize = 10; // Process in batches to avoid rate limiting
-        for (let i = 0; i < uncachedIds.length; i += batchSize) {
-          const batch = uncachedIds.slice(i, i + batchSize);
-          
-          // Use Promise.all with a delay between batches
-          const batchPromises = batch.map(async (userId, index) => {
-            // Add small delay between requests
-            if (index > 0) {
-              await new Promise(resolve => setTimeout(resolve, 100));
-            }
-            
-            const status = await this.getFollowStatus(userId);
-            return { userId, ...status };
-          });
-
-          const batchResults = await Promise.all(batchPromises);
-          
-          batchResults.forEach(({ userId, following, status }) => {
-            results[userId] = { following, status };
-          });
-        }
-      }
-
-      return results;
-    } catch (error) {
-      console.error('Failed to get bulk follow status:', error);
-      return {};
-    }
-  }
+async getBulkFollowStatus(userIds: string[]): Promise<Record<string, { following: boolean; status?: string }>> {
+  return this.getBulkFollowStatusV2(userIds);
+}
 
   // Public followers (optional auth)
   async getPublicFollowers(targetId: string, params?: {
@@ -510,7 +465,102 @@ class FollowService {
       };
     }
   }
+// In followService.ts - Update getBulkFollowStatusV2 method:
 
+async getBulkFollowStatusV2(userIds: string[]): Promise<Record<string, { following: boolean; status?: string }>> {
+  try {
+    if (!userIds || userIds.length === 0) return {};
+
+    // Remove duplicates and invalid IDs
+    const uniqueIds = Array.from(new Set(
+      userIds.filter(id => typeof id === 'string' && id.trim() !== '')
+    ));
+
+    if (uniqueIds.length === 0) return {};
+
+    console.log('📊 Fetching bulk follow status for:', uniqueIds.length, 'users');
+
+    try {
+      const response = await api.post<{
+        [x: string]: any;
+        success: boolean;
+        data: Record<string, boolean>;
+      }>('/follow/bulk-status', {
+        userIds: uniqueIds,
+        targetType: 'User'
+      });
+
+      if (!response.data.success) {
+        console.warn('⚠️ Bulk follow status API error:', response.data.message);
+        return this.fallbackToIndividualCalls(uniqueIds);
+      }
+
+      const results: Record<string, { following: boolean; status?: string }> = {};
+      
+      uniqueIds.forEach(userId => {
+        const following = response.data.data[userId] || false;
+        results[userId] = {
+          following,
+          status: following ? 'accepted' : 'none'
+        };
+
+        // Cache the result
+        const cacheKey = `${userId}_User`;
+        this.followStatusCache.set(cacheKey, {
+          following,
+          status: following ? 'accepted' : 'none',
+          timestamp: Date.now()
+        });
+      });
+
+      console.log('✅ Bulk follow status fetched successfully');
+      return results;
+    } catch (error: any) {
+      // If bulk endpoint doesn't exist (400 error), fall back to individual calls
+      if (error.response?.status === 400 || error.response?.status === 404) {
+        console.warn('⚠️ Bulk endpoint not available, falling back to individual calls');
+        return this.fallbackToIndividualCalls(uniqueIds);
+      }
+      throw error;
+    }
+  } catch (error) {
+    console.error('❌ Failed to get bulk follow status:', error);
+    return this.fallbackToIndividualCalls(userIds);
+  }
+}
+
+// Add fallback method
+private async fallbackToIndividualCalls(userIds: string[]): Promise<Record<string, { following: boolean; status?: string }>> {
+  const results: Record<string, { following: boolean; status?: string }> = {};
+  
+  // Process in small batches to avoid rate limiting
+  const batchSize = 3;
+  for (let i = 0; i < userIds.length; i += batchSize) {
+    const batch = userIds.slice(i, i + batchSize);
+    
+    const batchPromises = batch.map(async (userId, index) => {
+      // Small delay between requests
+      if (index > 0) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      
+      try {
+        const status = await this.getFollowStatus(userId);
+        return { userId, ...status };
+      } catch (error) {
+        console.error(`Failed to get follow status for ${userId}:`, error);
+        return { userId, following: false, status: 'none' };
+      }
+    });
+    
+    const batchResults = await Promise.all(batchPromises);
+    batchResults.forEach(({ userId, following, status }) => {
+      results[userId] = { following, status };
+    });
+  }
+  
+  return results;
+}
   // Utility functions
   canFollow(targetType: string, targetId: string, currentUserId?: string): boolean {
     if (!currentUserId) return true;

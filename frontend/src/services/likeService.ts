@@ -535,7 +535,6 @@ export const likeService = {
     }
   },
 
-  // Get user's specific interaction with a target
 getUserInteraction: async (
   targetId: string,
   targetType: 'Post' | 'Comment' = 'Post'
@@ -551,58 +550,83 @@ getUserInteraction: async (
   } | null;
 }> => {
   try {
-    // Check if we have a valid targetId first
-    if (!targetId || targetId.trim() === '') {
-      console.warn('Invalid targetId provided to getUserInteraction');
+    // Validate targetId more strictly
+    if (!targetId || 
+        targetId.trim() === '' || 
+        targetId === 'undefined' || 
+        targetId === 'null' ||
+        targetId.length < 10) { // Added length check for MongoDB IDs
       return { hasInteraction: false, interaction: null };
     }
 
-    // Add a timeout to prevent hanging requests
+    // Create abort controller with shorter timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 2000); // Reduced to 2 seconds
 
-    const response = await api.get<InteractionResponse>(
-      `/likes/${targetId}/user-interaction`,
-      {
-        params: { targetType },
-        signal: controller.signal
+    try {
+      const response = await api.get<InteractionResponse>(
+        `/likes/${targetId}/user-interaction`,
+        {
+          params: { targetType },
+          signal: controller.signal,
+          timeout: 2000 // Axios timeout
+        }
+      );
+
+      clearTimeout(timeoutId);
+
+      if (!response.data.success) {
+        return { hasInteraction: false, interaction: null };
       }
-    );
 
-    clearTimeout(timeoutId);
-
-    if (!response.data.success) {
-      return { hasInteraction: false, interaction: null };
+      const data = response.data.data;
+      return {
+        hasInteraction: data.hasInteraction,
+        interaction: data.interaction ? {
+          ...data.interaction,
+          isDisliked: data.interaction.interactionType === 'dislike'
+        } : null
+      };
+    } catch (apiError: any) {
+      clearTimeout(timeoutId);
+      throw apiError;
     }
-
-    const data = response.data.data;
-    return {
-      hasInteraction: data.hasInteraction,
-      interaction: data.interaction ? {
-        ...data.interaction,
-        isDisliked: data.interaction.interactionType === 'dislike'
-      } : null
-    };
   } catch (error: any) {
     // Don't throw error, just log and return null
     // Check for abort error specifically
-    if (error.name === 'AbortError' || error.code === 'ERR_CANCELED' || error.message?.includes('canceled')) {
-      console.log(`Request cancelled for ${targetType} ${targetId}`);
+    if (error.name === 'AbortError' || 
+        error.code === 'ERR_CANCELED' || 
+        error.message?.includes('canceled') ||
+        error.message?.includes('timeout')) {
       return { hasInteraction: false, interaction: null };
     }
 
-    console.warn(`Failed to get user interaction for ${targetType} ${targetId}:`, error.message || error);
+    // Check for network errors
+    if (error.message?.includes('Network Error') ||
+        error.message?.includes('Failed to fetch') ||
+        error.code === 'ERR_NETWORK') {
+      return { hasInteraction: false, interaction: null };
+    }
 
     // Check for specific error types
-    if (error.message?.includes('INVALID_TARGET_ID') ||
-      error.message?.includes('FETCH_USER_INTERACTION_ERROR') ||
-      error.message?.includes('404')) {
-      // These are expected errors, return empty
+    if (error.response?.status === 404 ||
+        error.message?.includes('INVALID_TARGET_ID') ||
+        error.message?.includes('FETCH_USER_INTERACTION_ERROR')) {
       return { hasInteraction: false, interaction: null };
     }
 
-    // For unexpected errors, still return empty but log
-    console.error('Unexpected error in getUserInteraction:', error);
+    // For 400/500 errors, return empty but don't log as error
+    if (error.response?.status >= 400 && error.response?.status < 500) {
+      return { hasInteraction: false, interaction: null };
+    }
+
+    // For unexpected errors, log but return empty
+    console.warn('Unexpected error in getUserInteraction:', {
+      targetId,
+      targetType,
+      error: error.message || error
+    });
+    
     return { hasInteraction: false, interaction: null };
   }
 },

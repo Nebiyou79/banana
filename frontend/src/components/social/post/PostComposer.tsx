@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // components/posts/PostComposer.tsx
 'use client';
 
@@ -7,14 +8,6 @@ import {
   Image as ImageIcon,
   Video as VideoIcon,
   File as FileIcon,
-  Link,
-  MapPin,
-  Smile,
-  Hash,
-  Globe,
-  Users,
-  Lock,
-  Calendar,
   BarChart,
   Send,
   Plus,
@@ -22,7 +15,10 @@ import {
   Upload,
   CheckCircle,
   AlertCircle,
-  Loader2
+  Loader2,
+  Globe,
+  Users,
+  Lock
 } from 'lucide-react';
 import { postService, CreatePostData, Poll } from '@/services/postService';
 import { useDropzone } from 'react-dropzone';
@@ -45,7 +41,7 @@ interface MediaFileWithPreview {
   description: string;
   type: 'image' | 'video' | 'document';
   error?: string;
-  uploadId?: string; // Unique ID for tracking uploads
+  uploadId?: string;
   uploadProgress?: number;
   uploadError?: string;
 }
@@ -60,6 +56,7 @@ const PostComposer: React.FC<PostComposerProps> = ({
   editMode = false,
   postId
 }) => {
+  // ... (all your existing state variables remain the same)
   const [content, setContent] = useState(initialContent);
   const [mediaFiles, setMediaFiles] = useState<MediaFileWithPreview[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -75,12 +72,25 @@ const PostComposer: React.FC<PostComposerProps> = ({
   const [pollDays, setPollDays] = useState(7);
   const [multipleChoice, setMultipleChoice] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [uploadQueue, setUploadQueue] = useState<File[]>([]);
   const [completedUploads, setCompletedUploads] = useState<string[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
   const uploadAbortController = useRef<AbortController | null>(null);
+
+  // Add scroll effect when media files are added
+  useEffect(() => {
+    if (mediaFiles.length > 0 && composerRef.current) {
+      // Scroll to bottom of composer to show media previews and submit button
+      setTimeout(() => {
+        composerRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'nearest' 
+        });
+      }, 100);
+    }
+  }, [mediaFiles.length]);
 
   // Handle click on photo/video button
   const handleMediaButtonClick = () => {
@@ -94,7 +104,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
     const files = e.target.files;
     if (files && files.length > 0) {
       handleFiles(Array.from(files));
-      // Reset file input to allow selecting same file again
       e.target.value = '';
     }
   };
@@ -105,7 +114,7 @@ const PostComposer: React.FC<PostComposerProps> = ({
       'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'],
       'video/*': ['.mp4', '.mov', '.avi', '.mkv', '.webm']
     },
-    maxSize: 200 * 1024 * 1024, // 200MB for videos, 20MB for images (Cloudinary limits)
+    maxSize: 200 * 1024 * 1024,
     maxFiles: 10,
     onDrop: (acceptedFiles) => {
       handleFiles(acceptedFiles);
@@ -133,7 +142,7 @@ const PostComposer: React.FC<PostComposerProps> = ({
   };
 
   const validateFile = (file: File): { isValid: boolean; error?: string } => {
-    // Cloudinary specific validations
+    // ... (your existing validateFile function remains the same)
     const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
     const allowedVideoTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska', 'video/webm'];
 
@@ -147,9 +156,8 @@ const PostComposer: React.FC<PostComposerProps> = ({
       };
     }
 
-    // Cloudinary size limits
-    const maxImageSize = 20 * 1024 * 1024; // 20MB
-    const maxVideoSize = 200 * 1024 * 1024; // 200MB
+    const maxImageSize = 20 * 1024 * 1024;
+    const maxVideoSize = 200 * 1024 * 1024;
     const maxSize = isImage ? maxImageSize : maxVideoSize;
 
     if (file.size > maxSize) {
@@ -159,7 +167,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
       };
     }
 
-    // Prevent duplicate uploads
     const existingFile = mediaFiles.find(mf =>
       mf.file.name === file.name &&
       mf.file.size === file.size &&
@@ -179,14 +186,12 @@ const PostComposer: React.FC<PostComposerProps> = ({
   const handleFiles = (files: File[]) => {
     if (files.length === 0) return;
 
-    // Check total files
     const totalFiles = mediaFiles.length + files.length;
     if (totalFiles > 10) {
       setError('Maximum 10 files allowed');
       return;
     }
 
-    // Validate each file
     const validatedFiles: MediaFileWithPreview[] = [];
     const errors: string[] = [];
 
@@ -205,7 +210,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
           uploadProgress: 0
         };
 
-        // Create preview for images
         if (mediaFile.type === 'image') {
           const reader = new FileReader();
           reader.onload = (e) => {
@@ -216,19 +220,15 @@ const PostComposer: React.FC<PostComposerProps> = ({
           };
           reader.readAsDataURL(file);
         }
-        // Create preview for videos (first frame if possible)
         else if (mediaFile.type === 'video') {
-          // Create a video element to capture first frame
           const video = document.createElement('video');
           video.preload = 'metadata';
 
           video.onloadedmetadata = () => {
-            // Set video to first frame
             video.currentTime = 0.1;
           };
 
           video.onseeked = () => {
-            // Create canvas to capture frame
             const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
@@ -243,7 +243,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
           };
 
           video.onerror = () => {
-            // If can't get preview, use placeholder
             mediaFile.preview = '/video-placeholder.png';
             setMediaFiles(prev => prev.map(mf =>
               mf.uploadId === uploadId ? { ...mf, preview: mediaFile.preview } : mf
@@ -266,7 +265,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
       setMediaFiles(prev => [...prev, ...validatedFiles]);
       setError(null);
 
-      // Clear any existing poll when adding media
       if (validatedFiles.length > 0 && poll) {
         setPoll(null);
         setShowPollForm(false);
@@ -278,15 +276,11 @@ const PostComposer: React.FC<PostComposerProps> = ({
     const fileToRemove = mediaFiles.find(mf => mf.uploadId === uploadId);
     if (!fileToRemove) return;
 
-    // Clean up blob URLs
     if (fileToRemove.preview?.startsWith('blob:') || fileToRemove.preview?.startsWith('data:')) {
       URL.revokeObjectURL(fileToRemove.preview);
     }
 
-    // Remove from media files
     setMediaFiles(prev => prev.filter(mf => mf.uploadId !== uploadId));
-
-    // Remove from completed uploads if it was uploaded
     setCompletedUploads(prev => prev.filter(id => id !== uploadId));
   };
 
@@ -342,7 +336,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
     setPoll(pollData);
     setShowPollForm(false);
     setSuccess('Poll created successfully');
-    // Clear media files when creating poll
     setMediaFiles([]);
   };
 
@@ -361,13 +354,11 @@ const PostComposer: React.FC<PostComposerProps> = ({
       errors.push('Maximum 10 files allowed');
     }
 
-    // Check for any upload errors
     const uploadErrors = mediaFiles.filter(mf => mf.uploadError);
     if (uploadErrors.length > 0) {
       errors.push(...uploadErrors.map(mf => `Failed to upload: ${mf.file.name}`));
     }
 
-    // Check for ongoing uploads
     const uploadingFiles = mediaFiles.filter(mf =>
       mf.uploadProgress !== undefined &&
       mf.uploadProgress < 100 &&
@@ -383,7 +374,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
     };
   };
 
-  // Simulate upload progress (in real app, this would be real upload)
   const simulateUpload = useCallback((uploadId: string) => {
     const interval = setInterval(() => {
       setMediaFiles(prev =>
@@ -403,9 +393,7 @@ const PostComposer: React.FC<PostComposerProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // Handle file uploads
   useEffect(() => {
-    // Find files that need to be uploaded (not in completedUploads)
     const filesToUpload = mediaFiles.filter(mf =>
       !completedUploads.includes(mf.uploadId!) &&
       !mf.uploadError &&
@@ -416,11 +404,8 @@ const PostComposer: React.FC<PostComposerProps> = ({
       setIsUploading(true);
 
       filesToUpload.forEach(mf => {
-        // In a real app, you would upload to Cloudinary here
-        // For now, we simulate the upload
         const cleanup = simulateUpload(mf.uploadId!);
 
-        // Simulate potential upload error (10% chance for demo)
         if (Math.random() < 0.1) {
           setTimeout(() => {
             setMediaFiles(prev =>
@@ -433,13 +418,11 @@ const PostComposer: React.FC<PostComposerProps> = ({
             cleanup();
           }, 1000);
         } else {
-          // Auto-cleanup after "upload" completes
           setTimeout(() => cleanup(), 2200);
         }
       });
     }
 
-    // Check if all uploads are complete
     const allUploaded = mediaFiles.length > 0 &&
       mediaFiles.every(mf =>
         mf.uploadProgress === 100 ||
@@ -453,7 +436,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
   }, [mediaFiles, completedUploads, simulateUpload]);
 
   const handleSubmit = async () => {
-    // Validate post data
     const validation = validatePostData();
     if (!validation.isValid) {
       setError(validation.errors.join(', '));
@@ -465,7 +447,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
     setSuccess(null);
 
     try {
-      // Check if there are files still uploading
       const uploadingFiles = mediaFiles.filter(mf =>
         mf.uploadProgress !== undefined &&
         mf.uploadProgress < 100 &&
@@ -476,7 +457,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
         throw new Error('Please wait for all files to finish uploading');
       }
 
-      // Prepare post data
       const postData: CreatePostData = {
         content: content.trim(),
         type: mediaFiles.length > 0 ?
@@ -485,10 +465,9 @@ const PostComposer: React.FC<PostComposerProps> = ({
         visibility,
         allowComments,
         allowSharing,
-        mediaFiles: mediaFiles.map(mf => mf.file), // Send files for Cloudinary upload
+        mediaFiles: mediaFiles.map(mf => mf.file),
       };
 
-      // If there are media files, include descriptions
       if (mediaFiles.length > 0) {
         const descriptions = mediaFiles.map(mf => mf.description).filter(desc => desc.trim() !== '');
         if (descriptions.length > 0) {
@@ -496,7 +475,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
         }
       }
 
-      // Include poll if exists
       if (poll) {
         postData.poll = poll;
       }
@@ -510,7 +488,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
         postId
       });
 
-      // Create or update post using postService
       let createdPost;
       if (editMode && postId) {
         createdPost = await postService.updatePost(postId, postData);
@@ -520,7 +497,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
         setSuccess('Post created successfully!');
       }
 
-      // Reset form
       setContent('');
       setMediaFiles([]);
       setPoll(null);
@@ -532,14 +508,12 @@ const PostComposer: React.FC<PostComposerProps> = ({
         onPostCreated(createdPost);
       }
 
-      // Clear success message after 3 seconds
       setTimeout(() => setSuccess(null), 3000);
 
     } catch (err: any) {
       console.error('Error creating post:', err);
       setError(err.message || 'Failed to create post. Please try again.');
 
-      // Preserve form data on error
       if (editMode) {
         setSuccess('Your draft has been preserved. Please try again.');
       }
@@ -548,7 +522,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
     }
   };
 
-  // Clean up on unmount
   useEffect(() => {
     return () => {
       mediaFiles.forEach(mediaFile => {
@@ -557,14 +530,12 @@ const PostComposer: React.FC<PostComposerProps> = ({
         }
       });
 
-      // Abort any ongoing uploads
       if (uploadAbortController.current) {
         uploadAbortController.current.abort();
       }
     };
   }, [mediaFiles]);
 
-  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -572,7 +543,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
     }
   }, [content]);
 
-  // Clear error after 5 seconds
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => {
@@ -582,7 +552,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
     }
   }, [error]);
 
-  // Get file type icon
   const getFileIcon = (type: string) => {
     if (type === 'image') {
       return <ImageIcon className="w-5 h-5 text-blue-500" />;
@@ -593,7 +562,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
     }
   };
 
-  // Format file size
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -602,7 +570,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  // Render upload status
   const renderUploadStatus = (mediaFile: MediaFileWithPreview) => {
     if (mediaFile.uploadError) {
       return (
@@ -642,7 +609,6 @@ const PostComposer: React.FC<PostComposerProps> = ({
     return null;
   };
 
-  // Render media preview
   const renderMediaPreview = (mediaFile: MediaFileWithPreview) => {
     if (mediaFile.type === 'image' && mediaFile.preview) {
       return (
@@ -704,7 +670,10 @@ const PostComposer: React.FC<PostComposerProps> = ({
     );
 
   return (
-    <div className={`rounded-lg ${colorClasses.bg.white} border ${colorClasses.border.gray400} p-4 ${className}`}>
+    <div 
+      ref={composerRef}
+      className={`relative rounded-lg ${colorClasses.bg.white} border ${colorClasses.border.gray400} ${className}`}
+    >
       {/* Hidden file input */}
       <input
         type="file"
@@ -719,387 +688,370 @@ const PostComposer: React.FC<PostComposerProps> = ({
       <div {...getRootProps()} className="relative">
         <input {...getInputProps()} />
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <h3 className={`text-lg font-semibold ${colorClasses.text.darkNavy}`}>
-            {editMode ? 'Edit Post' : 'Create Post'}
-          </h3>
-          {onCancel && (
-            <button
-              onClick={onCancel}
-              className="p-1 rounded-full hover:bg-gray-100 transition-colors"
-              type="button"
-              aria-label="Cancel"
-            >
-              <X className="w-5 h-5 text-gray-500" />
-            </button>
-          )}
-        </div>
-
-        {/* Content Input */}
-        <div className="mb-4">
-          <textarea
-            ref={textareaRef}
-            value={content}
-            onChange={handleContentChange}
-            placeholder={placeholder}
-            className={`w-full border-0 focus:ring-0 resize-none min-h-[100px] ${colorClasses.text.darkNavy} placeholder:${colorClasses.text.gray400} bg-transparent`}
-            maxLength={10000}
-            aria-label="Post content"
-          />
-          <div className="flex justify-between text-sm mt-1">
-            <span className={`${colorClasses.text.gray400}`}>
-              {content.length}/10000
-            </span>
-            <div className="flex gap-2">
-              <span className={`px-2 py-1 rounded ${colorClasses.bg.gray100} ${colorClasses.text.gray800}`}>
-                Hashtags: {postService.extractHashtags(content).length}
-              </span>
-              <span className={`px-2 py-1 rounded ${colorClasses.bg.gray100} ${colorClasses.text.gray800}`}>
-                Mentions: {postService.extractMentions(content).length}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Media Previews */}
-        {mediaFiles.length > 0 && (
-          <div className="mb-4">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {mediaFiles.map((mediaFile) => (
-                <div key={mediaFile.uploadId} className="relative group">
-                  <div className={`rounded-lg border ${colorClasses.border.gray400} overflow-hidden`}>
-                    {renderMediaPreview(mediaFile)}
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeFile(mediaFile.uploadId!);
-                    }}
-                    className="absolute -top-2 -right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-lg hover:bg-red-600"
-                    type="button"
-                    aria-label={`Remove ${mediaFile.file.name}`}
-                    disabled={isSubmitting}
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                  <input
-                    type="text"
-                    value={mediaFile.description || ''}
-                    onChange={(e) => updateMediaDescription(mediaFile.uploadId!, e.target.value)}
-                    placeholder="Add description..."
-                    className={`w-full mt-2 text-sm border ${colorClasses.border.gray400} rounded px-2 py-1.5 ${colorClasses.text.darkNavy} focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                    onClick={(e) => e.stopPropagation()}
-                    aria-label={`Description for ${mediaFile.file.name}`}
-                    disabled={isSubmitting}
-                  />
-                  {renderUploadStatus(mediaFile)}
-                </div>
-              ))}
-            </div>
-            <div className={`text-sm mt-2 ${colorClasses.text.gray400} flex items-center justify-between`}>
-              <span>
-                {mediaFiles.length} file{mediaFiles.length !== 1 ? 's' : ''} •
-                Max 10 files • Images: 20MB • Videos: 200MB
-              </span>
-              {isUploading && (
-                <span className="flex items-center gap-1">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  <span>Uploading...</span>
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Poll Form */}
-        {showPollForm && (
-          <div className={`mb-4 p-4 rounded-lg border ${colorClasses.border.gray400} ${colorClasses.bg.gray100}`}>
-            <div className="flex justify-between items-center mb-3">
-              <h4 className={`font-medium ${colorClasses.text.darkNavy}`}>Create Poll</h4>
+        {/* Make the entire composer scrollable but with fixed height */}
+        <div className="max-h-[70vh] overflow-y-auto p-4">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className={`text-lg font-semibold ${colorClasses.text.darkNavy}`}>
+              {editMode ? 'Edit Post' : 'Create Post'}
+            </h3>
+            {onCancel && (
               <button
-                onClick={() => setShowPollForm(false)}
-                className="text-gray-500 hover:text-gray-700"
+                onClick={onCancel}
+                className="p-1 rounded-full hover:bg-gray-100 transition-colors"
                 type="button"
-                aria-label="Close poll form"
-                disabled={isSubmitting}
+                aria-label="Cancel"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5 text-gray-500" />
               </button>
-            </div>
+            )}
+          </div>
 
-            <div className="space-y-3">
-              {pollOptions.map((option, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={option}
-                    onChange={(e) => updatePollOption(index, e.target.value)}
-                    placeholder={`Option ${index + 1}`}
-                    className={`flex-1 border ${colorClasses.border.gray400} rounded px-3 py-2 ${colorClasses.text.darkNavy} focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                    aria-label={`Poll option ${index + 1}`}
-                    disabled={isSubmitting}
-                  />
-                  {pollOptions.length > 2 && (
+          {/* Content Input */}
+          <div className="mb-4">
+            <textarea
+              ref={textareaRef}
+              value={content}
+              onChange={handleContentChange}
+              placeholder={placeholder}
+              className={`w-full border-0 focus:ring-0 resize-none min-h-[100px] ${colorClasses.text.darkNavy} placeholder:${colorClasses.text.gray400} bg-transparent`}
+              maxLength={10000}
+              aria-label="Post content"
+            />
+            <div className="flex justify-between text-sm mt-1">
+              <span className={`${colorClasses.text.gray400}`}>
+                {content.length}/10000
+              </span>
+              <div className="flex gap-2">
+                <span className={`px-2 py-1 rounded ${colorClasses.bg.gray100} ${colorClasses.text.gray800}`}>
+                  Hashtags: {postService.extractHashtags(content).length}
+                </span>
+                <span className={`px-2 py-1 rounded ${colorClasses.bg.gray100} ${colorClasses.text.gray800}`}>
+                  Mentions: {postService.extractMentions(content).length}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Media Previews - Now scrollable within the composer */}
+          {mediaFiles.length > 0 && (
+            <div className="mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {mediaFiles.map((mediaFile) => (
+                  <div key={mediaFile.uploadId} className="relative group">
+                    <div className={`rounded-lg border ${colorClasses.border.gray400} overflow-hidden`}>
+                      {renderMediaPreview(mediaFile)}
+                    </div>
                     <button
-                      onClick={() => removePollOption(index)}
-                      className="p-2 text-red-500 hover:text-red-700 disabled:opacity-50"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeFile(mediaFile.uploadId!);
+                      }}
+                      className="absolute -top-2 -right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-lg hover:bg-red-600"
                       type="button"
-                      aria-label={`Remove option ${index + 1}`}
+                      aria-label={`Remove ${mediaFile.file.name}`}
                       disabled={isSubmitting}
                     >
-                      <X className="w-4 h-4" />
+                      <Trash2 className="w-3 h-3" />
                     </button>
-                  )}
-                </div>
-              ))}
+                    <input
+                      type="text"
+                      value={mediaFile.description || ''}
+                      onChange={(e) => updateMediaDescription(mediaFile.uploadId!, e.target.value)}
+                      placeholder="Add description..."
+                      className={`w-full mt-2 text-sm border ${colorClasses.border.gray400} rounded px-2 py-1.5 ${colorClasses.text.darkNavy} focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`Description for ${mediaFile.file.name}`}
+                      disabled={isSubmitting}
+                    />
+                    {renderUploadStatus(mediaFile)}
+                  </div>
+                ))}
+              </div>
+              <div className={`text-sm mt-2 ${colorClasses.text.gray400} flex items-center justify-between`}>
+                <span>
+                  {mediaFiles.length} file{mediaFiles.length !== 1 ? 's' : ''} •
+                  Max 10 files • Images: 20MB • Videos: 200MB
+                </span>
+                {isUploading && (
+                  <span className="flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Uploading...</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
-              {pollOptions.length < 10 && (
+          {/* Poll Form */}
+          {showPollForm && (
+            <div className={`mb-4 p-4 rounded-lg border ${colorClasses.border.gray400} ${colorClasses.bg.gray100}`}>
+              <div className="flex justify-between items-center mb-3">
+                <h4 className={`font-medium ${colorClasses.text.darkNavy}`}>Create Poll</h4>
                 <button
-                  onClick={addPollOption}
-                  className={`text-sm flex items-center gap-1 ${colorClasses.text.blue} hover:underline disabled:opacity-50`}
+                  onClick={() => setShowPollForm(false)}
+                  className="text-gray-500 hover:text-gray-700"
                   type="button"
-                  aria-label="Add poll option"
+                  aria-label="Close poll form"
                   disabled={isSubmitting}
                 >
-                  <Plus className="w-3 h-3" />
-                  Add option
+                  <X className="w-4 h-4" />
                 </button>
-              )}
-            </div>
-
-            <div className="mt-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="multipleChoice"
-                  checked={multipleChoice}
-                  onChange={(e) => setMultipleChoice(e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  aria-label="Allow multiple choices"
-                  disabled={isSubmitting}
-                />
-                <label htmlFor="multipleChoice" className={`text-sm ${colorClasses.text.darkNavy} select-none`}>
-                  Allow multiple choices
-                </label>
               </div>
 
-              <div>
-                <label className={`block text-sm mb-1 ${colorClasses.text.darkNavy}`}>
-                  Poll duration (days)
-                </label>
-                <select
-                  value={pollDays}
-                  onChange={(e) => setPollDays(Number(e.target.value))}
-                  className={`w-full border ${colorClasses.border.gray400} rounded px-3 py-2 ${colorClasses.text.darkNavy} focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50`}
-                  aria-label="Poll duration"
-                  disabled={isSubmitting}
-                >
-                  <option value={1}>1 day</option>
-                  <option value={3}>3 days</option>
-                  <option value={7}>7 days</option>
-                  <option value={14}>14 days</option>
-                  <option value={30}>30 days</option>
-                </select>
-              </div>
-            </div>
+              <div className="space-y-3">
+                {pollOptions.map((option, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={option}
+                      onChange={(e) => updatePollOption(index, e.target.value)}
+                      placeholder={`Option ${index + 1}`}
+                      className={`flex-1 border ${colorClasses.border.gray400} rounded px-3 py-2 ${colorClasses.text.darkNavy} focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                      aria-label={`Poll option ${index + 1}`}
+                      disabled={isSubmitting}
+                    />
+                    {pollOptions.length > 2 && (
+                      <button
+                        onClick={() => removePollOption(index)}
+                        className="p-2 text-red-500 hover:text-red-700 disabled:opacity-50"
+                        type="button"
+                        aria-label={`Remove option ${index + 1}`}
+                        disabled={isSubmitting}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
 
-            <button
-              onClick={createPoll}
-              className={`mt-4 w-full py-2 rounded-lg font-medium ${colorClasses.bg.goldenMustard} ${colorClasses.text.darkNavy} hover:opacity-90 transition-opacity disabled:opacity-50`}
-              type="button"
-              aria-label="Create poll"
-              disabled={isSubmitting}
-            >
-              Create Poll
-            </button>
-          </div>
-        )}
-
-        {/* Existing Poll Preview */}
-        {poll && !showPollForm && (
-          <div className={`mb-4 p-4 rounded-lg border ${colorClasses.border.gray400} ${colorClasses.bg.gray100}`}>
-            <div className="flex justify-between items-center mb-3">
-              <div className="flex items-center gap-2">
-                <BarChart className="w-5 h-5 text-gray-500" />
-                <span className={`font-medium ${colorClasses.text.darkNavy}`}>Poll</span>
+                {pollOptions.length < 10 && (
+                  <button
+                    onClick={addPollOption}
+                    className={`text-sm flex items-center gap-1 ${colorClasses.text.blue} hover:underline disabled:opacity-50`}
+                    type="button"
+                    aria-label="Add poll option"
+                    disabled={isSubmitting}
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add option
+                  </button>
+                )}
               </div>
+
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="multipleChoice"
+                    checked={multipleChoice}
+                    onChange={(e) => setMultipleChoice(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    aria-label="Allow multiple choices"
+                    disabled={isSubmitting}
+                  />
+                  <label htmlFor="multipleChoice" className={`text-sm ${colorClasses.text.darkNavy} select-none`}>
+                    Allow multiple choices
+                  </label>
+                </div>
+
+                <div>
+                  <label className={`block text-sm mb-1 ${colorClasses.text.darkNavy}`}>
+                    Poll duration (days)
+                  </label>
+                  <select
+                    value={pollDays}
+                    onChange={(e) => setPollDays(Number(e.target.value))}
+                    className={`w-full border ${colorClasses.border.gray400} rounded px-3 py-2 ${colorClasses.text.darkNavy} focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50`}
+                    aria-label="Poll duration"
+                    disabled={isSubmitting}
+                  >
+                    <option value={1}>1 day</option>
+                    <option value={3}>3 days</option>
+                    <option value={7}>7 days</option>
+                    <option value={14}>14 days</option>
+                    <option value={30}>30 days</option>
+                  </select>
+                </div>
+              </div>
+
               <button
-                onClick={() => setPoll(null)}
-                className="text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                onClick={createPoll}
+                className={`mt-4 w-full py-2 rounded-lg font-medium ${colorClasses.bg.goldenMustard} ${colorClasses.text.darkNavy} hover:opacity-90 transition-opacity disabled:opacity-50`}
                 type="button"
-                aria-label="Remove poll"
+                aria-label="Create poll"
                 disabled={isSubmitting}
               >
-                <X className="w-4 h-4" />
+                Create Poll
               </button>
             </div>
-            <p className={`mb-3 ${colorClasses.text.darkNavy}`}>{poll.question}</p>
-            <div className="space-y-2">
-              {poll.options.map((option, index) => (
-                <div key={index} className={`p-2 rounded ${colorClasses.bg.white} border ${colorClasses.border.gray400}`}>
-                  {option.text}
+          )}
+
+          {/* Existing Poll Preview */}
+          {poll && !showPollForm && (
+            <div className={`mb-4 p-4 rounded-lg border ${colorClasses.border.gray400} ${colorClasses.bg.gray100}`}>
+              <div className="flex justify-between items-center mb-3">
+                <div className="flex items-center gap-2">
+                  <BarChart className="w-5 h-5 text-gray-500" />
+                  <span className={`font-medium ${colorClasses.text.darkNavy}`}>Poll</span>
                 </div>
-              ))}
-            </div>
-            <div className={`text-sm mt-2 ${colorClasses.text.gray400}`}>
-              Poll ends {new Date(poll.endsAt || '').toLocaleDateString()} • {multipleChoice ? 'Multiple choice' : 'Single choice'}
-            </div>
-          </div>
-        )}
-
-        {/* Toolbar */}
-        <div className={`py-3 border-t ${colorClasses.border.gray400}`}>
-          <div className="flex flex-wrap gap-2 mb-3">
-            {/* Photo/Video Button */}
-            <button
-              onClick={handleMediaButtonClick}
-              type="button"
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg ${colorClasses.bg.gray100} ${colorClasses.text.darkNavy} hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed`}
-              aria-label="Add photos or videos"
-              disabled={mediaFiles.length >= 10 || isSubmitting}
-            >
-              <ImageIcon className="w-5 h-5" />
-              <span>Photo/Video</span>
-            </button>
-
-            <button
-              onClick={() => setShowPollForm(true)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg ${colorClasses.bg.gray100} ${colorClasses.text.darkNavy} hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed`}
-              type="button"
-              aria-label="Create poll"
-              disabled={mediaFiles.length > 0 || isSubmitting}
-            >
-              <BarChart className="w-5 h-5" />
-              <span>Poll</span>
-            </button>
-
-            <button
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg ${colorClasses.bg.gray100} ${colorClasses.text.darkNavy} hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed`}
-              type="button"
-              aria-label="Add hashtag"
-              disabled={isSubmitting}
-            >
-              <Hash className="w-5 h-5" />
-              <span>Hashtag</span>
-            </button>
-
-            <button
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg ${colorClasses.bg.gray100} ${colorClasses.text.darkNavy} hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed`}
-              type="button"
-              aria-label="Add emoji"
-              disabled={isSubmitting}
-            >
-              <Smile className="w-5 h-5" />
-              <span>Emoji</span>
-            </button>
-          </div>
-
-          {/* Privacy Settings */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              {/* Privacy Select */}
-              <div className="relative">
-                <select
-                  value={visibility}
-                  onChange={(e) => setVisibility(e.target.value as any)}
-                  className={`text-sm border ${colorClasses.border.gray400} rounded pl-8 pr-8 py-1.5 ${colorClasses.text.darkNavy} appearance-none bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50`}
-                  aria-label="Post visibility"
+                <button
+                  onClick={() => setPoll(null)}
+                  className="text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                  type="button"
+                  aria-label="Remove poll"
                   disabled={isSubmitting}
                 >
-                  <option value="public">Public</option>
-                  <option value="connections">Connections Only</option>
-                  <option value="private">Private</option>
-                </select>
-                <div className="absolute left-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                  {visibility === 'public' && <Globe className="w-4 h-4 text-gray-500" />}
-                  {visibility === 'connections' && <Users className="w-4 h-4 text-gray-500" />}
-                  {visibility === 'private' && <Lock className="w-4 h-4 text-gray-500" />}
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className={`mb-3 ${colorClasses.text.darkNavy}`}>{poll.question}</p>
+              <div className="space-y-2">
+                {poll.options.map((option, index) => (
+                  <div key={index} className={`p-2 rounded ${colorClasses.bg.white} border ${colorClasses.border.gray400}`}>
+                    {option.text}
+                  </div>
+                ))}
+              </div>
+              <div className={`text-sm mt-2 ${colorClasses.text.gray400}`}>
+                Poll ends {new Date(poll.endsAt || '').toLocaleDateString()} • {multipleChoice ? 'Multiple choice' : 'Single choice'}
+              </div>
+            </div>
+          )}
+
+          {/* Toolbar - Now positioned at the bottom of scrollable area */}
+          <div className={`py-3 border-t ${colorClasses.border.gray400} sticky bottom-0 bg-white z-10`}>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {/* Photo/Video Button */}
+              <button
+                onClick={handleMediaButtonClick}
+                type="button"
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg ${colorClasses.bg.gray100} ${colorClasses.text.darkNavy} hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed`}
+                aria-label="Add photos or videos"
+                disabled={mediaFiles.length >= 10 || isSubmitting}
+              >
+                <ImageIcon className="w-5 h-5" />
+                <span>Photo/Video</span>
+              </button>
+
+              <button
+                onClick={() => setShowPollForm(true)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg ${colorClasses.bg.gray100} ${colorClasses.text.darkNavy} hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed`}
+                type="button"
+                aria-label="Create poll"
+                disabled={mediaFiles.length > 0 || isSubmitting}
+              >
+                <BarChart className="w-5 h-5" />
+                <span>Poll</span>
+              </button>
+            </div>
+
+            {/* Privacy Settings and Submit Button */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                {/* Privacy Select */}
+                <div className="relative">
+                  <select
+                    value={visibility}
+                    onChange={(e) => setVisibility(e.target.value as any)}
+                    className={`text-sm border ${colorClasses.border.gray400} rounded pl-8 pr-8 py-1.5 ${colorClasses.text.darkNavy} appearance-none bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50`}
+                    aria-label="Post visibility"
+                    disabled={isSubmitting}
+                  >
+                    <option value="public">Public</option>
+                    <option value="connections">Connections Only</option>
+                    <option value="private">Private</option>
+                  </select>
+                  <div className="absolute left-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                    {visibility === 'public' && <Globe className="w-4 h-4 text-gray-500" />}
+                    {visibility === 'connections' && <Users className="w-4 h-4 text-gray-500" />}
+                    {visibility === 'private' && <Lock className="w-4 h-4 text-gray-500" />}
+                  </div>
+                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
                 </div>
-                <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                  <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
+
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={allowComments}
+                      onChange={(e) => setAllowComments(e.target.checked)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
+                      aria-label="Allow comments"
+                      disabled={isSubmitting}
+                    />
+                    <span className={`text-sm ${colorClasses.text.darkNavy} select-none`}>Comments</span>
+                  </label>
+
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={allowSharing}
+                      onChange={(e) => setAllowSharing(e.target.checked)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
+                      aria-label="Allow sharing"
+                      disabled={isSubmitting}
+                    />
+                    <span className={`text-sm ${colorClasses.text.darkNavy} select-none`}>Sharing</span>
+                  </label>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={allowComments}
-                    onChange={(e) => setAllowComments(e.target.checked)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
-                    aria-label="Allow comments"
-                    disabled={isSubmitting}
-                  />
-                  <span className={`text-sm ${colorClasses.text.darkNavy} select-none`}>Comments</span>
-                </label>
-
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={allowSharing}
-                    onChange={(e) => setAllowSharing(e.target.checked)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
-                    aria-label="Allow sharing"
-                    disabled={isSubmitting}
-                  />
-                  <span className={`text-sm ${colorClasses.text.darkNavy} select-none`}>Sharing</span>
-                </label>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {error && (
-                <div className={`text-sm px-3 py-1 rounded ${colorClasses.bg.orange} bg-opacity-10 ${colorClasses.text.orange} flex items-center gap-1`}>
-                  <AlertCircle className="w-3 h-3" />
-                  {error}
-                </div>
-              )}
-
-              {success && (
-                <div className={`text-sm px-3 py-1 rounded ${colorClasses.bg.teal} bg-opacity-10 ${colorClasses.text.teal} flex items-center gap-1`}>
-                  <CheckCircle className="w-3 h-3" />
-                  {success}
-                </div>
-              )}
-
-              {onCancel && (
-                <button
-                  onClick={onCancel}
-                  className={`px-4 py-2 rounded-lg border ${colorClasses.border.gray400} ${colorClasses.text.darkNavy} hover:bg-gray-50 transition-colors disabled:opacity-50`}
-                  type="button"
-                  aria-label="Cancel"
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </button>
-              )}
-
-              <button
-                onClick={handleSubmit}
-                disabled={!canSubmit}
-                className={`px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-all
-                  ${!canSubmit
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : `${colorClasses.bg.goldenMustard} ${colorClasses.text.darkNavy} hover:opacity-90 active:scale-95 shadow-sm`
-                  }`}
-                type="button"
-                aria-label={isSubmitting ? "Posting..." : editMode ? "Update Post" : "Post"}
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    <span>{editMode ? 'Updating...' : 'Posting...'}</span>
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    <span>{editMode ? 'Update' : 'Post'}</span>
-                  </>
+                {error && (
+                  <div className={`text-sm px-3 py-1 rounded ${colorClasses.bg.orange} bg-opacity-10 ${colorClasses.text.orange} flex items-center gap-1`}>
+                    <AlertCircle className="w-3 h-3" />
+                    {error}
+                  </div>
                 )}
-              </button>
+
+                {success && (
+                  <div className={`text-sm px-3 py-1 rounded ${colorClasses.bg.teal} bg-opacity-10 ${colorClasses.text.teal} flex items-center gap-1`}>
+                    <CheckCircle className="w-3 h-3" />
+                    {success}
+                  </div>
+                )}
+
+                {onCancel && (
+                  <button
+                    onClick={onCancel}
+                    className={`px-4 py-2 rounded-lg border ${colorClasses.border.gray400} ${colorClasses.text.darkNavy} hover:bg-gray-50 transition-colors disabled:opacity-50`}
+                    type="button"
+                    aria-label="Cancel"
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </button>
+                )}
+
+                <button
+                  onClick={handleSubmit}
+                  disabled={!canSubmit}
+                  className={`px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-all
+                    ${!canSubmit
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : `${colorClasses.bg.goldenMustard} ${colorClasses.text.darkNavy} hover:opacity-90 active:scale-95 shadow-sm`
+                    }`}
+                  type="button"
+                  aria-label={isSubmitting ? "Posting..." : editMode ? "Update Post" : "Post"}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      <span>{editMode ? 'Updating...' : 'Posting...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      <span>{editMode ? 'Update' : 'Post'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -1306,13 +1306,14 @@ export const postService = {
   // Optimistic update helper for UI
   getOptimisticPostUpdate: (
     currentPost: Post,
-    action: 'add_reaction' | 'add_dislike' | 'remove_interaction' | 'toggle' | 'update_reaction',
+    action: 'add_reaction' | 'add_dislike' | 'remove_interaction' | 'toggle' | 'update_reaction' | 'save' | 'unsave',
     reaction?: ReactionType
   ): Post => {
     const currentStats = { ...currentPost.stats };
     let userInteraction = currentPost.userInteraction ? { ...currentPost.userInteraction } : undefined;
     let hasLiked = currentPost.hasLiked;
     let hasDisliked = currentPost.hasDisliked;
+    let isSaved = currentPost.isSaved;
 
     switch (action) {
       case 'add_reaction':
@@ -1393,6 +1394,20 @@ export const postService = {
           // No count change when updating reaction type
         }
         break;
+
+      case 'save':
+        if (!isSaved) {
+          isSaved = true;
+          currentStats.saves = (currentStats.saves || 0) + 1;
+        }
+        break;
+
+      case 'unsave':
+        if (isSaved) {
+          isSaved = false;
+          currentStats.saves = Math.max(0, (currentStats.saves || 0) - 1);
+        }
+        break;
     }
 
     return {
@@ -1400,7 +1415,8 @@ export const postService = {
       stats: currentStats,
       userInteraction,
       hasLiked,
-      hasDisliked
+      hasDisliked,
+      isSaved
     };
   }
 };

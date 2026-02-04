@@ -130,18 +130,13 @@ interface FinancialCapacity {
   currency: string;
 }
 
-// Form type
+// Form type - Fixed to match CreateProfessionalTenderData
 interface ProfessionalTenderFormValues extends Omit<CreateProfessionalTenderData,
   'tenderCategory' | 'deadline' | 'deliverables' | 'milestones' | 'timeline' |
-  'clarificationDeadline' | 'preBidMeeting' | 'workflowType' | 'status' |
-  'visibilityType' | 'bidValidityPeriod' | 'evaluationCriteria' | 'financialCapacity'
+  'clarificationDeadline' | 'preBidMeeting' | 'bidValidityPeriod' | 'financialCapacity'
 > {
-  invitedEmails: any;
   tenderCategory: 'professional';
   deadline: string;
-  workflowType: WorkflowType;
-  status: 'draft' | 'published';
-  visibilityType: VisibilityType;
   deliverables: Array<{
     title: string;
     description: string;
@@ -167,22 +162,13 @@ interface ProfessionalTenderFormValues extends Omit<CreateProfessionalTenderData
     location: string;
     onlineLink: string;
   };
-  technicalRequirements?: TechnicalRequirement[];
-  languageRequirements?: LanguageRequirement[];
-  keyPersonnel?: PersonnelRole[];
   financialCapacity: FinancialCapacity;
-  submissionLanguage?: string;
-  communicationLanguage?: string;
-  cpoRequired: boolean;
-  cpoDescription?: string;
-  evaluationCriteria: {
-    technicalWeight: number;
-    financialWeight: number;
-  };
   bidValidityPeriod: {
     value: number;
     unit: 'days' | 'weeks' | 'months';
   };
+  submissionLanguage?: string;
+  communicationLanguage?: string;
 }
 
 interface ProfessionalTenderFormProps {
@@ -201,7 +187,7 @@ const formatFileSize = (bytes: number): string => {
 };
 
 const safeFormatDate = (dateString?: string): string => {
-  if (!dateString) return 'N/A';
+  if (!dateString) return 'Not set';
   try {
     const date = new Date(dateString);
     return isNaN(date.getTime()) ? 'Invalid Date' : format(date, 'PPP');
@@ -217,6 +203,18 @@ const generateReferenceNumber = (): string => {
   const day = String(date.getDate()).padStart(2, '0');
   const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
   return `TDR-PRO-${year}${month}${day}-${random}`;
+};
+
+// HTML Sanitization function
+const sanitizeHTML = (html: string): string => {
+  // Simple HTML sanitization - remove potentially dangerous tags
+  // In production, use DOMPurify or similar library
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/on\w+="[^"]*"/g, '')
+    .replace(/on\w+='[^']*'/g, '')
+    .replace(/javascript:/gi, '')
+    .replace(/data:/gi, '');
 };
 
 // Predefined options
@@ -242,12 +240,12 @@ const BID_VALIDITY_UNITS = [
 
 // Color system with dark mode support
 const getColors = (isDarkMode: boolean) => ({
-  primary: isDarkMode ? '#3B82F6' : '#1E40AF', // Blue
+  primary: isDarkMode ? '#3B82F6' : '#1E40AF',
   primaryLight: isDarkMode ? '#60A5FA' : '#3B82F6',
   primaryDark: isDarkMode ? '#1E3A8A' : '#1E3A8A',
-  secondary: isDarkMode ? '#0D9488' : '#0F766E', // Teal
+  secondary: isDarkMode ? '#0D9488' : '#0F766E',
   secondaryLight: isDarkMode ? '#14B8A6' : '#0D9488',
-  accent: isDarkMode ? '#F59E0B' : '#F59E0B', // Amber
+  accent: isDarkMode ? '#F59E0B' : '#F59E0B',
   background: isDarkMode ? '#0F172A' : '#F8FAFC',
   card: isDarkMode ? '#1E293B' : '#FFFFFF',
   textPrimary: isDarkMode ? '#F1F5F9' : '#020617',
@@ -313,13 +311,8 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
   const [sealedConfirmed, setSealedConfirmed] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [invitationMethod, setInvitationMethod] = useState<'companies' | 'users' | 'emails'>('companies');
 
-  // Default dates - only used when no initial data
-  const getDefaultDeadline = () => format(addDays(new Date(), 30), 'yyyy-MM-dd');
-  const getDefaultStartDate = () => format(addDays(new Date(), 7), 'yyyy-MM-dd');
-  const getDefaultEndDate = () => format(addMonths(new Date(), 6), 'yyyy-MM-dd');
-
+  // Initialize form with empty values - ALL DATE FIELDS START EMPTY
   const form = useForm<ProfessionalTenderFormValues>({
     resolver: zodResolver(professionalTenderSchema) as any,
     defaultValues: {
@@ -327,17 +320,17 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
       title: initialData?.title || '',
       description: initialData?.description || '',
       procurementCategory: initialData?.procurementCategory || '',
-      deadline: initialData?.deadline ? format(new Date(initialData.deadline), 'yyyy-MM-dd') : getDefaultDeadline(),
+      deadline: initialData?.deadline ? format(new Date(initialData.deadline), 'yyyy-MM-dd') : '',
       referenceNumber: initialData?.professionalSpecific?.referenceNumber || generateReferenceNumber(),
       procuringEntity: initialData?.professionalSpecific?.procuringEntity || '',
       workflowType: (initialData?.workflowType as WorkflowType) || 'open',
       visibilityType: (initialData?.visibility?.visibilityType as VisibilityType) || 'public',
-      status: 'draft', // Always start as draft, user chooses at the end
+      status: 'draft',
       procurementMethod: (initialData?.procurementMethod as ProcurementMethod) || 'open_tender',
       evaluationMethod: (initialData?.professionalSpecific?.evaluationMethod as EvaluationMethod) || 'combined',
       sealedBidConfirmation: initialData?.professionalSpecific?.sealedBidConfirmation || false,
       skillsRequired: initialData?.skillsRequired || [],
-      minimumExperience: initialData?.professionalSpecific?.minimumExperience || 5,
+      minimumExperience: initialData?.professionalSpecific?.minimumExperience || 0,
       legalRegistrationRequired: initialData?.professionalSpecific?.legalRegistrationRequired ?? true,
       cpoRequired: initialData?.professionalSpecific?.cpoRequired || false,
       cpoDescription: initialData?.professionalSpecific?.cpoDescription || '',
@@ -374,14 +367,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
         ...initialData.professionalSpecific.timeline,
         startDate: format(new Date(initialData.professionalSpecific.timeline.startDate), 'yyyy-MM-dd'),
         endDate: format(new Date(initialData.professionalSpecific.timeline.endDate), 'yyyy-MM-dd'),
-      } : {
-        startDate: getDefaultStartDate(),
-        endDate: getDefaultEndDate(),
-        duration: {
-          value: 6,
-          unit: 'months',
-        },
-      },
+      } : undefined,
       clarificationDeadline: initialData?.professionalSpecific?.clarificationDeadline
         ? format(new Date(initialData.professionalSpecific.clarificationDeadline), 'yyyy-MM-dd')
         : '',
@@ -407,8 +393,6 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
   const evaluationMethod = form.watch('evaluationMethod');
   const sealedBidConfirmation = form.watch('sealedBidConfirmation');
   const skills = form.watch('skillsRequired') || [];
-  const allowedCompanies = form.watch('allowedCompanies') || [];
-  const allowedUsers = form.watch('allowedUsers') || [];
   const formStatus = form.watch('status');
 
   // Field arrays for dynamic sections
@@ -513,17 +497,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
       return;
     }
 
-    if (visibilityType === 'invite_only' &&
-      (!allowedCompanies.length && !allowedUsers.length && !data.invitedEmails?.length)) {
-      toast({
-        title: 'Invitations required',
-        description: 'Please specify at least one invitation method for invite-only visibility',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (evaluationCriteria.technicalWeight + evaluationCriteria.financialWeight !== 100) {
+    if (evaluationCriteria && (evaluationCriteria.technicalWeight + evaluationCriteria.financialWeight !== 100)) {
       toast({
         title: 'Evaluation weights error',
         description: 'Technical and financial weights must sum to 100%',
@@ -532,12 +506,26 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
       return;
     }
 
+    // Validate required dates
+    if (!data.deadline) {
+      toast({
+        title: 'Submission deadline required',
+        description: 'Please specify a submission deadline',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
+      // Sanitize HTML description
+      const sanitizedDescription = sanitizeHTML(data.description);
+
       const submissionData: CreateProfessionalTenderData = {
         ...data,
         tenderCategory: 'professional',
+        description: sanitizedDescription,
         deadline: new Date(data.deadline).toISOString(),
         deliverables: data.deliverables.map(d => ({
           ...d,
@@ -547,16 +535,16 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
           ...m,
           dueDate: new Date(m.dueDate).toISOString(),
         })),
-        clarificationDeadline: data.clarificationDeadline
+        clarificationDeadline: data.clarificationDeadline && data.clarificationDeadline.trim()
           ? new Date(data.clarificationDeadline).toISOString()
           : undefined,
-        preBidMeeting: data.preBidMeeting
+        preBidMeeting: data.preBidMeeting && data.preBidMeeting.date
           ? {
             ...data.preBidMeeting,
             date: new Date(data.preBidMeeting.date).toISOString(),
           }
           : undefined,
-        timeline: data.timeline
+        timeline: data.timeline && data.timeline.startDate && data.timeline.endDate
           ? {
             ...data.timeline,
             startDate: new Date(data.timeline.startDate).toISOString(),
@@ -568,7 +556,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
         cpoRequired: data.cpoRequired,
         cpoDescription: data.cpoRequired ? data.cpoDescription : undefined,
         sealedBidConfirmation: workflowType === 'closed' ? true : false,
-        status: data.status, // Use the status from form (draft or published)
+        status: data.status,
       };
 
       console.log('Submitting tender data:', submissionData);
@@ -643,20 +631,21 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
     }
   };
 
+  // Updated step fields for 6-step structure
   const getStepFields = (step: number): string[] => {
     switch (step) {
-      case 1:
+      case 1: // Basic Information
         return ['title', 'referenceNumber', 'procurementCategory', 'procuringEntity', 'description'];
-      case 2:
-        return ['procurementMethod', 'deadline', 'timeline.startDate', 'timeline.endDate'];
-      case 3:
+      case 2: // Procurement Details
+        return ['procurementMethod', 'deadline'];
+      case 3: // Requirements & Eligibility
         return ['minimumExperience', 'legalRegistrationRequired', 'financialCapacity.minAnnualTurnover'];
-      case 4:
+      case 4: // Evaluation & Deliverables
         return ['evaluationMethod', 'evaluationCriteria.technicalWeight', 'evaluationCriteria.financialWeight'];
-      case 5:
-        return ['cpoRequired', 'cpoDescription', 'workflowType', 'visibilityType'];
-      case 6:
-        return []; // No validation needed for final step, user chooses publish/draft
+      case 5: // CPO & Settings
+        return ['cpoRequired', 'workflowType', 'visibilityType'];
+      case 6: // Review & Submit
+        return []; // No validation needed for final step
       default:
         return [];
     }
@@ -681,7 +670,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
     });
   };
 
-  // Progress calculation
+  // Progress calculation for 6 steps
   const calculateProgress = () => {
     const totalSteps = 6;
     return Math.round((currentStep / totalSteps) * 100);
@@ -840,7 +829,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
     </Card>
   );
 
-  // Enhanced Calendar Component
+  // Enhanced Calendar Component - FIXED to handle empty dates
   const EnhancedCalendarTrigger = ({
     field,
     label,
@@ -856,7 +845,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
 
     // Safe date formatting function
     const safeFormatDateDisplay = (dateString: string | undefined) => {
-      if (!dateString) return "Pick a date";
+      if (!dateString || dateString.trim() === '') return "Pick a date";
 
       try {
         const date = new Date(dateString);
@@ -922,8 +911,8 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
               <Input
                 type="date"
                 value={field.value || ""}
-                min={today}
-                onChange={(e) => field.onChange(e.target.value || undefined)}
+                min={required ? today : undefined}
+                onChange={(e) => field.onChange(e.target.value || "")}
                 className={cn(
                   "w-full border text-white focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition-all",
                   isDarkMode
@@ -931,6 +920,18 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                     : "bg-white/10 border-white/20"
                 )}
               />
+
+              {!required && field.value && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => field.onChange("")}
+                  className="w-full text-red-400 hover:text-red-300 hover:bg-red-900/30"
+                >
+                  Clear date
+                </Button>
+              )}
             </div>
           </PopoverContent>
         </Popover>
@@ -946,10 +947,10 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
     )
   }
 
-  // Handle timeline duration calculation
+  // Handle timeline duration calculation - FIXED to handle empty dates
   const handleTimelineDurationChange = (value: number, unit: 'days' | 'weeks' | 'months' | 'years') => {
     const startDate = form.getValues('timeline.startDate');
-    if (startDate) {
+    if (startDate && startDate.trim()) {
       const start = new Date(startDate);
       let end = new Date(start);
 
@@ -974,7 +975,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
     form.setValue('timeline.duration', { value, unit });
   };
 
-  // Handle timeline start/end date changes
+  // Handle timeline start/end date changes - FIXED to handle empty dates
   const handleStartDateChange = (date: string) => {
     form.setValue('timeline.startDate', date);
     const duration = form.getValues('timeline.duration');
@@ -986,7 +987,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
   const handleEndDateChange = (date: string) => {
     form.setValue('timeline.endDate', date);
     const startDate = form.getValues('timeline.startDate');
-    if (startDate) {
+    if (startDate && startDate.trim() && date && date.trim()) {
       const start = new Date(startDate);
       const end = new Date(date);
       const diffTime = Math.abs(end.getTime() - start.getTime());
@@ -1001,10 +1002,10 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
     }
   };
 
-  // Render step content
+  // Render step content - REORGANIZED for 6 steps
   const renderStepContent = () => {
     switch (currentStep) {
-      case 1:
+      case 1: // Basic Information
         return (
           <div className="space-y-6 animate-in fade-in-50">
             <div className="flex items-center gap-3 mb-6">
@@ -1017,7 +1018,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                 <FileText className="h-6 w-6" style={{ color: colors.primary }} />
               </div>
               <div>
-                <h2 className="text-2xl font-bold tracking-tight">1. Tender Identification</h2>
+                <h2 className="text-2xl font-bold tracking-tight">1. Basic Information</h2>
                 <p className={isDarkMode ? "text-gray-400" : "text-gray-600"}>
                   Provide essential identification details for your tender
                 </p>
@@ -1203,10 +1204,10 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
               )}>
                 <CardTitle className="flex items-center gap-2 text-lg font-semibold">
                   <FileEdit className="h-5 w-5" style={{ color: colors.primary }} />
-                  Description & Details
+                  Description & Skills
                 </CardTitle>
                 <CardDescription>
-                  Detailed description of the tender requirements and scope
+                  Detailed description of the tender requirements and required skills
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6 p-6">
@@ -1312,7 +1313,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
           </div>
         );
 
-      case 2:
+      case 2: // Procurement Details
         return (
           <div className="space-y-6 animate-in fade-in-50">
             <div className="flex items-center gap-3 mb-6">
@@ -1322,7 +1323,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                   ? "bg-gradient-to-br from-blue-900/50 to-indigo-900/50"
                   : "bg-gradient-to-br from-blue-100 to-indigo-100"
               )}>
-                <CalendarDays className="h-6 w-6" style={{ color: colors.primary }} />
+                <Briefcase className="h-6 w-6" style={{ color: colors.primary }} />
               </div>
               <div>
                 <h2 className="text-2xl font-bold tracking-tight">2. Procurement Details & Timeline</h2>
@@ -1434,7 +1435,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
               </CardContent>
             </Card>
 
-            {/* Project Timeline Details Card */}
+            {/* Project Timeline Details Card - ALL DATES START EMPTY */}
             <Card className={cn(
               "border shadow-sm",
               isDarkMode
@@ -1449,7 +1450,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
               )}>
                 <CardTitle className="flex items-center gap-2 text-lg font-semibold">
                   <Calendar className="h-5 w-5" style={{ color: colors.primary }} />
-                  Project Timeline Details
+                  Project Timeline (Optional)
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6 p-6">
@@ -1464,6 +1465,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                           <Input
                             type="date"
                             {...field}
+                            value={field.value || ''}
                             onChange={(e) => handleStartDateChange(e.target.value)}
                             className={cn(
                               "transition-all",
@@ -1488,6 +1490,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                           <Input
                             type="date"
                             {...field}
+                            value={field.value || ''}
                             onChange={(e) => handleEndDateChange(e.target.value)}
                             className={cn(
                               "transition-all",
@@ -1497,147 +1500,6 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                             )}
                           />
                         </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="timeline.duration.value"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Project Duration</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={1}
-                            {...field}
-                            onChange={(e) => {
-                              const value = parseInt(e.target.value) || 1;
-                              const unit = form.getValues('timeline.duration.unit') || 'months';
-                              handleTimelineDurationChange(value, unit);
-                            }}
-                            className={cn(
-                              "transition-all",
-                              isDarkMode
-                                ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500 focus:ring-blue-500"
-                                : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                            )}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="timeline.duration.unit"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Duration Unit</FormLabel>
-                        <Select onValueChange={(value) => {
-                          field.onChange(value);
-                          const durationValue = form.getValues('timeline.duration.value') || 1;
-                          handleTimelineDurationChange(durationValue, value as any);
-                        }} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger className={cn(
-                              "transition-all",
-                              isDarkMode
-                                ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500 focus:ring-blue-500"
-                                : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                            )}>
-                              <SelectValue placeholder="Select unit" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent className={cn(
-                            "border shadow-lg animate-in fade-in-50",
-                            isDarkMode
-                              ? "bg-gray-800 border-gray-700"
-                              : "bg-white border-gray-200"
-                          )}>
-                            {TIME_UNITS.map((unit) => (
-                              <SelectItem key={unit.value} value={unit.value}>
-                                {unit.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="bidValidityPeriod.value"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Bid Validity Period</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={1}
-                            {...field}
-                            onChange={(e) => {
-                              const value = parseInt(e.target.value) || 0;
-                              form.setValue('bidValidityPeriod', {
-                                ...form.getValues('bidValidityPeriod'),
-                                value: value,
-                              });
-                            }}
-                            className={cn(
-                              "transition-all",
-                              isDarkMode
-                                ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500 focus:ring-blue-500"
-                                : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                            )}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          How long bids must remain valid after submission
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="bidValidityPeriod.unit"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Bid Validity Unit</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger className={cn(
-                              "transition-all",
-                              isDarkMode
-                                ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500 focus:ring-blue-500"
-                                : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                            )}>
-                              <SelectValue placeholder="Select unit" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent className={cn(
-                            "border shadow-lg animate-in fade-in-50",
-                            isDarkMode
-                              ? "bg-gray-800 border-gray-700"
-                              : "bg-white border-gray-200"
-                          )}>
-                            {BID_VALIDITY_UNITS.map((unit) => (
-                              <SelectItem key={unit.value} value={unit.value}>
-                                {unit.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -1660,7 +1522,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
           </div>
         );
 
-      case 3:
+      case 3: // Requirements & Eligibility
         return (
           <div className="space-y-6 animate-in fade-in-50">
             <div className="flex items-center gap-3 mb-6">
@@ -1673,7 +1535,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                 <UserCheck className="h-6 w-6" style={{ color: colors.primary }} />
               </div>
               <div>
-                <h2 className="text-2xl font-bold tracking-tight">3. Eligibility & Requirements</h2>
+                <h2 className="text-2xl font-bold tracking-tight">3. Requirements & Eligibility</h2>
                 <p className={isDarkMode ? "text-gray-400" : "text-gray-600"}>
                   Define qualification criteria and technical requirements for bidders
                 </p>
@@ -1795,6 +1657,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                             min={0}
                             step={1000}
                             {...field}
+                            value={field.value || ''}
                             onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                             className={cn(
                               "transition-all",
@@ -1854,7 +1717,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                           <Input
                             type="number"
                             min={0}
-                            {...field}
+                            value={field.value || 0}
                             onChange={(e) => {
                               const value = parseInt(e.target.value) || 0;
                               const pastProjectReferences = form.getValues('pastProjectReferences');
@@ -2059,7 +1922,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
           </div>
         );
 
-      case 4:
+      case 4: // Evaluation & Deliverables
         return (
           <div className="space-y-6 animate-in fade-in-50">
             <div className="flex items-center gap-3 mb-6">
@@ -2072,7 +1935,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                 <BarChart className="h-6 w-6" style={{ color: colors.primary }} />
               </div>
               <div>
-                <h2 className="text-2xl font-bold tracking-tight">4. Evaluation & Submission</h2>
+                <h2 className="text-2xl font-bold tracking-tight">4. Evaluation & Deliverables</h2>
                 <p className={isDarkMode ? "text-gray-400" : "text-gray-600"}>
                   Define evaluation criteria and submission requirements
                 </p>
@@ -2277,7 +2140,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                   name="projectObjectives"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Project Objectives</FormLabel>
+                      <FormLabel>Project Objectives (Optional)</FormLabel>
                       <FormControl>
                         <Textarea
                           placeholder="Describe the main objectives and goals of the project..."
@@ -2300,7 +2163,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
 
                 <div className="space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <Label>Deliverables</Label>
+                    <Label>Deliverables (Optional)</Label>
                     <Button
                       type="button"
                       variant="outline"
@@ -2309,7 +2172,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                         deliverablesFields.append({
                           title: '',
                           description: '',
-                          deadline: format(addDays(new Date(), 90), 'yyyy-MM-dd'),
+                          deadline: '',
                         })
                       }
                       className={cn(
@@ -2395,14 +2258,19 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                               name={`deliverables.${index}.deadline`}
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel className="text-sm">Deadline</FormLabel>
+                                  <FormLabel className="text-sm">Deadline (Optional)</FormLabel>
                                   <FormControl>
-                                    <Input type="date" {...field} className={cn(
-                                      "transition-all",
-                                      isDarkMode
-                                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500 focus:ring-blue-500"
-                                        : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                                    )} />
+                                    <Input
+                                      type="date"
+                                      {...field}
+                                      value={field.value || ''}
+                                      className={cn(
+                                        "transition-all",
+                                        isDarkMode
+                                          ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500 focus:ring-blue-500"
+                                          : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                                      )}
+                                    />
                                   </FormControl>
                                   <FormMessage />
                                 </FormItem>
@@ -2457,7 +2325,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <CardTitle className="flex items-center gap-2 text-lg font-semibold">
                     <Percent className="h-5 w-5" style={{ color: colors.primary }} />
-                    Payment Milestones
+                    Payment Milestones (Optional)
                   </CardTitle>
                   <Button
                     type="button"
@@ -2467,7 +2335,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                       milestonesFields.append({
                         title: '',
                         description: '',
-                        dueDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
+                        dueDate: '',
                         paymentPercentage: 0,
                       })
                     }
@@ -2560,14 +2428,19 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                               name={`milestones.${index}.dueDate`}
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel>Due Date</FormLabel>
+                                  <FormLabel>Due Date (Optional)</FormLabel>
                                   <FormControl>
-                                    <Input type="date" {...field} className={cn(
-                                      "transition-all",
-                                      isDarkMode
-                                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500 focus:ring-blue-500"
-                                        : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                                    )} />
+                                    <Input
+                                      type="date"
+                                      {...field}
+                                      value={field.value || ''}
+                                      className={cn(
+                                        "transition-all",
+                                        isDarkMode
+                                          ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500 focus:ring-blue-500"
+                                          : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                                      )}
+                                    />
                                   </FormControl>
                                   <FormMessage />
                                 </FormItem>
@@ -2640,7 +2513,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
           </div>
         );
 
-      case 5:
+      case 5: // CPO & Settings
         return (
           <div className="space-y-6 animate-in fade-in-50">
             <div className="flex items-center gap-3 mb-6">
@@ -2790,7 +2663,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                 </CardContent>
               </Card>
 
-              {/* Visibility Settings Card */}
+              {/* Visibility Settings Card - SIMPLIFIED (invitation system removed) */}
               <Card className={cn(
                 "border shadow-sm",
                 isDarkMode
@@ -2832,7 +2705,9 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                               ? "bg-gray-800 border-gray-700"
                               : "bg-white border-gray-200"
                           )}>
-                            {VISIBILITY_TYPES.filter(v => v.value !== 'freelancers_only').map((type) => (
+                            {VISIBILITY_TYPES.filter(v =>
+                              v.value === 'public' || v.value === 'invite_only'
+                            ).map((type) => (
                               <SelectItem key={type.value} value={type.value}>
                                 {type.label}
                               </SelectItem>
@@ -2848,141 +2723,19 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                   />
 
                   {visibilityType === 'invite_only' && (
-                    <div className="space-y-4">
-                      <Tabs value={invitationMethod} onValueChange={(v) => setInvitationMethod(v as any)}>
-                        <TabsList className={cn(
-                          "grid grid-cols-3 w-full",
-                          isDarkMode ? "bg-gray-700" : "bg-gray-100"
-                        )}>
-                          <TabsTrigger value="companies" className={cn(
-                            "transition-all",
-                            isDarkMode
-                              ? "data-[state=active]:bg-gray-800"
-                              : "data-[state=active]:bg-white"
-                          )}>
-                            <Building2 className="h-4 w-4 mr-2" />
-                            Companies
-                          </TabsTrigger>
-                          <TabsTrigger value="users" className={cn(
-                            "transition-all",
-                            isDarkMode
-                              ? "data-[state=active]:bg-gray-800"
-                              : "data-[state=active]:bg-white"
-                          )}>
-                            <Users className="h-4 w-4 mr-2" />
-                            Users
-                          </TabsTrigger>
-                          <TabsTrigger value="emails" className={cn(
-                            "transition-all",
-                            isDarkMode
-                              ? "data-[state=active]:bg-gray-800"
-                              : "data-[state=active]:bg-white"
-                          )}>
-                            <Mail className="h-4 w-4 mr-2" />
-                            Emails
-                          </TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="companies" className="space-y-4 animate-in fade-in-50">
-                          <div className="space-y-2">
-                            <Label>Invite Specific Companies</Label>
-                            <div className="flex gap-2">
-                              <Input
-                                placeholder="Search companies..."
-                                className={cn(
-                                  "transition-all",
-                                  isDarkMode
-                                    ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500 focus:ring-blue-500"
-                                    : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                                )}
-                              />
-                              <Button type="button" className="bg-blue-600 hover:bg-blue-700 text-white transition-all">
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                            </div>
-                            {allowedCompanies.length > 0 && (
-                              <div className="space-y-2 mt-3">
-                                <Label className="text-sm">Selected Companies</Label>
-                                <div className="space-y-1">
-                                  {allowedCompanies.map((company, index) => (
-                                    <div key={index} className={cn(
-                                      "flex items-center justify-between p-2 rounded transition-all",
-                                      isDarkMode
-                                        ? "bg-gray-700 hover:bg-gray-600"
-                                        : "bg-gray-50 hover:bg-gray-100"
-                                    )}>
-                                      <span className="text-sm">{company}</span>
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => {
-                                          const newCompanies = [...allowedCompanies];
-                                          newCompanies.splice(index, 1);
-                                          form.setValue('allowedCompanies', newCompanies);
-                                        }}
-                                        className="h-6 w-6 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 transition-all"
-                                      >
-                                        <X className="h-3 w-3" />
-                                      </Button>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </TabsContent>
-                        <TabsContent value="users" className="space-y-4 animate-in fade-in-50">
-                          <div className="space-y-2">
-                            <Label>Invite Specific Users</Label>
-                            <div className="flex gap-2">
-                              <Input
-                                placeholder="Search users..."
-                                className={cn(
-                                  "transition-all",
-                                  isDarkMode
-                                    ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500 focus:ring-blue-500"
-                                    : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                                )}
-                              />
-                              <Button type="button" className="bg-blue-600 hover:bg-blue-700 text-white transition-all">
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        </TabsContent>
-                        <TabsContent value="emails" className="space-y-4 animate-in fade-in-50">
-                          <div className="space-y-2">
-                            <Label>Invite by Email</Label>
-                            <Textarea
-                              placeholder="Enter email addresses (comma-separated)"
-                              className={cn(
-                                "min-h-[100px] resize-none transition-all",
-                                isDarkMode
-                                  ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500 focus:ring-blue-500"
-                                  : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                              )}
-                            />
-                            <FormDescription>
-                              Enter email addresses separated by commas
-                            </FormDescription>
-                          </div>
-                        </TabsContent>
-                      </Tabs>
-
-                      {(allowedCompanies.length === 0 && form.watch('allowedUsers')?.length === 0) && (
-                        <Alert className={cn(
-                          "border transition-all",
-                          isDarkMode
-                            ? "border-yellow-800 bg-yellow-900/20 text-yellow-200"
-                            : "border-yellow-200 bg-yellow-50 text-yellow-800"
-                        )}>
-                          <AlertTriangle className="h-4 w-4" />
-                          <AlertDescription>
-                            For invite-only visibility, you must specify at least one company, user, or email.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                    </div>
+                    <Alert className={cn(
+                      "border transition-all",
+                      isDarkMode
+                        ? "border-yellow-800 bg-yellow-900/20 text-yellow-200"
+                        : "border-yellow-200 bg-yellow-50 text-yellow-800"
+                    )}>
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertTitle>Invite-Only Mode</AlertTitle>
+                      <AlertDescription>
+                        This tender will only be visible to invited companies.
+                        You can manage invitations after creating the tender.
+                      </AlertDescription>
+                    </Alert>
                   )}
                 </CardContent>
               </Card>
@@ -2990,7 +2743,8 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
           </div>
         );
 
-      case 6:
+      case 6: { // Review & Submit
+        const totalWeight = (evaluationCriteria?.technicalWeight || 0) + (evaluationCriteria?.financialWeight || 0);
         return (
           <div className="space-y-6 animate-in fade-in-50">
             <div className="flex items-center gap-3 mb-6">
@@ -3003,7 +2757,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                 <FileUp className="h-6 w-6" style={{ color: colors.primary }} />
               </div>
               <div>
-                <h2 className="text-2xl font-bold tracking-tight">6. Review & Finalize</h2>
+                <h2 className="text-2xl font-bold tracking-tight">6. Review & Submit</h2>
                 <p className={isDarkMode ? "text-gray-400" : "text-gray-600"}>
                   Review deadlines, upload documents, and finalize your tender
                 </p>
@@ -3182,9 +2936,10 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
               </CardHeader>
               <CardContent className="space-y-6 p-6">
                 <div className="space-y-4">
+                  {/* Required deadline validation */}
                   <div className={cn(
                     "p-4 rounded-lg border transition-all",
-                    evaluationCriteria.technicalWeight + evaluationCriteria.financialWeight === 100
+                    form.watch('deadline') && form.watch('deadline').trim()
                       ? isDarkMode
                         ? "bg-blue-900/20 border-blue-700"
                         : "bg-blue-50 border-blue-200"
@@ -3195,11 +2950,51 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                     <div className="flex items-center gap-3">
                       <div className={cn(
                         "w-8 h-8 rounded-full flex items-center justify-center transition-all",
-                        evaluationCriteria.technicalWeight + evaluationCriteria.financialWeight === 100
+                        form.watch('deadline') && form.watch('deadline').trim()
                           ? "bg-green-500"
                           : "bg-red-500"
                       )}>
-                        {evaluationCriteria.technicalWeight + evaluationCriteria.financialWeight === 100 ? (
+                        {form.watch('deadline') && form.watch('deadline').trim() ? (
+                          <Check className="h-4 w-4 text-white" />
+                        ) : (
+                          <AlertTriangle className="h-4 w-4 text-white" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="font-medium">Submission Deadline</div>
+                        <div className={cn(
+                          "text-sm",
+                          form.watch('deadline') && form.watch('deadline').trim()
+                            ? isDarkMode ? "text-green-400" : "text-green-600"
+                            : isDarkMode ? "text-red-400" : "text-red-600"
+                        )}>
+                          {form.watch('deadline') && form.watch('deadline').trim()
+                            ? `✓ Deadline set: ${safeFormatDate(form.watch('deadline'))}`
+                            : '✗ Submission deadline is required'
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={cn(
+                    "p-4 rounded-lg border transition-all",
+                    totalWeight === 100
+                      ? isDarkMode
+                        ? "bg-blue-900/20 border-blue-700"
+                        : "bg-blue-50 border-blue-200"
+                      : isDarkMode
+                        ? "bg-red-900/20 border-red-700"
+                        : "bg-red-50 border-red-200"
+                  )}>
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "w-8 h-8 rounded-full flex items-center justify-center transition-all",
+                        totalWeight === 100
+                          ? "bg-green-500"
+                          : "bg-red-500"
+                      )}>
+                        {totalWeight === 100 ? (
                           <Check className="h-4 w-4 text-white" />
                         ) : (
                           <AlertTriangle className="h-4 w-4 text-white" />
@@ -3209,13 +3004,13 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                         <div className="font-medium">Evaluation Weights</div>
                         <div className={cn(
                           "text-sm",
-                          evaluationCriteria.technicalWeight + evaluationCriteria.financialWeight === 100
+                          totalWeight === 100
                             ? isDarkMode ? "text-green-400" : "text-green-600"
                             : isDarkMode ? "text-red-400" : "text-red-600"
                         )}>
-                          {evaluationCriteria.technicalWeight + evaluationCriteria.financialWeight === 100
+                          {totalWeight === 100
                             ? '✓ Weights properly balanced (100%)'
-                            : `✗ Weights sum to ${evaluationCriteria.technicalWeight + evaluationCriteria.financialWeight}% (must be 100%)`
+                            : `✗ Weights sum to ${totalWeight}% (must be 100%)`
                           }
                         </div>
                       </div>
@@ -3410,6 +3205,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
             </Card>
           </div>
         );
+      }
 
       default:
         return null;
@@ -3474,7 +3270,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
         </div>
 
         <Form {...form}>
-          {/* Progress Steps */}
+          {/* Progress Steps - Updated for 6 steps */}
           <Card className={cn(
             "border shadow-sm mb-6",
             isDarkMode
@@ -3508,12 +3304,12 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                         "mt-2 text-xs font-medium text-center",
                         isDarkMode ? "text-gray-400" : "text-gray-700"
                       )}>
-                        {step === 1 && 'Identification'}
+                        {step === 1 && 'Basic Info'}
                         {step === 2 && 'Procurement'}
-                        {step === 3 && 'Eligibility'}
+                        {step === 3 && 'Requirements'}
                         {step === 4 && 'Evaluation'}
-                        {step === 5 && 'CPO & Visibility'}
-                        {step === 6 && 'Finalize'}
+                        {step === 5 && 'CPO & Settings'}
+                        {step === 6 && 'Review'}
                       </span>
                     </div>
                     {step < 6 && (
@@ -3615,7 +3411,9 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                           isSubmitting ||
                           (workflowType === 'closed' && !sealedConfirmed) ||
                           (cpoRequired && !form.getValues('cpoDescription')?.trim()) ||
-                          (evaluationCriteria.technicalWeight + evaluationCriteria.financialWeight !== 100)
+                          (evaluationCriteria && (evaluationCriteria.technicalWeight + evaluationCriteria.financialWeight !== 100)) ||
+                          !form.watch('deadline') ||
+                          !form.watch('deadline').trim()
                         }
                         className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white transition-all duration-300 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                       >
@@ -3744,12 +3542,14 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                             <div>
                               <span className="text-sm font-medium">{d.title}</span>
                               <p className="text-sm">{d.description}</p>
-                              <p className={cn(
-                                "text-xs",
-                                isDarkMode ? "text-gray-400" : "text-gray-500"
-                              )}>
-                                Due: {safeFormatDate(d.deadline)}
-                              </p>
+                              {d.deadline && d.deadline.trim() && (
+                                <p className={cn(
+                                  "text-xs",
+                                  isDarkMode ? "text-gray-400" : "text-gray-500"
+                                )}>
+                                  Due: {safeFormatDate(d.deadline)}
+                                </p>
+                              )}
                             </div>
                           </li>
                         ))}

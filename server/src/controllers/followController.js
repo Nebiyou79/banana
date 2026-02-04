@@ -515,6 +515,74 @@ class FollowController {
       console.error('Error updating following count:', error);
     }
   }
+// In followController.js - Add this method:
+
+// Bulk follow status check
+async getBulkFollowStatus(req, res) {
+  try {
+    const { userIds, targetType = 'User' } = req.body;
+    const followerId = req.user.userId;
+
+    console.log('📊 Bulk follow status called:', { 
+      followerId, 
+      userIdsCount: userIds?.length || 0,
+      targetType 
+    });
+
+    if (!userIds || !Array.isArray(userIds)) {
+      return res.status(400).json({
+        success: false,
+        message: 'User IDs array is required'
+      });
+    }
+
+    // Validate ObjectIds
+    const validUserIds = userIds.filter(id => {
+      try {
+        return mongoose.Types.ObjectId.isValid(id) && id !== followerId.toString();
+      } catch (error) {
+        return false;
+      }
+    });
+    
+    if (validUserIds.length === 0) {
+      console.log('📊 No valid user IDs to check');
+      return res.json({
+        success: true,
+        data: {}
+      });
+    }
+
+    // Get follow status for all users in one query
+    const follows = await Follow.find({
+      follower: followerId,
+      targetType,
+      targetId: { $in: validUserIds },
+      status: 'accepted'
+    });
+
+    console.log(`📊 Found ${follows.length} follows for ${validUserIds.length} users`);
+
+    // Create a map for quick lookup
+    const statusMap = {};
+    validUserIds.forEach(userId => {
+      statusMap[userId] = follows.some(
+        follow => follow.targetId.toString() === userId.toString()
+      );
+    });
+
+    res.json({
+      success: true,
+      data: statusMap
+    });
+  } catch (error) {
+    console.error('❌ Bulk follow status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error checking bulk follow status'
+    });
+  }
+}
 }
 
 module.exports = new FollowController();

@@ -551,5 +551,33 @@
     "uploadedAt": "2026-01-28T14:33:59.601Z",
     "fileType": "image",
     "size": 526844
+  },
+  "bananalink/images/product-placeholder": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana\\server\\backups\\cloudinary\\images\\product-placeholder_a4600c79_2026-02-02T11-41-44-157Z.jpg",
+    "originalName": "product-placeholder.jpg",
+    "uploadedAt": "2026-02-02T11:41:44.161Z",
+    "fileType": "image",
+    "size": 19845
+  },
+  "bananalink/images/covers/695f8b35e612a524e5108bf8/hr-solutions": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana\\server\\backups\\cloudinary\\images\\hr-solutions_42d1a11d_2026-02-02T11-46-38-190Z.jpg",
+    "originalName": "hr-solutions.jpg",
+    "uploadedAt": "2026-02-02T11:46:38.191Z",
+    "fileType": "image",
+    "size": 15045
+  },
+  "bananalink/images/avatars/695f8b35e612a524e5108bf8/product-placeholder": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana\\server\\backups\\cloudinary\\images\\product-placeholder_6bfa4c59_2026-02-02T12-36-39-199Z.jpg",
+    "originalName": "product-placeholder.jpg",
+    "uploadedAt": "2026-02-02T12:36:39.203Z",
+    "fileType": "image",
+    "size": 19845
+  },
+  "bananalink/images/219983": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana\\server\\backups\\cloudinary\\images\\219983_d413c629_2026-02-03T14-44-29-689Z.png",
+    "originalName": "219983.png",
+    "uploadedAt": "2026-02-03T14:44:29.694Z",
+    "fileType": "image",
+    "size": 22932
   }
 }

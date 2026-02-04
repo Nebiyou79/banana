@@ -3,7 +3,7 @@ const User = require('../models/User');
 const { deleteFromCloudinary } = require('../config/cloudinary');
 const { validationResult } = require('express-validator');
 const mongoose = require('mongoose');
-
+const ProfileSyncService = require('../services/profileSyncService');
 // ========== HELPER FUNCTIONS (DEFINED OUTSIDE THE CLASS) ==========
 
 // Sanitize social links
@@ -835,7 +835,18 @@ async uploadAvatar(req, res) {
     );
     
     console.log('✅ Avatar update complete for user:', userId);
-    
+        // 🔄 SYNC TO COMPANY/ORGANIZATION (NEW)
+    try {
+      const syncResult = await ProfileSyncService.syncAvatarToEntity(userId);
+      if (syncResult.synced) {
+        console.log(`✅ Avatar synced to: ${syncResult.entities.join(', ')}`);
+      } else {
+        console.log('ℹ️ No company/organization to sync avatar to');
+      }
+    } catch (syncError) {
+      console.warn('⚠️ Avatar sync failed (non-critical):', syncError.message);
+      // Don't fail the request if sync fails
+    }
     res.status(200).json({
       success: true,
       message: 'Avatar uploaded successfully',

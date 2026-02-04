@@ -93,14 +93,31 @@ export const JobHeader: React.FC<JobHeaderProps> = ({
         return 'Unknown';
     };
 
-    const getOwnerAvatarUrl = () => {
+    const getOwnerAvatarUrl = (): string => {
         const ownerName = getOwnerName();
-        return getAvatarUrl({
-            profile: ownerProfile,
-            name: ownerName,
-            fallbackColor: job.jobType === 'organization' ? '#4F46E5' : '#10B981',
-            size: compact ? 40 : 48,
-        });
+
+        // First priority: ownerProfile from props
+        if (ownerProfile) {
+            return getAvatarUrl({
+                profile: ownerProfile,
+                name: ownerName,
+                fallbackColor: job.jobType === 'organization' ? '#4F46E5' : '#10B981',
+                size: compact ? 40 : 48,
+            });
+        }
+
+        // Second priority: logo from job data
+        if (job.jobType === 'organization' && job.organization?.logoUrl) {
+            return job.organization.logoUrl;
+        }
+        if (job.jobType === 'company' && job.company?.logoUrl) {
+            return job.company.logoUrl;
+        }
+
+        // Final fallback: initials-based avatar
+        const initials = getInitials(ownerName);
+        return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=${job.jobType === 'organization' ? '4F46E5' : '10B981'
+            }&color=fff&size=${compact ? 40 : 48}`;
     };
 
     const isVerified = () => {
@@ -271,6 +288,9 @@ export const JobHeader: React.FC<JobHeaderProps> = ({
     const isOwner = canEditJob();
     const locationText = job.location ? `${job.location.city}, ${job.location.region}` : 'Location not specified';
 
+    // Check if avatar is a real image URL or a fallback UI avatar
+    const hasRealAvatar = ownerAvatarUrl && !ownerAvatarUrl.includes('ui-avatars.com');
+
     // Get initials for fallback
     const getInitials = (name: string) => {
         if (!name) return 'U';
@@ -355,28 +375,29 @@ export const JobHeader: React.FC<JobHeaderProps> = ({
                                         "relative rounded-full overflow-hidden border",
                                         compact ? "w-8 h-8 md:w-10 md:h-10" : "w-10 h-10 md:w-12 md:h-12",
                                         theme.border.primary,
-                                        "bg-gray-100 dark:bg-gray-800" // Fallback background
+                                        "bg-gray-100 dark:bg-gray-800"
                                     )}>
-                                        {/* Avatar Image */}
-                                        {ownerAvatarUrl && (
+                                        {/* Avatar Image - Only show if hasRealAvatar */}
+                                        {hasRealAvatar ? (
                                             <img
                                                 src={ownerAvatarUrl}
                                                 alt={ownerName}
                                                 className="object-cover w-full h-full"
                                                 onError={handleAvatarError}
+                                                loading="lazy"
                                             />
-                                        )}
+                                        ) : null}
 
-                                        {/* Fallback Initials */}
+                                        {/* Fallback Initials - Show if no real avatar */}
                                         <div
                                             className={cn(
-                                                "w-full h-full flex items-center justify-center hidden",
+                                                "w-full h-full flex items-center justify-center",
                                                 "font-bold text-white",
                                                 job.jobType === 'organization'
                                                     ? 'bg-purple-600'
                                                     : 'bg-green-600'
                                             )}
-                                            style={{ display: !ownerAvatarUrl ? 'flex' : 'none' }}
+                                            style={{ display: hasRealAvatar ? 'none' : 'flex' }}
                                         >
                                             <span className={compact ? 'text-xs' : 'text-sm'}>
                                                 {ownerInitials}
@@ -725,6 +746,7 @@ export const JobAvatar: React.FC<JobAvatarProps> = ({
     };
 
     const ownerInitials = getInitials(ownerName);
+    const hasRealAvatar = avatarUrl && !avatarUrl.includes('ui-avatars.com');
 
     const sizeClasses = {
         sm: 'w-8 h-8',
@@ -745,18 +767,21 @@ export const JobAvatar: React.FC<JobAvatarProps> = ({
             "relative rounded-full overflow-hidden border",
             sizeClasses[size],
             theme.border.primary,
-            "bg-gray-100 dark:bg-gray-800", // Fallback background
+            "bg-gray-100 dark:bg-gray-800",
             className
         )}>
-            {/* Avatar Image */}
-            <img
-                src={avatarUrl}
-                alt={ownerName}
-                className="object-cover w-full h-full"
-                onError={handleImageError}
-            />
+            {/* Avatar Image - Only show if hasRealAvatar */}
+            {hasRealAvatar ? (
+                <img
+                    src={avatarUrl}
+                    alt={ownerName}
+                    className="object-cover w-full h-full"
+                    onError={handleImageError}
+                    loading="lazy"
+                />
+            ) : null}
 
-            {/* Fallback Initials */}
+            {/* Fallback Initials - Show if no real avatar */}
             <div
                 className={cn(
                     "w-full h-full flex items-center justify-center",
@@ -765,7 +790,7 @@ export const JobAvatar: React.FC<JobAvatarProps> = ({
                         ? 'bg-purple-600'
                         : 'bg-green-600'
                 )}
-                style={{ display: 'none' }}
+                style={{ display: hasRealAvatar ? 'none' : 'flex' }}
             >
                 <span className={size === 'sm' ? 'text-xs' : size === 'md' ? 'text-sm' : 'text-base'}>
                     {ownerInitials}

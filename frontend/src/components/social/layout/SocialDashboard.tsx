@@ -1,10 +1,10 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/router';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState} from 'react';
 import SocialSidebar from './SocialSidebar';
 import { profileService } from '@/services/profileService';
 import { toast } from '@/hooks/use-toast';
-import { Sparkles, Zap, TrendingUp, Bell, ChevronRight, ChevronDown, ChevronUp, Users, Eye, MousePointer } from 'lucide-react';
+import { Sparkles, Zap, TrendingUp, Bell, ChevronRight, ChevronUp } from 'lucide-react';
 import { Profile } from '@/services/profileService';
 import CandidateAdCard from '../CandidateAdCard';
 import CompanyAdCard from '../CompanyAdCard';
@@ -47,10 +47,11 @@ function SocialDashboardContent({
 }: SocialDashboardLayoutProps) {
   const { user, isLoading, isAuthenticated } = useAuth();
   const router = useRouter();
-  const { getPageBgStyle, getCardStyle, getButtonClasses, getTextClasses, colors, role } = useTheme();
+  const { getPageBgStyle, getCardStyle, getButtonClasses, colors, role } = useTheme();
   const [checkingProfile, setCheckingProfile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [windowWidth, setWindowWidth] = useState(0);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
   const [ads, setAds] = useState<AdData[]>([]);
   const [adStats, setAdStats] = useState({
@@ -66,18 +67,20 @@ function SocialDashboardContent({
   const [statsLoaded, setStatsLoaded] = useState(false);
   const [adsLoaded, setAdsLoaded] = useState(false);
 
-  /* ------------------------ Detect Mobile ------------------------ */
+  /* ------------------------ Detect Screen Size ------------------------ */
   useEffect(() => {
-    const checkMobile = () => {
-      const mobile = window.innerWidth < 1024;
+    const checkScreenSize = () => {
+      const width = window.innerWidth;
+      const mobile = width < 1024;
+      setWindowWidth(width);
       setIsMobile(mobile);
       setSidebarOpen(!mobile);
       if (mobile) setAdsExpanded(false);
     };
 
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
   /* ------------------ Page Load Animation ------------------ */
@@ -235,7 +238,7 @@ function SocialDashboardContent({
             className="text-lg tracking-wide animate-in fade-in-up duration-700 animate-delay-500"
             style={{ color: colors.secondary }}
           >
-            You don't have permission to access this page.
+            You don`t have permission to access this page.
           </p>
 
           {/* Animated button */}
@@ -282,9 +285,24 @@ function SocialDashboardContent({
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=${encodeURIComponent(colors.primary)}&color=fff&size=150`;
   };
 
-  /* ------------------- MAIN LAYOUT with optimized sidebar width ------------------- */
+  // Determine sidebar width based on screen size
+  const getSidebarWidth = () => {
+    if (windowWidth < 1280) return 'w-[340px]'; // For 1024px - 1279px screens
+    if (windowWidth < 1536) return 'w-[380px]'; // For 1280px - 1535px screens
+    return 'w-[420px]'; // For 1536px+ screens
+  };
+
+  const getMainMargin = () => {
+    if (windowWidth < 1280) return 'lg:mr-[340px]';
+    if (windowWidth < 1536) return 'lg:mr-[380px]';
+    return 'lg:mr-[420px]';
+  };
+
+  const isCompactMode = windowWidth < 1280;
+
+  /* ------------------- MAIN LAYOUT ------------------- */
   return (
-    <div className={`flex min-h-screen relative overflow-hidden animate-in fade-in duration-500 ${pageLoaded ? 'opacity-100' : 'opacity-0'}`} style={getPageBgStyle()}>
+    <div className={`flex min-h-screen relative overflow-hidden animate-in fade-in duration-500 transition-all duration-300 ${pageLoaded ? 'opacity-100' : 'opacity-0'}`} style={getPageBgStyle()}>
       {/* Animated background elements */}
       <div className="absolute inset-0 pointer-events-none">
         <div
@@ -302,7 +320,7 @@ function SocialDashboardContent({
       </div>
 
       {/* DESKTOP LEFT SIDEBAR with Animation */}
-      <div className="hidden lg:block fixed inset-y-0 left-0 z-30 animate-in slide-in-from-left-0 duration-500">
+      <div className="hidden lg:block fixed inset-y-0 left-0 z-30 animate-in slide-in-from-left-0 duration-500 w-80">
         <div className="h-full">
           <SocialSidebar userProfile={userProfile} />
         </div>
@@ -324,12 +342,10 @@ function SocialDashboardContent({
         </>
       )}
 
-      {/* DESKTOP RIGHT ADS SIDEBAR - OPTIMIZED WIDTH */}
+      {/* DESKTOP RIGHT ADS SIDEBAR - RESPONSIVE WIDTH */}
       {!isMobile && (
-        <div className="hidden lg:block fixed right-0 top-0 bottom-0 z-20 w-[470px] animate-in slide-in-from-right-0 duration-500">
-          {/* MIDDLE GROUND: w-[470px] (between 420px and 520px) */}
-          <div
-            className="h-full overflow-y-auto pl-6 pt-24 pb-8 pr-6"
+        <div className={`hidden lg:block fixed right-0 top-0 bottom-0 z-20 animate-in slide-in-from-right-0 duration-500 ${getSidebarWidth()}`}>
+          <div className={`h-full overflow-y-auto pt-24 pb-8 ${isCompactMode ? 'px-3' : 'px-4'} ${windowWidth >= 1536 ? 'px-5' : ''}`}
             style={{
               scrollbarWidth: 'thin',
               scrollbarColor: `${colors.primary + '30'} transparent`,
@@ -352,21 +368,21 @@ function SocialDashboardContent({
               }
             `}</style>
 
-            <div className="space-y-6">
-              {/* Profile Card - SIGNIFICANTLY SMALLER */}
+            <div className="space-y-5">
+              {/* Profile Card - RESPONSIVE */}
               {userProfile && (
                 <div
-                  className="rounded-xl shadow-sm p-4 animate-in slide-in-from-right-0 duration-500"
+                  className={`rounded-xl shadow-sm ${isCompactMode ? 'p-3' : 'p-4'} animate-in slide-in-from-right-0 duration-500`}
                   style={{
                     ...getCardStyle(),
                     border: `1px solid ${colors.cardBorderLight || '#e5e7eb'}`
                   }}
                 >
-                  <div className="flex items-center gap-4">
-                    {/* Avatar - SMALLER */}
+                  <div className={`flex items-center ${isCompactMode ? 'gap-3' : 'gap-4'}`}>
+                    {/* Avatar */}
                     <div className="relative">
                       <div
-                        className="w-16 h-16 rounded-lg flex items-center justify-center overflow-hidden shadow-lg border-2"
+                        className={`${isCompactMode ? 'w-14 h-14' : 'w-16 h-16'} rounded-lg flex items-center justify-center overflow-hidden shadow-lg border-2`}
                         style={{
                           borderColor: colors.cardBgLight || 'white',
                           background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`
@@ -390,12 +406,12 @@ function SocialDashboardContent({
                             }}
                           />
                         ) : (
-                          <span className="text-white text-lg font-bold">
+                          <span className={`${isCompactMode ? 'text-base' : 'text-lg'} text-white font-bold`}>
                             {userProfile.user.name?.charAt(0).toUpperCase() || 'U'}
                           </span>
                         )}
                       </div>
-                      {/* Online status indicator - SMALLER */}
+                      {/* Online status indicator */}
                       <div
                         className="absolute bottom-0 right-0 w-3 h-3 rounded-full border"
                         style={{
@@ -408,30 +424,32 @@ function SocialDashboardContent({
                     {/* User Info - COMPACT */}
                     <div className="flex-1 min-w-0">
                       <h3
-                        className="font-semibold truncate"
+                        className={`font-semibold truncate ${isCompactMode ? 'text-sm' : ''}`}
                         style={{ color: colors.primary }}
                       >
                         {userProfile.user.name}
                       </h3>
                       <p
-                        className="text-sm truncate mt-1"
+                        className={`truncate mt-1 ${isCompactMode ? 'text-xs' : 'text-sm'}`}
                         style={{ color: colors.secondary }}
                       >
-                        {userProfile.headline?.substring(0, 50) || 'No headline set'}
-                        {userProfile.headline && userProfile.headline.length > 50 ? '...' : ''}
+                        {isCompactMode 
+                          ? (userProfile.headline?.substring(0, 40) || 'No headline')
+                          : (userProfile.headline?.substring(0, 50) || 'No headline set')}
+                        {userProfile.headline && ((isCompactMode && userProfile.headline.length > 40) || (!isCompactMode && userProfile.headline.length > 50)) ? '...' : ''}
                       </p>
 
-                      {/* Stats - COMPACT AND HORIZONTAL */}
-                      <div className="flex gap-4 mt-3">
+                      {/* Stats - HORIZONTAL */}
+                      <div className={`flex ${isCompactMode ? 'gap-3 mt-2' : 'gap-4 mt-3'}`}>
                         <div className="text-center">
                           <div
-                            className="font-semibold text-sm"
+                            className={`font-semibold ${isCompactMode ? 'text-xs' : 'text-sm'}`}
                             style={{ color: colors.primary }}
                           >
                             {userProfile.socialStats?.followerCount || 0}
                           </div>
                           <div
-                            className="text-xs"
+                            className={isCompactMode ? 'text-[10px]' : 'text-xs'}
                             style={{ color: colors.secondary }}
                           >
                             Followers
@@ -439,13 +457,13 @@ function SocialDashboardContent({
                         </div>
                         <div className="text-center">
                           <div
-                            className="font-semibold text-sm"
+                            className={`font-semibold ${isCompactMode ? 'text-xs' : 'text-sm'}`}
                             style={{ color: colors.primary }}
                           >
                             {userProfile.socialStats?.followingCount || 0}
                           </div>
                           <div
-                            className="text-xs"
+                            className={isCompactMode ? 'text-[10px]' : 'text-xs'}
                             style={{ color: colors.secondary }}
                           >
                             Following
@@ -457,7 +475,7 @@ function SocialDashboardContent({
                 </div>
               )}
 
-              {/* Sponsored Ads Section - OPTIMIZED FOR WIDTH */}
+              {/* Sponsored Ads Section */}
               {ads.length > 0 && (
                 <div
                   className="rounded-xl overflow-hidden animate-in slide-in-from-right-0 duration-500 animate-delay-300"
@@ -468,23 +486,23 @@ function SocialDashboardContent({
                 >
                   {/* Ad Header */}
                   <div
-                    className="px-5 py-3 border-b flex items-center justify-between"
+                    className={`${isCompactMode ? 'px-3 py-2' : 'px-4 py-3'} border-b flex items-center justify-between`}
                     style={{
                       borderColor: colors.primary + '20',
                       background: colors.cardBgLight
                     }}
                   >
                     <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4" style={{ color: colors.accent }} />
+                      <Sparkles className={`${isCompactMode ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} style={{ color: colors.accent }} />
                       <span
-                        className="font-semibold text-sm"
+                        className={`font-semibold ${isCompactMode ? 'text-xs' : 'text-sm'}`}
                         style={{ color: colors.primary }}
                       >
                         Sponsored
                       </span>
                     </div>
                     <span
-                      className="text-xs px-2 py-1 rounded-full"
+                      className={`${isCompactMode ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-1'} rounded-full`}
                       style={{
                         background: colors.primary + '10',
                         color: colors.primary
@@ -494,8 +512,8 @@ function SocialDashboardContent({
                     </span>
                   </div>
 
-                  {/* Ads Content - ADJUSTED FOR NEW WIDTH */}
-                  <div className="p-5 space-y-5">
+                  {/* Ads Content */}
+                  <div className={`${isCompactMode ? 'p-3 space-y-4' : 'p-4 space-y-5'}`}>
                     {ads.map((ad, index) => (
                       <div
                         key={ad.id}
@@ -513,37 +531,37 @@ function SocialDashboardContent({
                 </div>
               )}
 
-              {/* Quick Stats Card - COMPACT */}
+              {/* Quick Stats Card */}
               <div
-                className="rounded-xl p-5 animate-in slide-in-from-right-0 duration-500 animate-delay-500"
+                className={`rounded-xl animate-in slide-in-from-right-0 duration-500 animate-delay-500 ${isCompactMode ? 'p-3' : 'p-4'}`}
                 style={{
                   ...getCardStyle(),
                   border: `1px solid ${colors.cardBorderLight || '#e5e7eb'}`
                 }}
               >
                 <h4
-                  className="font-semibold mb-4 flex items-center gap-2 text-sm"
+                  className={`font-semibold mb-3 flex items-center gap-2 ${isCompactMode ? 'text-xs' : 'text-sm'}`}
                   style={{ color: colors.primary }}
                 >
-                  <TrendingUp className="w-4 h-4" />
+                  <TrendingUp className={`${isCompactMode ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
                   Ad Performance
                 </h4>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm" style={{ color: colors.secondary }}>Impressions</span>
-                    <span style={{ color: colors.primary }} className="font-semibold">
+                    <span className={isCompactMode ? 'text-xs' : 'text-sm'} style={{ color: colors.secondary }}>Impressions</span>
+                    <span style={{ color: colors.primary }} className={`font-semibold ${isCompactMode ? 'text-xs' : 'text-sm'}`}>
                       {adStats.totalImpressions.toLocaleString()}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm" style={{ color: colors.secondary }}>Clicks</span>
-                    <span style={{ color: colors.primary }} className="font-semibold">
+                    <span className={isCompactMode ? 'text-xs' : 'text-sm'} style={{ color: colors.secondary }}>Clicks</span>
+                    <span style={{ color: colors.primary }} className={`font-semibold ${isCompactMode ? 'text-xs' : 'text-sm'}`}>
                       {adStats.totalClicks.toLocaleString()}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm" style={{ color: colors.secondary }}>CTR</span>
-                    <span style={{ color: colors.primary }} className="font-semibold">
+                    <span className={isCompactMode ? 'text-xs' : 'text-sm'} style={{ color: colors.secondary }}>CTR</span>
+                    <span style={{ color: colors.primary }} className={`font-semibold ${isCompactMode ? 'text-xs' : 'text-sm'}`}>
                       {adStats.totalImpressions > 0
                         ? `${((adStats.totalClicks / adStats.totalImpressions) * 100).toFixed(1)}%`
                         : '0%'}
@@ -553,7 +571,7 @@ function SocialDashboardContent({
 
                 {/* View All Button */}
                 <button
-                  className="w-full mt-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                  className={`w-full mt-3 rounded-lg font-medium transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${isCompactMode ? 'py-2 text-xs' : 'py-2.5 text-sm'}`}
                   style={{
                     background: `${colors.primary}10`,
                     color: colors.primary
@@ -562,15 +580,13 @@ function SocialDashboardContent({
                   View Analytics
                 </button>
               </div>
-
-              {/* FOOTER REMOVED FROM SIDEBAR - Now at bottom of main page */}
             </div>
           </div>
         </div>
       )}
 
-      {/* MAIN CONTENT AREA - WITHOUT ENVELOPING CARD */}
-      <div className={`flex-1 flex flex-col min-h-screen ${!isMobile ? 'lg:ml-80 lg:mr-[470px]' : ''}`}>
+      {/* MAIN CONTENT AREA - RESPONSIVE MARGINS */}
+      <div className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${!isMobile ? `lg:ml-80 ${getMainMargin()}` : ''}`}>
         {/* STICKY NAVBAR - Animated entrance */}
         <div className="sticky top-0 z-50 shrink-0 animate-in slide-in-from-top-0 duration-500"
           style={{ background: colors.cardBgLight || 'white' }}>
@@ -629,11 +645,10 @@ function SocialDashboardContent({
           </div>
         )}
 
-        {/* PAGE CONTENT - Main content area - WITHOUT ENVELOPING CARD */}
+        {/* PAGE CONTENT */}
         <main className="flex-1">
-          {/* NO background card engulfing the content */}
           <div className="mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            {/* HEADER with Animation - STANDALONE */}
+            {/* HEADER with Animation */}
             <div className="mb-6 lg:mb-8 animate-in fade-in-up duration-500">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                 <div>
@@ -673,7 +688,7 @@ function SocialDashboardContent({
                 </div>
 
                 <div className="flex items-center gap-3 animate-in fade-in-up duration-500 animate-delay-300">
-                  {/* Live Status with Pulse Animation - STANDALONE CARD */}
+                  {/* Live Status with Pulse Animation */}
                   <div
                     className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm animate-pulse animate-duration-[2000ms] animate-infinite"
                     style={getCardStyle()}
@@ -695,9 +710,8 @@ function SocialDashboardContent({
               </div>
             </div>
 
-            {/* MAIN CONTENT - FREE SPACE FOR COMPONENTS */}
+            {/* MAIN CONTENT */}
             <div className="animate-in fade-in-up duration-500">
-              {/* NO enveloping card - children render directly */}
               <div className="space-y-6">
                 {React.Children.map(children, (child, index) => (
                   <div
@@ -710,7 +724,7 @@ function SocialDashboardContent({
               </div>
             </div>
 
-            {/* FOOTER - At bottom of main page (BOTH DESKTOP AND MOBILE) */}
+            {/* FOOTER */}
             <div className="flex items-center justify-center gap-2 mt-12 pt-8 pb-4 text-sm animate-in fade-in-up duration-500 animate-delay-700 border-t"
               style={{
                 borderColor: colors.primary + '20',

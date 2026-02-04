@@ -84,6 +84,8 @@ export const CommentItem: React.FC<CommentItemProps> = ({
   // Refs to track mounted state and prevent duplicate calls
   const isMounted = useRef(true);
   const hasLoadedInteraction = useRef(false);
+  const loadAttempts = useRef(0);
+  const MAX_LOAD_ATTEMPTS = 2;
 
   // Memoized permissions and state
   const permissions = useMemo(() => ({
@@ -108,40 +110,46 @@ export const CommentItem: React.FC<CommentItemProps> = ({
     optimisticLikes ?? localComment.engagement.likes,
     [localComment.engagement.likes, optimisticLikes]);
 
-  // Load user interaction ONCE with proper cleanup
-  useEffect(() => {
-    isMounted.current = true;
+// SIMPLIFIED LOAD USER INTERACTION - FIX INFINITE LOOP
+useEffect(() => {
+  // Only load if we have a current user AND the comment is active
+  if (!currentUserId || !localComment._id || state.isDeleted) {
+    return;
+  }
 
-    const loadUserInteraction = async () => {
-      // Skip if already loaded, no user, or comment is deleted
-      if (hasLoadedInteraction.current || !currentUserId || !localComment._id || state.isDeleted) {
-        return;
-      }
+  // Skip if already loaded
+  if (hasLoadedInteraction.current) {
+    return;
+  }
 
-      try {
-        // Use the likeService directly to get user interaction
-        const result = await likeService.getUserInteraction(localComment._id, 'Comment');
+  // Create a simple flag to prevent multiple calls
+  let isActive = true;
 
-        if (isMounted.current && result.hasInteraction && result.interaction) {
-          // Only set if user has reacted (not disliked)
-          if (result.interaction.interactionType === 'reaction') {
-            setUserHasLiked(true);
-          }
-          hasLoadedInteraction.current = true;
+  const loadInteraction = async () => {
+    try {
+      const result = await likeService.getUserInteraction(localComment._id, 'Comment');
+      
+      if (!isActive) return;
+      
+      if (result.hasInteraction && result.interaction) {
+        if (result.interaction.interactionType === 'reaction') {
+          setUserHasLiked(true);
         }
-      } catch (error) {
-        if (isMounted.current) {
-          console.error('Failed to load user interaction:', error);
-        }
+        hasLoadedInteraction.current = true;
       }
-    };
+    } catch (error) {
+      // Silent fail - don't clog console
+      if (!isActive) return;
+    }
+  };
 
-    loadUserInteraction();
+  // Load immediately but only once
+  loadInteraction();
 
-    return () => {
-      isMounted.current = false;
-    };
-  }, [localComment._id, currentUserId, state.isDeleted]);
+  return () => {
+    isActive = false;
+  };
+}, [localComment._id, currentUserId, state.isDeleted]);
 
   // Update local comment when prop changes
   useEffect(() => {
@@ -166,7 +174,8 @@ export const CommentItem: React.FC<CommentItemProps> = ({
         state.hasReplies &&
         !hasLoadedReplies &&
         localReplies.length === 0 &&
-        !isLoadingReplies
+        !isLoadingReplies &&
+        isMounted.current
       ) {
         await loadCommentReplies();
       }
@@ -176,7 +185,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
   }, [localComment._id, state.hasReplies, hasLoadedReplies, localReplies.length, state.isDeleted, state.isHidden, isLoadingReplies]);
 
   const loadCommentReplies = useCallback(async () => {
-    if (isLoadingReplies || !localComment._id) return;
+    if (isLoadingReplies || !localComment._id || !isMounted.current) return;
 
     setIsLoadingReplies(true);
     try {
@@ -187,24 +196,28 @@ export const CommentItem: React.FC<CommentItemProps> = ({
         sortOrder: 'asc'
       });
 
-      if (response.data?.length) {
+      if (isMounted.current && response.data?.length) {
         setLocalReplies(response.data);
         setHasLoadedReplies(true);
       }
     } catch (error) {
-      console.error(`Failed to load replies:`, error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load replies',
-        variant: 'destructive'
-      });
+      if (isMounted.current) {
+        console.error(`Failed to load replies:`, error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load replies',
+          variant: 'destructive'
+        });
+      }
     } finally {
-      setIsLoadingReplies(false);
+      if (isMounted.current) {
+        setIsLoadingReplies(false);
+      }
     }
   }, [localComment._id, isLoadingReplies, toast]);
 
   const handleReaction = useCallback(async (reaction: ReactionType = 'like') => {
-    if (isLoadingInteraction || !currentUserId || !localComment._id || state.isDeleted) return;
+    if (isLoadingInteraction || !currentUserId || !localComment._id || state.isDeleted || !isMounted.current) return;
 
     setIsLoadingInteraction(true);
 
@@ -238,27 +251,33 @@ export const CommentItem: React.FC<CommentItemProps> = ({
       }
 
       // Update local state with server response
-      setLocalComment(prev => ({
-        ...prev,
-        engagement: {
-          ...prev.engagement,
-          likes: result.stats.reactions?.total || prev.engagement.likes,
-          dislikes: 0 // Remove dislikes
-        }
-      }));
-      setOptimisticLikes(null); // Clear optimistic state
+      if (isMounted.current) {
+        setLocalComment(prev => ({
+          ...prev,
+          engagement: {
+            ...prev.engagement,
+            likes: result.stats.reactions?.total || prev.engagement.likes,
+            dislikes: 0 // Remove dislikes
+          }
+        }));
+        setOptimisticLikes(null); // Clear optimistic state
+      }
 
       // Update userHasLiked based on result
-      const userInteractionResult = await likeService.getUserInteraction(localComment._id, 'Comment');
-      setUserHasLiked(userInteractionResult.hasInteraction &&
-        userInteractionResult.interaction?.interactionType === 'reaction');
+      if (isMounted.current) {
+        const userInteractionResult = await likeService.getUserInteraction(localComment._id, 'Comment');
+        setUserHasLiked(userInteractionResult.hasInteraction &&
+          userInteractionResult.interaction?.interactionType === 'reaction');
+      }
 
     } catch (error: any) {
       console.error('Failed to handle reaction:', error);
 
       // Rollback optimistic update
-      setUserHasLiked(previousHasLiked);
-      setOptimisticLikes(null);
+      if (isMounted.current) {
+        setUserHasLiked(previousHasLiked);
+        setOptimisticLikes(null);
+      }
 
       toast({
         title: 'Error',
@@ -266,8 +285,10 @@ export const CommentItem: React.FC<CommentItemProps> = ({
         variant: 'destructive'
       });
     } finally {
-      setIsLoadingInteraction(false);
-      setShowReactions(false);
+      if (isMounted.current) {
+        setIsLoadingInteraction(false);
+        setShowReactions(false);
+      }
     }
   }, [localComment._id, currentUserId, isLoadingInteraction, userHasLiked, state.isDeleted, toast, currentLikes]);
 
@@ -295,9 +316,13 @@ export const CommentItem: React.FC<CommentItemProps> = ({
       const updatedComment = await commentService.updateComment(localComment._id, {
         content: editedContent
       });
-      setLocalComment(updatedComment);
-      setIsEditing(false);
-      onCommentUpdated?.(updatedComment);
+      
+      if (isMounted.current) {
+        setLocalComment(updatedComment);
+        setIsEditing(false);
+        onCommentUpdated?.(updatedComment);
+      }
+      
       toast({
         title: 'Success',
         description: 'Comment updated successfully'
@@ -319,7 +344,11 @@ export const CommentItem: React.FC<CommentItemProps> = ({
 
     try {
       await commentService.deleteComment(localComment._id);
-      onCommentDeleted?.(localComment._id);
+      
+      if (isMounted.current) {
+        onCommentDeleted?.(localComment._id);
+      }
+      
       toast({
         title: 'Success',
         description: 'Comment deleted successfully'
@@ -354,6 +383,8 @@ export const CommentItem: React.FC<CommentItemProps> = ({
   }, [localComment._id, toast]);
 
   const handleReplyAdded = useCallback((newReply: Comment) => {
+    if (!isMounted.current) return;
+    
     setIsReplying(false);
     setLocalReplies(prev => [...prev, newReply]);
     setLocalComment(prev => ({
@@ -368,7 +399,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
   }, [onReplyAdded]);
 
   const loadMoreReplies = useCallback(async () => {
-    if (isLoadingReplies || !localComment._id) return;
+    if (isLoadingReplies || !localComment._id || !isMounted.current) return;
 
     setIsLoadingReplies(true);
     try {
@@ -377,13 +408,13 @@ export const CommentItem: React.FC<CommentItemProps> = ({
         limit: 20
       });
 
-      if (response.data?.length) {
+      if (response.data?.length && isMounted.current) {
         setLocalReplies(prev => [...prev, ...response.data]);
         toast({
           title: 'Success',
           description: `Loaded ${response.data.length} more replies`
         });
-      } else {
+      } else if (isMounted.current) {
         toast({
           title: 'Info',
           description: 'No more replies to load'
@@ -397,7 +428,9 @@ export const CommentItem: React.FC<CommentItemProps> = ({
         variant: 'destructive'
       });
     } finally {
-      setIsLoadingReplies(false);
+      if (isMounted.current) {
+        setIsLoadingReplies(false);
+      }
     }
   }, [localComment._id, isLoadingReplies, localReplies.length, toast]);
 
@@ -560,7 +593,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
           )}
         </div>
 
-        <AnimatePresence mode="sync">
+        <AnimatePresence mode="wait">
           {isExpanded && localReplies.length > 0 && (
             <motion.div
               key={`replies-${localComment._id}-${localReplies.length}`}
@@ -756,95 +789,56 @@ export const CommentItem: React.FC<CommentItemProps> = ({
           {/* Media */}
           {renderMedia}
 
-          {/* Actions */}
-          {showActions && state.isActive && (
-            <div className="flex items-center gap-2 mt-3">
-              {/* Like Button */}
-              <div className="relative">
-                <button
-                  onClick={handleLike}
-                  disabled={isLoadingInteraction || !currentUserId}
-                  className={cn(
-                    "flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors",
-                    "hover:bg-gray-100 dark:hover:bg-gray-800",
-                    userHasLiked
-                      ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                      : "text-gray-600 dark:text-gray-400",
-                    "disabled:opacity-50 disabled:cursor-not-allowed"
-                  )}
-                  type="button"
-                >
-                  <span className="text-sm">👍</span>
-                  <span className="font-medium">
-                    {currentLikes > 0
-                      ? commentService.utils.formatEngagementNumber(currentLikes)
-                      : 'Like'
-                    }
-                  </span>
-                </button>
+{/* Actions */}
+{showActions && state.isActive && (
+  <div className="flex items-center gap-2 mt-3">
+    {/* Like Button - Clean Design */}
+    <div className="relative">
+      <button
+        onClick={handleLike}
+        disabled={isLoadingInteraction || !currentUserId}
+        className={cn(
+          "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-all",
+          "hover:bg-gray-100 dark:hover:bg-gray-800",
+          userHasLiked
+            ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+            : "text-gray-600 dark:text-gray-400",
+          "disabled:opacity-50 disabled:cursor-not-allowed",
+          "hover:scale-[1.02] active:scale-95"
+        )}
+        type="button"
+      >
+        <span className={cn(
+          "transition-colors",
+          userHasLiked 
+            ? "text-blue-500 dark:text-blue-400" 
+            : "text-gray-500 dark:text-gray-400"
+        )}>
+          <ThumbsUp size={14} className="fill-current" />
+        </span>
+        <span className="font-medium">
+          {currentLikes > 0
+            ? commentService.utils.formatEngagementNumber(currentLikes)
+            : 'Like'
+          }
+        </span>
+      </button>
+    </div>
 
-                {/* Reactions Dropdown */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowReactions(!showReactions);
-                  }}
-                  disabled={isLoadingInteraction}
-                  className="ml-1 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-50"
-                  aria-label="Choose reaction"
-                  type="button"
-                >
-                  <ChevronDown size={10} />
-                </button>
-
-                {/* Reactions Popover */}
-                <AnimatePresence mode="wait">
-                  {showReactions && (
-                    <motion.div
-                      key={`reactions-popover-${localComment._id}`}
-                      layout
-                      initial={{ opacity: 0, scale: 0.8, y: 10 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.8, y: 10 }}
-                      className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2 flex gap-1 z-50"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {reactionConfigs.map((config) => (
-                        <button
-                          key={`reaction-btn-${localComment._id}-${config.type}`}
-                          onClick={() => handleReaction(config.type)}
-                          disabled={isLoadingInteraction}
-                          className={cn(
-                            "p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors",
-                            "hover:scale-110 active:scale-95 flex items-center justify-center w-8 h-8",
-                            userHasLiked && "ring-1 ring-blue-300"
-                          )}
-                          title={config.label}
-                          aria-label={config.label}
-                          type="button"
-                        >
-                          <span className="text-lg">{config.emoji}</span>
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Reply Button */}
-              {permissions.canReply && (
-                <button
-                  onClick={() => setIsReplying(!isReplying)}
-                  disabled={isLoadingInteraction}
-                  className="flex items-center gap-1 px-2 py-1 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors text-xs disabled:opacity-50"
-                  type="button"
-                >
-                  <Reply size={12} />
-                  <span className="font-medium">Reply</span>
-                </button>
-              )}
-            </div>
-          )}
+    {/* Reply Button */}
+    {permissions.canReply && (
+      <button
+        onClick={() => setIsReplying(!isReplying)}
+        disabled={isLoadingInteraction}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all text-xs disabled:opacity-50 hover:scale-[1.02] active:scale-95"
+        type="button"
+      >
+        <Reply size={14} />
+        <span className="font-medium">Reply</span>
+      </button>
+    )}
+  </div>
+)}
 
           {/* Reply Composer */}
           <AnimatePresence mode="wait">

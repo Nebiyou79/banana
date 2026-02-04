@@ -2,6 +2,9 @@ FROM node:18-bullseye
 
 WORKDIR /app
 
+# Copy .env.production file
+COPY .env.production .env.production
+
 # Install dependencies first
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev

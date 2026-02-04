@@ -1,3 +1,4 @@
+// In Company.js - Replace the entire file
 const mongoose = require('mongoose');
 
 const companySchema = new mongoose.Schema({
@@ -23,10 +24,12 @@ const companySchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  // DEPRECATED: Now used as fallback only
   logoUrl: {
     type: String,
     default: null
   },
+  // DEPRECATED: Now used as fallback only
   bannerUrl: {
     type: String,
     default: null
@@ -71,7 +74,14 @@ const companySchema = new mongoose.Schema({
     unique: true
   },
   
-  // NEW: Social & Engagement Fields
+  // Profile reference for primary avatar
+  userProfile: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Profile',
+    required: false
+  },
+  
+  // Company-specific fields
   headline: {
     type: String,
     trim: true,
@@ -93,7 +103,6 @@ const companySchema = new mongoose.Schema({
     maxlength: 1000
   },
   
-  // NEW: Social Stats for Company
   socialStats: {
     followerCount: { type: Number, default: 0 },
     postCount: { type: Number, default: 0 },
@@ -101,7 +110,6 @@ const companySchema = new mongoose.Schema({
     profileViews: { type: Number, default: 0 }
   },
   
-  // NEW: Company Details
   companySize: {
     type: String,
     enum: ['1-10', '11-50', '51-200', '201-500', '501-1000', '1000+'],
@@ -118,7 +126,6 @@ const companySchema = new mongoose.Schema({
     default: 'sme'
   },
   
-  // NEW: Social Links
   socialLinks: {
     linkedin: {
       type: String,
@@ -158,7 +165,6 @@ const companySchema = new mongoose.Schema({
     }
   },
   
-  // NEW: Privacy & Settings
   settings: {
     allowMessages: { type: Boolean, default: true },
     showContactInfo: { type: Boolean, default: true },
@@ -170,13 +176,11 @@ const companySchema = new mongoose.Schema({
     }
   },
   
-  // NEW: Tags for categorization
   tags: [{
     type: String,
     trim: true
   }],
   
-  // NEW: Featured status
   featured: {
     type: Boolean,
     default: false
@@ -187,21 +191,47 @@ const companySchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Virtual for getting full logo URL
-companySchema.virtual('logoFullUrl').get(function () {
+// ========== VIRTUALS ==========
+
+// Primary: Get logo from user's profile avatar
+companySchema.virtual('profileLogo').get(function() {
+  // If we have a populated profile with avatar
+  if (this.userProfile?.avatar?.secure_url) {
+    return this.userProfile.avatar.secure_url;
+  }
+  
+  return null;
+});
+
+// Fallback: Get logo from legacy logoUrl field
+companySchema.virtual('legacyLogo').get(function () {
   if (!this.logoUrl) return null;
   if (this.logoUrl.startsWith('http')) return this.logoUrl;
   return `${process.env.BASE_URL || 'http://localhost:4000'}${this.logoUrl}`;
 });
 
-// Virtual for getting full banner URL
-companySchema.virtual('bannerFullUrl').get(function () {
+// Primary virtual that clients should use
+companySchema.virtual('logo').get(function () {
+  // 1. Try profile avatar first (PRIMARY)
+  const profileLogo = this.profileLogo;
+  if (profileLogo) return profileLogo;
+  
+  // 2. Try legacy logo as fallback
+  const legacyLogo = this.legacyLogo;
+  if (legacyLogo) return legacyLogo;
+  
+  // 3. Return null if no logo available
+  return null;
+});
+
+// Banner virtual (optional, same pattern)
+companySchema.virtual('banner').get(function () {
   if (!this.bannerUrl) return null;
   if (this.bannerUrl.startsWith('http')) return this.bannerUrl;
   return `${process.env.BASE_URL || 'http://localhost:4000'}${this.bannerUrl}`;
 });
 
-// NEW: Virtual for job count
+// Virtual for job count
 companySchema.virtual('jobCount', {
   ref: 'Job',
   localField: '_id',
@@ -209,7 +239,7 @@ companySchema.virtual('jobCount', {
   count: true
 });
 
-// NEW: Virtual for active job count
+// Virtual for active job count
 companySchema.virtual('activeJobCount', {
   ref: 'Job',
   localField: '_id',
@@ -218,7 +248,9 @@ companySchema.virtual('activeJobCount', {
   match: { status: 'active' }
 });
 
-// NEW: Method to update social stats
+// ========== METHODS ==========
+
+// Method to update social stats
 companySchema.methods.updateSocialStats = async function() {
   const Follow = mongoose.model('Follow');
   const Post = mongoose.model('Post');
@@ -232,7 +264,36 @@ companySchema.methods.updateSocialStats = async function() {
   return this.save();
 };
 
+// Method to sync profile reference
+companySchema.methods.syncProfile = async function() {
+  const User = mongoose.model('User');
+  const Profile = mongoose.model('Profile');
+  
+  const user = await User.findById(this.user).populate('profile');
+  if (user?.profile) {
+    this.userProfile = user.profile._id;
+    await this.save();
+    return true;
+  }
+  
+  return false;
+};
+
 // Ensure virtual fields are serialized
-companySchema.set('toJSON', { virtuals: true });
+companySchema.set('toJSON', { 
+  virtuals: true,
+  transform: function(doc, ret) {
+    // Always include logo and banner from virtuals
+    ret.logo = doc.logo;
+    ret.banner = doc.banner;
+    
+    // Optionally hide deprecated fields
+    delete ret.logoUrl;
+    delete ret.bannerUrl;
+    delete ret.userProfile; // Keep internal reference hidden
+    
+    return ret;
+  }
+});
 
 module.exports = mongoose.model('Company', companySchema);

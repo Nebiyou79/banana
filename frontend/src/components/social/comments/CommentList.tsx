@@ -58,19 +58,26 @@ export const CommentList: React.FC<CommentListProps> = ({
   const [newCommentIds, setNewCommentIds] = useState<Set<string>>(new Set());
   const containerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const isMounted = useRef(true);
+  const loadAttempts = useRef(0);
+  const MAX_LOAD_ATTEMPTS = 3;
 
-  // FIX 1: Stable skeleton IDs
+  // FIX: Stable skeleton IDs
   const skeletonIds = useMemo(() =>
     ['skeleton-1', 'skeleton-2', 'skeleton-3'],
     []);
 
+  // FIX: Simplified loadComments without complex dependencies
   const loadComments = useCallback(async (pageNum: number = 1, append: boolean = false) => {
-    if (isLoading || isLoadingMore || !postId) return;
+    // Safety check to prevent infinite loops
+    if (isLoading || isLoadingMore || !postId || loadAttempts.current >= MAX_LOAD_ATTEMPTS || !isMounted.current) {
+      return;
+    }
+
+    loadAttempts.current++;
 
     if (pageNum === 1) setIsLoading(true);
     else setIsLoadingMore(true);
-
-    setError(null);
 
     try {
       const response = await commentService.getComments(postId, {
@@ -82,27 +89,37 @@ export const CommentList: React.FC<CommentListProps> = ({
         depth: 2
       });
 
-      if (response.data && Array.isArray(response.data)) {
+      if (response.data && Array.isArray(response.data) && isMounted.current) {
         // Separate pinned comments
         const pinned = response.data.filter(comment => comment.metadata?.isPinned);
         const regular = response.data.filter(comment => !comment.metadata?.isPinned);
 
-        setComments(prev => {
-          const newComments = append ? [...prev, ...regular] : regular;
-          const uniqueComments = Array.from(
-            new Map(newComments.map(comment => [`comment-${comment._id}`, comment])).values()
-          );
-          return commentService.utils.sortComments(
-            uniqueComments,
+        if (append) {
+          setComments(prev => {
+            const newComments = [...prev, ...regular];
+            const uniqueComments = Array.from(
+              new Map(newComments.map(comment => [`comment-${comment._id}`, comment])).values()
+            );
+            return commentService.utils.sortComments(
+              uniqueComments,
+              sortConfig.sortBy === 'trending' ? 'engagement.likes' : sortConfig.sortBy,
+              sortConfig.sortOrder
+            );
+          });
+        } else {
+          const sorted = commentService.utils.sortComments(
+            regular,
             sortConfig.sortBy === 'trending' ? 'engagement.likes' : sortConfig.sortBy,
             sortConfig.sortOrder
           );
-        });
+          setComments(sorted);
+        }
 
         setPinnedComments(pinned);
         setTotalComments(response.pagination?.total || response.data.length);
         setHasMore(!!response.pagination?.hasNext);
         setPage(pageNum);
+        setError(null);
 
         // Highlight new comments
         if (highlightNewComments && pageNum === 1) {
@@ -110,15 +127,13 @@ export const CommentList: React.FC<CommentListProps> = ({
           setNewCommentIds(newIds);
 
           setTimeout(() => {
-            setNewCommentIds(new Set());
+            if (isMounted.current) {
+              setNewCommentIds(new Set());
+            }
           }, 3000);
         }
 
         onCommentCountChange?.(response.pagination?.total || response.data.length);
-      } else {
-        setComments([]);
-        setPinnedComments([]);
-        setTotalComments(0);
       }
     } catch (error: any) {
       console.error('Failed to load comments:', error);
@@ -133,45 +148,67 @@ export const CommentList: React.FC<CommentListProps> = ({
         errorMessage = 'Post not found.';
       }
 
-      setError(errorMessage);
-      toast({
-        title: 'Error',
-        description: errorMessage,
-        variant: 'destructive'
-      });
+      if (isMounted.current) {
+        setError(errorMessage);
+        toast({
+          title: 'Error',
+          description: errorMessage,
+          variant: 'destructive'
+        });
+      }
     } finally {
-      setIsLoading(false);
-      setIsLoadingMore(false);
+      if (isMounted.current) {
+        setIsLoading(false);
+        setIsLoadingMore(false);
+      }
     }
-  }, [postId, limit, sortConfig, isLoading, isLoadingMore, highlightNewComments, onCommentCountChange, toast]);
+  }, [postId, limit, sortConfig, highlightNewComments, onCommentCountChange, toast]);
 
-  // Initial load
+  // FIX: Initial load - simplified
   useEffect(() => {
+    isMounted.current = true;
+    loadAttempts.current = 0;
+
     if (autoLoad && postId) {
+      // Use requestAnimationFrame to avoid React 18 double mount
+      const timer = requestAnimationFrame(() => {
+        loadComments(1, false);
+      });
+      return () => cancelAnimationFrame(timer);
+    }
+
+    return () => {
+      isMounted.current = false;
+    };
+  }, [postId, autoLoad]); // Remove loadComments from dependencies
+
+  // FIX: Sort config changes - simplified
+  useEffect(() => {
+    if (autoLoad && postId && isMounted.current) {
       const timer = setTimeout(() => {
         loadComments(1, false);
-      }, 300);
+      }, 200);
       return () => clearTimeout(timer);
     }
-  }, [autoLoad, postId, loadComments]);
-
-  // Reload when sort config changes
-  useEffect(() => {
-    if (autoLoad && postId) {
-      loadComments(1, false);
-    }
-  }, [sortConfig, autoLoad, postId, loadComments]);
+  }, [sortConfig]);
 
   const handleLoadMore = useCallback(() => {
-    loadComments(page + 1, true);
-  }, [loadComments, page]);
+    if (hasMore && !isLoading && !isLoadingMore && isMounted.current) {
+      loadComments(page + 1, true);
+    }
+  }, [hasMore, isLoading, isLoadingMore, page]);
 
   const handleRetry = useCallback(() => {
-    setError(null);
-    loadComments(1, false);
-  }, [loadComments]);
+    if (isMounted.current) {
+      loadAttempts.current = 0;
+      setError(null);
+      loadComments(1, false);
+    }
+  }, []);
 
   const handleCommentAdded = useCallback((newComment: Comment) => {
+    if (!isMounted.current) return;
+
     if (newComment.parentType === 'Comment' && newComment.parentId) {
       // Update parent comment's replies
       setComments(prev => {
@@ -214,22 +251,28 @@ export const CommentList: React.FC<CommentListProps> = ({
     if (highlightNewComments) {
       setNewCommentIds(prev => new Set([...prev, newComment._id]));
       setTimeout(() => {
-        setNewCommentIds(prev => {
-          const next = new Set(prev);
-          next.delete(newComment._id);
-          return next;
-        });
+        if (isMounted.current) {
+          setNewCommentIds(prev => {
+            const next = new Set(prev);
+            next.delete(newComment._id);
+            return next;
+          });
+        }
       }, 3000);
     }
 
     // Scroll to new comment
     setTimeout(() => {
-      const element = document.getElementById(`comment-${newComment._id}`);
-      element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (isMounted.current) {
+        const element = document.getElementById(`comment-${newComment._id}`);
+        element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     }, 100);
   }, [sortConfig, totalComments, onCommentCountChange, highlightNewComments]);
 
   const handleCommentUpdated = useCallback((updatedComment: Comment) => {
+    if (!isMounted.current) return;
+
     setComments(prev => {
       const updateComment = (commentList: Comment[]): Comment[] => {
         return commentList.map(comment => {
@@ -255,6 +298,8 @@ export const CommentList: React.FC<CommentListProps> = ({
   }, [toast]);
 
   const handleCommentDeleted = useCallback((commentId: string) => {
+    if (!isMounted.current) return;
+
     setComments(prev => {
       const removeComment = (commentList: Comment[]): Comment[] => {
         return commentList
@@ -282,11 +327,16 @@ export const CommentList: React.FC<CommentListProps> = ({
   }, [totalComments, onCommentCountChange, toast]);
 
   const handleSortChange = useCallback((newSortBy: 'createdAt' | 'engagement.likes' | 'trending') => {
-    setSortConfig(prev => ({
-      sortBy: newSortBy,
-      sortOrder: prev.sortBy === newSortBy && prev.sortOrder === 'desc' ? 'asc' : 'desc'
-    }));
-  }, []);
+    if (isLoading) return;
+    
+    setSortConfig(prev => {
+      if (prev.sortBy === newSortBy && prev.sortOrder === 'desc') return prev;
+      return {
+        sortBy: newSortBy,
+        sortOrder: prev.sortBy === newSortBy && prev.sortOrder === 'desc' ? 'asc' : 'desc'
+      };
+    });
+  }, [isLoading]);
 
   const getSortLabel = useCallback((type: 'createdAt' | 'engagement.likes' | 'trending') => {
     const labels = {
@@ -316,7 +366,6 @@ export const CommentList: React.FC<CommentListProps> = ({
   const hasComments = getFilteredComments.length > 0;
   const showPinnedSection = pinnedComments.length > 0 && activeTab === 'all';
 
-  // FIX 2: Render skeleton without AnimatePresence during loading
   const renderSkeleton = useCallback(() => (
     <div className="space-y-4 animate-pulse">
       {skeletonIds.map((id) => (
@@ -446,18 +495,17 @@ export const CommentList: React.FC<CommentListProps> = ({
     </div>
   ), [activeTab, totalComments, pinnedComments.length]);
 
-  // FIX 3: Main comments list with proper AnimatePresence
+  // FIX: Fixed AnimatePresence mode from "sync" to "popLayout"
   const renderCommentsList = useMemo(() => {
     if (isLoading) return renderSkeleton();
     if (error) return renderErrorState();
     if (!hasComments) return renderEmptyState();
 
     return (
-      // FIX: Remove mode or use "sync" for list animations
-      <AnimatePresence mode="sync">
+      <AnimatePresence mode="popLayout">
         {getFilteredComments.map((comment, index) => (
           <motion.div
-            key={`comment-${comment._id}-${comment.updatedAt}`} // FIX: Add timestamp for updates
+            key={`comment-${comment._id}`}
             layout
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

@@ -31,6 +31,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { postService, Post, FeedParams } from '@/services/postService';
+import { followService } from '@/services/followService'; // NEW IMPORT
 import { useAuth } from '@/contexts/AuthContext';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { useTheme } from '@/components/social/theme/RoleThemeProvider';
@@ -68,6 +69,11 @@ function SocialFeedContent() {
     totalComments: 0,
     uniqueAuthors: 0
   });
+
+  // NEW: Follow status management
+  const [followStatuses, setFollowStatuses] = useState<Record<string, boolean>>({});
+  const [isLoadingFollowStatus, setIsLoadingFollowStatus] = useState(false);
+  const followStatusCache = useRef<Map<string, boolean>>(new Map());
 
   // Animation states
   const [pageLoaded, setPageLoaded] = useState(false);
@@ -110,6 +116,81 @@ function SocialFeedContent() {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  /* ---------------------- NEW: Bulk Follow Status Fetch ---------------------- */
+  const fetchBulkFollowStatus = useCallback(async (authorIds: string[]) => {
+    if (!user?._id || authorIds.length === 0 || isLoadingFollowStatus) return;
+
+    setIsLoadingFollowStatus(true);
+    try {
+      // Check cache first
+      const uncachedIds: string[] = [];
+      const cachedResults: Record<string, boolean> = {};
+
+      authorIds.forEach(id => {
+        const cached = followStatusCache.current.get(id);
+        if (cached !== undefined) {
+          cachedResults[id] = cached;
+        } else {
+          uncachedIds.push(id);
+        }
+      });
+
+      // If all cached, use cache
+      if (uncachedIds.length === 0) {
+        setFollowStatuses(prev => ({ ...prev, ...cachedResults }));
+        return;
+      }
+
+      // Fetch uncached IDs in bulk
+      const bulkStatuses = await followService.getBulkFollowStatus(uncachedIds);
+      
+      // Update cache
+      Object.entries(bulkStatuses).forEach(([userId, data]) => {
+        if (data) {
+          followStatusCache.current.set(userId, data.following || false);
+        }
+      });
+
+      // Combine cached and fetched results
+      const combinedResults = { ...cachedResults };
+      Object.entries(bulkStatuses).forEach(([userId, data]) => {
+        if (data) {
+          combinedResults[userId] = data.following || false;
+        }
+      });
+
+      setFollowStatuses(prev => ({ ...prev, ...combinedResults }));
+    } catch (error) {
+      console.error('Failed to fetch bulk follow status:', error);
+      // Don't show error toast for background operation
+    } finally {
+      setIsLoadingFollowStatus(false);
+    }
+  }, [user?._id, isLoadingFollowStatus]);
+
+  /* ---------------------- NEW: Update Follow Status When Posts Change ---------------------- */
+  useEffect(() => {
+    if (posts.length === 0 || !user?._id) return;
+
+    // Get unique author IDs (excluding current user)
+    const authorIds = Array.from(
+      new Set(
+        posts
+          .map(post => post.author?._id)
+          .filter(id => id && id !== user._id)
+      )
+    ) as string[];
+
+    if (authorIds.length === 0) return;
+
+    // Debounce the API call
+    const timeoutId = setTimeout(() => {
+      fetchBulkFollowStatus(authorIds);
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [posts, user?._id, fetchBulkFollowStatus]);
 
   /* ---------------------- Initial Data Load ---------------------- */
   useEffect(() => {
@@ -225,6 +306,18 @@ function SocialFeedContent() {
     }
   };
 
+  /* ---------------------- NEW: Handle Follow Status Update ---------------------- */
+  const handleFollowChange = useCallback((userId: string, isFollowing: boolean) => {
+    // Update local state
+    setFollowStatuses(prev => ({
+      ...prev,
+      [userId]: isFollowing
+    }));
+    
+    // Update cache
+    followStatusCache.current.set(userId, isFollowing);
+  }, []);
+
   /* ---------------------- Event Handlers ---------------------- */
   const handlePostCreated = useCallback((newPost: Post) => {
     setPosts(prev => [newPost, ...prev]);
@@ -264,6 +357,9 @@ function SocialFeedContent() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
+    // Clear follow cache on refresh
+    followStatusCache.current.clear();
+    setFollowStatuses({});
     await loadInitialData();
     setIsRefreshing(false);
     toast({
@@ -873,6 +969,8 @@ function SocialFeedContent() {
                     onUpdatePost={handlePostUpdated}
                     condensed={isMobile}
                     className={isMobile ? '' : 'shadow-md hover:shadow-xl transition-shadow duration-300'}
+                    isFollowing={followStatuses[post.author?._id] || false} // NEW: Pass follow status
+                    onFollowChange={handleFollowChange} // NEW: Handle follow changes
                   />
                   {isMobile && index < filteredPosts.length - 1 && (
                     <div className="mt-4" style={{ borderColor: colors.primary + '10' }} />
@@ -905,7 +1003,7 @@ function SocialFeedContent() {
                 <Zap className="w-5 h-5 md:w-6 md:h-6" style={{ color: colors.primary }} />
               </div>
               <p className={`text-sm ${getTextClasses('muted')}`}>
-                You've reached the end of your feed
+                You`ve reached the end of your feed
               </p>
               <p className={`text-xs mt-1 ${getTextClasses('muted')}`}>
                 Check back later for new updates

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Globe, Users, Lock, MapPin, MoreVertical, Flag,
-   Share2, Bookmark,
+  Share2, Bookmark,
   Calendar, Building, Crown, Verified,
   ChevronDown, ChevronUp
 } from 'lucide-react';
@@ -26,6 +26,8 @@ interface PostCardProps {
   onUpdatePost?: (updatedPost: Post) => void;
   condensed?: boolean;
   className?: string;
+  isFollowing?: boolean; // NEW: Follow status passed from parent
+  onFollowChange?: (userId: string, isFollowing: boolean) => void; // NEW: Callback for follow changes
 }
 
 export const PostCard: React.FC<PostCardProps> = ({
@@ -34,12 +36,14 @@ export const PostCard: React.FC<PostCardProps> = ({
   onViewProfile,
   onUpdatePost,
   condensed = false,
-  className = ''
+  className = '',
+  isFollowing: parentIsFollowing = false, // Default from parent
+  onFollowChange // Callback to update parent state
 }) => {
   const [localPost, setLocalPost] = useState<Post>(post);
   const [showComments, setShowComments] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(parentIsFollowing); // Sync with parent prop
   const [isExpanded, setIsExpanded] = useState(!condensed);
   const [showFullMetadata, setShowFullMetadata] = useState(false);
   const { toast } = useToast();
@@ -67,21 +71,21 @@ export const PostCard: React.FC<PostCardProps> = ({
     setLocalPost(post);
   }, [post]);
 
-  // Check follow status
+  // Sync isFollowing with parent prop
   useEffect(() => {
-    const checkFollowStatus = async () => {
-      if (!isOwnPost && post.author?._id && currentUserId) {
-        try {
-          const status = await followService.getFollowStatus(post.author._id);
-          setIsFollowing(status.following || false);
-        } catch (error) {
-          console.error('Error checking follow status:', error);
-        }
-      }
-    };
+    setIsFollowing(parentIsFollowing);
+  }, [parentIsFollowing]);
 
-    checkFollowStatus();
-  }, [post.author?._id, currentUserId, isOwnPost]);
+  // Update local post when parent updates it
+  const handlePostUpdate = (updatedPost: Post) => {
+    setLocalPost(updatedPost);
+    if (onUpdatePost) {
+      onUpdatePost(updatedPost);
+    }
+  };
+
+  // REMOVED: Individual API call for follow status
+  // The parent component now provides this via prop
 
   // Follow handler
   const handleFollow = async () => {
@@ -104,11 +108,22 @@ export const PostCard: React.FC<PostCardProps> = ({
     }
 
     const previousFollowing = isFollowing;
+    
+    // Optimistic update
     setIsFollowing(!previousFollowing);
+    // Notify parent of the change
+    if (onFollowChange) {
+      onFollowChange(post.author._id, !previousFollowing);
+    }
 
     try {
       const result = await followService.toggleFollow(post.author._id);
+      
+      // Update with actual result
       setIsFollowing(result.following);
+      if (onFollowChange) {
+        onFollowChange(post.author._id, result.following);
+      }
 
       toast({
         variant: "success",
@@ -119,7 +134,11 @@ export const PostCard: React.FC<PostCardProps> = ({
         duration: 2000
       });
     } catch (error: any) {
+      // Rollback on error
       setIsFollowing(previousFollowing);
+      if (onFollowChange) {
+        onFollowChange(post.author._id, previousFollowing);
+      }
       toast({
         variant: "destructive",
         title: "Error",
@@ -148,13 +167,21 @@ export const PostCard: React.FC<PostCardProps> = ({
     }
   };
 
-  // Save handler
+  // Save handler - Updated to use PostActions instead
   const handleSave = async () => {
     const newSavedState = !localPost.isSaved;
 
     try {
       // Optimistic update
-      setLocalPost(prev => ({ ...prev, isSaved: newSavedState }));
+      const updatedPost = {
+        ...localPost,
+        isSaved: newSavedState,
+        stats: {
+          ...localPost.stats,
+          saves: newSavedState ? (localPost.stats.saves || 0) + 1 : Math.max(0, (localPost.stats.saves || 0) - 1)
+        }
+      };
+      setLocalPost(updatedPost);
 
       if (newSavedState) {
         await postService.savePost(post._id);
@@ -171,7 +198,16 @@ export const PostCard: React.FC<PostCardProps> = ({
         duration: 2000
       });
     } catch (error: any) {
-      setLocalPost(prev => ({ ...prev, isSaved: !newSavedState }));
+      // Rollback on error
+      const rolledBackPost = {
+        ...localPost,
+        isSaved: !newSavedState,
+        stats: {
+          ...localPost.stats,
+          saves: !newSavedState ? (localPost.stats.saves || 0) + 1 : Math.max(0, (localPost.stats.saves || 0) - 1)
+        }
+      };
+      setLocalPost(rolledBackPost);
       toast({
         variant: "destructive",
         title: "Error",
@@ -247,6 +283,10 @@ export const PostCard: React.FC<PostCardProps> = ({
                     src={localPost.author.avatar}
                     alt={localPost.author.name}
                     className="object-cover"
+                    onError={(e) => {
+                      // Fallback to initials if image fails to load
+                      e.currentTarget.style.display = 'none';
+                    }}
                   />
                 ) : (
                   <AvatarFallback className={`${isMobile ? 'text-sm' : 'text-base'} bg-linear-to-br from-blue-100 to-purple-100 dark:from-blue-900/30 dark:to-purple-900/30 text-blue-600 dark:text-blue-400 font-medium`}>
@@ -470,6 +510,7 @@ export const PostCard: React.FC<PostCardProps> = ({
             onComment={() => setShowComments(!showComments)}
             onShare={handleShare}
             onSave={handleSave}
+            onInteractionUpdate={handlePostUpdate} // IMPORTANT: This allows PostActions to update PostCard
           />
         </div>
 

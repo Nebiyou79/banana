@@ -25,7 +25,14 @@ const jobSchema = new mongoose.Schema({
     min: [1, 'At least 1 candidate is required'],
     default: 1
   },
-  
+    companyLogo: {
+    type: String,
+    default: null
+  },
+  organizationLogo: {
+    type: String,
+    default: null
+  },
   // UPDATED: Salary mode system (replaces old logic)
   salaryMode: {
     type: String,

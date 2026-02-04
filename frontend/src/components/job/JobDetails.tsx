@@ -49,6 +49,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/router';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { cn } from '@/lib/utils'; // Added cn import
 
 interface TabbedJobDetailsProps {
     job: Job;
@@ -107,7 +108,6 @@ const TabbedJobDetails: React.FC<TabbedJobDetailsProps> = ({
         isLoading: false
     });
     const { toast } = useToast();
-
 
     // Fetch full entity details when entity tab is active
     useEffect(() => {
@@ -213,12 +213,33 @@ const TabbedJobDetails: React.FC<TabbedJobDetailsProps> = ({
     const getAvatarUrlForEntity = (): string => {
         const ownerName = entityInfo.name || getOwnerNameFromJob(job);
 
-        return getAvatarUrl({
-            profile: ownerProfile,
-            name: ownerName,
-            fallbackColor: entityInfo.type === 'organization' ? '#4F46E5' : '#10B981',
-            size: 96, // For the company profile tab
-        });
+        // First priority: ownerProfile from props
+        if (ownerProfile) {
+            return getAvatarUrl({
+                profile: ownerProfile,
+                name: ownerName,
+                fallbackColor: entityInfo.type === 'organization' ? '#4F46E5' : '#10B981',
+                size: 96,
+            });
+        }
+
+        // Second priority: logoUrl from entityInfo
+        if (entityInfo.logoUrl) {
+            return entityInfo.logoUrl;
+        }
+
+        // Third priority: logo from job data
+        if (job.jobType === 'company' && job.company?.logoUrl) {
+            return job.company.logoUrl;
+        }
+        if (job.jobType === 'organization' && job.organization?.logoUrl) {
+            return job.organization.logoUrl;
+        }
+
+        // Final fallback: initials-based avatar
+        const initials = getInitials(ownerName);
+        return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=${entityInfo.type === 'organization' ? '4F46E5' : '10B981'
+            }&color=fff&size=96`;
     };
 
     const formatDate = (dateString?: string): string => {
@@ -292,6 +313,7 @@ const TabbedJobDetails: React.FC<TabbedJobDetailsProps> = ({
         const ownerName = entityInfo.name || getOwnerNameFromJob(job);
         const avatarUrl = getAvatarUrlForEntity();
         const initials = getInitials(ownerName);
+        const hasAvatar = avatarUrl && !avatarUrl.includes('ui-avatars.com');
 
         return (
             <TabsContent value="entity" className="mt-6 space-y-6">
@@ -307,24 +329,27 @@ const TabbedJobDetails: React.FC<TabbedJobDetailsProps> = ({
                                 <>
                                     {/* Avatar/Logo */}
                                     <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white dark:border-gray-800 shadow-lg mb-4 relative">
-                                        {/* Avatar Image */}
-                                        <img
-                                            src={avatarUrl}
-                                            alt={ownerName}
-                                            className="w-full h-full object-cover"
-                                            onError={handleAvatarError}
-                                        />
+                                        {/* Avatar Image - Only show if hasAvatar */}
+                                        {hasAvatar ? (
+                                            <img
+                                                src={avatarUrl}
+                                                alt={ownerName}
+                                                className="w-full h-full object-cover"
+                                                onError={handleAvatarError}
+                                                loading="lazy"
+                                            />
+                                        ) : null}
 
-                                        {/* Fallback Initials */}
+                                        {/* Fallback Initials - Show if no avatar or if avatar fails */}
                                         <div
                                             className={cn(
-                                                "w-full h-full flex items-center justify-center hidden",
+                                                "w-full h-full flex items-center justify-center",
                                                 "font-bold text-white",
                                                 entityInfo.type === 'organization'
                                                     ? 'bg-purple-600'
                                                     : 'bg-green-600'
                                             )}
-                                            style={{ display: 'none' }}
+                                            style={{ display: hasAvatar ? 'none' : 'flex' }}
                                         >
                                             <span className="text-lg">
                                                 {initials}
@@ -1012,11 +1037,6 @@ const TabbedJobDetails: React.FC<TabbedJobDetailsProps> = ({
             </Card>
         </TabsContent>
     );
-
-    // Helper function for conditional class names
-    const cn = (...classes: (string | boolean | undefined)[]) => {
-        return classes.filter(Boolean).join(' ');
-    };
 
     return (
         <div className="w-full">

@@ -707,7 +707,7 @@ export const profileService = {
         publicId: response.data.data.avatar.public_id,
         url: response.data.data.avatar.secure_url
       });
-
+      
       handleSuccess('Profile picture updated successfully!');
       
       return {

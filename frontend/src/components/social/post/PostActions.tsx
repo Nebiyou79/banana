@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// components/social/post/PostActions.tsx - FACEBOOK-STYLE VERSION
+// components/social/post/PostActions.tsx - FACEBOOK-STYLE VERSION WITH IMMEDIATE UPDATES
 import React, { useState, useEffect, useRef } from 'react';
 import {
     MessageCircle, Share2, Bookmark, Eye
@@ -19,10 +19,7 @@ interface PostActionsProps {
     onSave?: () => void;
     onReactionChange?: (reaction: ReactionType) => void;
     showDislike?: boolean;
-    onInteractionUpdate?: (interaction: {
-        interactionType: 'reaction' | 'dislike';
-        value: ReactionType | 'dislike';
-    } | null) => void;
+    onInteractionUpdate?: (updatedPost: any) => void; // Updated to pass full post
 }
 
 // Facebook-style reaction bar component
@@ -169,8 +166,7 @@ export const PostActions: React.FC<PostActionsProps> = ({
     onInteractionUpdate,
 }) => {
     const [showReactionBar, setShowReactionBar] = useState(false);
-    const [isSaved, setIsSaved] = useState(post?.isSaved || false);
-    const [userInteraction, setUserInteraction] = useState(post?.userInteraction || null);
+    const [localPost, setLocalPost] = useState(post);
     const [isLoading, setIsLoading] = useState(false);
     const { toast } = useToast();
     const isMobile = useMediaQuery('(max-width: 768px)');
@@ -179,6 +175,11 @@ export const PostActions: React.FC<PostActionsProps> = ({
     const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Update local state when prop changes
+    useEffect(() => {
+        setLocalPost(post);
+    }, [post]);
 
     // Cleanup timeouts on unmount
     useEffect(() => {
@@ -189,26 +190,43 @@ export const PostActions: React.FC<PostActionsProps> = ({
         };
     }, []);
 
-    // Update local state when props change
-    useEffect(() => {
-        if (post?.userInteraction !== undefined) {
-            setUserInteraction(post.userInteraction);
-        }
-        if (post?.isSaved !== undefined) {
-            setIsSaved(post.isSaved);
-        }
-    }, [post]);
+    // Get current user interaction
+    const getUserInteraction = () => {
+        return localPost?.userInteraction || null;
+    };
 
-    // Get stats from post with fallbacks - starting from 0
-    const likeCount = post?.stats?.likes || 0;
-    const dislikeCount = post?.stats?.dislikes || 0;
-    const commentCount = post?.stats?.comments || 0;
-    const shareCount = post?.stats?.shares || 0;
-    const saveCount = post?.stats?.saves || 0;
-    const viewCount = post?.stats?.views || 0;
+    // Get stats with proper handling
+    const getOptimisticStats = () => {
+        const baseStats = localPost?.stats || {};
+        const userInteraction = getUserInteraction();
+        
+        // Calculate likes/dislikes based on current interaction
+        let likeCount = baseStats.likes || 0;
+        let dislikeCount = baseStats.dislikes || 0;
+        
+        if (userInteraction?.interactionType === 'reaction') {
+            // User has a reaction - ensure at least 1 like shown
+            likeCount = Math.max(1, likeCount);
+        } else if (userInteraction?.interactionType === 'dislike') {
+            // User has a dislike - ensure at least 1 dislike shown
+            dislikeCount = Math.max(1, dislikeCount);
+        }
+
+        return {
+            likeCount,
+            dislikeCount,
+            commentCount: baseStats.comments || 0,
+            shareCount: baseStats.shares || 0,
+            saveCount: localPost?.isSaved ? Math.max(1, baseStats.saves || 0) : (baseStats.saves || 0),
+            viewCount: baseStats.views || 0
+        };
+    };
+
+    const stats = getOptimisticStats();
 
     // Get current reaction from user interaction
     const getCurrentReaction = (): ReactionType | null => {
+        const userInteraction = getUserInteraction();
         if (userInteraction?.interactionType === 'reaction') {
             return userInteraction.value as ReactionType;
         }
@@ -247,6 +265,40 @@ export const PostActions: React.FC<PostActionsProps> = ({
             }
         }
         return 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400';
+    };
+
+    // Update local and parent state
+    const updatePostState = (updatedPost: any) => {
+        setLocalPost(updatedPost);
+        if (onInteractionUpdate) {
+            onInteractionUpdate(updatedPost);
+        }
+    };
+
+    // Apply optimistic update immediately
+    const applyOptimisticUpdate = (action: {
+        type: 'add_reaction' | 'add_dislike' | 'remove_interaction' | 'toggle' | 'update_reaction' | 'save' | 'unsave';
+        reaction?: ReactionType;
+    }) => {
+        const updatedPost = postService.getOptimisticPostUpdate(localPost, action.type, action.reaction);
+        
+        // Handle save/unsave specifically
+        if (action.type === 'save') {
+            updatedPost.isSaved = true;
+            updatedPost.stats = {
+                ...updatedPost.stats,
+                saves: (updatedPost.stats.saves || 0) + 1
+            };
+        } else if (action.type === 'unsave') {
+            updatedPost.isSaved = false;
+            updatedPost.stats = {
+                ...updatedPost.stats,
+                saves: Math.max(0, (updatedPost.stats.saves || 0) - 1)
+            };
+        }
+        
+        updatePostState(updatedPost);
+        return updatedPost;
     };
 
     // Handle hover to show reaction bar
@@ -295,34 +347,31 @@ export const PostActions: React.FC<PostActionsProps> = ({
         e.preventDefault();
         e.stopPropagation();
 
-        if (isLoading) return;
+        if (isLoading || !currentUserId) return;
 
         setIsLoading(true);
 
         try {
             const currentReaction = getCurrentReaction();
+            const userInteraction = getUserInteraction();
             const hasDislike = userInteraction?.interactionType === 'dislike';
 
+            // Apply optimistic update immediately
+            let optimisticAction: any;
             if (hasDislike) {
-                // User has dislike, need to remove it first
-                if (onDislike) onDislike();
+                optimisticAction = { type: 'toggle' as const };
+            } else if (currentReaction) {
+                optimisticAction = { type: 'remove_interaction' as const };
+            } else {
+                optimisticAction = { type: 'add_reaction' as const, reaction: 'like' as ReactionType };
+            }
+            
+            applyOptimisticUpdate(optimisticAction);
 
-                // Then add default like
-                if (onReactionChange) {
-                    onReactionChange('like');
-                } else if (onLike) {
-                    onLike('like');
-                }
-
-                const newInteraction = {
-                    interactionType: 'reaction' as const,
-                    value: 'like' as ReactionType
-                };
-                setUserInteraction(newInteraction);
-                if (onInteractionUpdate) {
-                    onInteractionUpdate(newInteraction);
-                }
-
+            // Make API call
+            if (hasDislike) {
+                // User has dislike, need to toggle to like
+                await likeService.toggleInteraction(post._id, 'Post');
                 toast({
                     variant: "success",
                     title: "Liked",
@@ -330,14 +379,7 @@ export const PostActions: React.FC<PostActionsProps> = ({
                 });
             } else if (currentReaction) {
                 // User already has a reaction - remove it
-                if (onLike) onLike(undefined); // Pass undefined to indicate removal
-
-                const newInteraction = null;
-                setUserInteraction(newInteraction);
-                if (onInteractionUpdate) {
-                    onInteractionUpdate(newInteraction);
-                }
-
+                await likeService.removeInteraction(post._id, 'Post');
                 toast({
                     variant: "info",
                     title: "Reaction removed",
@@ -345,21 +387,7 @@ export const PostActions: React.FC<PostActionsProps> = ({
                 });
             } else {
                 // No interaction - add default like
-                if (onReactionChange) {
-                    onReactionChange('like');
-                } else if (onLike) {
-                    onLike('like');
-                }
-
-                const newInteraction = {
-                    interactionType: 'reaction' as const,
-                    value: 'like' as ReactionType
-                };
-                setUserInteraction(newInteraction);
-                if (onInteractionUpdate) {
-                    onInteractionUpdate(newInteraction);
-                }
-
+                await likeService.addReaction(post._id, { reaction: 'like', targetType: 'Post' });
                 toast({
                     variant: "success",
                     title: "Liked",
@@ -370,70 +398,67 @@ export const PostActions: React.FC<PostActionsProps> = ({
             setShowReactionBar(false);
         } catch (error: any) {
             console.error('Failed to handle like:', error);
-            // Rollback state on error
-            if (userInteraction) {
-                setUserInteraction(userInteraction);
-            }
+            // Rollback optimistic update on error
+            updatePostState(post);
             toast({
                 variant: "destructive",
                 title: "Error",
                 description: "Failed to update reaction"
             });
         } finally {
-            setTimeout(() => {
-                setIsLoading(false);
-            }, 300);
+            setIsLoading(false);
         }
     };
 
     // Handle reaction selection from bar
     const handleReactionSelect = async (reaction: ReactionType) => {
-        if (isLoading) return;
+        if (isLoading || !currentUserId) return;
 
         setIsLoading(true);
 
         try {
             const currentReaction = getCurrentReaction();
+            const userInteraction = getUserInteraction();
             const hasDislike = userInteraction?.interactionType === 'dislike';
 
+            // Apply optimistic update immediately
+            let optimisticAction: any;
             if (hasDislike) {
-                // If user has dislike, remove it first
-                if (onDislike) onDislike();
+                optimisticAction = { type: 'toggle' as const, reaction };
+            } else if (currentReaction === reaction) {
+                optimisticAction = { type: 'remove_interaction' as const };
+            } else {
+                optimisticAction = { type: currentReaction ? 'update_reaction' : 'add_reaction' as const, reaction };
             }
+            
+            applyOptimisticUpdate(optimisticAction);
 
-            if (currentReaction === reaction) {
+            // Make API call
+            if (hasDislike) {
+                // If user has dislike, toggle to reaction
+                await likeService.toggleInteraction(post._id, 'Post');
+                // Then update to specific reaction
+                await likeService.updateReaction(post._id, { reaction, targetType: 'Post' });
+            } else if (currentReaction === reaction) {
                 // Clicking same reaction - remove it
-                if (onLike) onLike(undefined);
-
-                const newInteraction = null;
-                setUserInteraction(newInteraction);
-                if (onInteractionUpdate) {
-                    onInteractionUpdate(newInteraction);
-                }
-
+                await likeService.removeInteraction(post._id, 'Post');
                 toast({
                     variant: "info",
                     title: "Reaction removed",
                     duration: 1500
                 });
+            } else if (currentReaction) {
+                // Changing reaction type
+                await likeService.updateReaction(post._id, { reaction, targetType: 'Post' });
+                const reactionLabel = likeService.getReactionLabel(reaction);
+                toast({
+                    variant: "success",
+                    title: `${reactionLabel}`,
+                    duration: 1500
+                });
             } else {
-                // Add new reaction
-                if (onReactionChange) {
-                    onReactionChange(reaction);
-                } else if (onLike) {
-                    onLike(reaction);
-                }
-
-                const newInteraction = {
-                    interactionType: 'reaction' as const,
-                    value: reaction
-                };
-                setUserInteraction(newInteraction);
-                if (onInteractionUpdate) {
-                    onInteractionUpdate(newInteraction);
-                }
-
-                // Show success feedback
+                // Adding new reaction
+                await likeService.addReaction(post._id, { reaction, targetType: 'Post' });
                 const reactionLabel = likeService.getReactionLabel(reaction);
                 toast({
                     variant: "success",
@@ -445,19 +470,15 @@ export const PostActions: React.FC<PostActionsProps> = ({
             setShowReactionBar(false);
         } catch (error: any) {
             console.error('Failed to set reaction:', error);
-            // Rollback state on error
-            if (userInteraction) {
-                setUserInteraction(userInteraction);
-            }
+            // Rollback optimistic update on error
+            updatePostState(post);
             toast({
                 variant: "destructive",
                 title: "Error",
                 description: "Failed to add reaction"
             });
         } finally {
-            setTimeout(() => {
-                setIsLoading(false);
-            }, 300);
+            setIsLoading(false);
         }
     };
 
@@ -466,43 +487,46 @@ export const PostActions: React.FC<PostActionsProps> = ({
         e.preventDefault();
         e.stopPropagation();
 
-        if (isLoading) return;
+        if (isLoading || !currentUserId) return;
 
         setIsLoading(true);
         try {
+            const userInteraction = getUserInteraction();
             const hasDislike = userInteraction?.interactionType === 'dislike';
             const hasReaction = userInteraction?.interactionType === 'reaction';
 
+            // Apply optimistic update immediately
+            let optimisticAction: any;
+            if (hasDislike) {
+                optimisticAction = { type: 'remove_interaction' as const };
+            } else if (hasReaction) {
+                optimisticAction = { type: 'toggle' as const };
+            } else {
+                optimisticAction = { type: 'add_dislike' as const };
+            }
+            
+            applyOptimisticUpdate(optimisticAction);
+
+            // Make API call
             if (hasDislike) {
                 // Remove dislike
-                if (onDislike) onDislike();
-                const newInteraction = null;
-                setUserInteraction(newInteraction);
-                if (onInteractionUpdate) {
-                    onInteractionUpdate(newInteraction);
-                }
-
+                await likeService.removeInteraction(post._id, 'Post');
                 toast({
                     variant: "info",
                     title: "Dislike removed",
                     duration: 1500
                 });
+            } else if (hasReaction) {
+                // Toggle from reaction to dislike
+                await likeService.toggleInteraction(post._id, 'Post');
+                toast({
+                    variant: "info",
+                    title: "Disliked",
+                    duration: 1500
+                });
             } else {
-                // Add dislike (remove any existing reaction first if exists)
-                if (hasReaction && onLike) {
-                    onLike(undefined); // Remove the reaction
-                }
-
-                if (onDislike) onDislike();
-                const newInteraction = {
-                    interactionType: 'dislike' as const,
-                    value: 'dislike' as const
-                };
-                setUserInteraction(newInteraction);
-                if (onInteractionUpdate) {
-                    onInteractionUpdate(newInteraction);
-                }
-
+                // Add dislike
+                await likeService.addDislike(post._id, 'Post');
                 toast({
                     variant: "info",
                     title: "Disliked",
@@ -511,19 +535,15 @@ export const PostActions: React.FC<PostActionsProps> = ({
             }
         } catch (error: any) {
             console.error('Failed to handle dislike:', error);
-            // Rollback state on error
-            if (userInteraction) {
-                setUserInteraction(userInteraction);
-            }
+            // Rollback optimistic update on error
+            updatePostState(post);
             toast({
                 variant: "destructive",
                 title: "Error",
                 description: "Failed to update reaction"
             });
         } finally {
-            setTimeout(() => {
-                setIsLoading(false);
-            }, 300);
+            setIsLoading(false);
         }
     };
 
@@ -546,43 +566,48 @@ export const PostActions: React.FC<PostActionsProps> = ({
         e.preventDefault();
         e.stopPropagation();
 
-        if (isLoading) return;
+        if (isLoading || !currentUserId) return;
 
         setIsLoading(true);
-        const previousSavedState = isSaved;
-        const newSavedState = !isSaved;
-
+        
         try {
-            setIsSaved(newSavedState);
-            if (onSave) onSave();
-
+            const currentSaved = localPost?.isSaved || false;
+            
+            // Apply optimistic update immediately
+            if (currentSaved) {
+                applyOptimisticUpdate({ type: 'unsave' });
+            } else {
+                applyOptimisticUpdate({ type: 'save' });
+            }
+            
             // Call postService methods for actual saving
-            if (newSavedState) {
+            if (!currentSaved) {
                 await postService.savePost(post._id);
+                toast({
+                    variant: "success",
+                    title: "Saved",
+                    description: "Post saved to your collection",
+                    duration: 1500
+                });
             } else {
                 await postService.unsavePost(post._id);
+                toast({
+                    variant: "info",
+                    title: "Unsaved",
+                    description: "Post removed from saved",
+                    duration: 1500
+                });
             }
-
-            toast({
-                variant: newSavedState ? "success" : "info",
-                title: newSavedState ? "Saved" : "Unsaved",
-                description: newSavedState
-                    ? "Post saved to your collection"
-                    : "Post removed from saved",
-                duration: 1500
-            });
         } catch (error: any) {
             // Rollback on error
-            setIsSaved(previousSavedState);
+            updatePostState(post);
             toast({
                 variant: "destructive",
                 title: "Error",
                 description: error.message || "Failed to save post"
             });
         } finally {
-            setTimeout(() => {
-                setIsLoading(false);
-            }, 300);
+            setIsLoading(false);
         }
     };
 
@@ -601,11 +626,13 @@ export const PostActions: React.FC<PostActionsProps> = ({
         }
     };
 
+    const userInteraction = getUserInteraction();
     const hasReaction = userInteraction?.interactionType === 'reaction';
     const currentReaction = getCurrentReaction();
     const currentReactionEmoji = getCurrentReactionEmoji();
     const currentReactionLabel = getCurrentReactionLabel();
     const hasDislike = userInteraction?.interactionType === 'dislike';
+    const isSaved = localPost?.isSaved || false;
 
     return (
         <div ref={containerRef} className="relative px-4 py-3">
@@ -721,19 +748,19 @@ export const PostActions: React.FC<PostActionsProps> = ({
                 </div>
             </div>
 
-            {/* Stats Display - All stats starting from 0 */}
+            {/* Stats Display - Updated with optimistic counts */}
             <div className="mt-2 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 flex-wrap">
                 {/* Likes */}
                 <div className="flex items-center gap-1">
-                    <span className="font-medium">{likeCount}</span>
-                    <span>like{likeCount !== 1 ? 's' : ''}</span>
+                    <span className="font-medium">{stats.likeCount}</span>
+                    <span>like{stats.likeCount !== 1 ? 's' : ''}</span>
                 </div>
 
                 {/* Dislikes */}
                 {showDislike && (
                     <div className="flex items-center gap-1">
-                        <span className="font-medium">{dislikeCount}</span>
-                        <span>dislike{dislikeCount !== 1 ? 's' : ''}</span>
+                        <span className="font-medium">{stats.dislikeCount}</span>
+                        <span>dislike{stats.dislikeCount !== 1 ? 's' : ''}</span>
                     </div>
                 )}
 
@@ -742,27 +769,27 @@ export const PostActions: React.FC<PostActionsProps> = ({
                     onClick={handleCommentClick}
                     className="flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
                 >
-                    <span className="font-medium">{commentCount}</span>
-                    <span>comment{commentCount !== 1 ? 's' : ''}</span>
+                    <span className="font-medium">{stats.commentCount}</span>
+                    <span>comment{stats.commentCount !== 1 ? 's' : ''}</span>
                 </div>
 
                 {/* Shares */}
                 <div className="flex items-center gap-1">
-                    <span className="font-medium">{shareCount}</span>
-                    <span>share{shareCount !== 1 ? 's' : ''}</span>
+                    <span className="font-medium">{stats.shareCount}</span>
+                    <span>share{stats.shareCount !== 1 ? 's' : ''}</span>
                 </div>
 
                 {/* Saves */}
                 <div className="flex items-center gap-1">
-                    <span className="font-medium">{saveCount}</span>
-                    <span>save{saveCount !== 1 ? 's' : ''}</span>
+                    <span className="font-medium">{stats.saveCount}</span>
+                    <span>save{stats.saveCount !== 1 ? 's' : ''}</span>
                 </div>
 
                 {/* Views */}
                 <div className="flex items-center gap-1 ml-auto">
                     <Eye className="w-4 h-4" />
-                    <span className="font-medium">{viewCount}</span>
-                    <span>view{viewCount !== 1 ? 's' : ''}</span>
+                    <span className="font-medium">{stats.viewCount}</span>
+                    <span>view{stats.viewCount !== 1 ? 's' : ''}</span>
                 </div>
             </div>
         </div>

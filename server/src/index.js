@@ -1,16 +1,36 @@
 // /server/src/index.js (FINAL FIXED VERSION - HYBRID UPLOAD SYSTEM)
 // ================== ENV MUST LOAD FIRST ==================
-require('dotenv').config({
-  path: process.env.NODE_ENV === 'production'
-    ? '.env.production'
-    : '.env'
+const path = require('path');
+const dotenv = require('dotenv');
+
+// Try to load .env.production file explicitly
+const envPath = path.join(__dirname, '..', '.env.production');
+console.log('🔍 Looking for env file at:', envPath);
+
+try {
+  if (require('fs').existsSync(envPath)) {
+    console.log('✅ Found .env.production file');
+    dotenv.config({ path: envPath });
+  } else {
+    console.log('⚠️ .env.production not found, using environment variables');
+    dotenv.config();
+  }
+} catch (error) {
+  console.error('❌ Error loading env file:', error.message);
+  dotenv.config();
+}
+
+console.log('🔍 Cloudinary config check:', {
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME ? 'SET' : 'MISSING',
+  api_key: process.env.CLOUDINARY_API_KEY ? 'SET' : 'MISSING',
+  api_secret: process.env.CLOUDINARY_API_SECRET ? 'SET' : 'MISSING',
+  node_env: process.env.NODE_ENV
 });
 
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const connectDB = require('./config/db');
-const path = require('path');
 const fs = require('fs');
 const helmet = require('helmet');
 const morgan = require('morgan');
