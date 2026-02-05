@@ -21,6 +21,7 @@ import {
   Phone
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { colorClasses, getTheme } from '@/utils/color';
 
 interface ApplicationCardProps {
   application: Application;
@@ -39,6 +40,10 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
 }) => {
   const { toast } = useToast();
   const formattedApplication = applicationService.formatApplication(application);
+  
+  // Get theme colors based on mode (default light)
+  const themeMode = 'light'; // In a real app, this would come from a theme context
+  const theme = getTheme(themeMode);
 
   const handleDownloadCV = async (cv: any) => {
     try {
@@ -129,43 +134,115 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
   };
 
   const getStatusColorClass = (status: string) => {
-    const statusColors: Record<string, string> = {
-      'applied': 'bg-blue-50 text-blue-700 border-blue-200',
-      'under-review': 'bg-yellow-50 text-yellow-700 border-yellow-200',
-      'shortlisted': 'bg-green-50 text-green-700 border-green-200',
-      'interview-scheduled': 'bg-purple-50 text-purple-700 border-purple-200',
-      'interviewed': 'bg-indigo-50 text-indigo-700 border-indigo-200',
-      'offer-pending': 'bg-orange-50 text-orange-700 border-orange-200',
-      'offer-made': 'bg-teal-50 text-teal-700 border-teal-200',
-      'offer-accepted': 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      'rejected': 'bg-red-50 text-red-700 border-red-200',
-      'on-hold': 'bg-gray-50 text-gray-700 border-gray-200',
-      'withdrawn': 'bg-gray-100 text-gray-600 border-gray-300'
+    const statusColors: Record<string, { text: string; bg: string; border: string }> = {
+      'applied': {
+        text: colorClasses.text.blue,
+        bg: 'bg-blue-50 dark:bg-blue-900/20',
+        border: colorClasses.border.blue
+      },
+      'under-review': {
+        text: colorClasses.text.amber,
+        bg: 'bg-yellow-50 dark:bg-yellow-900/20',
+        border: colorClasses.border.amber
+      },
+      'shortlisted': {
+        text: colorClasses.text.green,
+        bg: 'bg-green-50 dark:bg-green-900/20',
+        border: colorClasses.border.green
+      },
+      'interview-scheduled': {
+        text: colorClasses.text.purple,
+        bg: 'bg-purple-50 dark:bg-purple-900/20',
+        border: colorClasses.border.purple
+      },
+      'interviewed': {
+        text: colorClasses.text.indigo,
+        bg: 'bg-indigo-50 dark:bg-indigo-900/20',
+        border: colorClasses.border.indigo
+      },
+      'offer-pending': {
+        text: colorClasses.text.orange,
+        bg: 'bg-orange-50 dark:bg-orange-900/20',
+        border: colorClasses.border.orange
+      },
+      'offer-made': {
+        text: colorClasses.text.teal,
+        bg: 'bg-teal-50 dark:bg-teal-900/20',
+        border: colorClasses.border.teal
+      },
+      'offer-accepted': {
+        text: colorClasses.text.emerald,
+        bg: 'bg-emerald-50 dark:bg-emerald-900/20',
+        border: colorClasses.border.emerald
+      },
+      'rejected': {
+        text: colorClasses.text.red,
+        bg: 'bg-red-50 dark:bg-red-900/20',
+        border: colorClasses.border.red
+      },
+      'on-hold': {
+        text: colorClasses.text.gray800,
+        bg: 'bg-gray-50 dark:bg-gray-800',
+        border: colorClasses.border.gray800
+      },
+      'withdrawn': {
+        text: colorClasses.text.gray600,
+        bg: 'bg-gray-100 dark:bg-gray-800/50',
+        border: colorClasses.border.gray400
+      }
     };
-    return statusColors[status] || 'bg-gray-50 text-gray-700 border-gray-200';
+    
+    return statusColors[status] || {
+      text: colorClasses.text.gray800,
+      bg: 'bg-gray-50 dark:bg-gray-800',
+      border: colorClasses.border.gray400
+    };
   };
 
   const ownerInfo = getOwnerInfo();
+  const statusColor = getStatusColorClass(application.status);
 
   return (
-    <Card className="w-full group cursor-pointer transition-all duration-300 hover:shadow-xl border border-gray-200/80 rounded-2xl overflow-hidden bg-gradient-to-br from-white to-gray-50/50 backdrop-blur-sm">
-      <CardHeader className="pb-4 border-b border-gray-100/50 bg-white/80">
-        <div className="flex items-start justify-between">
+    <Card className={`
+      w-full group cursor-pointer transition-all duration-300 
+      hover:shadow-xl border rounded-2xl overflow-hidden 
+      ${colorClasses.bg.white} backdrop-blur-sm
+      ${colorClasses.border.gray400}
+      hover:${colorClasses.border.gray800}
+    `}>
+      <CardHeader className={`
+        pb-4 border-b ${colorClasses.bg.white}/80
+        ${colorClasses.border.gray100}
+      `}>
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div className="flex items-start space-x-4 flex-1 min-w-0">            
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
+                <div className={`
+                  p-2 bg-gradient-to-br from-blue-500 to-blue-600 
+                  rounded-xl shadow-lg w-fit
+                `}>
                   <FileText className="h-5 w-5 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <CardTitle className="text-xl font-bold text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+                  <CardTitle className={`
+                    text-xl font-bold truncate 
+                    group-hover:${colorClasses.text.blue} 
+                    transition-colors ${colorClasses.text.darkNavy}
+                  `}>
                     {application.job.title}
                   </CardTitle>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Building className="h-4 w-4 text-gray-500" />
-                    <span className="text-sm font-medium text-gray-700">{ownerInfo.name}</span>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <Building className={`h-4 w-4 ${colorClasses.text.gray400}`} />
+                    <span className={`text-sm font-medium ${colorClasses.text.gray700}`}>
+                      {ownerInfo.name}
+                    </span>
                     {ownerInfo.verified && (
-                      <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs px-2 py-1">
+                      <Badge variant="secondary" className={`
+                        bg-emerald-100 dark:bg-emerald-900/30 
+                        ${colorClasses.text.emerald}
+                        ${colorClasses.border.emerald} text-xs px-2 py-1
+                      `}>
                         Verified
                       </Badge>
                     )}
@@ -173,22 +250,35 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
                 </div>
               </div>
               
-              <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
-                <div className="flex items-center gap-2 bg-blue-50/50 px-3 py-1.5 rounded-full">
-                  <Calendar className="h-4 w-4 text-blue-600" />
-                  <span className="font-medium">Applied {formattedApplication.daysSinceApplied === 0 ? 'today' : `${formattedApplication.daysSinceApplied}d ago`}</span>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-sm">
+                <div className={`
+                  flex items-center gap-2 px-3 py-1.5 rounded-full 
+                  bg-blue-50/50 dark:bg-blue-900/20
+                `}>
+                  <Calendar className={`h-4 w-4 ${colorClasses.text.blue}`} />
+                  <span className={`font-medium ${colorClasses.text.blue}`}>
+                    Applied {formattedApplication.daysSinceApplied === 0 ? 'today' : `${formattedApplication.daysSinceApplied}d ago`}
+                  </span>
                 </div>
-                <div className="flex items-center gap-2 bg-gray-50/50 px-3 py-1.5 rounded-full">
-                  <Clock className="h-4 w-4 text-gray-600" />
-                  <span>Updated {new Date(application.updatedAt).toLocaleDateString()}</span>
+                <div className={`
+                  flex items-center gap-2 px-3 py-1.5 rounded-full
+                  ${colorClasses.bg.gray100}
+                `}>
+                  <Clock className={`h-4 w-4 ${colorClasses.text.gray600}`} />
+                  <span className={colorClasses.text.gray600}>
+                    Updated {new Date(application.updatedAt).toLocaleDateString()}
+                  </span>
                 </div>
               </div>
             </div>
           </div>
           
-          <div className="flex flex-col items-end gap-3">
+          <div className="flex flex-row md:flex-col items-center md:items-end gap-3">
             <Badge 
-              className={`px-4 py-2 font-semibold border-2 ${getStatusColorClass(application.status)} rounded-full shadow-sm`}
+              className={`
+                px-4 py-2 font-semibold border-2 rounded-full shadow-sm
+                ${statusColor.text} ${statusColor.bg} ${statusColor.border}
+              `}
             >
               {formattedApplication.statusLabel}
             </Badge>
@@ -199,9 +289,19 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
                 e.stopPropagation();
                 handleSelect();
               }}
-              className="h-9 w-9 p-0 bg-white/80 border border-gray-200/50 rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all duration-200 shadow-sm"
+              className={`
+                h-9 w-9 p-0 border rounded-xl 
+                transition-all duration-200 shadow-sm
+                ${colorClasses.bg.white}/80
+                ${colorClasses.border.gray400}
+                hover:${colorClasses.bg.blue}
+                hover:${colorClasses.border.blue}
+              `}
             >
-              <ChevronRight className="h-4 w-4 text-gray-600 group-hover:text-blue-600" />
+              <ChevronRight className={`
+                h-4 w-4 ${colorClasses.text.gray600} 
+                group-hover:${colorClasses.text.blue}
+              `} />
             </Button>
           </div>
         </div>
@@ -210,28 +310,53 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
       <CardContent className="pt-6 space-y-4">
         {/* Candidate Info */}
         {viewType !== 'candidate' && (
-          <div className="p-4 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 rounded-2xl border border-blue-200/50 backdrop-blur-sm">
+          <div className={`
+            p-4 bg-gradient-to-r rounded-2xl border backdrop-blur-sm
+            from-blue-50/80 to-indigo-50/80 dark:from-blue-900/20 dark:to-indigo-900/20
+            ${colorClasses.border.blue}
+          `}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-white rounded-xl shadow-sm border border-blue-100">
-                <User className="h-5 w-5 text-blue-600" />
+              <div className={`
+                p-2 rounded-xl shadow-sm border
+                ${colorClasses.bg.white}
+                ${colorClasses.border.blue}
+              `}>
+                <User className={`h-5 w-5 ${colorClasses.text.blue}`} />
               </div>
               <div className="flex-1">
-                <h4 className="font-semibold text-gray-900 text-sm">{application.candidate.name}</h4>
-                <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 mt-2">
-                  <div className="flex items-center gap-1.5 bg-white/50 px-2 py-1 rounded-lg">
+                <h4 className={`font-semibold text-sm ${colorClasses.text.darkNavy}`}>
+                  {application.candidate.name}
+                </h4>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs mt-2">
+                  <div className={`
+                    flex items-center gap-1.5 px-2 py-1 rounded-lg
+                    ${colorClasses.bg.white}/50
+                  `}>
                     <Mail className="h-3.5 w-3.5" />
-                    <span className="font-medium">{application.candidate.email}</span>
+                    <span className={`font-medium ${colorClasses.text.gray700}`}>
+                      {application.candidate.email}
+                    </span>
                   </div>
                   {application.candidate.phone && (
-                    <div className="flex items-center gap-1.5 bg-white/50 px-2 py-1 rounded-lg">
+                    <div className={`
+                      flex items-center gap-1.5 px-2 py-1 rounded-lg
+                      ${colorClasses.bg.white}/50
+                    `}>
                       <Phone className="h-3.5 w-3.5" />
-                      <span>{application.candidate.phone}</span>
+                      <span className={colorClasses.text.gray700}>
+                        {application.candidate.phone}
+                      </span>
                     </div>
                   )}
                   {application.candidate.location && (
-                    <div className="flex items-center gap-1.5 bg-white/50 px-2 py-1 rounded-lg">
+                    <div className={`
+                      flex items-center gap-1.5 px-2 py-1 rounded-lg
+                      ${colorClasses.bg.white}/50
+                    `}>
                       <MapPin className="h-3.5 w-3.5" />
-                      <span>{application.candidate.location}</span>
+                      <span className={colorClasses.text.gray700}>
+                        {application.candidate.location}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -244,19 +369,43 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Skills */}
           {application.skills && application.skills.length > 0 && (
-            <div className="bg-gradient-to-br from-yellow-50/50 to-amber-50/50 p-4 rounded-2xl border border-yellow-200/50">
-              <h4 className="font-semibold text-gray-900 text-sm mb-3 flex items-center gap-2">
-                <Award className="h-4 w-4 text-yellow-600" />
+            <div className={`
+              p-4 rounded-2xl border
+              bg-gradient-to-br from-yellow-50/50 to-amber-50/50 
+              dark:from-yellow-900/20 dark:to-amber-900/20
+              ${colorClasses.border.amber}
+            `}>
+              <h4 className={`
+                font-semibold text-sm mb-3 flex items-center gap-2
+                ${colorClasses.text.darkNavy}
+              `}>
+                <Award className={`h-4 w-4 ${colorClasses.text.amber}`} />
                 Key Skills
               </h4>
               <div className="flex flex-wrap gap-2">
                 {application.skills.slice(0, 4).map((skill, index) => (
-                  <Badge key={index} variant="outline" className="text-xs bg-white/80 border-yellow-300 text-gray-700 shadow-sm">
+                  <Badge 
+                    key={index} 
+                    variant="outline" 
+                    className={`
+                      text-xs shadow-sm
+                      ${colorClasses.bg.white}/80
+                      ${colorClasses.border.amber}
+                      ${colorClasses.text.gray700}
+                    `}
+                  >
                     {skill}
                   </Badge>
                 ))}
                 {application.skills.length > 4 && (
-                  <Badge variant="outline" className="text-xs bg-yellow-100/50 border-yellow-200 text-yellow-700">
+                  <Badge 
+                    variant="outline" 
+                    className={`
+                      text-xs bg-yellow-100/50 dark:bg-yellow-900/30
+                      ${colorClasses.border.amber}
+                      ${colorClasses.text.amber}
+                    `}
+                  >
                     +{application.skills.length - 4} more
                   </Badge>
                 )}
@@ -266,24 +415,38 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
 
           {/* CVs */}
           {application.selectedCVs && application.selectedCVs.length > 0 && (
-            <div className="bg-gradient-to-br from-blue-50/50 to-cyan-50/50 p-4 rounded-2xl border border-blue-200/50">
-              <h4 className="font-semibold text-gray-900 text-sm mb-3 flex items-center gap-2">
-                <FileText className="h-4 w-4 text-blue-600" />
+            <div className={`
+              p-4 rounded-2xl border
+              bg-gradient-to-br from-blue-50/50 to-cyan-50/50
+              dark:from-blue-900/20 dark:to-cyan-900/20
+              ${colorClasses.border.blue}
+            `}>
+              <h4 className={`
+                font-semibold text-sm mb-3 flex items-center gap-2
+                ${colorClasses.text.darkNavy}
+              `}>
+                <FileText className={`h-4 w-4 ${colorClasses.text.blue}`} />
                 Documents ({application.selectedCVs.length})
               </h4>
               <div className="space-y-2">
                 {application.selectedCVs.slice(0, 2).map((cv, index) => {
                   const plainCV = applicationService.convertMongooseDocToPlainObject(cv);
                   return (
-                    <div key={index} className="flex items-center justify-between p-3 bg-white/80 border border-blue-200/30 rounded-xl hover:border-blue-300 transition-all duration-200 shadow-sm">
+                    <div key={index} className={`
+                      flex items-center justify-between p-3 border rounded-xl
+                      transition-all duration-200 shadow-sm
+                      ${colorClasses.bg.white}/80
+                      ${colorClasses.border.blue}
+                      hover:${colorClasses.border.blue}
+                    `}>
                       <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <FileText className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                        <FileText className={`h-4 w-4 ${colorClasses.text.blue} flex-shrink-0`} />
                         <div className="flex-1 min-w-0">
-                          <span className="text-sm text-gray-900 truncate block">
+                          <span className={`text-sm truncate block ${colorClasses.text.darkNavy}`}>
                             {plainCV.originalName || plainCV.filename || `CV-${index + 1}`}
                           </span>
                           {plainCV.size && (
-                            <span className="text-xs text-gray-500">
+                            <span className={`text-xs ${colorClasses.text.gray400}`}>
                               ({applicationService.getFileSize(plainCV)})
                             </span>
                           )}
@@ -297,7 +460,10 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
                             e.stopPropagation();
                             handleViewCV(plainCV);
                           }}
-                          className="h-7 w-7 p-0 hover:bg-blue-500 hover:text-white transition-all duration-200 rounded-lg"
+                          className={`
+                            h-7 w-7 p-0 transition-all duration-200 rounded-lg
+                            hover:bg-blue-500 hover:text-white
+                          `}
                           title="View CV"
                         >
                           <Eye className="h-3.5 w-3.5" />
@@ -309,7 +475,10 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
                             e.stopPropagation();
                             handleDownloadCV(plainCV);
                           }}
-                          className="h-7 w-7 p-0 hover:bg-emerald-500 hover:text-white transition-all duration-200 rounded-lg"
+                          className={`
+                            h-7 w-7 p-0 transition-all duration-200 rounded-lg
+                            hover:bg-emerald-500 hover:text-white
+                          `}
                           title="Download CV"
                         >
                           <Download className="h-3.5 w-3.5" />
@@ -325,13 +494,25 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
 
         {/* Cover Letter Preview */}
         {application.coverLetter && (
-          <div className="bg-gradient-to-br from-orange-50/50 to-amber-50/50 p-4 rounded-2xl border border-orange-200/50">
-            <h4 className="font-semibold text-gray-900 text-sm mb-3 flex items-center gap-2">
-              <Briefcase className="h-4 w-4 text-orange-600" />
+          <div className={`
+            p-4 rounded-2xl border
+            bg-gradient-to-br from-orange-50/50 to-amber-50/50
+            dark:from-orange-900/20 dark:to-amber-900/20
+            ${colorClasses.border.orange}
+          `}>
+            <h4 className={`
+              font-semibold text-sm mb-3 flex items-center gap-2
+              ${colorClasses.text.darkNavy}
+            `}>
+              <Briefcase className={`h-4 w-4 ${colorClasses.text.orange}`} />
               Cover Letter Preview
             </h4>
-            <div className="p-3 bg-white/80 border border-orange-200/30 rounded-xl max-h-20 overflow-y-auto">
-              <p className="text-sm text-gray-700 line-clamp-3 leading-relaxed">
+            <div className={`
+              p-3 border rounded-xl max-h-20 overflow-y-auto
+              ${colorClasses.bg.white}/80
+              ${colorClasses.border.orange}
+            `}>
+              <p className={`text-sm leading-relaxed ${colorClasses.text.gray700} line-clamp-3`}>
                 {application.coverLetter}
               </p>
             </div>
@@ -339,9 +520,16 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
         )}
       </CardContent>
 
-      <CardFooter className="pt-4 border-t border-gray-100/50 bg-white/50">
-        <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50/50 px-3 py-1.5 rounded-full">
+      <CardFooter className={`
+        pt-4 border-t bg-white/50 dark:bg-gray-900/50
+        ${colorClasses.border.gray100}
+      `}>
+        <div className="flex flex-col sm:flex-row items-center justify-between w-full gap-4">
+          <div className={`
+            flex items-center gap-2 text-xs px-3 py-1.5 rounded-full
+            ${colorClasses.bg.gray100}
+            ${colorClasses.text.gray400}
+          `}>
             <User className="h-3 w-3" />
             <span>ID: {application._id.slice(-8)}</span>
           </div>
@@ -355,7 +543,12 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
                   e.stopPropagation();
                   handleWithdraw();
                 }}
-                className="border-orange-300 text-orange-700 bg-orange-50/50 hover:bg-orange-500 hover:text-white transition-all duration-200 rounded-lg shadow-sm"
+                className={`
+                  border text-orange-700 dark:text-orange-300 bg-orange-50/50 
+                  dark:bg-orange-900/20 hover:bg-orange-500 hover:text-white 
+                  transition-all duration-200 rounded-lg shadow-sm
+                  ${colorClasses.border.orange}
+                `}
               >
                 Withdraw
               </Button>
@@ -367,7 +560,12 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
                 e.stopPropagation();
                 handleSelect();
               }}
-              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 transition-all duration-200 rounded-lg shadow-lg shadow-blue-500/25"
+              className={`
+                bg-gradient-to-r from-blue-600 to-blue-700 
+                hover:from-blue-700 hover:to-blue-800 
+                text-white transition-all duration-200 
+                rounded-lg shadow-lg shadow-blue-500/25
+              `}
             >
               <ExternalLink className="h-4 w-4 mr-2" />
               View Details

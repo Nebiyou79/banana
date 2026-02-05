@@ -206,6 +206,7 @@ const CVUploadCard: React.FC<CVUploadCardProps> = ({
         });
         setUploadingFiles(uploadStates);
 
+        // Upload files (multiple or single)
         await onUpload(selectedFiles);
         setSelectedFiles([]);
 
@@ -258,24 +259,14 @@ const CVUploadCard: React.FC<CVUploadCardProps> = ({
   };
 
   // ✅ UPDATED: Handle CV preview using candidateService.viewCV()
-  const handlePreview = (cv: CV) => {
+  const handlePreview = async (cv: CV) => {
     try {
-      candidateService.viewCV(cv._id)
-        .then(() => {
-          console.log('Preview opened for:', cv.originalName);
-        })
-        .catch((error: any) => {
-          console.error('Preview failed:', error);
-          toast({
-            title: 'Preview Failed',
-            description: error.message || 'Unable to preview CV at this time',
-            variant: 'destructive',
-          });
-        });
+      await candidateService.viewCV(cv._id);
+      console.log('Preview opened for:', cv.originalName);
     } catch (error: any) {
-      console.error('Preview CV error:', error);
+      console.error('Preview failed:', error);
       toast({
-        title: 'Preview Error',
+        title: 'Preview Failed',
         description: error.message || 'Unable to preview CV at this time',
         variant: 'destructive',
       });
@@ -283,24 +274,14 @@ const CVUploadCard: React.FC<CVUploadCardProps> = ({
   };
 
   // ✅ UPDATED: Handle download using candidateService.downloadCV()
-  const handleDownload = (cv: CV) => {
+  const handleDownload = async (cv: CV) => {
     try {
-      candidateService.downloadCV(cv._id, cv.originalName)
-        .then(() => {
-          console.log('Download initiated for:', cv.originalName);
-        })
-        .catch((error: any) => {
-          console.error('Download failed:', error);
-          toast({
-            title: 'Download Failed',
-            description: error.message || 'Failed to download CV',
-            variant: 'destructive',
-          });
-        });
+      await candidateService.downloadCV(cv._id, cv.originalName);
+      console.log('Download initiated for:', cv.originalName);
     } catch (error: any) {
-      console.error('Download CV error:', error);
+      console.error('Download failed:', error);
       toast({
-        title: 'Download Error',
+        title: 'Download Failed',
         description: error.message || 'Failed to download CV',
         variant: 'destructive',
       });
@@ -414,8 +395,10 @@ const CVUploadCard: React.FC<CVUploadCardProps> = ({
                               </div>
                             ) : (
                               <button
+                                type="button" // ✅ ADDED: type="button" to prevent form submission
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  e.preventDefault(); // ✅ ADDED: Prevent default
                                   removeSelectedFile(index);
                                 }}
                                 className="text-gray-400 hover:text-red-500 flex-shrink-0 ml-2"
@@ -448,8 +431,10 @@ const CVUploadCard: React.FC<CVUploadCardProps> = ({
 
                   <div className={responsiveClasses.buttonGroup}>
                     <button
+                      type="button" // ✅ ADDED: type="button" to prevent form submission
                       onClick={(e) => {
                         e.stopPropagation();
+                        e.preventDefault(); // ✅ ADDED: Prevent default
                         uploadSelectedFiles();
                       }}
                       disabled={isUploading || selectedFiles.length === 0}
@@ -470,8 +455,10 @@ const CVUploadCard: React.FC<CVUploadCardProps> = ({
                       )}
                     </button>
                     <button
+                      type="button" // ✅ ADDED: type="button" to prevent form submission
                       onClick={(e) => {
                         e.stopPropagation();
+                        e.preventDefault(); // ✅ ADDED: Prevent default
                         setSelectedFiles([]);
                       }}
                       disabled={isUploading}
@@ -500,8 +487,10 @@ const CVUploadCard: React.FC<CVUploadCardProps> = ({
                     multiple
                   />
                   <button
+                    type="button" // ✅ ADDED: type="button" to prevent form submission
                     onClick={(e) => {
                       e.stopPropagation();
+                      e.preventDefault(); // ✅ ADDED: Prevent default
                       fileInputRef.current?.click();
                     }}
                     disabled={isUploading || cvs.length >= maxFiles}
@@ -613,7 +602,12 @@ const CVUploadCard: React.FC<CVUploadCardProps> = ({
                       <div className="flex items-center space-x-2 mt-3 sm:mt-0">
                         {!cv.isPrimary && hasValidId && (
                           <button
-                            onClick={() => handleSetPrimary(cv)}
+                            type="button" // ✅ ADDED: type="button" to prevent form submission
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleSetPrimary(cv);
+                            }}
                             disabled={isUploading}
                             className={`px-3 py-1 text-sm border rounded-lg transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed
                               ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']}
@@ -627,7 +621,12 @@ const CVUploadCard: React.FC<CVUploadCardProps> = ({
                           </button>
                         )}
                         <button
-                          onClick={() => handlePreview(cv)}
+                          type="button" // ✅ ADDED: type="button" to prevent form submission
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handlePreview(cv);
+                          }}
                           disabled={!previewUrl || isUploading || !hasValidUrls}
                           className={`p-2 transition-colors ${colorClasses.text[themeMode === 'dark' ? 'gray400' : 'gray400']} hover:text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed`}
                           title="Preview CV in browser"
@@ -636,7 +635,12 @@ const CVUploadCard: React.FC<CVUploadCardProps> = ({
                         </button>
                         {/* Download button - uses candidateService.downloadCV() */}
                         <button
-                          onClick={() => handleDownload(cv)}
+                          type="button" // ✅ ADDED: type="button" to prevent form submission
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDownload(cv);
+                          }}
                           disabled={!downloadUrl || isUploading || !hasValidUrls}
                           className={`p-2 transition-colors ${colorClasses.text[themeMode === 'dark' ? 'gray400' : 'gray400']} hover:text-green-600 disabled:opacity-50 disabled:cursor-not-allowed`}
                           title="Download CV"
@@ -645,7 +649,12 @@ const CVUploadCard: React.FC<CVUploadCardProps> = ({
                         </button>
                         {hasValidId && (
                           <button
-                            onClick={() => handleDeleteClick(cv._id!, cv.originalName || 'CV')}
+                            type="button" // ✅ ADDED: type="button" to prevent form submission
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleDeleteClick(cv._id!, cv.originalName || 'CV');
+                            }}
                             disabled={isUploading}
                             className={`p-2 transition-colors ${colorClasses.text[themeMode === 'dark' ? 'gray400' : 'gray400']} hover:text-red-600 disabled:opacity-50 disabled:cursor-not-allowed`}
                             title="Delete CV from server"

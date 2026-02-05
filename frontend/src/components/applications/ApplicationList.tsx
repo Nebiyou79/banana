@@ -20,6 +20,7 @@ import {
   Filter,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { colorClasses, getTheme } from '@/utils/color';
 
 interface ApplicationListProps {
   viewType: 'candidate' | 'company' | 'organization';
@@ -66,6 +67,10 @@ export const ApplicationList: React.FC<ApplicationListProps> = ({
   });
 
   const { toast } = useToast();
+  
+  // Get theme colors
+  const themeMode = 'light'; // In a real app, this would come from a theme context
+  const theme = getTheme(themeMode);
 
   const fetchApplications = async () => {
     try {
@@ -188,27 +193,118 @@ export const ApplicationList: React.FC<ApplicationListProps> = ({
     return applications.filter(app => app.status === status).length;
   };
 
-  const StatCard = ({ title, value, icon, color }: { title: string; value: number; icon: React.ReactNode; color: string }) => (
-    <Card className={`border-${color}-200 bg-gradient-to-br from-${color}-50 to-white shadow-sm hover:shadow-md transition-all duration-300`}>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-            <p className="text-3xl font-bold text-gray-900">{value}</p>
+  // Status color mapping from color.ts
+  const getStatusColorClasses = (status: string) => {
+    const colorMap: Record<string, { bg: string; text: string; border: string }> = {
+      'under-review': {
+        bg: 'bg-yellow-100 dark:bg-yellow-900/30',
+        text: colorClasses.text.amber,
+        border: colorClasses.border.amber
+      },
+      'shortlisted': {
+        bg: 'bg-green-100 dark:bg-green-900/30',
+        text: colorClasses.text.green,
+        border: colorClasses.border.green
+      },
+      'interview-scheduled': {
+        bg: 'bg-purple-100 dark:bg-purple-900/30',
+        text: colorClasses.text.purple,
+        border: colorClasses.border.purple
+      },
+      'offer-made': {
+        bg: 'bg-teal-100 dark:bg-teal-900/30',
+        text: colorClasses.text.teal,
+        border: colorClasses.border.teal
+      },
+      'rejected': {
+        bg: 'bg-red-100 dark:bg-red-900/30',
+        text: colorClasses.text.red,
+        border: colorClasses.border.red
+      }
+    };
+    
+    return colorMap[status] || {
+      bg: colorClasses.bg.gray100,
+      text: colorClasses.text.gray700,
+      border: colorClasses.border.gray400
+    };
+  };
+
+  const StatCard = ({ 
+    title, 
+    value, 
+    icon, 
+    status 
+  }: { 
+    title: string; 
+    value: number; 
+    icon: React.ReactNode; 
+    status: 'blue' | 'yellow' | 'green' | 'purple' | 'red' 
+  }) => {
+    const colorConfig = {
+      blue: {
+        bg: 'from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-900',
+        iconBg: 'bg-blue-100 dark:bg-blue-900/40',
+        iconColor: colorClasses.text.blue,
+        border: colorClasses.border.blue
+      },
+      yellow: {
+        bg: 'from-yellow-50 to-white dark:from-yellow-900/20 dark:to-gray-900',
+        iconBg: 'bg-yellow-100 dark:bg-yellow-900/40',
+        iconColor: colorClasses.text.amber,
+        border: colorClasses.border.amber
+      },
+      green: {
+        bg: 'from-green-50 to-white dark:from-green-900/20 dark:to-gray-900',
+        iconBg: 'bg-green-100 dark:bg-green-900/40',
+        iconColor: colorClasses.text.green,
+        border: colorClasses.border.green
+      },
+      purple: {
+        bg: 'from-purple-50 to-white dark:from-purple-900/20 dark:to-gray-900',
+        iconBg: 'bg-purple-100 dark:bg-purple-900/40',
+        iconColor: colorClasses.text.purple,
+        border: colorClasses.border.purple
+      },
+      red: {
+        bg: 'from-red-50 to-white dark:from-red-900/20 dark:to-gray-900',
+        iconBg: 'bg-red-100 dark:bg-red-900/40',
+        iconColor: colorClasses.text.red,
+        border: colorClasses.border.red
+      }
+    };
+
+    const colors = colorConfig[status];
+
+    return (
+      <Card className={`
+        border shadow-sm hover:shadow-md transition-all duration-300
+        bg-gradient-to-br ${colors.bg} ${colors.border}
+      `}>
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-sm font-medium mb-1 ${colorClasses.text.gray600}`}>
+                {title}
+              </p>
+              <p className={`text-2xl sm:text-3xl font-bold ${colorClasses.text.darkNavy}`}>
+                {value}
+              </p>
+            </div>
+            <div className={`p-3 rounded-xl ${colors.iconBg} ${colors.iconColor}`}>
+              {icon}
+            </div>
           </div>
-          <div className={`p-3 rounded-xl bg-${color}-100 text-${color}-600`}>
-            {icon}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+        </CardContent>
+      </Card>
+    );
+  };
 
   if (loading && !refreshing) {
     return (
       <div className="space-y-6">
         {viewType !== 'candidate' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             {[...Array(4)].map((_, i) => (
               <Skeleton key={i} className="h-32 rounded-2xl" />
             ))}
@@ -228,51 +324,65 @@ export const ApplicationList: React.FC<ApplicationListProps> = ({
       {/* Custom Title and Description */}
       {(title || description) && (
         <div className="mb-6">
-          {title && <h2 className="text-3xl font-bold text-gray-900 mb-3">{title}</h2>}
-          {description && <p className="text-gray-600 text-lg">{description}</p>}
+          {title && (
+            <h2 className={`text-2xl sm:text-3xl font-bold mb-3 ${colorClasses.text.darkNavy}`}>
+              {title}
+            </h2>
+          )}
+          {description && (
+            <p className={`text-gray-600 text-base sm:text-lg ${colorClasses.text.gray600}`}>
+              {description}
+            </p>
+          )}
         </div>
       )}
 
       {/* Statistics Dashboard */}
       {viewType !== 'candidate' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           <StatCard
             title="Total Applications"
             value={stats.total}
             icon={<FileText className="h-6 w-6" />}
-            color="blue"
+            status="blue"
           />
           <StatCard
             title="Under Review"
             value={stats.underReview}
             icon={<Users className="h-6 w-6" />}
-            color="yellow"
+            status="yellow"
           />
           <StatCard
             title="Shortlisted"
             value={stats.shortlisted}
             icon={<TrendingUp className="h-6 w-6" />}
-            color="green"
+            status="green"
           />
           <StatCard
             title="Interviews"
             value={stats.interviewScheduled}
             icon={<Calendar className="h-6 w-6" />}
-            color="purple"
+            status="purple"
           />
         </div>
       )}
 
       {/* Filters and Controls */}
       {showFilters && (
-        <Card className="border border-gray-200 shadow-sm bg-white rounded-2xl">
+        <Card className={`
+          border shadow-sm rounded-2xl
+          ${colorClasses.bg.white}
+          ${colorClasses.border.gray400}
+        `}>
           <CardHeader className="pb-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <CardTitle className="text-2xl font-bold text-gray-900">
+                <CardTitle className={`
+                  text-xl sm:text-2xl font-bold ${colorClasses.text.darkNavy}
+                `}>
                   {viewType === 'candidate' ? 'My Applications' : 'Job Applications'}
                 </CardTitle>
-                <CardDescription className="text-gray-600">
+                <CardDescription className={colorClasses.text.gray600}>
                   {pagination.totalResults} applications found
                 </CardDescription>
               </div>
@@ -282,7 +392,12 @@ export const ApplicationList: React.FC<ApplicationListProps> = ({
                   variant="outline"
                   onClick={handleRefresh}
                   disabled={refreshing}
-                  className="border-gray-300 text-gray-700 hover:bg-blue-50 rounded-xl"
+                  className={`
+                    border text-gray-700 hover:bg-blue-50 rounded-xl
+                    ${colorClasses.border.gray400}
+                    ${colorClasses.text.gray700}
+                    hover:${colorClasses.bg.blue}
+                  `}
                 >
                   <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
                   Refresh
@@ -296,12 +411,19 @@ export const ApplicationList: React.FC<ApplicationListProps> = ({
               {/* Search */}
               <div className="md:col-span-2">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Search className={`
+                    absolute left-3 top-1/2 transform -translate-y-1/2 
+                    h-4 w-4 ${colorClasses.text.gray400}
+                  `} />
                   <Input
                     placeholder="Search applications..."
                     value={filters.search || ''}
                     onChange={(e) => handleFilterChange('search', e.target.value)}
-                    className="pl-10 border-gray-300 focus:ring-blue-500 focus:border-blue-500 rounded-xl h-12"
+                    className={`
+                      pl-10 border focus:ring-blue-500 focus:border-blue-500 
+                      rounded-xl h-12
+                      ${colorClasses.border.gray400}
+                    `}
                   />
                 </div>
               </div>
@@ -312,9 +434,12 @@ export const ApplicationList: React.FC<ApplicationListProps> = ({
                   value={filters.status || 'all'}
                   onValueChange={(value) => handleFilterChange('status', value === 'all' ? '' : value)}
                 >
-                  <SelectTrigger className="border-gray-300 focus:ring-blue-500 focus:border-blue-500 rounded-xl h-12">
+                  <SelectTrigger className={`
+                    border focus:ring-blue-500 focus:border-blue-500 rounded-xl h-12
+                    ${colorClasses.border.gray400}
+                  `}>
                     <div className="flex items-center gap-2">
-                      <Filter className="h-4 w-4" />
+                      <Filter className={`h-4 w-4 ${colorClasses.text.gray400}`} />
                       <SelectValue placeholder="All Statuses" />
                     </div>
                   </SelectTrigger>
@@ -345,7 +470,10 @@ export const ApplicationList: React.FC<ApplicationListProps> = ({
                     handleFilterChange('sortOrder', sortOrder);
                   }}
                 >
-                  <SelectTrigger className="border-gray-300 focus:ring-blue-500 focus:border-blue-500 rounded-xl h-12">
+                  <SelectTrigger className={`
+                    border focus:ring-blue-500 focus:border-blue-500 rounded-xl h-12
+                    ${colorClasses.border.gray400}
+                  `}>
                     <SelectValue placeholder="Sort by" />
                   </SelectTrigger>
                   <SelectContent>
@@ -362,25 +490,32 @@ export const ApplicationList: React.FC<ApplicationListProps> = ({
             {viewType !== 'candidate' && applications.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-6">
                 {[
-                  { value: 'under-review', label: 'Under Review', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
-                  { value: 'shortlisted', label: 'Shortlisted', color: 'bg-green-100 text-green-800 border-green-200' },
-                  { value: 'interview-scheduled', label: 'Interview', color: 'bg-purple-100 text-purple-800 border-purple-200' },
-                  { value: 'offer-made', label: 'Offer Made', color: 'bg-teal-100 text-teal-800 border-teal-200' },
-                  { value: 'rejected', label: 'Rejected', color: 'bg-red-100 text-red-800 border-red-200' }
-                ].map(option => (
-                  <Badge
-                    key={option.value}
-                    variant={filters.status === option.value ? 'default' : 'outline'}
-                    className={`cursor-pointer px-4 py-2 transition-all rounded-lg ${
-                      filters.status === option.value 
-                        ? `${option.color} border-transparent font-semibold` 
-                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                    }`}
-                    onClick={() => handleFilterChange('status', option.value)}
-                  >
-                    {option.label} ({getStatusCount(option.value)})
-                  </Badge>
-                ))}
+                  { value: 'under-review', label: 'Under Review' },
+                  { value: 'shortlisted', label: 'Shortlisted' },
+                  { value: 'interview-scheduled', label: 'Interview' },
+                  { value: 'offer-made', label: 'Offer Made' },
+                  { value: 'rejected', label: 'Rejected' }
+                ].map(option => {
+                  const isActive = filters.status === option.value;
+                  const statusColors = getStatusColorClasses(option.value);
+                  
+                  return (
+                    <Badge
+                      key={option.value}
+                      variant={isActive ? 'default' : 'outline'}
+                      className={`
+                        cursor-pointer px-4 py-2 transition-all rounded-lg
+                        ${isActive 
+                          ? `${statusColors.bg} ${statusColors.text} border-transparent font-semibold` 
+                          : `${colorClasses.bg.white} ${colorClasses.text.gray700} ${colorClasses.border.gray400} hover:${colorClasses.bg.gray100}`
+                        }
+                      `}
+                      onClick={() => handleFilterChange('status', option.value)}
+                    >
+                      {option.label} ({getStatusCount(option.value)})
+                    </Badge>
+                  );
+                })}
               </div>
             )}
           </CardContent>
@@ -389,13 +524,28 @@ export const ApplicationList: React.FC<ApplicationListProps> = ({
 
       {/* Applications List */}
       {applications.length === 0 ? (
-        <Card className="border border-gray-200 shadow-sm bg-white rounded-2xl">
-          <CardContent className="flex flex-col items-center justify-center py-20">
-            <div className="w-20 h-20 bg-gray-100 rounded-2xl flex items-center justify-center mb-6">
-              <AlertCircle className="h-10 w-10 text-gray-400" />
+        <Card className={`
+          border shadow-sm rounded-2xl
+          ${colorClasses.bg.white}
+          ${colorClasses.border.gray400}
+        `}>
+          <CardContent className="flex flex-col items-center justify-center py-12 sm:py-20">
+            <div className={`
+              w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center mb-6
+              ${colorClasses.bg.gray100}
+            `}>
+              <AlertCircle className="h-8 w-8 sm:h-10 sm:w-10 text-gray-400" />
             </div>
-            <h3 className="text-2xl font-semibold text-gray-900 mb-3">No applications found</h3>
-            <p className="text-gray-600 text-center max-w-md mb-8 text-lg">
+            <h3 className={`
+              text-xl sm:text-2xl font-semibold mb-3
+              ${colorClasses.text.darkNavy}
+            `}>
+              No applications found
+            </h3>
+            <p className={`
+              text-gray-600 text-center max-w-md mb-8 text-sm sm:text-base
+              ${colorClasses.text.gray600}
+            `}>
               {filters.search || filters.status 
                 ? 'Try adjusting your filters to see more results.'
                 : viewType === 'candidate'
@@ -407,7 +557,10 @@ export const ApplicationList: React.FC<ApplicationListProps> = ({
             </p>
             {viewType === 'candidate' && (
               <Button 
-                className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-8 py-3 text-lg"
+                className={`
+                  bg-blue-600 hover:bg-blue-700 text-white 
+                  rounded-xl px-6 sm:px-8 py-3 text-sm sm:text-base
+                `}
                 onClick={() => window.open('/jobs', '_blank')}
               >
                 Browse Jobs
@@ -416,7 +569,7 @@ export const ApplicationList: React.FC<ApplicationListProps> = ({
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {applications.map(application => (
             <ApplicationCard
               key={application._id}
@@ -432,8 +585,12 @@ export const ApplicationList: React.FC<ApplicationListProps> = ({
 
       {/* Pagination */}
       {pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between pt-6 border-t border-gray-200">
-          <div className="text-sm text-gray-600">
+        <div className={`
+          flex flex-col sm:flex-row items-center justify-between 
+          pt-6 border-t gap-4 sm:gap-0
+          ${colorClasses.border.gray400}
+        `}>
+          <div className={`text-sm ${colorClasses.text.gray600}`}>
             Showing {((pagination.current - 1) * pagination.resultsPerPage) + 1} to{' '}
             {Math.min(pagination.current * pagination.resultsPerPage, pagination.totalResults)} of{' '}
             {pagination.totalResults} applications
@@ -445,7 +602,11 @@ export const ApplicationList: React.FC<ApplicationListProps> = ({
               size="sm"
               onClick={() => handlePageChange(pagination.current - 1)}
               disabled={pagination.current === 1}
-              className="border-gray-300 text-gray-700 hover:bg-blue-50 rounded-xl"
+              className={`
+                border text-gray-700 hover:bg-blue-50 rounded-xl
+                ${colorClasses.border.gray400}
+                ${colorClasses.text.gray700}
+              `}
             >
               Previous
             </Button>
@@ -453,17 +614,22 @@ export const ApplicationList: React.FC<ApplicationListProps> = ({
             <div className="flex items-center gap-1">
               {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
                 const page = i + 1;
+                const isActive = pagination.current === page;
+                
                 return (
                   <Button
                     key={page}
-                    variant={pagination.current === page ? 'primary' : 'outline'}
+                    variant={isActive ? 'primary' : 'outline'}
                     size="sm"
                     onClick={() => handlePageChange(page)}
-                    className={`w-10 h-10 p-0 transition-colors rounded-xl ${
-                      pagination.current === page 
+                    className={`
+                      w-10 h-10 p-0 transition-colors rounded-xl
+                      ${isActive 
                         ? 'bg-blue-600 text-white border-blue-600' 
-                        : 'border-gray-300 text-gray-700 hover:bg-blue-50'
-                    }`}
+                        : `border text-gray-700 hover:bg-blue-50 
+                           ${colorClasses.border.gray400} ${colorClasses.text.gray700}`
+                      }
+                    `}
                   >
                     {page}
                   </Button>
@@ -476,7 +642,11 @@ export const ApplicationList: React.FC<ApplicationListProps> = ({
               size="sm"
               onClick={() => handlePageChange(pagination.current + 1)}
               disabled={pagination.current === pagination.totalPages}
-              className="border-gray-300 text-gray-700 hover:bg-blue-50 rounded-xl"
+              className={`
+                border text-gray-700 hover:bg-blue-50 rounded-xl
+                ${colorClasses.border.gray400}
+                ${colorClasses.text.gray700}
+              `}
             >
               Next
             </Button>

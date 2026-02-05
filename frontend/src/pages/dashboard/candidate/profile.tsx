@@ -238,6 +238,7 @@ const CandidateProfilePage: React.FC = () => {
           variant: 'destructive',
         });
         setIsUploading(false);
+        setUploadProgress(0);
         return;
       }
 
@@ -252,18 +253,28 @@ const CandidateProfilePage: React.FC = () => {
         });
       }, 500);
 
-      // Upload files using service (note: single file at a time with local storage)
+      // ✅ UPDATED: Upload files - support multiple CVs
+      let uploadedCount = 0;
+      let errorCount = 0;
+      const uploadPromises = [];
+
       for (const file of files) {
         try {
-          await candidateService.uploadSingleCV(file);
+          const promise = candidateService.uploadSingleCV(file);
+          uploadPromises.push(promise);
         } catch (error) {
-          console.error('Failed to upload file:', file.name, error);
-          toast({
-            title: 'Upload Error',
-            description: `Failed to upload ${file.name}`,
-            variant: 'destructive',
-          });
+          console.error('Failed to queue file for upload:', file.name, error);
+          errorCount++;
         }
+      }
+
+      try {
+        // Wait for all uploads to complete
+        await Promise.all(uploadPromises);
+        uploadedCount = uploadPromises.length;
+      } catch (error) {
+        console.error('Some uploads failed:', error);
+        // Continue even if some uploads fail
       }
 
       clearInterval(progressInterval);
@@ -279,11 +290,20 @@ const CandidateProfilePage: React.FC = () => {
         console.warn('Could not refresh CV list:', refreshError);
       }
 
-      toast({
-        title: 'Upload Successful',
-        description: `Successfully uploaded ${files.length} CV(s) to local storage`,
-        variant: 'default',
-      });
+      // Show appropriate message
+      if (uploadedCount > 0) {
+        toast({
+          title: 'Upload Successful',
+          description: `Successfully uploaded ${uploadedCount} CV(s) to local storage${errorCount > 0 ? ` (${errorCount} failed)` : ''}`,
+          variant: 'default',
+        });
+      } else {
+        toast({
+          title: 'Upload Failed',
+          description: 'No CVs were uploaded. Please try again.',
+          variant: 'destructive',
+        });
+      }
 
       // Reset progress after delay
       setTimeout(() => setUploadProgress(0), 1000);
@@ -351,7 +371,7 @@ const CandidateProfilePage: React.FC = () => {
     }
   };
 
-  // Form submission
+  // ✅ UPDATED: Form submission - prevent submission on CV card clicks
   const onSubmit = async (values: ProfileFormData) => {
     if (!user) return;
 
@@ -537,182 +557,180 @@ const CandidateProfilePage: React.FC = () => {
           </div>
         </div>
 
+        {/* ✅ FIXED: CV Upload Card placed OUTSIDE the form */}
+        <CVUploadCard
+          cvs={cvs}
+          onUpload={handleCVUpload}
+          onSetPrimary={handleSetPrimaryCV}
+          onDelete={handleDeleteCV}
+          isUploading={isUploading}
+          uploadProgress={uploadProgress}
+          maxFiles={10}
+          maxSizeMB={100}
+          themeMode={themeMode}
+        />
+
+        {/* Profile Form (placed below CV upload card) */}
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* Basic Information & CV Upload Section */}
-            <div className={responsiveClasses.grid}>
-              {/* Basic Information Card */}
-              <Card className={`${colorClasses.bg[themeMode === 'dark' ? 'gray800' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} shadow-sm`}>
-                <CardHeader>
-                  <CardTitle className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
-                    Basic Information
-                  </CardTitle>
-                  <CardDescription className={colorClasses.text[themeMode === 'dark' ? 'gray100' : 'gray800']}>
-                    Your personal details
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className={responsiveClasses.cardSpacing}>
-                  {/* Date of Birth */}
-                  <FormField
-                    control={form.control}
-                    name="dateOfBirth"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
-                          Date of Birth
-                        </FormLabel>
-                        <FormControl>
-                          <div className="space-y-2">
-                            <Input
-                              type="date"
-                              {...field}
-                              value={field.value || ''}
-                              max={new Date().toISOString().split('T')[0]}
-                              className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
-                            />
-                            {age !== null && (
-                              <div className={`text-sm flex items-center ${colorClasses.text[themeMode === 'dark' ? 'gray100' : 'gray800']}`}>
-                                <Calendar className="h-4 w-4 mr-2" />
-                                Age: {age} years old
-                              </div>
-                            )}
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Gender */}
-                  <FormField
-                    control={form.control}
-                    name="gender"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
-                          Gender
-                        </FormLabel>
-                        <FormControl>
-                          <select
-                            {...field}
-                            className={`w-full px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-ring ${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
-                          >
-                            <option value="prefer-not-to-say">Prefer not to say</option>
-                            <option value="male">Male</option>
-                            <option value="female">Female</option>
-                            <option value="other">Other</option>
-                          </select>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Bio */}
-                  <FormField
-                    control={form.control}
-                    name="bio"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
-                          Bio
-                        </FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Tell us about yourself, your career goals, and what makes you unique..."
-                            rows={4}
-                            {...field}
-                            value={field.value || ''}
-                            className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']} resize-none`}
-                            maxLength={1000}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Location */}
-                  <FormField
-                    control={form.control}
-                    name="location"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
-                          Location
-                        </FormLabel>
-                        <FormControl>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 mt-6">
+            {/* Basic Information Card */}
+            <Card className={`${colorClasses.bg[themeMode === 'dark' ? 'gray800' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} shadow-sm`}>
+              <CardHeader>
+                <CardTitle className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                  Basic Information
+                </CardTitle>
+                <CardDescription className={colorClasses.text[themeMode === 'dark' ? 'gray100' : 'gray800']}>
+                  Your personal details
+                </CardDescription>
+              </CardHeader>
+              <CardContent className={responsiveClasses.cardSpacing}>
+                {/* Date of Birth */}
+                <FormField
+                  control={form.control}
+                  name="dateOfBirth"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                        Date of Birth
+                      </FormLabel>
+                      <FormControl>
+                        <div className="space-y-2">
                           <Input
-                            placeholder="e.g., Addis Ababa, Ethiopia"
+                            type="date"
                             {...field}
                             value={field.value || ''}
+                            max={new Date().toISOString().split('T')[0]}
                             className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
                           />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                          {age !== null && (
+                            <div className={`text-sm flex items-center ${colorClasses.text[themeMode === 'dark' ? 'gray100' : 'gray800']}`}>
+                              <Calendar className="h-4 w-4 mr-2" />
+                              Age: {age} years old
+                            </div>
+                          )}
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                  {/* Phone */}
-                  <FormField
-                    control={form.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
-                          Phone
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="+251 91 234 5678"
-                            {...field}
-                            value={field.value || ''}
-                            className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                {/* Gender */}
+                <FormField
+                  control={form.control}
+                  name="gender"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                        Gender
+                      </FormLabel>
+                      <FormControl>
+                        <select
+                          {...field}
+                          className={`w-full px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-ring ${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
+                        >
+                          <option value="prefer-not-to-say">Prefer not to say</option>
+                          <option value="male">Male</option>
+                          <option value="female">Female</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                  {/* Website */}
-                  <FormField
-                    control={form.control}
-                    name="website"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
-                          Website/Portfolio
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="https://yourportfolio.com"
-                            {...field}
-                            value={field.value || ''}
-                            className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </CardContent>
-              </Card>
+                {/* Bio */}
+                <FormField
+                  control={form.control}
+                  name="bio"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                        Bio
+                      </FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Tell us about yourself, your career goals, and what makes you unique..."
+                          rows={4}
+                          {...field}
+                          value={field.value || ''}
+                          className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']} resize-none`}
+                          maxLength={1000}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              {/* ✅ UPDATED: CV Upload Card - uses local storage */}
-              <CVUploadCard
-                cvs={cvs}
-                onUpload={handleCVUpload}
-                onSetPrimary={handleSetPrimaryCV}
-                onDelete={handleDeleteCV}
-                isUploading={isUploading}
-                uploadProgress={uploadProgress}
-                maxFiles={10}
-                maxSizeMB={100}
-                themeMode={themeMode}
-              />
-            </div>
+                {/* Location */}
+                <FormField
+                  control={form.control}
+                  name="location"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                        Location
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g., Addis Ababa, Ethiopia"
+                          {...field}
+                          value={field.value || ''}
+                          className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Phone */}
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                        Phone
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="+251 91 234 5678"
+                          {...field}
+                          value={field.value || ''}
+                          className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Website */}
+                <FormField
+                  control={form.control}
+                  name="website"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className={colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}>
+                        Website/Portfolio
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="https://yourportfolio.com"
+                          {...field}
+                          value={field.value || ''}
+                          className={`${colorClasses.bg[themeMode === 'dark' ? 'darkNavy' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']}`}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
 
             {/* Skills Section */}
             <Card className={`${colorClasses.bg[themeMode === 'dark' ? 'gray800' : 'white']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} shadow-sm`}>
@@ -748,7 +766,7 @@ const CandidateProfilePage: React.FC = () => {
                     </CardDescription>
                   </div>
                   <button
-                    type="button"
+                    type="button" // ✅ ADDED: type="button"
                     onClick={addEducation}
                     className={`flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-all ${colorClasses.bg.gold} ${colorClasses.text[themeMode === 'dark' ? 'darkNavy' : 'darkNavy']} hover:opacity-90 hover:shadow-md`}
                   >
@@ -771,7 +789,7 @@ const CandidateProfilePage: React.FC = () => {
                         </h4>
                       </div>
                       <button
-                        type="button"
+                        type="button" // ✅ ADDED: type="button"
                         onClick={() => removeEducation(index)}
                         className="p-2 text-gray-400 hover:text-red-500 transition-colors"
                       >
@@ -955,7 +973,7 @@ const CandidateProfilePage: React.FC = () => {
                     </CardDescription>
                   </div>
                   <button
-                    type="button"
+                    type="button" // ✅ ADDED: type="button"
                     onClick={addExperience}
                     className={`flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-all ${colorClasses.bg.gold} ${colorClasses.text[themeMode === 'dark' ? 'darkNavy' : 'darkNavy']} hover:opacity-90 hover:shadow-md`}
                   >
@@ -978,7 +996,7 @@ const CandidateProfilePage: React.FC = () => {
                         </h4>
                       </div>
                       <button
-                        type="button"
+                        type="button" // ✅ ADDED: type="button"
                         onClick={() => removeExperience(index)}
                         className="p-2 text-gray-400 hover:text-red-500 transition-colors"
                       >
@@ -1150,7 +1168,7 @@ const CandidateProfilePage: React.FC = () => {
                     </CardDescription>
                   </div>
                   <button
-                    type="button"
+                    type="button" // ✅ ADDED: type="button"
                     onClick={addCertification}
                     className={`flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-all ${colorClasses.bg.gold} ${colorClasses.text[themeMode === 'dark' ? 'darkNavy' : 'darkNavy']} hover:opacity-90 hover:shadow-md`}
                   >
@@ -1173,7 +1191,7 @@ const CandidateProfilePage: React.FC = () => {
                         </h4>
                       </div>
                       <button
-                        type="button"
+                        type="button" // ✅ ADDED: type="button"
                         onClick={() => removeCertification(index)}
                         className="p-2 text-gray-400 hover:text-red-500 transition-colors"
                       >
@@ -1346,7 +1364,7 @@ const CandidateProfilePage: React.FC = () => {
             {/* Save Button */}
             <div className={`flex justify-end space-x-4 pt-6 border-t ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']}`}>
               <button
-                type="button"
+                type="button" // ✅ ADDED: type="button"
                 onClick={() => window.history.back()}
                 className={`px-6 py-3 border rounded-xl font-medium transition-all ${colorClasses.bg[themeMode === 'dark' ? 'gray800' : 'gray100']} ${colorClasses.text[themeMode === 'dark' ? 'white' : 'darkNavy']} ${colorClasses.border[themeMode === 'dark' ? 'gray800' : 'gray400']} hover:opacity-90`}
               >

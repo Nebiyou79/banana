@@ -183,6 +183,23 @@ export const colorClasses = {
     blue: 'text-[#4DA6FF] dark:text-[#4DA6FF]',
     green: 'text-[#10B981] dark:text-[#10B981]',
     red: 'text-[#EF4444] dark:text-[#EF4444]',
+    // 🟣 Purple – secondary actions / highlights
+    purple: 'text-[#8B5CF6] dark:text-[#8B5CF6]',
+
+    // 💚 Emerald – success / positive state (richer than green)
+    emerald: 'text-[#10B981] dark:text-[#10B981]',
+
+    // 🔵 Indigo – primary actions / links
+    indigo: 'text-[#6366F1] dark:text-[#6366F1]',
+
+    // ⚪ Slate – neutral containers / subtle backgrounds
+    slate: 'text-[#64748B] dark:text-[#94A3B8]',
+
+    // 🌹 Rose – soft destructive / warnings
+    rose: 'text-[#F43F5E] dark:text-[#F43F5E]',
+
+    // 🟡 Amber – warning / attention
+    amber: 'text-[#F59E0B] dark:text-[#F59E0B]',
   },
   bg: {
     gold: 'bg-[#FFD700] dark:bg-[#FFD700]',
@@ -198,6 +215,23 @@ export const colorClasses = {
     blue: 'bg-[#4DA6FF] dark:bg-[#4DA6FF]',
     green: 'bg-[#10B981] dark:bg-[#10B981]',
     red: 'bg-[#EF4444] dark:bg-[#EF4444]',
+    // 🟣 Purple – secondary actions / highlights
+    purple: 'bg-[#8B5CF6] dark:bg-[#8B5CF6]',
+
+    // 💚 Emerald – success / positive state (richer than green)
+    emerald: 'bg-[#10B981] dark:bg-[#10B981]',
+
+    // 🔵 Indigo – primary actions / links
+    indigo: 'bg-[#6366F1] dark:bg-[#6366F1]',
+
+    // ⚪ Slate – neutral containers / subtle backgrounds
+    slate: 'bg-[#64748B] dark:bg-[#94A3B8]',
+
+    // 🌹 Rose – soft destructive / warnings
+    rose: 'bg-[#F43F5E] dark:bg-[#F43F5E]',
+
+    // 🟡 Amber – warning / attention
+    amber: 'bg-[#F59E0B] dark:bg-[#F59E0B]',
   },
   border: {
     gold: 'border-[#FFD700] dark:border-[#FFD700]',
@@ -213,6 +247,23 @@ export const colorClasses = {
     blue: 'border-[#4DA6FF] dark:border-[#4DA6FF]',
     green: 'border-[#10B981] dark:border-[#10B981]',
     red: 'border-[#EF4444] dark:border-[#EF4444]',
+    // 🟣 Purple – secondary actions / highlights
+    purple: 'border-[#8B5CF6] dark:border-[#8B5CF6]',
+
+    // 💚 Emerald – success / positive state (richer than green)
+    emerald: 'border-[#10B981] dark:border-[#10B981]',
+
+    // 🔵 Indigo – primary actions / links
+    indigo: 'border-[#6366F1] dark:border-[#6366F1]',
+
+    // ⚪ Slate – neutral containers / subtle backgrounds
+    slate: 'border-[#64748B] dark:border-[#94A3B8]',
+
+    // 🌹 Rose – soft destructive / warnings
+    rose: 'border-[#F43F5E] dark:border-[#F43F5E]',
+
+    // 🟡 Amber – warning / attention
+    amber: 'border-[#F59E0B] dark:border-[#F59E0B]',
   },
 };
 
