@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: banana-backend
+    ports:
+      - "127.0.0.1:4000:4000"
+    env_file:
+      - ./server/.env.production
+    environment:
+      NODE_ENV: production
+      APP_URL: https://getbananalink.com
+      BASE_URL: https://getbananalink.com
+      CORS_ORIGIN: https://getbananalink.com
+      # ADD: BACKEND_URL to prevent localhost fallback in file URLs
+      BACKEND_URL: https://getbananalink.com
+      # ADD: UPLOAD_BASE_PATH for consistent path resolution
+      UPLOAD_BASE_PATH: /app/uploads
+    volumes:
+      - uploads_volume:/app/uploads
+    restart: unless-stopped
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: banana-frontend
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - ./frontend/.env.production
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: https://getbananalink.com/api/v1
+      NEXT_PUBLIC_BACKEND_URL: https://getbananalink.com
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  uploads_volume:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

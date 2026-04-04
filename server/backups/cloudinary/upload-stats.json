@@ -1,0 +1,179 @@
+{
+  "totalUploads": 126,
+  "successfulUploads": 124,
+  "failedUploads": 2,
+  "totalSize": 29233303,
+  "byType": {
+    "documents": {
+      "count": 6,
+      "size": 2295535
+    },
+    "images": {
+      "count": 116,
+      "size": 22517401
+    },
+    "videos": {
+      "count": 2,
+      "size": 4420367
+    }
+  },
+  "dailyStats": {
+    "2026-01-13": {
+      "uploads": 13,
+      "successes": 13,
+      "failures": 0,
+      "totalSize": 5655136
+    },
+    "2026-01-14": {
+      "uploads": 12,
+      "successes": 11,
+      "failures": 1,
+      "totalSize": 1238216
+    },
+    "2026-01-16": {
+      "uploads": 3,
+      "successes": 3,
+      "failures": 0,
+      "totalSize": 111954
+    },
+    "2026-01-17": {
+      "uploads": 15,
+      "successes": 14,
+      "failures": 1,
+      "totalSize": 4518286
+    },
+    "2026-01-20": {
+      "uploads": 2,
+      "successes": 2,
+      "failures": 0,
+      "totalSize": 563019
+    },
+    "2026-01-22": {
+      "uploads": 2,
+      "successes": 2,
+      "failures": 0,
+      "totalSize": 1451580
+    },
+    "2026-01-23": {
+      "uploads": 6,
+      "successes": 6,
+      "failures": 0,
+      "totalSize": 687105
+    },
+    "2026-01-26": {
+      "uploads": 3,
+      "successes": 3,
+      "failures": 0,
+      "totalSize": 311738
+    },
+    "2026-01-27": {
+      "uploads": 2,
+      "successes": 2,
+      "failures": 0,
+      "totalSize": 282601
+    },
+    "2026-01-28": {
+      "uploads": 4,
+      "successes": 4,
+      "failures": 0,
+      "totalSize": 652071
+    },
+    "2026-01-30": {
+      "uploads": 1,
+      "successes": 1,
+      "failures": 0,
+      "totalSize": 526844
+    },
+    "2026-02-02": {
+      "uploads": 3,
+      "successes": 3,
+      "failures": 0,
+      "totalSize": 54735
+    },
+    "2026-02-03": {
+      "uploads": 1,
+      "successes": 1,
+      "failures": 0,
+      "totalSize": 22932
+    },
+    "2026-02-07": {
+      "uploads": 3,
+      "successes": 3,
+      "failures": 0,
+      "totalSize": 640827
+    },
+    "2026-02-08": {
+      "uploads": 2,
+      "successes": 2,
+      "failures": 0,
+      "totalSize": 662677
+    },
+    "2026-02-09": {
+      "uploads": 1,
+      "successes": 1,
+      "failures": 0,
+      "totalSize": 14044
+    },
+    "2026-02-12": {
+      "uploads": 7,
+      "successes": 7,
+      "failures": 0,
+      "totalSize": 1497844
+    },
+    "2026-02-13": {
+      "uploads": 15,
+      "successes": 15,
+      "failures": 0,
+      "totalSize": 1558585
+    },
+    "2026-02-16": {
+      "uploads": 1,
+      "successes": 1,
+      "failures": 0,
+      "totalSize": 887528
+    },
+    "2026-02-17": {
+      "uploads": 2,
+      "successes": 2,
+      "failures": 0,
+      "totalSize": 62106
+    },
+    "2026-02-18": {
+      "uploads": 5,
+      "successes": 5,
+      "failures": 0,
+      "totalSize": 409693
+    },
+    "2026-03-03": {
+      "uploads": 4,
+      "successes": 4,
+      "failures": 0,
+      "totalSize": 1502400
+    },
+    "2026-03-05": {
+      "uploads": 4,
+      "successes": 4,
+      "failures": 0,
+      "totalSize": 208490
+    },
+    "2026-03-18": {
+      "uploads": 5,
+      "successes": 5,
+      "failures": 0,
+      "totalSize": 1245427
+    },
+    "2026-04-01": {
+      "uploads": 8,
+      "successes": 8,
+      "failures": 0,
+      "totalSize": 2886150
+    },
+    "2026-04-02": {
+      "uploads": 2,
+      "successes": 2,
+      "failures": 0,
+      "totalSize": 1758787
+    }
+  },
+  "lastUpdated": "2026-04-02T13:06:36.403Z"
+}

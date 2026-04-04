@@ -1,0 +1,2894 @@
+{
+  "info": {
+    "name": "Banana Platform - Tender Testing (Part 4)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Complete test suite for Freelance and Professional Tenders. Tests all CRUD operations, state transitions, applications, bids, invitations, CPO, and edge cases for all roles."
+  },
+  "item": [
+    {
+      "name": "🔐 1. AUTHENTICATION - Login All Roles",
+      "item": [
+        {
+          "name": "1.1 Login as Freelancer (TestUser)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.token).to.not.be.undefined;",
+                  "    pm.expect(response.user.role).to.equal('freelancer');",
+                  "    ",
+                  "    pm.collectionVariables.set('freelancerToken', response.token);",
+                  "    pm.collectionVariables.set('freelancerId', response.user._id);",
+                  "    pm.collectionVariables.set('freelancerEmail', response.user.email);",
+                  "    pm.collectionVariables.set('freelancerName', response.user.name);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"freelancer@test.com\",\n  \"password\": \"Test@123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.2 Login as Company (TestCompany)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.token).to.not.be.undefined;",
+                  "    pm.expect(response.user.role).to.equal('company');",
+                  "    ",
+                  "    pm.collectionVariables.set('companyToken', response.token);",
+                  "    pm.collectionVariables.set('companyId', response.user._id);",
+                  "    pm.collectionVariables.set('companyEmail', response.user.email);",
+                  "    pm.collectionVariables.set('companyName', response.user.name);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"company@test.com\",\n  \"password\": \"Test@123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.3 Login as Organization (TestOrg)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.token).to.not.be.undefined;",
+                  "    pm.expect(response.user.role).to.equal('organization');",
+                  "    ",
+                  "    pm.collectionVariables.set('organizationToken', response.token);",
+                  "    pm.collectionVariables.set('organizationId', response.user._id);",
+                  "    pm.collectionVariables.set('organizationEmail', response.user.email);",
+                  "    pm.collectionVariables.set('organizationName', response.user.name);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"organization@test.com\",\n  \"password\": \"Test@123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.4 Login as Admin (TestAdmin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.token).to.not.be.undefined;",
+                  "    pm.expect(response.user.role).to.equal('admin');",
+                  "    ",
+                  "    pm.collectionVariables.set('adminToken', response.token);",
+                  "    pm.collectionVariables.set('adminId', response.user._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@banana.com\",\n  \"password\": \"Admin@123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📋 2. FREELANCE TENDERS - Public & Categories",
+      "item": [
+        {
+          "name": "2.1 Get Categories (No Auth)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Get categories successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data).to.have.property('Development');",
+                  "    pm.expect(response.data).to.have.property('Design');",
+                  "    pm.expect(response.data).to.have.property('Writing');",
+                  "    pm.expect(response.data).to.have.property('Marketing');",
+                  "    pm.expect(response.data.Development).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "categories"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏢 3. FREELANCE TENDERS - Company/Org Creation",
+      "item": [
+        {
+          "name": "3.1 Company: Create Draft Freelance Tender (Fixed Price)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Create freelance tender successful', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data).to.have.property('_id');",
+                  "    pm.expect(response.data.status).to.equal('draft');",
+                  "    pm.expect(response.data.details.engagementType).to.equal('fixed_price');",
+                  "    ",
+                  "    pm.collectionVariables.set('freelanceTenderId1', response.data._id);",
+                  "    pm.collectionVariables.set('freelanceTenderOwnerId', response.data.owner);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Build React Native Mobile App\",\n  \"description\": \"We need a freelancer to build a cross-platform mobile app using React Native. Must have experience with Firebase and payment integrations.\",\n  \"procurementCategory\": \"Mobile App Development\",\n  \"skillsRequired\": [\"React Native\", \"Firebase\", \"Redux\", \"Stripe API\"],\n  \"deadline\": \"2026-04-15T23:59:59.999Z\",\n  \"status\": \"draft\",\n  \"details\": {\n    \"engagementType\": \"fixed_price\",\n    \"budget\": {\n      \"min\": 1500,\n      \"max\": 3000,\n      \"currency\": \"USD\"\n    },\n    \"experienceLevel\": \"intermediate\",\n    \"numberOfPositions\": 1,\n    \"projectType\": \"one_time\",\n    \"portfolioRequired\": true,\n    \"urgency\": \"normal\",\n    \"screeningQuestions\": [\n      {\n        \"question\": \"Have you built a React Native app with payment integration before?\",\n        \"required\": true\n      },\n      {\n        \"question\": \"Provide links to your previous mobile apps\",\n        \"required\": true\n      }\n    ],\n    \"industry\": \"Technology\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "create"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.2 Organization: Create Draft Freelance Tender (Hourly)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Create freelance tender successful', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data).to.have.property('_id');",
+                  "    pm.expect(response.data.status).to.equal('draft');",
+                  "    pm.expect(response.data.details.engagementType).to.equal('hourly');",
+                  "    ",
+                  "    pm.collectionVariables.set('freelanceTenderId2', response.data._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organizationToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Social Media Manager for NGO Campaign\",\n  \"description\": \"Looking for a social media expert to manage our fundraising campaign across all platforms. Create content, schedule posts, engage with followers.\",\n  \"procurementCategory\": \"Social Media Marketing\",\n  \"skillsRequired\": [\"Content Creation\", \"Instagram\", \"Facebook\", \"Twitter\", \"Canva\"],\n  \"deadline\": \"2026-03-30T23:59:59.999Z\",\n  \"status\": \"draft\",\n  \"details\": {\n    \"engagementType\": \"hourly\",\n    \"weeklyHours\": 15,\n    \"estimatedDuration\": {\n      \"value\": 3,\n      \"unit\": \"months\"\n    },\n    \"experienceLevel\": \"entry\",\n    \"numberOfPositions\": 1,\n    \"projectType\": \"ongoing\",\n    \"portfolioRequired\": true,\n    \"urgency\": \"normal\",\n    \"industry\": \"Non-profit\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "create"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.3 Company: Create Another Draft (For Invites)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Create freelance tender successful', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.collectionVariables.set('freelanceTenderId3', response.data._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"WordPress Website Redesign\",\n  \"description\": \"Redesign our company website with modern UI/UX. Need responsive design and SEO optimization.\",\n  \"procurementCategory\": \"Web Design\",\n  \"skillsRequired\": [\"WordPress\", \"PHP\", \"CSS\", \"JavaScript\", \"UI/UX\"],\n  \"deadline\": \"2026-04-20T23:59:59.999Z\",\n  \"status\": \"draft\",\n  \"details\": {\n    \"engagementType\": \"fixed_price\",\n    \"budget\": {\n      \"min\": 800,\n      \"max\": 1500,\n      \"currency\": \"USD\"\n    },\n    \"experienceLevel\": \"intermediate\",\n    \"numberOfPositions\": 1,\n    \"projectType\": \"one_time\",\n    \"portfolioRequired\": true,\n    \"industry\": \"Marketing\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "create"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "✏️ 4. FREELANCE TENDERS - Update Operations (Testing ALWAYS editable)",
+      "item": [
+        {
+          "name": "4.1 Update Draft Tender (Should work)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Update draft tender successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.title).to.equal('Build React Native Mobile App - UPDATED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Build React Native Mobile App - UPDATED\",\n  \"description\": \"UPDATED: We need a freelancer to build a cross-platform mobile app. Must have Expo experience.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId1}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId1}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📤 5. FREELANCE TENDERS - Publish Operations",
+      "item": [
+        {
+          "name": "5.1 Publish Tender #1 (Fixed Price)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Publish tender successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.status).to.equal('published');",
+                  "    pm.expect(response.data.publishedAt).to.not.be.undefined;",
+                  "    pm.expect(response.data.tenderId).to.match(/^FT-\\d{4}-\\d{4}$/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId1}}/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId1}}",
+                "publish"
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.2 Publish Tender #2 (Hourly)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Publish tender successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.status).to.equal('published');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organizationToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId2}}/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId2}}",
+                "publish"
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.3 Try to Publish Already Published Tender (Should Fail)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Should fail to publish again', function() {",
+                  "    pm.response.to.have.status(400);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.false;",
+                  "    pm.expect(response.message).to.include('Cannot publish');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId1}}/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId1}}",
+                "publish"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔍 6. FREELANCE TENDERS - Browse as Freelancer",
+      "item": [
+        {
+          "name": "6.1 Browse All Published Tenders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Browse tenders successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data).to.have.property('tenders');",
+                  "    pm.expect(response.data.tenders).to.be.an('array');",
+                  "    ",
+                  "    if (response.data.tenders.length > 0) {",
+                  "        const tender = response.data.tenders[0];",
+                  "        pm.expect(tender).to.not.have.property('applications');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{freelancerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/?page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "6.2 Browse with Search Filter",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Search tenders successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{freelancerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/?search=React&experienceLevel=intermediate&sortBy=deadline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "React"
+                },
+                {
+                  "key": "experienceLevel",
+                  "value": "intermediate"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "deadline"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👁️ 7. FREELANCE TENDERS - View Single Tender",
+      "item": [
+        {
+          "name": "7.1 View as Owner (Company) - Should See Applications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Owner view successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.isOwner).to.be.true;",
+                  "    pm.expect(response.data).to.have.property('applications');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId1}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId1}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "7.2 View as Freelancer - Should NOT See Applications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Freelancer view successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.isOwner).to.be.false;",
+                  "    pm.expect(response.data).to.not.have.property('applications');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{freelancerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId1}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId1}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📝 8. FREELANCE TENDERS - Applications",
+      "item": [
+        {
+          "name": "8.1 Freelancer: Apply to Tender #1 (with CV)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Application submitted successfully', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data).to.have.property('_id');",
+                  "    pm.expect(response.data.status).to.equal('submitted');",
+                  "    ",
+                  "    pm.collectionVariables.set('applicationId1', response.data._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{freelancerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "multipart/form-data"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "coverLetter",
+                  "value": "I have 5 years of experience building React Native apps. I've worked on 3 fintech apps with Stripe integration. I'm confident I can deliver this project within 2 months.",
+                  "type": "text"
+                },
+                {
+                  "key": "proposedRate",
+                  "value": "2500",
+                  "type": "text"
+                },
+                {
+                  "key": "proposedRateCurrency",
+                  "value": "USD",
+                  "type": "text"
+                },
+                {
+                  "key": "estimatedTimeline",
+                  "value": "{\"value\":8,\"unit\":\"weeks\"}",
+                  "type": "text"
+                },
+                {
+                  "key": "portfolioLinks",
+                  "value": "https://github.com/myportfolio,https://myappstore.com/app1",
+                  "type": "text"
+                },
+                {
+                  "key": "cv",
+                  "value": "dummy-cv.pdf",
+                  "type": "file",
+                  "src": "/path/to/dummy-cv.pdf"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId1}}/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId1}}",
+                "apply"
+              ]
+            }
+          }
+        },
+        {
+          "name": "8.2 Second Freelancer: Apply to Tender #1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Second application submitted', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{freelancerToken2}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coverLetter\": \"I'm an expert React Native developer with 8 years experience. I've built apps for Fortune 500 companies.\",\n  \"proposedRate\": 2800,\n  \"proposedRateCurrency\": \"USD\",\n  \"estimatedTimeline\": {\n    \"value\": 6,\n    \"unit\": \"weeks\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId1}}/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId1}}",
+                "apply"
+              ]
+            }
+          }
+        },
+        {
+          "name": "8.3 Freelancer: Apply to Tender #2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Application to second tender', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{freelancerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coverLetter\": \"I'm a social media expert with 3 years experience managing NGO accounts. I increased engagement by 200% for my previous client.\",\n  \"proposedRate\": 25,\n  \"proposedRateCurrency\": \"USD\",\n  \"estimatedTimeline\": {\n    \"value\": 3,\n    \"unit\": \"months\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId2}}/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId2}}",
+                "apply"
+              ]
+            }
+          }
+        },
+        {
+          "name": "8.4 Try to Apply Again (Should Fail - Duplicate)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Duplicate application should fail', function() {",
+                  "    pm.response.to.have.status(400);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.false;",
+                  "    pm.expect(response.message).to.include('already applied');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{freelancerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coverLetter\": \"Trying to apply again\",\n  \"proposedRate\": 2600\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId1}}/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId1}}",
+                "apply"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 9. FREELANCE TENDERS - Owner Management",
+      "item": [
+        {
+          "name": "9.1 Get My Posted Tenders (Company)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Get my tenders successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.tenders).to.be.an('array');",
+                  "    pm.expect(response.data.tenders[0]).to.not.have.property('applications');",
+                  "    pm.expect(response.data.tenders[0]).to.have.property('applicationCount');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/my-tenders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "my-tenders"
+              ]
+            }
+          }
+        },
+        {
+          "name": "9.2 Get Applications for Tender #1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Get applications successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.applications).to.be.an('array');",
+                  "    pm.expect(response.data.applications.length).to.be.at.least(2);",
+                  "    pm.expect(response.data.summary.byStatus.submitted).to.equal(2);",
+                  "    ",
+                  "    pm.collectionVariables.set('applicationId2', response.data.applications[1]._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId1}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId1}}",
+                "applications"
+              ]
+            }
+          }
+        },
+        {
+          "name": "9.3 Update Application Status to Under Review",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Update status successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.status).to.equal('under_review');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"under_review\",\n  \"notes\": \"Good portfolio, moving to review stage\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId1}}/applications/{{applicationId1}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId1}}",
+                "applications",
+                "{{applicationId1}}",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "9.4 Update Second Application to Shortlisted",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Update status successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"shortlisted\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId1}}/applications/{{applicationId2}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId1}}",
+                "applications",
+                "{{applicationId2}}",
+                "status"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "⭐ 10. FREELANCE TENDERS - Save/Unsave Features",
+      "item": [
+        {
+          "name": "10.1 Freelancer: Save Tender #1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Save tender successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.saved).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{freelancerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId1}}/toggle-save",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId1}}",
+                "toggle-save"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10.2 Freelancer: Save Tender #2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Save second tender successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{freelancerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId2}}/toggle-save",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId2}}",
+                "toggle-save"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10.3 Get Saved Tenders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Get saved tenders successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.tenders).to.be.an('array');",
+                  "    pm.expect(response.data.tenders.length).to.be.at.least(2);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{freelancerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/saved",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "saved"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10.4 Freelancer: Unsave Tender #1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Unsave tender successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.saved).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{freelancerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId1}}/toggle-save",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId1}}",
+                "toggle-save"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📈 11. FREELANCE TENDERS - Stats & Analytics",
+      "item": [
+        {
+          "name": "11.1 Get Tender Stats (Owner Only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Get stats successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data).to.have.property('totalApplications');",
+                  "    pm.expect(response.data).to.have.property('byStatus');",
+                  "    pm.expect(response.data).to.have.property('views');",
+                  "    pm.expect(response.data.totalApplications).to.equal(2);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId1}}/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId1}}",
+                "stats"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏛️ 12. PROFESSIONAL TENDERS - Categories (Public)",
+      "item": [
+        {
+          "name": "12.1 Get Professional Categories",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Get professional categories successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data).to.have.property('Works');",
+                  "    pm.expect(response.data).to.have.property('Goods');",
+                  "    pm.expect(response.data).to.have.property('Services');",
+                  "    pm.expect(response.data).to.have.property('Consultancy');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "categories"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏗️ 13. PROFESSIONAL TENDERS - Creation (Open vs Sealed)",
+      "item": [
+        {
+          "name": "13.1 Company: Create Open Professional Tender (Draft)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Create open professional tender successful', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.status).to.equal('draft');",
+                  "    pm.expect(response.data.workflowType).to.equal('open');",
+                  "    ",
+                  "    pm.collectionVariables.set('openTenderId', response.data._id);",
+                  "    pm.collectionVariables.set('openTenderRef', response.data.referenceNumber);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Office Furniture Supply - Ministry of Education\",\n  \"description\": \"Supply of 500 office desks and chairs for the new ministry building. Must meet quality standards and deliver within 3 months.\",\n  \"procurementCategory\": \"Furniture\",\n  \"tenderType\": \"goods\",\n  \"workflowType\": \"open\",\n  \"referenceNumber\": \"MoE/GOODS/001/2026\",\n  \"deadline\": \"2026-05-15T23:59:59.999Z\",\n  \"visibilityType\": \"public\",\n  \"status\": \"draft\",\n  \"procurement\": {\n    \"procuringEntity\": \"Ministry of Education\",\n    \"procurementMethod\": \"open_tender\",\n    \"fundingSource\": \"Government Budget\",\n    \"contactPerson\": {\n      \"name\": \"Alemitu Bekele\",\n      \"email\": \"procurement@moe.gov.et\",\n      \"phone\": \"+251911234567\"\n    },\n    \"bidSecurityAmount\": 50000,\n    \"bidSecurityCurrency\": \"ETB\"\n  },\n  \"eligibility\": {\n    \"minimumExperience\": 3,\n    \"legalRegistrationRequired\": true,\n    \"financialCapacity\": {\n      \"minAnnualTurnover\": 5000000,\n      \"currency\": \"ETB\"\n    }\n  },\n  \"evaluation\": {\n    \"evaluationMethod\": \"combined\",\n    \"technicalWeight\": 70,\n    \"financialWeight\": 30\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "create"
+              ]
+            }
+          }
+        },
+        {
+          "name": "13.2 Company: Create Sealed (Closed) Professional Tender",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Create sealed professional tender successful', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.status).to.equal('draft');",
+                  "    pm.expect(response.data.workflowType).to.equal('closed');",
+                  "    ",
+                  "    pm.collectionVariables.set('sealedTenderId', response.data._id);",
+                  "    pm.collectionVariables.set('sealedTenderRef', response.data.referenceNumber);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Construction of Rural Road - Phase 3\",\n  \"description\": \"Construction of 25km asphalt road in Oromia region. Project includes drainage, signage, and culverts. Sealed bid process.\",\n  \"procurementCategory\": \"Roads\",\n  \"tenderType\": \"works\",\n  \"workflowType\": \"closed\",\n  \"referenceNumber\": \"ERA/WORKS/045/2026\",\n  \"deadline\": \"2026-06-01T23:59:59.999Z\",\n  \"visibilityType\": \"public\",\n  \"status\": \"draft\",\n  \"sealedBidConfirmation\": true,\n  \"procurement\": {\n    \"procuringEntity\": \"Ethiopian Roads Authority\",\n    \"procurementMethod\": \"restricted\",\n    \"fundingSource\": \"World Bank Loan\",\n    \"contactPerson\": {\n      \"name\": \"Tadesse Worku\",\n      \"email\": \"procurement@era.gov.et\",\n      \"phone\": \"+251911876543\"\n    },\n    \"bidSecurityAmount\": 200000,\n    \"bidSecurityCurrency\": \"ETB\"\n  },\n  \"eligibility\": {\n    \"minimumExperience\": 5,\n    \"requiredCertifications\": [\n      {\n        \"name\": \"Road Construction License Grade 1\",\n        \"issuingAuthority\": \"Ministry of Transport\"\n      }\n    ],\n    \"financialCapacity\": {\n      \"minAnnualTurnover\": 20000000,\n      \"currency\": \"ETB\"\n    },\n    \"pastProjectReferences\": {\n      \"minCount\": 3,\n      \"similarValueProjects\": true\n    }\n  },\n  \"scope\": {\n    \"projectObjectives\": \"Construct 25km asphalt road with drainage\",\n    \"timeline\": {\n      \"startDate\": \"2026-07-01\",\n      \"endDate\": \"2027-06-30\",\n      \"duration\": {\n        \"value\": 12,\n        \"unit\": \"months\"\n      }\n    }\n  },\n  \"cpoRequired\": true,\n  \"cpoDescription\": \"Bid security must be in the form of CPO from recognized bank\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "create"
+              ]
+            }
+          }
+        },
+        {
+          "name": "13.3 Organization: Create Professional Tender",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Organization creates tender', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "    pm.collectionVariables.set('orgTenderId', response.data._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organizationToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Financial Audit Services - NGO Consortium\",\n  \"description\": \"Seeking qualified audit firm to conduct annual financial audit for 5 NGOs. Must have experience with international donors.\",\n  \"procurementCategory\": \"Financial Audit\",\n  \"tenderType\": \"services\",\n  \"workflowType\": \"open\",\n  \"referenceNumber\": \"NGO/AUDIT/001/2026\",\n  \"deadline\": \"2026-04-30T23:59:59.999Z\",\n  \"visibilityType\": \"public\",\n  \"status\": \"draft\",\n  \"procurement\": {\n    \"procuringEntity\": \"Ethiopian NGOs Consortium\",\n    \"procurementMethod\": \"open_tender\",\n    \"contactPerson\": {\n      \"name\": \"Meron Assefa\",\n      \"email\": \"finance@ngoconsortium.org\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "create"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🚫 14. PROFESSIONAL TENDERS - Test DRAFT-ONLY Edit Rule",
+      "item": [
+        {
+          "name": "14.1 Update Draft Tender (Should Work)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Update draft tender successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.title).to.include('UPDATED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Office Furniture Supply - Ministry of Education (UPDATED)\",\n  \"description\": \"UPDATED: Supply of 600 desks and chairs. Delivery deadline extended.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{openTenderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{openTenderId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📤 15. PROFESSIONAL TENDERS - Publish Operations",
+      "item": [
+        {
+          "name": "15.1 Publish Open Tender",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Publish open tender successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.status).to.equal('published');",
+                  "    pm.expect(response.data.tenderId).to.match(/^PT-\\d{4}-\\d{4}$/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{openTenderId}}/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{openTenderId}}",
+                "publish"
+              ]
+            }
+          }
+        },
+        {
+          "name": "15.2 Publish Sealed Tender (Should become LOCKED, not published)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Publish sealed tender becomes LOCKED', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.status).to.equal('locked');",
+                  "    pm.expect(response.data.metadata.dataHash).to.not.be.undefined;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{sealedTenderId}}/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{sealedTenderId}}",
+                "publish"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔒 16. PROFESSIONAL TENDERS - Test DRAFT-ONLY Edit Rule (Post-Publish)",
+      "item": [
+        {
+          "name": "16.1 Try to Update Published Tender (Should FAIL with addendum message)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Update published tender should fail', function() {",
+                  "    pm.response.to.have.status(400);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.false;",
+                  "    pm.expect(response.message).to.include('Active tenders cannot be edited');",
+                  "    pm.expect(response.message).to.include('addendum');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"This should fail\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{openTenderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{openTenderId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "16.2 Try to Delete Published Tender (Should FAIL)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Delete published tender should fail', function() {",
+                  "    pm.response.to.have.status(400);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.false;",
+                  "    pm.expect(response.message).to.include('Only draft tenders can be deleted');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{openTenderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{openTenderId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📋 17. PROFESSIONAL TENDERS - Browse as Company",
+      "item": [
+        {
+          "name": "17.1 Browse Professional Tenders (Company)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Browse professional tenders successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.tenders).to.be.an('array');",
+                  "    ",
+                  "    if (response.data.tenders.length > 0) {",
+                  "        const sealedTender = response.data.tenders.find(t => t.workflowType === 'closed');",
+                  "        if (sealedTender) {",
+                  "            pm.expect(sealedTender).to.have.property('bidCount');",
+                  "            pm.expect(sealedTender).to.not.have.property('bids');",
+                  "        }",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/?tenderType=works&workflowType=closed",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "tenderType",
+                  "value": "works"
+                },
+                {
+                  "key": "workflowType",
+                  "value": "closed"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "💼 18. PROFESSIONAL TENDERS - Bidding (Open Tender)",
+      "item": [
+        {
+          "name": "18.1 Company: Submit Bid for Open Tender",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Submit bid successful', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.collectionVariables.set('openBidId', response.data._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bidAmount\": 4500000,\n  \"currency\": \"ETB\",\n  \"technicalProposal\": \"We have 10 years experience supplying office furniture to government ministries. We can deliver within 8 weeks.\",\n  \"financialProposal\": \"Total bid amount: 4,500,000 ETB inclusive of all taxes and delivery.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{openTenderId}}/bid",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{openTenderId}}",
+                "bid"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔐 19. PROFESSIONAL TENDERS - CPO Submission (Sealed Tender)",
+      "item": [
+        {
+          "name": "19.1 Company: Submit CPO for Sealed Tender",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Submit CPO successful', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.collectionVariables.set('cpoId', response.data._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "multipart/form-data"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "cpoNumber",
+                  "value": "CPO-2026-00123",
+                  "type": "text"
+                },
+                {
+                  "key": "amount",
+                  "value": "200000",
+                  "type": "text"
+                },
+                {
+                  "key": "currency",
+                  "value": "ETB",
+                  "type": "text"
+                },
+                {
+                  "key": "issuingBank",
+                  "value": "Commercial Bank of Ethiopia",
+                  "type": "text"
+                },
+                {
+                  "key": "issueDate",
+                  "value": "2026-03-01",
+                  "type": "text"
+                },
+                {
+                  "key": "expiryDate",
+                  "value": "2026-07-01",
+                  "type": "text"
+                },
+                {
+                  "key": "document",
+                  "value": "cpo-document.pdf",
+                  "type": "file",
+                  "src": "/path/to/cpo.pdf"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{sealedTenderId}}/cpo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{sealedTenderId}}",
+                "cpo"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔐 20. PROFESSIONAL TENDERS - Sealed Bidding",
+      "item": [
+        {
+          "name": "20.1 Company: Submit Sealed Bid (with content hashing)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Submit sealed bid successful', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.sealed).to.be.true;",
+                  "    pm.expect(response.data.sealedHash).to.not.be.undefined;",
+                  "    ",
+                  "    pm.collectionVariables.set('sealedBidId', response.data._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bidAmount\": 18500000,\n  \"currency\": \"ETB\",\n  \"technicalProposal\": \"We are a Grade 1 road construction company with 15 years experience. We have completed 3 similar projects for ERA.\",\n  \"financialProposal\": \"Total bid: 18,500,000 ETB including all taxes, materials, and labor.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{sealedTenderId}}/bid",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{sealedTenderId}}",
+                "bid"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👁️ 21. PROFESSIONAL TENDERS - View with Sealed Bid Privacy",
+      "item": [
+        {
+          "name": "21.1 Owner View Sealed Tender (Should see all bids)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Owner sees full tender with bids', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.isOwner).to.be.true;",
+                  "    pm.expect(response.data).to.have.property('bids');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{sealedTenderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{sealedTenderId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "21.2 Company View Sealed Tender (Should NOT see bid content)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Company sees bid count but not content', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.isOwner).to.be.false;",
+                  "    pm.expect(response.data).to.have.property('bidCount');",
+                  "    pm.expect(response.data).to.not.have.property('bids');",
+                  "    pm.expect(response.data).to.have.property('myBid');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{sealedTenderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{sealedTenderId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📝 22. PROFESSIONAL TENDERS - Addendum System",
+      "item": [
+        {
+          "name": "22.1 Owner: Issue Addendum with Deadline Extension",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Issue addendum successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data).to.have.property('title');",
+                  "    pm.expect(response.data).to.have.property('newDeadline');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Addendum 1 - Deadline Extension\",\n  \"description\": \"Due to public holidays, the submission deadline is extended by 2 weeks.\",\n  \"newDeadline\": \"2026-06-15T23:59:59.999Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{sealedTenderId}}/addendum",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{sealedTenderId}}",
+                "addendum"
+              ]
+            }
+          }
+        },
+        {
+          "name": "22.2 Get Addenda (Any Viewer)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Get addenda successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data).to.be.an('array');",
+                  "    pm.expect(response.data.length).to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{sealedTenderId}}/addendum",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{sealedTenderId}}",
+                "addendum"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📨 23. PROFESSIONAL TENDERS - Invitation System (Invite Only)",
+      "item": [
+        {
+          "name": "23.1 Create Invite-Only Tender",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Create invite-only tender', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.data.visibilityType).to.equal('invite_only');",
+                  "    pm.collectionVariables.set('inviteTenderId', response.data._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Confidential IT Security Audit\",\n  \"description\": \"Security audit of government systems. Invitation only.\",\n  \"procurementCategory\": \"IT Security\",\n  \"tenderType\": \"services\",\n  \"workflowType\": \"closed\",\n  \"referenceNumber\": \"INSA/SEC/001/2026\",\n  \"deadline\": \"2026-05-30T23:59:59.999Z\",\n  \"visibilityType\": \"invite_only\",\n  \"status\": \"draft\",\n  \"sealedBidConfirmation\": true,\n  \"procurement\": {\n    \"procuringEntity\": \"Information Network Security Agency\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "create"
+              ]
+            }
+          }
+        },
+        {
+          "name": "23.2 Publish Invite-Only Tender",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Publish invite-only tender', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{inviteTenderId}}/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{inviteTenderId}}",
+                "publish"
+              ]
+            }
+          }
+        },
+        {
+          "name": "23.3 Company: Try to Browse (Should NOT see invite-only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Invite-only not visible in browse', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    const found = response.data.tenders.find(t => t._id === pm.collectionVariables.get('inviteTenderId'));",
+                  "    pm.expect(found).to.be.undefined;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                ""
+              ]
+            }
+          }
+        },
+        {
+          "name": "23.4 Owner: Invite Companies",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Send invitations successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.data.invitationsSent).to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companies\": [\"{{companyId}}\"],\n  \"emails\": [\"securityfirm@example.com\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{inviteTenderId}}/invite",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{inviteTenderId}}",
+                "invite"
+              ]
+            }
+          }
+        },
+        {
+          "name": "23.5 Company: Get My Invitations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Get my invitations successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.data.invitations).to.be.an('array');",
+                  "    pm.expect(response.data.invitations.length).to.be.at.least(1);",
+                  "    pm.collectionVariables.set('inviteId', response.data.invitations[0].myInvitations[0]._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/my-invitations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "my-invitations"
+              ]
+            }
+          }
+        },
+        {
+          "name": "23.6 Company: Accept Invitation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Accept invitation successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.data.invitationStatus).to.equal('accepted');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"response\": \"accepted\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{inviteTenderId}}/invitations/{{inviteId}}/respond",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{inviteTenderId}}",
+                "invitations",
+                "{{inviteId}}",
+                "respond"
+              ]
+            }
+          }
+        },
+        {
+          "name": "23.7 Company: Now Should See Tender",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Can now view tender after accepting', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{inviteTenderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{inviteTenderId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔓 24. PROFESSIONAL TENDERS - Bid Reveal (After Deadline)",
+      "item": [
+        {
+          "name": "24.1 Manually Trigger Deadline (For Testing)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Update deadline to past', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deadline\": \"2024-01-01T00:00:00.000Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/force-deadline/{{sealedTenderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "force-deadline",
+                "{{sealedTenderId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "24.2 Owner: Reveal Bids",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Reveal bids successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.data.bidsRevealed).to.be.at.least(1);",
+                  "    pm.expect(response.data.tender.status).to.equal('revealed');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{sealedTenderId}}/reveal-bids",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{sealedTenderId}}",
+                "reveal-bids"
+              ]
+            }
+          }
+        },
+        {
+          "name": "24.3 Company: View After Reveal (Should See All Bids)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('View after reveal shows bids', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.data).to.have.property('bids');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{sealedTenderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{sealedTenderId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 25. PROFESSIONAL TENDERS - Stats",
+      "item": [
+        {
+          "name": "25.1 Get Professional Tender Stats (Owner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Get professional stats successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data).to.have.property('totalBids');",
+                  "    pm.expect(response.data).to.have.property('cpoSubmissions');",
+                  "    pm.expect(response.data).to.have.property('invitations');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professional-tenders/{{sealedTenderId}}/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professional-tenders",
+                "{{sealedTenderId}}",
+                "stats"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "✅ 26. CLEANUP - Test Deletions",
+      "item": [
+        {
+          "name": "26.1 Delete Draft Freelance Tender (Should work)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Delete draft freelance tender successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{companyToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/freelance-tenders/{{freelanceTenderId3}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "freelance-tenders",
+                "{{freelanceTenderId3}}"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000",
+      "type": "string"
+    },
+    {
+      "key": "freelancerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "companyToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "organizationToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "freelancerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "companyId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "organizationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "freelanceTenderId1",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "freelanceTenderId2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "freelanceTenderId3",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "openTenderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sealedTenderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "inviteTenderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "orgTenderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "applicationId1",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "applicationId2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "openBidId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sealedBidId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cpoId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "inviteId",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

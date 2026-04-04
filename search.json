@@ -1,0 +1,550 @@
+{
+  "info": {
+    "_postman_id": "banana-link-search-api",
+    "name": "Banana Link Search API",
+    "description": "Comprehensive API testing for Banana Link Search functionality",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "🔍 Search Endpoints",
+      "item": [
+        {
+          "name": "1. Search Profiles (All Types)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/social-search/profiles",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "social-search", "profiles"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "john",
+                  "description": "Search query"
+                },
+                {
+                  "key": "type",
+                  "value": "all",
+                  "description": "Type: all, candidate, freelancer, user, company, organization"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2. Search Candidates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/social-search/profiles?type=candidate&q=software&skills=JavaScript,React&location=Addis%20Ababa",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "social-search", "profiles"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "software"
+                },
+                {
+                  "key": "type",
+                  "value": "candidate"
+                },
+                {
+                  "key": "skills",
+                  "value": "JavaScript,React"
+                },
+                {
+                  "key": "location",
+                  "value": "Addis Ababa"
+                },
+                {
+                  "key": "minFollowers",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3. Search Freelancers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/social-search/profiles?type=freelancer&q=designer&skills=Design,UI/UX",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "social-search", "profiles"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "freelancer"
+                },
+                {
+                  "key": "q",
+                  "value": "designer"
+                },
+                {
+                  "key": "skills",
+                  "value": "Design,UI/UX"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "followers"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "4. Search Companies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/social-search/profiles?type=company&q=tech&industry=technology",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "social-search", "profiles"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "company"
+                },
+                {
+                  "key": "q",
+                  "value": "tech"
+                },
+                {
+                  "key": "industry",
+                  "value": "technology"
+                },
+                {
+                  "key": "location",
+                  "value": "Ethiopia"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5. Search Organizations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/social-search/profiles?type=organization&q=ngo&organizationType=nonprofit",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "social-search", "profiles"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "organization"
+                },
+                {
+                  "key": "q",
+                  "value": "ngo"
+                },
+                {
+                  "key": "organizationType",
+                  "value": "nonprofit"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "6. Search Posts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/social-search/posts?q=JavaScript&hashtag=programming",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "social-search", "posts"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "JavaScript"
+                },
+                {
+                  "key": "hashtag",
+                  "value": "programming"
+                },
+                {
+                  "key": "author",
+                  "value": "john"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7. Global Search",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/social-search/global?q=software&limit=15",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "social-search", "global"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "software",
+                  "description": "Required: Search query"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "15"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "8. Get Search Suggestions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/social-search/suggestions?q=tech&type=all",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "social-search", "suggestions"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "tech",
+                  "description": "Minimum 2 characters"
+                },
+                {
+                  "key": "type",
+                  "value": "all",
+                  "description": "all, users, companies, organizations, hashtags"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "9. Get Trending Hashtags",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/social-search/trending/hashtags?days=7&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "social-search", "trending", "hashtags"],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "7",
+                  "description": "Number of days to look back"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Number of hashtags to return"
+                },
+                {
+                  "key": "refresh",
+                  "value": "false",
+                  "description": "Force refresh cache"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "10. Advanced Search - Specific Types",
+          "item": [
+            {
+              "name": "Advanced: Users Only",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/social-search/advanced/users?q=marketing&skills=marketing,sales",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "social-search", "advanced", "users"],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "marketing"
+                    },
+                    {
+                      "key": "skills",
+                      "value": "marketing,sales"
+                    },
+                    {
+                      "key": "verificationStatus",
+                      "value": "verified"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Advanced: Companies Only",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/social-search/advanced/companies?q=technology&industry=software",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "social-search", "advanced", "companies"],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "technology"
+                    },
+                    {
+                      "key": "industry",
+                      "value": "software"
+                    },
+                    {
+                      "key": "location",
+                      "value": "Addis Ababa"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Advanced: Organizations Only",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/social-search/advanced/organizations?q=education&organizationType=educational",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "social-search", "advanced", "organizations"],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "education"
+                    },
+                    {
+                      "key": "organizationType",
+                      "value": "educational"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Advanced: Candidates Only",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/social-search/advanced/candidates?q=developer&skills=JavaScript,Python&minFollowers=50",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "social-search", "advanced", "candidates"],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "developer"
+                    },
+                    {
+                      "key": "skills",
+                      "value": "JavaScript,Python"
+                    },
+                    {
+                      "key": "minFollowers",
+                      "value": "50"
+                    },
+                    {
+                      "key": "sortBy",
+                      "value": "followers"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Advanced: Freelancers Only",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/social-search/advanced/freelancers?q=designer&skills=UI/UX,Figma",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "social-search", "advanced", "freelancers"],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "designer"
+                    },
+                    {
+                      "key": "skills",
+                      "value": "UI/UX,Figma"
+                    },
+                    {
+                      "key": "sortBy",
+                      "value": "recent"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🧪 Test & Health Endpoints",
+      "item": [
+        {
+          "name": "Test Server",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/test",
+              "host": ["{{base_url}}"],
+              "path": ["api", "test"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "health"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔐 Authentication Required Tests",
+      "item": [
+        {
+          "name": "Search Posts with Auth (to see likes)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/social-search/posts?q=technology",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "social-search", "posts"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "technology"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:4000",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "your_jwt_token_here",
+      "type": "string"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "console.log('Testing Banana Link Search API');"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Basic response validation",
+          "pm.test(\"Status code is 200\", function () {",
+          "    pm.response.to.have.status(200);",
+          "});",
+          "",
+          "pm.test(\"Response has success property\", function () {",
+          "    pm.response.to.have.jsonBody(\"success\");",
+          "});",
+          "",
+          "pm.test(\"Success is true\", function () {",
+          "    pm.expect(pm.response.json().success).to.be.true;",
+          "});"
+        ]
+      }
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  }
+}
