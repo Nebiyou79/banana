@@ -1,505 +1,441 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// pages/social/profile/[id].tsx — COMPLETE FIXED PUBLIC PROFILE PAGE
-// Fixes: 404 company/org public endpoints, "Invalid target type" follow error,
-//        role-specific rich sections for all 4 user types
+/**
+ * pages/social/profile/[id].tsx
+ *
+ * KEY FIXES:
+ * 1. Route is /social/profile/[id] (not /dashboard/social/...)
+ * 2. Correct TypeScript types from each service:
+ *    - CandidateProfile from candidateService (has skills, experience, education, certifications, portfolio)
+ *    - UserProfile from freelancerService (has freelancerProfile.hourlyRate, freelancerProfile.availability, portfolio)
+ *    - CompanyProfile from companyService (has industry, website, phone, verified, logoUrl, description)
+ *    - OrganizationProfile from organizationService (has mission, organizationType, phone, verified)
+ *    - DetailedProfile.roleSpecific ONLY has { skills: string[], experience: any, education: any }
+ * 3. All role-specific data accessed via typed roleData (any cast used where needed for runtime flexibility)
+ * 4. Cover/Avatar from Cloudinary objects AND plain strings
+ * 5. Follow: correct 'User' | 'Company' | 'Organization' mapping
+ * 6. Layout: Header → Tabs → Content (no middle strip)
+ */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
-// Services
-import { profileService, DetailedProfile, SocialLinks } from '@/services/profileService';
+// ── Services ─────────────────────────────────────────────────────────────────
+import {
+  profileService,
+  DetailedProfile,
+  SocialLinks,
+  Certification,
+  Experience,
+  Education,
+  Language,
+  CloudinaryImage,
+} from '@/services/profileService';
 import { followService } from '@/services/followService';
-import { companyService } from '@/services/companyService';
-import { organizationService } from '@/services/organizationService';
-import { candidateService } from '@/services/candidateService';
-import { freelancerService } from '@/services/freelancerService';
+import { companyService, CompanyProfile } from '@/services/companyService';
+import { organizationService, OrganizationProfile } from '@/services/organizationService';
+import { candidateService, CandidateProfile } from '@/services/candidateService';
+import { freelancerService, UserProfile as FreelancerUserProfile, PortfolioItem } from '@/services/freelancerService';
 import { useAuth } from '@/contexts/AuthContext';
 
-// Layout / Theme
+// ── Layout ───────────────────────────────────────────────────────────────────
 import { SocialDashboardLayout } from '@/components/social/layout/SocialDashboard';
 import { RoleThemeProvider } from '@/components/social/theme/RoleThemeProvider';
-
-// Profile sub-components (existing)
 import { ProfileTabs, ProfileTabContent, TabTransitionWrapper } from '@/components/profile/ProfileTabs';
-import { PublicProfileActions, QuickActions, MobileFloatingActions } from '@/components/profile/PublicProfileActions';
 import { Button } from '@/components/social/ui/Button';
-import { Badge } from '@/components/social/ui/Badge';
 
-// Colors
-import { colors, colorClasses, getTheme, type ThemeMode } from '@/utils/color';
+// ── Colors ───────────────────────────────────────────────────────────────────
+import type { ThemeMode } from '@/utils/color';
 import { cn } from '@/lib/utils';
 
-// Icons
+// ── Icons ────────────────────────────────────────────────────────────────────
 import {
   Briefcase, Sparkles, Building2, Users, Shield, Camera, CheckCircle,
-  MapPin, LinkIcon, ExternalLink, Calendar, Share2, Loader2, UserCheck,
-  Users as UsersIcon, MessageCircle, Edit3, FileText, Heart, Eye,
-  Linkedin, Twitter, Github, Facebook, Instagram, Youtube, AlertCircle,
-  ArrowLeft,  Crown,
-  DollarSign, Award, Code, Globe, Phone, Tag,
-   Layers, Zap, Target, Package, Handshake,
-  GraduationCap, Trophy, Lightbulb, ChevronDown, ChevronUp,
-   ExternalLink as ExtLink, Info
+  MapPin, ExternalLink, Calendar, Share2, Loader2, UserCheck, MessageCircle,
+  Edit3, FileText, Heart, Eye, Linkedin, Twitter, Github, Facebook,
+  Instagram, Youtube, AlertCircle, ArrowLeft, Crown, DollarSign, Award,
+  GraduationCap, Code, Globe, Phone, Tag, Zap, Target, Handshake,
+  Trophy, Lightbulb, ChevronDown, ChevronUp, Info, Users2, Layers,
 } from 'lucide-react';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPED ROLE DATA UNION
+// ─────────────────────────────────────────────────────────────────────────────
+
+type RoleData =
+  | CandidateProfile         // candidate
+  | FreelancerUserProfile    // freelancer
+  | CompanyProfile           // company
+  | OrganizationProfile      // organization
+  | null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IMAGE HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function extractUrl(src: CloudinaryImage | string | null | undefined): string {
+  if (!src) return '';
+  if (typeof src === 'string') return src;
+  if (typeof src === 'object') {
+    if ('secure_url' in src && src.secure_url) return src.secure_url;
+    if ('url' in (src as any)) return (src as any).url || '';
+  }
+  return '';
+}
+
+function getAvatarUrl(p: DetailedProfile): string {
+  // 1. profile.avatar (CloudinaryImage object from profileService upload)
+  const fromObj = extractUrl(p.avatar);
+  if (fromObj) return fromObj;
+  // 2. user.avatar (plain string stored on user document)
+  if (p.user?.avatar) return p.user.avatar;
+  // 3. generated
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(p.user?.name ?? 'U')}&background=6366f1&color=fff&size=200&bold=true`;
+}
+
+function getCoverUrl(p: DetailedProfile): string | null {
+  // 1. profile.cover (CloudinaryImage object)
+  const fromCover = extractUrl((p as any).cover);
+  if (fromCover) return fromCover;
+  // 2. profile.coverPhoto (string)
+  if (p.coverPhoto) return p.coverPhoto;
+  // 3. user.coverPhoto
+  if (p.user?.coverPhoto) return p.user.coverPhoto;
+  return null;
+}
+
+// Get logo/avatar for a company or org (from their specific service data)
+function getCompanyLogoUrl(rd: CompanyProfile | OrganizationProfile | null): string {
+  if (!rd) return '';
+  return rd.logoFullUrl || rd.logoUrl || '';
+}
+
+function optimizeCld(url: string, w: number, h: number): string {
+  if (!url || !url.includes('cloudinary.com')) return url;
+  return url.replace('/upload/', `/upload/c_fill,w_${w},h_${h},q_auto,f_auto/`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FOLLOW TARGET TYPE
+// ─────────────────────────────────────────────────────────────────────────────
+
+function toFollowTarget(role: string): 'User' | 'Company' | 'Organization' {
+  if (role === 'company') return 'Company';
+  if (role === 'organization') return 'Organization';
+  return 'User'; // candidate, freelancer, admin
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ROLE CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface RoleConfig {
+interface RoleCfg {
   icon: React.ElementType;
   label: string;
-  gradient: string;
-  accentColor: string;
+  grad: string;
   lightBg: string;
+  lightTxt: string;
   darkBg: string;
-  lightText: string;
-  darkText: string;
-  borderColor: string;
-  shadowColor: string;
-  badgeBg: string;
+  darkTxt: string;
+  ring: string;
 }
 
-const ROLE_CONFIG: Record<string, RoleConfig> = {
-  candidate: {
-    icon: Briefcase,
-    label: 'Job Seeker',
-    gradient: 'from-[#2563EB] to-[#4DA6FF]',
-    accentColor: colors.blue600,
-    lightBg: 'bg-blue-50',
-    darkBg: 'dark:bg-blue-900/20',
-    lightText: 'text-blue-700',
-    darkText: 'dark:text-blue-300',
-    borderColor: 'border-blue-200 dark:border-blue-800',
-    shadowColor: 'shadow-blue-500/20',
-    badgeBg: colorClasses.bg.blueLight,
-  },
-  freelancer: {
-    icon: Sparkles,
-    label: 'Freelancer',
-    gradient: 'from-[#F59E0B] to-[#FF8C42]',
-    accentColor: colors.amber,
-    lightBg: 'bg-amber-50',
-    darkBg: 'dark:bg-amber-900/20',
-    lightText: 'text-amber-700',
-    darkText: 'dark:text-amber-300',
-    borderColor: 'border-amber-200 dark:border-amber-800',
-    shadowColor: 'shadow-amber-500/20',
-    badgeBg: colorClasses.bg.amberLight,
-  },
-  company: {
-    icon: Building2,
-    label: 'Company',
-    gradient: 'from-[#2AA198] to-[#10B981]',
-    accentColor: colors.teal,
-    lightBg: 'bg-teal-50',
-    darkBg: 'dark:bg-teal-900/20',
-    lightText: 'text-teal-700',
-    darkText: 'dark:text-teal-300',
-    borderColor: 'border-teal-200 dark:border-teal-800',
-    shadowColor: 'shadow-teal-500/20',
-    badgeBg: colorClasses.bg.tealLight,
-  },
-  organization: {
-    icon: Users,
-    label: 'Organization',
-    gradient: 'from-[#6366F1] to-[#8B5CF6]',
-    accentColor: colors.indigo,
-    lightBg: 'bg-indigo-50',
-    darkBg: 'dark:bg-indigo-900/20',
-    lightText: 'text-indigo-700',
-    darkText: 'dark:text-indigo-300',
-    borderColor: 'border-indigo-200 dark:border-indigo-800',
-    shadowColor: 'shadow-indigo-500/20',
-    badgeBg: colorClasses.bg.indigoLight,
-  },
-  admin: {
-    icon: Shield,
-    label: 'Administrator',
-    gradient: 'from-[#8B5CF6] to-[#F43F5E]',
-    accentColor: colors.purple,
-    lightBg: 'bg-purple-50',
-    darkBg: 'dark:bg-purple-900/20',
-    lightText: 'text-purple-700',
-    darkText: 'dark:text-purple-300',
-    borderColor: 'border-purple-200 dark:border-purple-800',
-    shadowColor: 'shadow-purple-500/20',
-    badgeBg: colorClasses.bg.purpleLight,
-  },
+const ROLE_CFG: Record<string, RoleCfg> = {
+  candidate:    { icon: Briefcase,  label: 'Job Seeker',    grad: 'from-blue-600 to-cyan-500',     lightBg: 'bg-blue-50',   lightTxt: 'text-blue-700',   darkBg: 'dark:bg-blue-900/30',   darkTxt: 'dark:text-blue-300',   ring: 'ring-blue-400' },
+  freelancer:   { icon: Sparkles,   label: 'Freelancer',    grad: 'from-amber-500 to-rose-500',    lightBg: 'bg-amber-50',  lightTxt: 'text-amber-700',  darkBg: 'dark:bg-amber-900/30',  darkTxt: 'dark:text-amber-300',  ring: 'ring-amber-400' },
+  company:      { icon: Building2,  label: 'Company',       grad: 'from-teal-600 to-emerald-500',  lightBg: 'bg-teal-50',   lightTxt: 'text-teal-700',   darkBg: 'dark:bg-teal-900/30',   darkTxt: 'dark:text-teal-300',   ring: 'ring-teal-400' },
+  organization: { icon: Users,      label: 'Organization',  grad: 'from-indigo-600 to-purple-500', lightBg: 'bg-indigo-50', lightTxt: 'text-indigo-700', darkBg: 'dark:bg-indigo-900/30', darkTxt: 'dark:text-indigo-300', ring: 'ring-indigo-400' },
+  admin:        { icon: Shield,     label: 'Administrator', grad: 'from-purple-600 to-pink-500',   lightBg: 'bg-purple-50', lightTxt: 'text-purple-700', darkBg: 'dark:bg-purple-900/30', darkTxt: 'dark:text-purple-300', ring: 'ring-purple-400' },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HELPERS
+// UTILS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Map a user role string → valid Follow API targetType.
- * The follow endpoint accepts ONLY 'User' | 'Company' | 'Organization'.
- */
-function toFollowTargetType(role: string): 'User' | 'Company' | 'Organization' {
-  if (role === 'company') return 'Company';
-  if (role === 'organization') return 'Organization';
-  return 'User'; // candidate, freelancer, admin all map to 'User'
-}
+const fmtNum = (n: number) =>
+  n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n ?? 0);
 
-const formatNumber = (n: number): string => {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toString();
+const fmtDate = (d?: string, opts?: Intl.DateTimeFormatOptions) => {
+  try { return d ? new Date(d).toLocaleDateString('en-US', opts ?? { year: 'numeric', month: 'long' }) : ''; }
+  catch { return d ?? ''; }
 };
 
-const formatDate = (d: string, opts?: Intl.DateTimeFormatOptions): string => {
-  try {
-    return new Date(d).toLocaleDateString('en-US', opts || { year: 'numeric', month: 'long' });
-  } catch { return d; }
-};
+// ─────────────────────────────────────────────────────────────────────────────
+// SHARED CARD / SECTION HEAD
+// ─────────────────────────────────────────────────────────────────────────────
+
+const Card = ({ children, className = '', dark }: { children: React.ReactNode; className?: string; dark: boolean }) => (
+  <div className={cn(
+    'rounded-2xl border p-5 sm:p-6 transition-all duration-300',
+    dark ? 'bg-gray-900 border-gray-800 hover:border-gray-700' : 'bg-white border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200',
+    className,
+  )}>{children}</div>
+);
+
+const SH = ({ icon: Icon, title, dark }: { icon: React.ElementType; title: string; dark: boolean }) => (
+  <div className="flex items-center gap-2.5 mb-4">
+    <div className={cn('p-1.5 rounded-lg', dark ? 'bg-gray-800' : 'bg-gray-100')}>
+      <Icon className={cn('w-4 h-4', dark ? 'text-gray-300' : 'text-gray-600')} />
+    </div>
+    <h3 className={cn('font-bold text-base', dark ? 'text-white' : 'text-gray-900')}>{title}</h3>
+  </div>
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SKELETON
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ProfileSkeleton = ({ themeMode = 'light' }: { themeMode?: ThemeMode }) => (
-  <div className="space-y-6 animate-pulse">
-    <div className={cn('rounded-3xl overflow-hidden border shadow-2xl', themeMode === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200')}>
-      <div className="h-52 bg-gray-200 dark:bg-gray-800" />
-      <div className="px-6 pb-6 -mt-14">
-        <div className="w-28 h-28 rounded-full bg-gray-300 dark:bg-gray-700 border-4 border-white dark:border-gray-900" />
-        <div className="mt-4 space-y-3">
-          <div className="h-7 bg-gray-200 dark:bg-gray-800 rounded w-52" />
-          <div className="h-5 bg-gray-200 dark:bg-gray-800 rounded w-36" />
-          <div className="flex gap-3 mt-4">
-            {[1,2,3,4].map(i => <div key={i} className="h-10 w-24 bg-gray-200 dark:bg-gray-800 rounded-lg" />)}
+const Skeleton = ({ dark }: { dark: boolean }) => {
+  const p = dark ? 'bg-gray-800' : 'bg-gray-200';
+  const c = dark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100';
+  return (
+    <div className="animate-pulse space-y-5">
+      <div className={cn('rounded-3xl overflow-hidden border', c)}>
+        <div className={cn('h-52 sm:h-64', p)} />
+        <div className="px-5 sm:px-8 pb-6">
+          <div className="flex items-end justify-between -mt-12 sm:-mt-16 mb-4">
+            <div className={cn('w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4', p, dark ? 'border-gray-900' : 'border-white')} />
+            <div className="flex gap-2 pb-1">{[1,2,3].map(i => <div key={i} className={cn('h-9 w-20 rounded-xl', p)} />)}</div>
+          </div>
+          <div className="space-y-3">
+            <div className={cn('h-7 w-52 rounded-lg', p)} />
+            <div className={cn('h-5 w-72 rounded-lg', p)} />
+            <div className="flex gap-4">{[1,2,3].map(i => <div key={i} className={cn('h-4 w-28 rounded', p)} />)}</div>
+          </div>
+          <div className={cn('grid grid-cols-4 gap-4 mt-6 pt-5 border-t', dark ? 'border-gray-800' : 'border-gray-100')}>
+            {[1,2,3,4].map(i => <div key={i} className="text-center space-y-2">
+              <div className={cn('h-10 w-10 mx-auto rounded-xl', p)} />
+              <div className={cn('h-5 w-12 mx-auto rounded', p)} />
+              <div className={cn('h-3 w-14 mx-auto rounded', p)} />
+            </div>)}
           </div>
         </div>
       </div>
-    </div>
-    <div className="h-12 bg-gray-200 dark:bg-gray-800 rounded-xl" />
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 space-y-4">
-        {[1,2,3].map(i => (
-          <div key={i} className={cn('rounded-2xl p-6 border', themeMode === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200')}>
-            <div className="h-5 bg-gray-200 dark:bg-gray-800 rounded w-1/4 mb-4" />
-            <div className="space-y-2">
-              {[1,2,3].map(j => <div key={j} className="h-4 bg-gray-200 dark:bg-gray-800 rounded" />)}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="space-y-4">
-        {[1,2].map(i => (
-          <div key={i} className={cn('rounded-2xl p-6 border', themeMode === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200')}>
-            <div className="h-5 bg-gray-200 dark:bg-gray-800 rounded w-1/3 mb-4" />
-            <div className="h-24 bg-gray-200 dark:bg-gray-800 rounded" />
-          </div>
-        ))}
+      <div className={cn('h-14 rounded-2xl', p)} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2 space-y-4">{[1,2,3].map(i => <div key={i} className={cn('p-6 rounded-2xl border', c)}><div className={cn('h-5 w-28 mb-4 rounded', p)} />{[1,2,3].map(j => <div key={j} className={cn('h-4 mb-2 rounded', p)} />)}</div>)}</div>
+        <div className="space-y-4">{[1,2].map(i => <div key={i} className={cn('p-6 rounded-2xl border', c)}><div className={cn('h-5 w-20 mb-4 rounded', p)} /><div className={cn('h-24 rounded-xl', p)} /></div>)}</div>
       </div>
     </div>
-  </div>
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CARD WRAPPER
-// ─────────────────────────────────────────────────────────────────────────────
-
-const Card = ({
-  children, className = '', themeMode, accent,
-}: { children: React.ReactNode; className?: string; themeMode: ThemeMode; accent?: boolean }) => (
-  <div className={cn(
-    'rounded-2xl p-5 sm:p-6 border transition-all duration-200',
-    themeMode === 'dark' ? 'bg-gray-900 border-gray-800 hover:border-gray-700' : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-md',
-    accent && 'ring-1 ring-[#FFD700]/30',
-    className,
-  )}>
-    {children}
-  </div>
-);
-
-const SectionTitle = ({ icon: Icon, title, themeMode }: { icon: React.ElementType; title: string; themeMode: ThemeMode }) => (
-  <div className="flex items-center gap-2 mb-4">
-    <div className={cn('p-1.5 rounded-lg', colorClasses.bg.blueLight)}>
-      <Icon className={cn('w-4 h-4', colorClasses.text.blue600)} />
-    </div>
-    <h3 className={cn('text-base sm:text-lg font-semibold', themeMode === 'dark' ? 'text-white' : 'text-gray-900')}>
-      {title}
-    </h3>
-  </div>
-);
+  );
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PROFILE HEADER
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface ProfileHeaderProps {
+const ProfileHeader = ({
+  profile, companyLogo, isOwn, isFollowing, followPending,
+  rc, onFollow, onShare, onMessage, onEdit, dark,
+}: {
   profile: DetailedProfile;
-  roleData: any;
-  isOwnProfile: boolean;
+  companyLogo: string;
+  isOwn: boolean;
   isFollowing: boolean;
-  followLoading: boolean;
-  roleConfig: RoleConfig;
-  onFollowToggle: () => void;
+  followPending: boolean;
+  rc: RoleCfg;
+  onFollow: () => void;
   onShare: () => void;
   onMessage: () => void;
   onEdit: () => void;
-  themeMode: ThemeMode;
-}
-
-const ProfileHeader: React.FC<ProfileHeaderProps> = ({
-  profile, roleData, isOwnProfile, isFollowing, followLoading,
-  roleConfig, onFollowToggle, onShare, onMessage, onEdit, themeMode,
+  dark: boolean;
 }) => {
   const router = useRouter();
   const [coverLoaded, setCoverLoaded] = useState(false);
-  const [avatarError, setAvatarError] = useState(false);
-  const [coverError, setCoverError] = useState(false);
+  const [coverErr, setCoverErr] = useState(false);
+  const [avatarErr, setAvatarErr] = useState(false);
 
-  const coverUrl = profile.coverPhoto || profile.user?.coverPhoto || null;
-  const avatarUrl = profile.user?.avatar || profile.avatar
-    || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.user.name)}&background=6366f1&color=fff&size=200&bold=true`;
+  const rawAvatar = getAvatarUrl(profile);
+  const rawCover = getCoverUrl(profile);
 
-  const isVerified = profile.verificationStatus === 'verified';
+  // For company/org, prefer their logo as avatar
+  const role = profile.user?.role;
+  const isCompanyOrOrg = role === 'company' || role === 'organization';
+  const effectiveAvatar = isCompanyOrOrg && companyLogo ? companyLogo : rawAvatar;
+
+  const avatarSrc = effectiveAvatar.includes('cloudinary') ? optimizeCld(effectiveAvatar, 300, 300) : effectiveAvatar;
+  const coverSrc = rawCover ? (rawCover.includes('cloudinary') ? optimizeCld(rawCover, 1400, 420) : rawCover) : null;
+
+  // Also use company banner/logo as cover if no profile cover
+  const isVerified = profile.verificationStatus === 'verified' || (profile as any).isVerified;
   const isPremium = profile.premium?.isPremium;
 
-  // Extra info by role
-  const getSubtitle = () => {
-    const r = profile.user.role;
-    if (r === 'candidate' && roleData?.experience?.[0]) {
-      const e = roleData.experience[0];
-      return `${e.position} at ${e.company}`;
-    }
-    if (r === 'freelancer' && roleData?.hourlyRate) {
-      return `$${roleData.hourlyRate}/hr · Freelancer`;
-    }
-    if (r === 'company') {
-      return roleData?.industry || 'Company';
-    }
-    if (r === 'organization') {
-      return roleData?.organizationType || 'Organization';
-    }
-    return profile.headline;
-  };
+  const stats = [
+    { l: 'Posts',     v: profile.socialStats?.postCount ?? 0,     icon: FileText, g: 'from-blue-500 to-cyan-500' },
+    { l: 'Followers', v: profile.socialStats?.followerCount ?? 0,  icon: Heart,    g: 'from-rose-500 to-pink-500' },
+    { l: 'Following', v: profile.socialStats?.followingCount ?? 0, icon: Users,    g: 'from-violet-500 to-purple-500' },
+    { l: 'Views',     v: profile.socialStats?.profileViews ?? 0,   icon: Eye,      g: 'from-emerald-500 to-teal-500' },
+  ];
 
   return (
-    <header className={cn(
-      'relative rounded-3xl overflow-hidden border shadow-2xl',
-      themeMode === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200',
-    )}>
+    <div className={cn('rounded-3xl overflow-hidden border shadow-xl', dark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200')}>
       {/* Cover */}
-      <div className="relative h-44 sm:h-56 lg:h-64 overflow-hidden bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-800 dark:to-gray-700">
-        {coverUrl && !coverError ? (
+      <div className="relative h-48 sm:h-60 lg:h-72 overflow-hidden">
+        {coverSrc && !coverErr ? (
           <>
             <img
-              src={coverUrl}
-              alt="cover"
-              className={cn('w-full h-full object-cover transition-opacity duration-700 hover:scale-105', coverLoaded ? 'opacity-100' : 'opacity-0')}
+              src={coverSrc} alt="cover"
+              className={cn('absolute inset-0 w-full h-full object-cover transition-all duration-700 hover:scale-105', coverLoaded ? 'opacity-100' : 'opacity-0')}
               onLoad={() => setCoverLoaded(true)}
-              onError={() => setCoverError(true)}
+              onError={() => { setCoverErr(true); setCoverLoaded(false); }}
             />
-            {!coverLoaded && <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-8 h-8 text-white animate-spin" /></div>}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+            {!coverLoaded && <div className="absolute inset-0 flex items-center justify-center bg-gray-200 dark:bg-gray-800"><Loader2 className="w-8 h-8 text-gray-400 animate-spin" /></div>}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
           </>
         ) : (
-          <div className={cn('absolute inset-0 bg-gradient-to-br', roleConfig.gradient)} />
+          <div className={cn('absolute inset-0 bg-gradient-to-br', rc.grad)}>
+            <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
+          </div>
         )}
-        {isOwnProfile && (
-          <button
-            onClick={() => router.push('/settings/cover')}
-            className="absolute bottom-4 right-4 px-3 py-1.5 bg-black/40 backdrop-blur-md rounded-lg text-white text-xs flex items-center gap-1.5 hover:bg-black/60 transition-all border border-white/20 z-10"
-          >
-            <Camera className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Change Cover</span>
+        {isOwn && (
+          <button onClick={() => router.push('/settings/cover')}
+            className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 backdrop-blur-md text-white text-xs font-medium hover:bg-black/60 transition-all border border-white/20">
+            <Camera className="w-3.5 h-3.5" /><span className="hidden sm:inline">Change Cover</span>
           </button>
         )}
       </div>
 
-      {/* Avatar + info */}
-      <div className="px-4 sm:px-6 lg:px-8 -mt-12 sm:-mt-14">
-        <div className="relative w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 shrink-0">
-          <div className="w-full h-full rounded-full border-4 border-white dark:border-gray-900 shadow-xl overflow-hidden bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-800 dark:to-gray-700">
-            {!avatarError ? (
-              <img
-                src={avatarUrl}
-                alt={profile.user.name}
-                className="w-full h-full object-cover"
-                onError={() => setAvatarError(true)}
-              />
-            ) : (
-              <div className={cn('w-full h-full flex items-center justify-center bg-gradient-to-br', roleConfig.gradient)}>
-                <span className="text-2xl font-bold text-white">{profile.user.name.charAt(0).toUpperCase()}</span>
-              </div>
+      {/* Avatar + actions */}
+      <div className="px-4 sm:px-6 lg:px-8">
+        <div className="flex items-end justify-between -mt-12 sm:-mt-16 mb-4">
+          <div className="relative">
+            <div className={cn(
+              'w-24 h-24 sm:w-32 sm:h-32 rounded-full overflow-hidden border-4 shadow-xl',
+              dark ? 'border-gray-900' : 'border-white',
+              isVerified ? `ring-2 ring-offset-2 ${rc.ring} ${dark ? 'ring-offset-gray-900' : 'ring-offset-white'}` : '',
+            )}>
+              {!avatarErr ? (
+                <img src={avatarSrc} alt={profile.user?.name} className="w-full h-full object-cover" onError={() => setAvatarErr(true)} />
+              ) : (
+                <div className={cn('w-full h-full flex items-center justify-center text-3xl sm:text-4xl font-black text-white bg-gradient-to-br', rc.grad)}>
+                  {(profile.user?.name ?? 'U').charAt(0).toUpperCase()}
+                </div>
+              )}
+            </div>
+            {isVerified && <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-1.5 border-2 border-white dark:border-gray-900 shadow-md"><CheckCircle className="w-3 h-3 text-white" /></div>}
+            {isPremium && <div className="absolute -top-1 -right-1 bg-gradient-to-br from-amber-400 to-yellow-500 rounded-full p-1.5 border-2 border-white dark:border-gray-900 shadow-md"><Crown className="w-3 h-3 text-white" /></div>}
+            {isOwn && (
+              <button onClick={() => router.push('/settings/avatar')} className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                <Camera className="w-6 h-6 text-white" />
+              </button>
             )}
           </div>
-          {isVerified && (
-            <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-1 shadow-lg border-2 border-white dark:border-gray-900">
-              <CheckCircle className="w-3 h-3 text-white" />
-            </div>
-          )}
-          {isPremium && (
-            <div className="absolute -top-1 -right-1 bg-gradient-to-r from-amber-400 to-yellow-500 rounded-full p-1 shadow-lg border-2 border-white dark:border-gray-900">
-              <Crown className="w-3 h-3 text-white" />
-            </div>
-          )}
-          {isOwnProfile && (
-            <button
-              onClick={() => router.push('/settings/avatar')}
-              className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
-            >
-              <Camera className="w-5 h-5 text-white" />
-            </button>
-          )}
-        </div>
-      </div>
 
-      {/* Info row */}
-      <div className="px-4 sm:px-6 lg:px-8 mt-3 pb-6">
-        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-          <div className="space-y-2 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className={cn('text-xl sm:text-2xl lg:text-3xl font-bold', themeMode === 'dark' ? 'text-white' : 'text-gray-900')}>
-                {profile.user.name}
-              </h1>
-              {isVerified && (
-                <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1">
-                  <CheckCircle className="w-3 h-3" /> Verified
-                </span>
-              )}
-              <span className={cn('px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1', roleConfig.lightBg, roleConfig.lightText, roleConfig.darkBg, roleConfig.darkText)}>
-                <roleConfig.icon className="w-3 h-3" />
-                {roleConfig.label}
-              </span>
-            </div>
-
-            {getSubtitle() && (
-              <p className={cn('text-sm sm:text-base font-medium', themeMode === 'dark' ? 'text-gray-300' : 'text-gray-700')}>
-                {getSubtitle()}
-              </p>
-            )}
-
-            {profile.headline && profile.headline !== getSubtitle() && (
-              <p className={cn('text-sm', themeMode === 'dark' ? 'text-gray-400' : 'text-gray-600')}>
-                {profile.headline}
-              </p>
-            )}
-
-            <div className="flex flex-wrap gap-3 text-xs text-gray-500 dark:text-gray-400 mt-1">
-              {profile.location && (
-                <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{profile.location}</span>
-              )}
-              {profile.website && (
-                <a
-                  href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
-                  target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 hover:text-blue-600 transition-colors"
-                >
-                  <Globe className="w-3.5 h-3.5" />{profile.website.replace(/^https?:\/\//, '').split('/')[0]}
-                  <ExternalLink className="w-2.5 h-2.5" />
-                </a>
-              )}
-              <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />Joined {formatDate(profile.createdAt)}</span>
-              {profile.lastActive && (
-                <span className="flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />Active recently
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={onShare} variant="outline" size="sm" className="flex items-center gap-1.5 text-xs sm:text-sm">
-              <Share2 className="w-4 h-4" /><span className="hidden sm:inline">Share</span>
+          <div className="flex flex-wrap gap-2 pb-1">
+            <Button onClick={onShare} variant="outline" size="sm" className={cn('h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm', dark ? 'border-gray-700 hover:bg-gray-800' : 'border-gray-200 hover:bg-gray-50')}>
+              <Share2 className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Share</span>
             </Button>
-            {!isOwnProfile ? (
+            {!isOwn ? (
               <>
-                <Button
-                  onClick={onFollowToggle}
-                  size="sm"
-                  disabled={followLoading}
-                  className={cn(
-                    'flex items-center gap-1.5 text-xs sm:text-sm transition-all',
+                <Button onClick={onFollow} size="sm" disabled={followPending}
+                  className={cn('h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm transition-all duration-300',
                     isFollowing
-                      ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 hover:bg-gray-200'
-                      : `bg-gradient-to-r ${roleConfig.gradient} text-white hover:shadow-lg hover:scale-105 ${roleConfig.shadowColor}`,
-                  )}
-                >
-                  {followLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : isFollowing ? <><UserCheck className="w-4 h-4" /><span className="hidden sm:inline">Following</span></> : <><UsersIcon className="w-4 h-4" /><span className="hidden sm:inline">Follow</span></>}
+                      ? cn('border', dark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-100 border-gray-200 text-gray-800')
+                      : `bg-gradient-to-r ${rc.grad} text-white border-0 hover:opacity-90 hover:shadow-lg hover:scale-105`,
+                  )}>
+                  {followPending ? <Loader2 className="w-4 h-4 animate-spin" /> : isFollowing
+                    ? <><UserCheck className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Following</span></>
+                    : <><Users2 className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Follow</span></>}
                 </Button>
-                <Button onClick={onMessage} variant="premium" size="sm" className="flex items-center gap-1.5 text-xs sm:text-sm">
-                  <MessageCircle className="w-4 h-4" /><span className="hidden sm:inline">Message</span>
+                <Button onClick={onMessage} variant="premium" size="sm" className="h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm">
+                  <MessageCircle className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Message</span>
                 </Button>
               </>
             ) : (
-              <Button onClick={onEdit} variant="premium" size="sm" className="flex items-center gap-1.5 text-xs sm:text-sm">
-                <Edit3 className="w-4 h-4" /><span className="hidden sm:inline">Edit Profile</span>
+              <Button onClick={onEdit} variant="premium" size="sm" className="h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm">
+                <Edit3 className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Edit Profile</span>
               </Button>
             )}
           </div>
         </div>
 
+        {/* Name / headline / meta */}
+        <div className="space-y-2 mb-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className={cn('text-xl sm:text-2xl lg:text-3xl font-black tracking-tight', dark ? 'text-white' : 'text-gray-900')}>{profile.user?.name}</h1>
+            {isVerified && (
+              <span className="px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 text-xs font-bold flex items-center gap-1">
+                <CheckCircle className="w-3 h-3" />Verified
+              </span>
+            )}
+            <span className={cn('px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5', rc.lightBg, rc.lightTxt, rc.darkBg, rc.darkTxt)}>
+              <rc.icon className="w-3 h-3" />{rc.label}
+            </span>
+          </div>
+
+          {profile.headline && (
+            <p className={cn('text-sm sm:text-base font-medium', dark ? 'text-gray-300' : 'text-gray-700')}>{profile.headline}</p>
+          )}
+
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+            {profile.location && <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 shrink-0" />{profile.location}</span>}
+            {profile.website && (
+              <a href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 hover:text-blue-600 transition-colors">
+                <Globe className="w-3.5 h-3.5 shrink-0" />
+                {profile.website.replace(/^https?:\/\//, '').split('/')[0]}
+                <ExternalLink className="w-3 h-3 opacity-60" />
+              </a>
+            )}
+            <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 shrink-0" />Joined {fmtDate(profile.createdAt)}</span>
+            {profile.lastActive && <span className="flex items-center gap-1.5"><span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />Recently active</span>}
+          </div>
+        </div>
+
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-gray-200 dark:border-gray-800">
-          {[
-            { label: 'Posts', value: profile.socialStats?.postCount || 0, icon: FileText, grad: 'from-blue-500 to-cyan-500' },
-            { label: 'Followers', value: profile.socialStats?.followerCount || 0, icon: Heart, grad: 'from-rose-500 to-pink-500' },
-            { label: 'Following', value: profile.socialStats?.followingCount || 0, icon: Users, grad: 'from-purple-500 to-violet-500' },
-            { label: 'Views', value: profile.socialStats?.profileViews || 0, icon: Eye, grad: 'from-emerald-500 to-green-500' },
-          ].map((s, i) => (
-            <div key={i} className="text-center group cursor-default">
-              <div className={cn('inline-flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br mb-1.5 shadow-sm group-hover:shadow-md transition-all group-hover:scale-105', s.grad)}>
-                <s.icon className="w-4 h-4 text-white" />
+        <div className={cn('grid grid-cols-4 gap-3 py-5 border-t', dark ? 'border-gray-800' : 'border-gray-100')}>
+          {stats.map((s, i) => (
+            <div key={i} className="group text-center cursor-default">
+              <div className={cn('w-9 h-9 sm:w-10 sm:h-10 mx-auto mb-2 rounded-xl bg-gradient-to-br flex items-center justify-center shadow-sm group-hover:scale-110 group-hover:shadow-md transition-all duration-200', s.g)}>
+                <s.icon className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
               </div>
-              <div className={cn('text-lg sm:text-xl font-bold', themeMode === 'dark' ? 'text-white' : 'text-gray-900')}>
-                {formatNumber(s.value)}
-              </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">{s.label}</div>
+              <p className={cn('text-lg sm:text-xl font-black', dark ? 'text-white' : 'text-gray-900')}>{fmtNum(s.v)}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{s.l}</p>
             </div>
           ))}
         </div>
       </div>
-    </header>
+    </div>
   );
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GENERIC SECTIONS
+// GENERAL SECTIONS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BioSection = ({ profile, themeMode }: { profile: DetailedProfile; themeMode: ThemeMode }) => {
-  const [expanded, setExpanded] = useState(false);
-  if (!profile.bio) return null;
-  const isLong = profile.bio.length > 280;
+const BioSection = ({ bio, dark }: { bio: string; dark: boolean }) => {
+  const [exp, setExp] = useState(false);
+  const long = bio.length > 300;
   return (
-    <Card themeMode={themeMode}>
-      <SectionTitle icon={Info} title="About" themeMode={themeMode} />
-      <p className={cn('text-sm sm:text-base leading-relaxed whitespace-pre-line', themeMode === 'dark' ? 'text-gray-300' : 'text-gray-700')}>
-        {isLong && !expanded ? `${profile.bio.slice(0, 280)}…` : profile.bio}
+    <Card dark={dark}>
+      <SH icon={Info} title="About" dark={dark} />
+      <p className={cn('text-sm sm:text-base leading-relaxed whitespace-pre-line', dark ? 'text-gray-300' : 'text-gray-700')}>
+        {long && !exp ? `${bio.slice(0, 300)}…` : bio}
       </p>
-      {isLong && (
-        <button onClick={() => setExpanded(e => !e)} className="mt-2 text-sm font-medium text-blue-600 flex items-center gap-1 hover:underline">
-          {expanded ? <><ChevronUp className="w-4 h-4" />Show less</> : <><ChevronDown className="w-4 h-4" />Read more</>}
+      {long && (
+        <button onClick={() => setExp(e => !e)} className="mt-3 text-sm font-semibold text-blue-600 flex items-center gap-1 hover:underline">
+          {exp ? <><ChevronUp className="w-4 h-4" />Less</> : <><ChevronDown className="w-4 h-4" />More</>}
         </button>
       )}
     </Card>
   );
 };
 
-const SkillsSection = ({ skills, themeMode, roleConfig }: { skills: string[]; themeMode: ThemeMode; roleConfig: RoleConfig }) => {
-  const [expanded, setExpanded] = useState(false);
+const SkillChips = ({ skills, dark }: { skills: string[]; dark: boolean }) => {
+  const [exp, setExp] = useState(false);
+  const limit = 14;
   if (!skills?.length) return null;
-  const shown = expanded ? skills : skills.slice(0, 12);
   return (
-    <Card themeMode={themeMode}>
-      <SectionTitle icon={Code} title="Skills" themeMode={themeMode} />
+    <Card dark={dark}>
+      <SH icon={Code} title="Skills" dark={dark} />
       <div className="flex flex-wrap gap-2">
-        {shown.map((s, i) => (
-          <span key={i} className={cn('px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium border', themeMode === 'dark' ? 'bg-blue-900/20 text-blue-300 border-blue-800' : 'bg-blue-50 text-blue-700 border-blue-200')}>
-            {s}
-          </span>
+        {(exp ? skills : skills.slice(0, limit)).map((s, i) => (
+          <span key={i} className={cn('px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold border hover:scale-105 transition-transform cursor-default', dark ? 'bg-blue-900/20 text-blue-300 border-blue-800' : 'bg-blue-50 text-blue-700 border-blue-200')}>{s}</span>
         ))}
-        {!expanded && skills.length > 12 && (
-          <button onClick={() => setExpanded(true)} className={cn('px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium border', themeMode === 'dark' ? 'bg-gray-800 text-gray-300 border-gray-700' : 'bg-gray-100 text-gray-600 border-gray-200')}>
-            +{skills.length - 12} more
+        {!exp && skills.length > limit && (
+          <button onClick={() => setExp(true)} className={cn('px-3 py-1.5 rounded-xl text-xs font-semibold border', dark ? 'bg-gray-800 text-gray-400 border-gray-700' : 'bg-gray-100 text-gray-500 border-gray-200')}>
+            +{skills.length - limit}
           </button>
         )}
       </div>
@@ -507,33 +443,32 @@ const SkillsSection = ({ skills, themeMode, roleConfig }: { skills: string[]; th
   );
 };
 
-const ExperienceSection = ({ experiences, themeMode }: { experiences: any[]; themeMode: ThemeMode }) => {
+// Experience uses profileService.Experience type
+const ExperienceSection = ({ experiences, dark }: { experiences: Experience[]; dark: boolean }) => {
   if (!experiences?.length) return null;
   return (
-    <Card themeMode={themeMode}>
-      <SectionTitle icon={Briefcase} title="Experience" themeMode={themeMode} />
+    <Card dark={dark}>
+      <SH icon={Briefcase} title="Experience" dark={dark} />
       <div className="space-y-5">
         {experiences.map((e, i) => (
           <div key={i} className="relative pl-5 border-l-2 border-gray-200 dark:border-gray-700">
-            <div className="absolute -left-1.5 top-1.5 w-2.5 h-2.5 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500" />
-            <div className="space-y-0.5">
-              <h4 className={cn('font-semibold text-sm sm:text-base', themeMode === 'dark' ? 'text-white' : 'text-gray-900')}>{e.position}</h4>
-              <p className={cn('text-xs sm:text-sm font-medium', colorClasses.text.blue600)}>{e.company}</p>
-              {e.location && <p className={cn('text-xs', themeMode === 'dark' ? 'text-gray-500' : 'text-gray-500')}><MapPin className="w-3 h-3 inline mr-1" />{e.location}</p>}
-              <p className="text-xs text-gray-500 flex items-center gap-1">
-                <Calendar className="w-3 h-3" />
-                {formatDate(e.startDate, { month: 'short', year: 'numeric' })} – {e.current ? 'Present' : e.endDate ? formatDate(e.endDate, { month: 'short', year: 'numeric' }) : ''}
-                {e.current && <span className="ml-2 px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">Current</span>}
-              </p>
-              {e.description && <p className={cn('text-xs sm:text-sm mt-1 line-clamp-3', themeMode === 'dark' ? 'text-gray-400' : 'text-gray-600')}>{e.description}</p>}
-              {e.skills?.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {e.skills.slice(0, 5).map((sk: string, j: number) => (
-                    <span key={j} className="px-2 py-0.5 text-xs rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">{sk}</span>
-                  ))}
-                </div>
-              )}
-            </div>
+            <div className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500" />
+            <p className={cn('font-bold text-sm sm:text-base', dark ? 'text-white' : 'text-gray-900')}>{e.position}</p>
+            <p className="text-xs sm:text-sm font-semibold text-blue-600 dark:text-blue-400">{e.company}</p>
+            {e.location && <p className="text-xs text-gray-500"><MapPin className="w-3 h-3 inline mr-1" />{e.location}</p>}
+            <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+              <Calendar className="w-3 h-3" />
+              {fmtDate(e.startDate, { month: 'short', year: 'numeric' })} –{' '}
+              {e.current ? <span className="text-green-600 font-semibold">Present</span> : fmtDate(e.endDate, { month: 'short', year: 'numeric' })}
+            </p>
+            {e.description && <p className={cn('text-xs sm:text-sm mt-1 line-clamp-3', dark ? 'text-gray-400' : 'text-gray-600')}>{e.description}</p>}
+            {e.skills?.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {e.skills.slice(0, 5).map((sk, j) => (
+                  <span key={j} className={cn('px-2 py-0.5 text-xs rounded-lg', dark ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600')}>{sk}</span>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -541,22 +476,24 @@ const ExperienceSection = ({ experiences, themeMode }: { experiences: any[]; the
   );
 };
 
-const EducationSection = ({ educations, themeMode }: { educations: any[]; themeMode: ThemeMode }) => {
+const EducationSection = ({ educations, dark }: { educations: Education[]; dark: boolean }) => {
   if (!educations?.length) return null;
   return (
-    <Card themeMode={themeMode}>
-      <SectionTitle icon={GraduationCap} title="Education" themeMode={themeMode} />
+    <Card dark={dark}>
+      <SH icon={GraduationCap} title="Education" dark={dark} />
       <div className="space-y-5">
         {educations.map((e, i) => (
           <div key={i} className="relative pl-5 border-l-2 border-gray-200 dark:border-gray-700">
-            <div className="absolute -left-1.5 top-1.5 w-2.5 h-2.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
-            <h4 className={cn('font-semibold text-sm sm:text-base', themeMode === 'dark' ? 'text-white' : 'text-gray-900')}>{e.degree}</h4>
-            <p className={cn('text-xs sm:text-sm', themeMode === 'dark' ? 'text-gray-300' : 'text-gray-700')}>{e.institution}</p>
-            {e.field && <p className={cn('text-xs', themeMode === 'dark' ? 'text-gray-400' : 'text-gray-500')}>{e.field}</p>}
+            <div className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
+            <p className={cn('font-bold text-sm sm:text-base', dark ? 'text-white' : 'text-gray-900')}>{e.degree}</p>
+            <p className={cn('text-xs sm:text-sm', dark ? 'text-gray-300' : 'text-gray-700')}>{e.institution}</p>
+            {e.field && <p className={cn('text-xs', dark ? 'text-gray-400' : 'text-gray-500')}>{e.field}</p>}
             <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
               <Calendar className="w-3 h-3" />
-              {formatDate(e.startDate, { month: 'short', year: 'numeric' })} – {e.current ? 'Present' : e.endDate ? formatDate(e.endDate, { month: 'short', year: 'numeric' }) : ''}
+              {fmtDate(e.startDate, { month: 'short', year: 'numeric' })} –{' '}
+              {e.current ? 'Present' : fmtDate(e.endDate, { month: 'short', year: 'numeric' })}
             </p>
+            {e.description && <p className={cn('text-xs sm:text-sm mt-1', dark ? 'text-gray-400' : 'text-gray-600')}>{e.description}</p>}
           </div>
         ))}
       </div>
@@ -564,24 +501,24 @@ const EducationSection = ({ educations, themeMode }: { educations: any[]; themeM
   );
 };
 
-const CertificationsSection = ({ certs, themeMode }: { certs: any[]; themeMode: ThemeMode }) => {
+const CertsSection = ({ certs, dark }: { certs: Certification[]; dark: boolean }) => {
   if (!certs?.length) return null;
   return (
-    <Card themeMode={themeMode}>
-      <SectionTitle icon={Award} title="Certifications" themeMode={themeMode} />
+    <Card dark={dark}>
+      <SH icon={Award} title="Certifications" dark={dark} />
       <div className="space-y-4">
         {certs.map((c, i) => (
           <div key={i} className="flex gap-3">
-            <div className={cn('shrink-0 w-10 h-10 rounded-xl flex items-center justify-center', colorClasses.bg.amberLight)}>
-              <Trophy className={cn('w-5 h-5', colorClasses.text.amber600)} />
+            <div className={cn('shrink-0 w-10 h-10 rounded-xl flex items-center justify-center', dark ? 'bg-amber-900/30' : 'bg-amber-50')}>
+              <Trophy className={cn('w-5 h-5', dark ? 'text-amber-400' : 'text-amber-600')} />
             </div>
-            <div>
-              <h4 className={cn('font-semibold text-sm', themeMode === 'dark' ? 'text-white' : 'text-gray-900')}>{c.name}</h4>
-              <p className={cn('text-xs', themeMode === 'dark' ? 'text-gray-400' : 'text-gray-600')}>{c.issuer}</p>
-              <p className="text-xs text-gray-500">{formatDate(c.issueDate, { month: 'short', year: 'numeric' })}</p>
+            <div className="min-w-0">
+              <p className={cn('font-semibold text-sm', dark ? 'text-white' : 'text-gray-900')}>{c.name}</p>
+              <p className={cn('text-xs', dark ? 'text-gray-400' : 'text-gray-600')}>{c.issuer}</p>
+              <p className="text-xs text-gray-500">{fmtDate(c.issueDate, { month: 'short', year: 'numeric' })}</p>
               {c.credentialUrl && (
                 <a href={c.credentialUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 flex items-center gap-1 mt-0.5 hover:underline">
-                  <ExtLink className="w-3 h-3" /> Verify credential
+                  <ExternalLink className="w-3 h-3" />Verify credential
                 </a>
               )}
             </div>
@@ -592,27 +529,27 @@ const CertificationsSection = ({ certs, themeMode }: { certs: any[]; themeMode: 
   );
 };
 
-const SocialLinksSection = ({ socialLinks, themeMode }: { socialLinks: SocialLinks | Record<string, string>; themeMode: ThemeMode }) => {
-  const platforms: Record<string, { icon: React.ElementType; label: string; color: string }> = {
-    linkedin: { icon: Linkedin, label: 'LinkedIn', color: 'bg-[#0A66C2]' },
-    twitter: { icon: Twitter, label: 'Twitter', color: 'bg-[#1DA1F2]' },
-    github: { icon: Github, label: 'GitHub', color: 'bg-gray-800 dark:bg-gray-700' },
-    facebook: { icon: Facebook, label: 'Facebook', color: 'bg-[#1877F2]' },
-    instagram: { icon: Instagram, label: 'Instagram', color: 'bg-gradient-to-br from-purple-500 to-pink-500' },
-    youtube: { icon: Youtube, label: 'YouTube', color: 'bg-[#FF0000]' },
+const SocialLinksSection = ({ links, dark }: { links: SocialLinks | Record<string, string>; dark: boolean }) => {
+  const P: Record<string, { icon: React.ElementType; label: string; bg: string }> = {
+    linkedin: { icon: Linkedin,  label: 'LinkedIn',  bg: 'bg-[#0A66C2]' },
+    twitter:  { icon: Twitter,   label: 'Twitter',   bg: 'bg-[#1DA1F2]' },
+    github:   { icon: Github,    label: 'GitHub',    bg: dark ? 'bg-gray-700' : 'bg-gray-800' },
+    facebook: { icon: Facebook,  label: 'Facebook',  bg: 'bg-[#1877F2]' },
+    instagram:{ icon: Instagram, label: 'Instagram', bg: 'bg-gradient-to-br from-purple-500 to-pink-500' },
+    youtube:  { icon: Youtube,   label: 'YouTube',   bg: 'bg-[#FF0000]' },
   };
-  const valid = Object.entries(socialLinks || {}).filter(([k, v]) => v && platforms[k]);
+  const valid = Object.entries(links ?? {}).filter(([k, v]) => v && P[k]);
   if (!valid.length) return null;
   return (
-    <Card themeMode={themeMode}>
-      <SectionTitle icon={Globe} title="Connect" themeMode={themeMode} />
+    <Card dark={dark}>
+      <SH icon={Globe} title="Connect" dark={dark} />
       <div className="flex flex-wrap gap-2">
         {valid.map(([k, url]) => {
-          const p = platforms[k];
+          const p = P[k];
           return (
-            <a key={k} href={(url as string).startsWith('http') ? url as string : `https://${url}`} target="_blank" rel="noopener noreferrer"
-              className={cn('inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-white text-xs font-medium transition-all hover:scale-105 hover:shadow-md', p.color)}
-            >
+            <a key={k} href={(url as string).startsWith('http') ? url as string : `https://${url}`}
+              target="_blank" rel="noopener noreferrer"
+              className={cn('inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-white text-xs font-semibold hover:scale-105 hover:shadow-md transition-all duration-200', p.bg)}>
               <p.icon className="w-3.5 h-3.5" />{p.label}
             </a>
           );
@@ -622,74 +559,58 @@ const SocialLinksSection = ({ socialLinks, themeMode }: { socialLinks: SocialLin
   );
 };
 
-const LanguagesSection = ({ languages, themeMode }: { languages: any[]; themeMode: ThemeMode }) => {
-  if (!languages?.length) return null;
-  return (
-    <Card themeMode={themeMode}>
-      <SectionTitle icon={Globe} title="Languages" themeMode={themeMode} />
-      <div className="space-y-2">
-        {languages.map((l, i) => (
-          <div key={i} className="flex items-center justify-between">
-            <span className={cn('text-sm', themeMode === 'dark' ? 'text-gray-300' : 'text-gray-700')}>{l.language}</span>
-            <span className={cn('px-2 py-0.5 text-xs rounded-full capitalize', colorClasses.bg.blueLight, colorClasses.text.blue600)}>{l.proficiency}</span>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
-// ROLE-SPECIFIC SECTIONS
+// ROLE-SPECIFIC SIDEBAR SECTIONS
+// Using typed roleData from each service
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** CANDIDATE — CV, portfolio note, target roles, open to work */
-const CandidateExtras = ({ profile, roleData, themeMode }: { profile: DetailedProfile; roleData: any; themeMode: ThemeMode }) => {
-  const openToWork = roleData?.openToWork ?? profile.roleSpecific?.openToWork;
-  const targetRoles = roleData?.jobPreferences?.desiredPositions || profile.roleSpecific?.jobPreferences?.desiredPositions || [];
-  const salaryMin = roleData?.jobPreferences?.salaryExpectation?.min || profile.roleSpecific?.jobPreferences?.salaryExpectation?.min;
-  const salaryMax = roleData?.jobPreferences?.salaryExpectation?.max || profile.roleSpecific?.jobPreferences?.salaryExpectation?.max;
-  const employmentTypes = roleData?.jobPreferences?.employmentType || profile.roleSpecific?.jobPreferences?.employmentType || [];
-  const workLocation = roleData?.jobPreferences?.workLocation || profile.roleSpecific?.jobPreferences?.workLocation;
+/** CANDIDATE sidebar – uses CandidateProfile from candidateService */
+const CandidateSidebar = ({ roleData, dark }: { roleData: CandidateProfile | null; dark: boolean }) => {
+  // CandidateProfile doesn't have openToWork/jobPreferences in its interface,
+  // but the API may return extra fields — we access via (rd as any) to be safe
+  const rd = roleData as any;
+  const openToWork: boolean = rd?.openToWork ?? false;
+  const desiredPositions: string[] = rd?.jobPreferences?.desiredPositions ?? [];
+  const salaryMin: number | undefined = rd?.jobPreferences?.salaryExpectation?.min;
+  const salaryMax: number | undefined = rd?.jobPreferences?.salaryExpectation?.max;
+  const employmentTypes: string[] = rd?.jobPreferences?.employmentType ?? [];
+  const workLocation: string | undefined = rd?.jobPreferences?.workLocation;
+
+  const hasPrefs = salaryMin || employmentTypes.length > 0 || workLocation;
 
   return (
     <div className="space-y-4">
-      {/* Open to work banner */}
       {openToWork && (
-        <div className={cn('rounded-2xl p-4 border flex items-center gap-3 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20', themeMode === 'dark' ? 'border-green-800' : 'border-green-200')}>
+        <div className={cn('rounded-2xl p-4 border flex items-center gap-3', dark ? 'bg-green-900/20 border-green-800' : 'bg-green-50 border-green-200')}>
           <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center shrink-0">
             <Zap className="w-5 h-5 text-white" />
           </div>
           <div>
-            <p className={cn('font-semibold', themeMode === 'dark' ? 'text-white' : 'text-gray-900')}>Open to work</p>
-            {targetRoles.length > 0 && <p className="text-xs text-gray-600 dark:text-gray-400">{targetRoles.slice(0, 2).join(' · ')}</p>}
+            <p className={cn('font-bold text-sm', dark ? 'text-white' : 'text-gray-900')}>Open to work</p>
+            {desiredPositions.length > 0 && <p className="text-xs text-gray-500">{desiredPositions.slice(0, 2).join(' · ')}</p>}
           </div>
         </div>
       )}
-
-      {/* Job preferences */}
-      {(salaryMin || employmentTypes.length > 0 || workLocation) && (
-        <Card themeMode={themeMode}>
-          <SectionTitle icon={Target} title="Job Preferences" themeMode={themeMode} />
+      {hasPrefs && (
+        <Card dark={dark}>
+          <SH icon={Target} title="Job Preferences" dark={dark} />
           <div className="space-y-2 text-sm">
             {salaryMin && (
               <div className="flex items-center gap-2">
-                <DollarSign className="w-4 h-4 text-green-600" />
-                <span className={themeMode === 'dark' ? 'text-gray-300' : 'text-gray-700'}>
-                  ${salaryMin.toLocaleString()}{salaryMax ? ` – $${salaryMax.toLocaleString()}` : '+'} / yr
-                </span>
+                <DollarSign className="w-4 h-4 text-green-600 shrink-0" />
+                <span className={dark ? 'text-gray-300' : 'text-gray-700'}>${salaryMin.toLocaleString()}{salaryMax ? ` – $${salaryMax.toLocaleString()}` : '+'}/yr</span>
               </div>
             )}
             {workLocation && (
               <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-blue-600" />
-                <span className={cn('capitalize', themeMode === 'dark' ? 'text-gray-300' : 'text-gray-700')}>{workLocation}</span>
+                <MapPin className="w-4 h-4 text-blue-600 shrink-0" />
+                <span className={cn('capitalize', dark ? 'text-gray-300' : 'text-gray-700')}>{workLocation}</span>
               </div>
             )}
             {employmentTypes.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1">
-                {employmentTypes.map((t: string, i: number) => (
-                  <span key={i} className={cn('px-2 py-0.5 text-xs rounded-full capitalize', colorClasses.bg.blueLight, colorClasses.text.blue600)}>{t}</span>
+                {employmentTypes.map((t, i) => (
+                  <span key={i} className={cn('px-2 py-0.5 text-xs rounded-full capitalize font-medium', dark ? 'bg-blue-900/30 text-blue-300' : 'bg-blue-50 text-blue-700')}>{t}</span>
                 ))}
               </div>
             )}
@@ -700,193 +621,165 @@ const CandidateExtras = ({ profile, roleData, themeMode }: { profile: DetailedPr
   );
 };
 
-/** FREELANCER — hourly rate, availability, portfolio highlights */
-const FreelancerExtras = ({ profile, roleData, themeMode }: { profile: DetailedProfile; roleData: any; themeMode: ThemeMode }) => {
-  const hourlyRate = roleData?.hourlyRate || profile.roleSpecific?.hourlyRate;
-  const availability = roleData?.availability || profile.roleSpecific?.availability;
-  const portfolio = roleData?.portfolio || [];
+/** FREELANCER sidebar – uses UserProfile (freelancerService) */
+const FreelancerSidebar = ({ roleData, dark }: { roleData: FreelancerUserProfile | null; dark: boolean }) => {
+  // hourlyRate and availability live inside freelancerProfile sub-object
+  const fp = roleData?.freelancerProfile;
+  const hourlyRate = fp?.hourlyRate;
+  const availability = fp?.availability;
+  // portfolio comes from top-level portfolio array in UserProfile
+  const portfolio: PortfolioItem[] = roleData?.portfolio ?? [];
 
   return (
     <div className="space-y-4">
-      {/* Rate card */}
       {hourlyRate && (
-        <div className={cn('rounded-2xl p-5 border bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20', themeMode === 'dark' ? 'border-amber-800' : 'border-amber-200')}>
-          <div className="flex items-center gap-3 mb-2">
-            <DollarSign className="w-5 h-5 text-amber-600" />
-            <span className={cn('font-semibold', themeMode === 'dark' ? 'text-white' : 'text-gray-900')}>Hourly Rate</span>
-          </div>
-          <p className={cn('text-3xl font-bold', themeMode === 'dark' ? 'text-white' : 'text-gray-900')}>
+        <div className={cn('rounded-2xl p-5 border', dark ? 'bg-amber-900/20 border-amber-800' : 'bg-amber-50 border-amber-200')}>
+          <p className={cn('text-xs font-bold uppercase tracking-wide mb-1', dark ? 'text-amber-400' : 'text-amber-600')}>Hourly Rate</p>
+          <p className={cn('text-3xl font-black', dark ? 'text-white' : 'text-gray-900')}>
             ${hourlyRate}<span className="text-sm font-normal text-gray-500 ml-1">/hr</span>
           </p>
         </div>
       )}
-      {/* Availability */}
       {availability && (
-        <Card themeMode={themeMode}>
-          <div className="flex items-center gap-3">
-            <div className={cn('w-3 h-3 rounded-full', availability === 'available' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500')} />
-            <span className={cn('text-sm font-medium capitalize', themeMode === 'dark' ? 'text-white' : 'text-gray-900')}>
-              {availability === 'available' ? 'Available for work' : availability}
+        <Card dark={dark}>
+          <div className="flex items-center gap-2.5">
+            <span className={cn('w-3 h-3 rounded-full shrink-0', availability === 'available' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500')} />
+            <span className={cn('text-sm font-semibold capitalize', dark ? 'text-gray-200' : 'text-gray-800')}>
+              {availability === 'available' ? 'Available for work' : availability.replace('-', ' ')}
             </span>
           </div>
         </Card>
       )}
-      {/* Portfolio grid */}
       {portfolio.length > 0 && (
-        <Card themeMode={themeMode}>
-          <SectionTitle icon={Layers} title="Portfolio" themeMode={themeMode} />
-          <div className="grid grid-cols-2 gap-3">
-            {portfolio.slice(0, 4).map((item: any, i: number) => (
-              <div key={i} className={cn('rounded-xl overflow-hidden border group cursor-pointer', themeMode === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50')}>
-                {item.mediaUrl ? (
-                  <img src={item.mediaUrl} alt={item.title} className="w-full h-24 object-cover group-hover:scale-105 transition-transform duration-300" />
-                ) : (
-                  <div className={cn('h-24 flex items-center justify-center bg-gradient-to-br', ROLE_CONFIG.freelancer.gradient)}>
-                    <Layers className="w-8 h-8 text-white/60" />
-                  </div>
-                )}
-                <div className="p-2">
-                  <p className={cn('text-xs font-semibold truncate', themeMode === 'dark' ? 'text-white' : 'text-gray-900')}>{item.title}</p>
-                  {item.technologies?.length > 0 && (
-                    <p className="text-xs text-gray-500 truncate">{item.technologies.slice(0, 2).join(' · ')}</p>
+        <Card dark={dark}>
+          <SH icon={Layers} title="Portfolio" dark={dark} />
+          <div className="grid grid-cols-2 gap-2.5">
+            {portfolio.slice(0, 4).map((item, i) => {
+              const thumb = item.mediaUrls?.[0] ?? '';
+              return (
+                <div key={i} className={cn('rounded-xl overflow-hidden border group cursor-pointer', dark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50')}>
+                  {thumb ? (
+                    <img src={thumb} alt={item.title} className="w-full h-20 object-cover group-hover:scale-110 transition-transform duration-300" />
+                  ) : (
+                    <div className="h-20 flex items-center justify-center bg-gradient-to-br from-amber-400 to-orange-500">
+                      <Layers className="w-7 h-7 text-white/60" />
+                    </div>
                   )}
+                  <div className="p-2">
+                    <p className={cn('text-xs font-semibold truncate', dark ? 'text-white' : 'text-gray-900')}>{item.title}</p>
+                    {item.technologies?.length && (
+                      <p className="text-xs text-gray-500 truncate">{item.technologies.slice(0, 2).join(' · ')}</p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
-          {portfolio.length > 4 && (
-            <p className="text-xs text-center text-gray-500 mt-2">+{portfolio.length - 4} more projects</p>
-          )}
+          {portfolio.length > 4 && <p className="text-xs text-center text-gray-500 mt-2">+{portfolio.length - 4} more projects</p>}
         </Card>
       )}
     </div>
   );
 };
 
-/** COMPANY — overview, industry, products */
-const CompanyExtras = ({ profile, roleData, themeMode }: { profile: DetailedProfile; roleData: any; themeMode: ThemeMode }) => {
-  const products = roleData?.products || profile.roleSpecific?.products || [];
-  const industry = roleData?.industry || profile.roleSpecific?.industry;
-  const website = roleData?.website || profile.website;
+/** COMPANY sidebar – uses CompanyProfile (companyService) */
+const CompanySidebar = ({ roleData, profileWebsite, dark }: { roleData: CompanyProfile | null; profileWebsite?: string; dark: boolean }) => {
+  const industry = roleData?.industry;
+  const website = roleData?.website ?? profileWebsite;
   const phone = roleData?.phone;
   const verified = roleData?.verified;
+  const description = roleData?.description;
 
   return (
     <div className="space-y-4">
-      {/* Company info */}
-      <Card themeMode={themeMode}>
-        <SectionTitle icon={Building2} title="Company Info" themeMode={themeMode} />
-        <div className="space-y-2 text-sm">
+      <Card dark={dark}>
+        <SH icon={Building2} title="Company Info" dark={dark} />
+        <div className="space-y-2.5 text-sm">
+          {description && (
+            <p className={cn('text-xs sm:text-sm line-clamp-3', dark ? 'text-gray-400' : 'text-gray-600')}>{description}</p>
+          )}
           {industry && (
             <div className="flex items-center gap-2">
-              <Briefcase className="w-4 h-4 text-teal-600" />
-              <span className={themeMode === 'dark' ? 'text-gray-300' : 'text-gray-700'}>{industry}</span>
+              <Briefcase className="w-4 h-4 text-teal-600 shrink-0" />
+              <span className={dark ? 'text-gray-300' : 'text-gray-700'}>{industry}</span>
             </div>
           )}
           {website && (
             <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4 text-blue-600" />
+              <Globe className="w-4 h-4 text-blue-600 shrink-0" />
               <a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noopener noreferrer"
-                className="text-blue-600 hover:underline truncate">
-                {website.replace(/^https?:\/\//, '')}
-              </a>
+                className="text-blue-600 hover:underline truncate">{website.replace(/^https?:\/\//, '')}</a>
             </div>
           )}
           {phone && (
             <div className="flex items-center gap-2">
-              <Phone className="w-4 h-4 text-green-600" />
-              <span className={themeMode === 'dark' ? 'text-gray-300' : 'text-gray-700'}>{phone}</span>
+              <Phone className="w-4 h-4 text-green-600 shrink-0" />
+              <span className={dark ? 'text-gray-300' : 'text-gray-700'}>{phone}</span>
             </div>
           )}
           {verified && (
-            <div className="flex items-center gap-2 mt-2 p-2 rounded-lg bg-green-50 dark:bg-green-900/20">
+            <div className="flex items-center gap-2 mt-2 p-2 rounded-xl bg-green-50 dark:bg-green-900/20">
               <CheckCircle className="w-4 h-4 text-green-600" />
-              <span className="text-xs text-green-700 dark:text-green-400 font-medium">Verified Company</span>
+              <span className="text-xs text-green-700 dark:text-green-400 font-semibold">Verified Company</span>
             </div>
           )}
         </div>
       </Card>
-
-      {/* Products */}
-      {products.length > 0 && (
-        <Card themeMode={themeMode}>
-          <SectionTitle icon={Package} title="Products & Services" themeMode={themeMode} />
-          <div className="space-y-3">
-            {products.slice(0, 4).map((p: any, i: number) => (
-              <div key={i} className={cn('flex gap-3 p-3 rounded-xl', themeMode === 'dark' ? 'bg-gray-800' : 'bg-gray-50')}>
-                {p.imageUrl && (
-                  <img src={p.imageUrl} alt={p.name} className="w-12 h-12 rounded-lg object-cover shrink-0" />
-                )}
-                <div className="min-w-0">
-                  <p className={cn('font-medium text-sm truncate', themeMode === 'dark' ? 'text-white' : 'text-gray-900')}>{p.name}</p>
-                  {p.price && <p className="text-xs text-green-600 font-semibold">${p.price}</p>}
-                  {p.description && <p className={cn('text-xs line-clamp-2', themeMode === 'dark' ? 'text-gray-400' : 'text-gray-500')}>{p.description}</p>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
     </div>
   );
 };
 
-/** ORGANIZATION — mission, type, contact */
-const OrganizationExtras = ({ profile, roleData, themeMode }: { profile: DetailedProfile; roleData: any; themeMode: ThemeMode }) => {
-  const mission = roleData?.mission || profile.roleSpecific?.mission;
+/** ORGANIZATION sidebar – uses OrganizationProfile (organizationService) */
+const OrgSidebar = ({ roleData, profileWebsite, dark }: { roleData: OrganizationProfile | null; profileWebsite?: string; dark: boolean }) => {
+  const mission = roleData?.mission;
   const orgType = roleData?.organizationType;
+  const website = roleData?.website ?? profileWebsite;
   const phone = roleData?.phone;
   const secondaryPhone = roleData?.secondaryPhone;
-  const website = roleData?.website || profile.website;
   const verified = roleData?.verified;
+  const description = roleData?.description;
 
   return (
     <div className="space-y-4">
-      {/* Mission */}
       {mission && (
-        <Card themeMode={themeMode}>
-          <SectionTitle icon={Target} title="Our Mission" themeMode={themeMode} />
-          <p className={cn('text-sm leading-relaxed italic', themeMode === 'dark' ? 'text-gray-300' : 'text-gray-700')}>
-            "{mission}"
-          </p>
+        <Card dark={dark}>
+          <SH icon={Target} title="Our Mission" dark={dark} />
+          <p className={cn('text-sm leading-relaxed italic', dark ? 'text-gray-300' : 'text-gray-700')}>`{mission}`</p>
         </Card>
       )}
-
-      {/* Org info */}
-      <Card themeMode={themeMode}>
-        <SectionTitle icon={Handshake} title="Organization Info" themeMode={themeMode} />
-        <div className="space-y-2 text-sm">
+      <Card dark={dark}>
+        <SH icon={Handshake} title="Organization Info" dark={dark} />
+        <div className="space-y-2.5 text-sm">
+          {description && <p className={cn('text-xs line-clamp-3 mb-2', dark ? 'text-gray-400' : 'text-gray-600')}>{description}</p>}
           {orgType && (
             <div className="flex items-center gap-2">
-              <Tag className="w-4 h-4 text-indigo-600" />
-              <span className={cn('capitalize', themeMode === 'dark' ? 'text-gray-300' : 'text-gray-700')}>{orgType}</span>
+              <Tag className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span className={cn('capitalize', dark ? 'text-gray-300' : 'text-gray-700')}>{orgType}</span>
             </div>
           )}
           {website && (
             <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4 text-blue-600" />
+              <Globe className="w-4 h-4 text-blue-600 shrink-0" />
               <a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noopener noreferrer"
-                className="text-blue-600 hover:underline truncate">
-                {website.replace(/^https?:\/\//, '')}
-              </a>
+                className="text-blue-600 hover:underline truncate">{website.replace(/^https?:\/\//, '')}</a>
             </div>
           )}
           {phone && (
             <div className="flex items-center gap-2">
-              <Phone className="w-4 h-4 text-green-600" />
-              <span className={themeMode === 'dark' ? 'text-gray-300' : 'text-gray-700'}>{phone}</span>
+              <Phone className="w-4 h-4 text-green-600 shrink-0" />
+              <span className={dark ? 'text-gray-300' : 'text-gray-700'}>{phone}</span>
             </div>
           )}
           {secondaryPhone && (
             <div className="flex items-center gap-2">
-              <Phone className="w-4 h-4 text-green-500" />
-              <span className={themeMode === 'dark' ? 'text-gray-400' : 'text-gray-500'}>{secondaryPhone}</span>
+              <Phone className="w-4 h-4 text-green-500 shrink-0" />
+              <span className={dark ? 'text-gray-400' : 'text-gray-500'}>{secondaryPhone}</span>
             </div>
           )}
           {verified && (
-            <div className="flex items-center gap-2 mt-2 p-2 rounded-lg bg-green-50 dark:bg-green-900/20">
+            <div className="flex items-center gap-2 mt-2 p-2 rounded-xl bg-green-50 dark:bg-green-900/20">
               <CheckCircle className="w-4 h-4 text-green-600" />
-              <span className="text-xs text-green-700 dark:text-green-400 font-medium">Verified Organization</span>
+              <span className="text-xs text-green-700 dark:text-green-400 font-semibold">Verified Organization</span>
             </div>
           )}
         </div>
@@ -896,284 +789,376 @@ const OrganizationExtras = ({ profile, roleData, themeMode }: { profile: Detaile
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PROFILE CONTENT
+// OVERVIEW GRID
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ProfileContent: React.FC<{ userId: string; themeMode: ThemeMode }> = ({ userId, themeMode }) => {
+const Overview = ({
+  profile, candidateData, freelancerData, companyData, orgData, dark,
+}: {
+  profile: DetailedProfile;
+  candidateData: CandidateProfile | null;
+  freelancerData: FreelancerUserProfile | null;
+  companyData: CompanyProfile | null;
+  orgData: OrganizationProfile | null;
+  dark: boolean;
+}) => {
+  const role = profile.user?.role;
+
+  // Skills: DetailedProfile has top-level skills[] OR roleSpecific.skills[]
+  const skills: string[] =
+    (profile as any).skills?.length > 0
+      ? (profile as any).skills
+      : profile.roleSpecific?.skills ?? [];
+
+  // Experience & Education: from roleSpecific (typed as any in PublicProfile)
+  // OR from candidate/freelancer roleData (which has proper typed arrays)
+  const experience: Experience[] =
+    (candidateData?.experience ?? freelancerData?.experience ?? profile.roleSpecific?.experience ?? []) as Experience[];
+
+  const education: Education[] =
+    (candidateData?.education ?? freelancerData?.education ?? profile.roleSpecific?.education ?? []) as Education[];
+
+  // Certifications: DetailedProfile has top-level certifications[]
+  const certifications: Certification[] =
+    (profile as any).certifications?.length > 0
+      ? (profile as any).certifications
+      : (candidateData?.certifications ?? (freelancerData as any)?.certifications ?? []);
+
+  const langs: Language[] = profile.languages ?? [];
+  const interests: string[] = profile.interests ?? [];
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6">
+      {/* Main column */}
+      <div className="lg:col-span-2 space-y-5">
+        {profile.bio && <BioSection bio={profile.bio} dark={dark} />}
+        {skills.length > 0 && <SkillChips skills={skills} dark={dark} />}
+        {(role === 'candidate' || role === 'freelancer') && experience.length > 0 && <ExperienceSection experiences={experience} dark={dark} />}
+        {(role === 'candidate' || role === 'freelancer') && education.length > 0 && <EducationSection educations={education} dark={dark} />}
+        {certifications.length > 0 && <CertsSection certs={certifications} dark={dark} />}
+        {langs.length > 0 && (
+          <Card dark={dark}>
+            <SH icon={Globe} title="Languages" dark={dark} />
+            <div className="space-y-2">
+              {langs.map((l, i) => (
+                <div key={i} className="flex items-center justify-between">
+                  <span className={cn('text-sm', dark ? 'text-gray-300' : 'text-gray-700')}>{l.language}</span>
+                  <span className={cn('px-2.5 py-0.5 text-xs rounded-full font-semibold capitalize', dark ? 'bg-blue-900/30 text-blue-300' : 'bg-blue-50 text-blue-700')}>{l.proficiency}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+      </div>
+
+      {/* Sidebar */}
+      <div className="space-y-5">
+        <SocialLinksSection links={profile.socialLinks ?? {}} dark={dark} />
+        {role === 'candidate' && <CandidateSidebar roleData={candidateData} dark={dark} />}
+        {role === 'freelancer' && <FreelancerSidebar roleData={freelancerData} dark={dark} />}
+        {role === 'company' && <CompanySidebar roleData={companyData} profileWebsite={profile.website} dark={dark} />}
+        {role === 'organization' && <OrgSidebar roleData={orgData} profileWebsite={profile.website} dark={dark} />}
+        {interests.length > 0 && (
+          <Card dark={dark}>
+            <SH icon={Lightbulb} title="Interests" dark={dark} />
+            <div className="flex flex-wrap gap-2">
+              {interests.map((t, i) => (
+                <span key={i} className={cn('px-3 py-1.5 rounded-xl text-xs font-semibold', dark ? 'bg-rose-900/30 text-rose-300' : 'bg-rose-50 text-rose-600')}>{t}</span>
+              ))}
+            </div>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROFILE CONTENT (orchestration + data loading)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ProfileContent: React.FC<{ userId: string; dark: boolean }> = ({ userId, dark }) => {
   const router = useRouter();
   const { user: currentUser } = useAuth();
 
   const [profile, setProfile] = useState<DetailedProfile | null>(null);
-  const [roleData, setRoleData] = useState<any>(null);
+  // Typed role data states
+  const [candidateData, setCandidateData] = useState<CandidateProfile | null>(null);
+  const [freelancerData, setFreelancerData] = useState<FreelancerUserProfile | null>(null);
+  const [companyData, setCompanyData] = useState<CompanyProfile | null>(null);
+  const [orgData, setOrgData] = useState<OrganizationProfile | null>(null);
+  // Company/Org logo for avatar
+  const [companyLogo, setCompanyLogo] = useState('');
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
-  const [followLoading, setFollowLoading] = useState(false);
+  const [followPending, setFollowPending] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [previousTab, setPreviousTab] = useState('');
 
-  const isOwnProfile = useMemo(() => currentUser?._id === userId, [currentUser, userId]);
-  const roleConfig = useMemo(() => ROLE_CONFIG[profile?.user?.role || 'candidate'] || ROLE_CONFIG.candidate, [profile?.user?.role]);
+  const isOwn = useMemo(() => currentUser?._id === userId, [currentUser, userId]);
+  const rc = useMemo(() => ROLE_CFG[profile?.user?.role ?? 'candidate'] ?? ROLE_CFG.candidate, [profile?.user?.role]);
 
   useEffect(() => { if (activeTab !== previousTab) setPreviousTab(activeTab); }, [activeTab]);
-  useEffect(() => { if (userId) fetchProfile(); }, [userId]);
-  useEffect(() => { if (profile && currentUser && !isOwnProfile) checkFollow(); }, [profile, currentUser, isOwnProfile]);
 
-  const fetchProfile = async () => {
+  // Load profile
+  useEffect(() => {
+    if (!userId) return;
+    setLoading(true);
+    setError(null);
+
+    profileService.getPublicProfile(userId)
+      .then((p) => {
+        const dp = p as DetailedProfile;
+        setProfile(dp);
+        loadRoleData(dp);
+      })
+      .catch((err) => {
+        console.error('Profile load error:', err);
+        setError(err?.message || 'Profile not found');
+      })
+      .finally(() => setLoading(false));
+  }, [userId]);
+
+  const loadRoleData = useCallback(async (p: DetailedProfile) => {
+    const uid = p.user?._id;
+    if (!uid) return;
+
     try {
-      setLoading(true);
-      setError(null);
-      const p = await profileService.getPublicProfile(userId) as DetailedProfile;
-      setProfile(p);
-
-      // Fetch role-specific data with graceful fallback (never crash on 404)
-      try {
-        let rd: any = null;
-        const uid = p.user._id;
-        switch (p.user.role) {
-          case 'company':
-            rd = await companyService.getPublicCompany(uid); // returns null on 404
-            if (!rd) rd = { name: p.user.name, description: p.bio, products: [] };
-            break;
-          case 'organization':
-            rd = await organizationService.getPublicOrganization(uid); // returns null on 404
-            if (!rd) rd = { name: p.user.name, description: p.bio };
-            break;
-          case 'candidate':
-            try { rd = await candidateService.getPublicCandidateProfile(uid); } catch { rd = null; }
-            if (!rd) rd = { skills: p.roleSpecific?.skills || [], experience: p.roleSpecific?.experience || [], education: p.roleSpecific?.education || [] };
-            break;
-          case 'freelancer':
-            try {
-              rd = await freelancerService.getPublicProfile(uid);
-              try {
-                const port = await freelancerService.getPublicPortfolio(uid, { limit: 10 });
-                rd = { ...rd, portfolio: port.items || [] };
-              } catch { rd = { ...rd, portfolio: [] }; }
-            } catch {
-              rd = { skills: p.roleSpecific?.skills || [], portfolio: [] };
-            }
-            break;
+      switch (p.user?.role) {
+        case 'company': {
+          const cd = await companyService.getPublicCompany(uid);
+          setCompanyData(cd);
+          if (cd?.logoFullUrl || cd?.logoUrl) setCompanyLogo(cd.logoFullUrl ?? cd.logoUrl ?? '');
+          break;
         }
-        setRoleData(rd);
-      } catch (e) {
-        console.warn('Role data fetch failed gracefully:', e);
+        case 'organization': {
+          const od = await organizationService.getPublicOrganization(uid);
+          setOrgData(od);
+          if (od?.logoFullUrl || od?.logoUrl) setCompanyLogo(od.logoFullUrl ?? od.logoUrl ?? '');
+          break;
+        }
+        case 'candidate': {
+          const cand = await candidateService.getPublicCandidateProfile(uid);
+          setCandidateData(cand);
+          break;
+        }
+        case 'freelancer': {
+          try {
+            const fp = await freelancerService.getPublicProfile(uid);
+            // Merge portfolio items from getPublicPortfolio as well
+            try {
+              const port = await freelancerService.getPublicPortfolio(uid, { limit: 12 });
+              setFreelancerData({ ...fp, portfolio: port.items ?? fp.portfolio });
+            } catch {
+              setFreelancerData(fp);
+            }
+          } catch (e) {
+            console.warn('Freelancer public profile failed:', e);
+          }
+          break;
+        }
       }
-    } catch (e: any) {
-      setError(e.message || 'Failed to load profile');
-      toast.error('Failed to load profile');
-    } finally {
-      setLoading(false);
+    } catch (e) {
+      console.warn('Role data load failed (non-critical):', e);
     }
-  };
+  }, []);
 
-  const checkFollow = async () => {
-    if (!profile?.user?._id) return;
-    try {
-      const status = await followService.getFollowStatus(profile.user._id, toFollowTargetType(profile.user.role));
-      setIsFollowing(status.following);
-    } catch (e) { /* silent */ }
-  };
+  // Follow status
+  useEffect(() => {
+    if (!profile || !currentUser || isOwn) return;
+    followService
+      .getFollowStatus(profile.user._id, toFollowTarget(profile.user.role))
+      .then(s => setIsFollowing(s.following))
+      .catch(() => {});
+  }, [profile, currentUser, isOwn]);
 
-  const handleFollowToggle = async () => {
-    if (!profile?.user?._id) return;
+  const handleFollow = async () => {
+    if (!profile) return;
     if (!currentUser) { router.push(`/login?redirect=${encodeURIComponent(router.asPath)}`); return; }
-    if (isOwnProfile) return;
-
     const prev = isFollowing;
-    // optimistic
     setIsFollowing(!isFollowing);
-    setProfile(p => p ? { ...p, socialStats: { ...p.socialStats, followerCount: !isFollowing ? p.socialStats.followerCount + 1 : Math.max(0, p.socialStats.followerCount - 1) } } : null);
-
+    setProfile(p => p ? {
+      ...p,
+      socialStats: {
+        ...p.socialStats,
+        followerCount: !isFollowing
+          ? (p.socialStats?.followerCount ?? 0) + 1
+          : Math.max(0, (p.socialStats?.followerCount ?? 0) - 1),
+      },
+    } : null);
     try {
-      setFollowLoading(true);
-      const result = await followService.toggleFollow(profile.user._id, {
-        targetType: toFollowTargetType(profile.user.role),
-      });
-      setIsFollowing(result.following);
-      toast.success(result.following ? 'Following!' : 'Unfollowed');
+      setFollowPending(true);
+      const r = await followService.toggleFollow(profile.user._id, { targetType: toFollowTarget(profile.user.role) });
+      setIsFollowing(r.following);
+      toast.success(r.following ? '✓ Following!' : 'Unfollowed');
     } catch (e: any) {
       setIsFollowing(prev);
-      setProfile(p => p ? { ...p, socialStats: { ...p.socialStats, followerCount: prev ? p.socialStats.followerCount + 1 : Math.max(0, p.socialStats.followerCount - 1) } } : null);
-      toast.error(e.message || 'Action failed');
+      setProfile(p => p ? {
+        ...p,
+        socialStats: {
+          ...p.socialStats,
+          followerCount: prev
+            ? (p.socialStats?.followerCount ?? 0) + 1
+            : Math.max(0, (p.socialStats?.followerCount ?? 0) - 1),
+        },
+      } : null);
+      toast.error(e?.message || 'Action failed');
     } finally {
-      setFollowLoading(false);
+      setFollowPending(false);
     }
   };
 
   const handleShare = async () => {
     const url = window.location.href;
-    if (navigator.share) {
-      try { await navigator.share({ title: profile?.user.name, url }); return; } catch { /* fall through */ }
-    }
-    navigator.clipboard.writeText(url);
+    if (navigator.share) { try { await navigator.share({ title: profile?.user?.name, url }); return; } catch { /* fallthrough */ } }
+    await navigator.clipboard.writeText(url);
     toast.success('Link copied!');
   };
 
   const handleMessage = () => {
     if (!currentUser) { router.push(`/login?redirect=${encodeURIComponent(router.asPath)}`); return; }
-    router.push(`/dashboard/messages?user=${profile?.user._id}`);
+    router.push(`/dashboard/messages?user=${profile?.user?._id}`);
   };
 
-  const handleEdit = () => router.push(`/social/${profile?.user.role}/profile/edit`);
+  const handleEdit = () => router.push(`/social/${profile?.user?.role}/profile/edit`);
 
-  if (loading) return <ProfileSkeleton themeMode={themeMode} />;
+  // ── Render ──────────────────────────────────────────────────────────────────
+  if (loading) return <Skeleton dark={dark} />;
 
-  if (error || !profile) return (
-    <div className="text-center py-16">
-      <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-red-500 to-pink-500 flex items-center justify-center">
-        <AlertCircle className="w-10 h-10 text-white" />
+  if (error || !profile) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-red-500 to-pink-500 flex items-center justify-center mb-5 shadow-xl">
+          <AlertCircle className="w-10 h-10 text-white" />
+        </div>
+        <h2 className={cn('text-2xl font-black mb-2', dark ? 'text-white' : 'text-gray-900')}>Profile not found</h2>
+        <p className={cn('text-sm mb-8 max-w-sm', dark ? 'text-gray-400' : 'text-gray-500')}>
+          {error ?? 'This profile does not exist or is not publicly accessible.'}
+        </p>
+        <div className="flex gap-3 flex-wrap justify-center">
+          <Button variant="outline" size="sm" onClick={() => router.back()}><ArrowLeft className="w-4 h-4 mr-2" />Go back</Button>
+          <Button variant="premium" size="sm" onClick={() => router.push('/')}>Home</Button>
+        </div>
       </div>
-      <h3 className={cn('text-2xl font-bold mb-2', themeMode === 'dark' ? 'text-white' : 'text-gray-900')}>Profile Not Found</h3>
-      <p className={cn('text-sm mb-6 max-w-md mx-auto', themeMode === 'dark' ? 'text-gray-400' : 'text-gray-600')}>{error || 'This profile does not exist or is private.'}</p>
-      <div className="flex gap-3 justify-center">
-        <Button onClick={() => router.back()} variant="outline" size="sm"><ArrowLeft className="w-4 h-4 mr-2" />Go Back</Button>
-        <Button onClick={() => router.push('/')} variant="premium" size="sm">Home</Button>
-      </div>
-    </div>
-  );
-
-  const role = profile.user.role;
-  const skills = roleData?.skills || profile.roleSpecific?.skills || [];
-  const experience = roleData?.experience || profile.roleSpecific?.experience || [];
-  const education = roleData?.education || profile.roleSpecific?.education || [];
-  const certifications = roleData?.certifications || profile.roleSpecific?.certifications || [];
+    );
+  }
 
   const componentProps = {
-    profileData: profile, socialStats: profile.socialStats,
-    userId: profile.user._id, isOwnProfile, currentUserId: currentUser?._id,
-    companyId: profile.user._id, companyName: profile.user.name,
-    candidateData: roleData, freelancerData: roleData, companyData: roleData,
-    portfolioItems: roleData?.portfolio || [], freelancerName: profile.user.name, themeMode,
+    profileData: profile,
+    socialStats: profile.socialStats,
+    userId: profile.user?._id,
+    isOwnProfile: isOwn,
+    currentUserId: currentUser?._id,
+    companyId: profile.user?._id,
+    companyName: profile.user?.name,
+    candidateData: candidateData as any,
+    freelancerData: freelancerData as any,
+    companyData: companyData as any,
+    portfolioItems: freelancerData?.portfolio ?? [],
+    freelancerName: profile.user?.name,
+    themeMode: (dark ? 'dark' : 'light') as ThemeMode,
   };
 
   return (
-    <div className="space-y-6 pb-20">
-      {/* Header */}
+    <div className="space-y-5 pb-24">
+      {/* ── HEADER ───────────────────────────────────────────── */}
       <ProfileHeader
-        profile={profile} roleData={roleData} isOwnProfile={isOwnProfile}
-        isFollowing={isFollowing} followLoading={followLoading} roleConfig={roleConfig}
-        onFollowToggle={handleFollowToggle} onShare={handleShare}
-        onMessage={handleMessage} onEdit={handleEdit} themeMode={themeMode}
+        profile={profile}
+        companyLogo={companyLogo}
+        isOwn={isOwn}
+        isFollowing={isFollowing}
+        followPending={followPending}
+        rc={rc}
+        onFollow={handleFollow}
+        onShare={handleShare}
+        onMessage={handleMessage}
+        onEdit={handleEdit}
+        dark={dark}
       />
 
-      {/* Non-owner action strip */}
-      {!isOwnProfile && (
-        <PublicProfileActions
-          targetId={profile.user._id}
-          targetType={toFollowTargetType(role) as any}
-          targetName={profile.user.name}
-          targetData={profile}
-          initialIsFollowing={isFollowing}
-          onAction={(action) => { if (action === 'follow' || action === 'unfollow') handleFollowToggle(); }}
-          themeMode={themeMode}
-          variant="compact"
-        />
-      )}
-
-      {/* Tabs */}
+      {/* ── TABS ─────────────────────────────────────────────── */}
       <ProfileTabs
-        activeTab={activeTab} onTabChange={setActiveTab}
-        userRole={role} profileType={role as any}
-        variant="underline" showIcons isOwnProfile={isOwnProfile}
-        isPremium={profile.premium?.isPremium || false}
-        stats={{ posts: profile.socialStats?.postCount || 0, followers: profile.socialStats?.followerCount || 0, following: profile.socialStats?.followingCount || 0, connections: profile.socialStats?.connectionCount || 0, profileViews: profile.socialStats?.profileViews || 0, products: roleData?.products?.length || 0, portfolio: roleData?.portfolio?.length || 0, applications: 0 }}
-        componentProps={componentProps} themeMode={themeMode}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        userRole={profile.user?.role}
+        profileType={profile.user?.role as any}
+        variant="underline"
+        showIcons
+        isOwnProfile={isOwn}
+        isPremium={profile.premium?.isPremium ?? false}
+        stats={{
+          posts: profile.socialStats?.postCount ?? 0,
+          followers: profile.socialStats?.followerCount ?? 0,
+          following: profile.socialStats?.followingCount ?? 0,
+          connections: profile.socialStats?.connectionCount ?? 0,
+          profileViews: profile.socialStats?.profileViews ?? 0,
+          products: 0,
+          portfolio: freelancerData?.portfolio?.length ?? 0,
+          applications: 0,
+        }}
+        componentProps={componentProps}
+        themeMode={dark ? 'dark' : 'light'}
       />
 
-      {/* Tab content */}
-      <TabTransitionWrapper activeTab={activeTab} previousTab={previousTab} themeMode={themeMode}>
+      {/* ── TAB CONTENT ──────────────────────────────────────── */}
+      <TabTransitionWrapper activeTab={activeTab} previousTab={previousTab} themeMode={dark ? 'dark' : 'light'}>
         {activeTab === 'overview' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left */}
-            <div className="lg:col-span-2 space-y-5">
-              <BioSection profile={profile} themeMode={themeMode} />
-              {skills.length > 0 && <SkillsSection skills={skills} themeMode={themeMode} roleConfig={roleConfig} />}
-              {(role === 'candidate' || role === 'freelancer') && experience.length > 0 && <ExperienceSection experiences={experience} themeMode={themeMode} />}
-              {(role === 'candidate' || role === 'freelancer') && education.length > 0 && <EducationSection educations={education} themeMode={themeMode} />}
-              {certifications.length > 0 && <CertificationsSection certs={certifications} themeMode={themeMode} />}
-              {profile.languages?.length > 0 && <LanguagesSection languages={profile.languages} themeMode={themeMode} />}
-            </div>
-
-            {/* Right sidebar */}
-            <div className="space-y-5">
-              <SocialLinksSection socialLinks={profile.socialLinks || {}} themeMode={themeMode} />
-
-              {/* Role-specific sidebar extras */}
-              {role === 'candidate' && <CandidateExtras profile={profile} roleData={roleData} themeMode={themeMode} />}
-              {role === 'freelancer' && <FreelancerExtras profile={profile} roleData={roleData} themeMode={themeMode} />}
-              {role === 'company' && <CompanyExtras profile={profile} roleData={roleData} themeMode={themeMode} />}
-              {role === 'organization' && <OrganizationExtras profile={profile} roleData={roleData} themeMode={themeMode} />}
-
-              {/* Interests */}
-              {profile.interests?.length > 0 && (
-                <Card themeMode={themeMode}>
-                  <SectionTitle icon={Lightbulb} title="Interests" themeMode={themeMode} />
-                  <div className="flex flex-wrap gap-2">
-                    {profile.interests.map((t, i) => (
-                      <span key={i} className={cn('px-3 py-1 rounded-full text-xs font-medium', colorClasses.bg.roseLight, colorClasses.text.rose)}>{t}</span>
-                    ))}
-                  </div>
-                </Card>
-              )}
-            </div>
-          </div>
+          <Overview
+            profile={profile}
+            candidateData={candidateData}
+            freelancerData={freelancerData}
+            companyData={companyData}
+            orgData={orgData}
+            dark={dark}
+          />
         ) : (
           <ProfileTabContent
-            activeTab={activeTab} userRole={role} profileType={role as any}
-            isOwnProfile={isOwnProfile} isPremium={profile.premium?.isPremium || false}
-            profileData={profile} socialStats={profile.socialStats}
-            componentProps={componentProps} themeMode={themeMode}
+            activeTab={activeTab}
+            userRole={profile.user?.role}
+            profileType={profile.user?.role as any}
+            isOwnProfile={isOwn}
+            isPremium={profile.premium?.isPremium ?? false}
+            profileData={profile}
+            socialStats={profile.socialStats}
+            componentProps={componentProps}
+            themeMode={dark ? 'dark' : 'light'}
           />
         )}
       </TabTransitionWrapper>
-
-      {/* Mobile quick actions */}
-      {!isOwnProfile && (
-        <>
-          <QuickActions
-            targetId={profile.user._id} targetType={toFollowTargetType(role) as any}
-            onAction={(a) => { if (a === 'follow' || a === 'unfollow') handleFollowToggle(); else if (a === 'message') handleMessage(); else if (a === 'share') handleShare(); }}
-            className="lg:hidden fixed bottom-4 left-4 z-50" themeMode={themeMode}
-          />
-          <MobileFloatingActions
-            targetId={profile.user._id} targetType={toFollowTargetType(role) as any}
-            onAction={(a) => { if (a === 'follow' || a === 'unfollow') handleFollowToggle(); else if (a === 'message') handleMessage(); else if (a === 'share') handleShare(); }}
-            themeMode={themeMode}
-          />
-        </>
-      )}
     </div>
   );
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PAGE
+// PAGE SHELL
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PublicProfilePage: React.FC = () => {
   const router = useRouter();
   const { user: currentUser } = useAuth();
-  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
+  const [dark, setDark] = useState(false);
+
   const { id } = router.query;
-  const profileUserId = Array.isArray(id) ? id[0] : id;
+  const userId = Array.isArray(id) ? id[0] : (id ?? '');
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    setThemeMode(mq.matches ? 'dark' : 'light');
-    const h = (e: MediaQueryListEvent) => setThemeMode(e.matches ? 'dark' : 'light');
+    setDark(mq.matches);
+    const h = (e: MediaQueryListEvent) => setDark(e.matches);
     mq.addEventListener('change', h);
     return () => mq.removeEventListener('change', h);
   }, []);
 
-  const content = <ProfileContent userId={profileUserId || ''} themeMode={themeMode} />;
+  const inner = <ProfileContent userId={userId} dark={dark} />;
 
   if (currentUser) {
     return (
       <SocialDashboardLayout>
         <RoleThemeProvider overrideRole={currentUser.role as any}>
-          <div className={cn('min-h-screen', themeMode === 'dark' ? 'bg-gray-950' : 'bg-gray-50')}>
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">{content}</div>
+          <div className={cn('min-h-screen', dark ? 'bg-gray-950' : 'bg-gray-50')}>
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">{inner}</div>
           </div>
         </RoleThemeProvider>
       </SocialDashboardLayout>
@@ -1182,34 +1167,27 @@ const PublicProfilePage: React.FC = () => {
 
   return (
     <RoleThemeProvider overrideRole="candidate">
-      <div className={cn('min-h-screen', themeMode === 'dark' ? 'bg-gray-950' : 'bg-gray-50')}>
-        {/* Public nav */}
-        <nav className={cn('sticky top-0 z-40 backdrop-blur-xl border-b', themeMode === 'dark' ? 'bg-gray-900/90 border-gray-800' : 'bg-white/90 border-gray-200')}>
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-14 sm:h-16">
-            <Button variant="ghost" onClick={() => router.push('/')} className="flex items-center gap-2 text-sm">
-              <ArrowLeft className="w-4 h-4" /><span className="hidden sm:inline">Home</span>
+      <div className={cn('min-h-screen', dark ? 'bg-gray-950' : 'bg-gray-50')}>
+        <nav className={cn('sticky top-0 z-40 border-b backdrop-blur-xl', dark ? 'bg-gray-900/90 border-gray-800' : 'bg-white/90 border-gray-200')}>
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
+            <Button variant="ghost" size="sm" onClick={() => router.back()} className="gap-1.5">
+              <ArrowLeft className="w-4 h-4" /><span className="hidden sm:inline">Back</span>
             </Button>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setThemeMode(m => m === 'light' ? 'dark' : 'light')}
-                className={cn('p-2 rounded-lg transition-colors', themeMode === 'dark' ? 'bg-gray-800 text-yellow-400' : 'bg-gray-100 text-gray-700')}
-              >
-                {themeMode === 'dark' ? '☀️' : '🌙'}
+              <button onClick={() => setDark(d => !d)}
+                className={cn('w-9 h-9 rounded-lg flex items-center justify-center text-sm transition-colors', dark ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200')}>
+                {dark ? '☀️' : '🌙'}
               </button>
-              <Button variant="outline" size="sm" onClick={() => router.push('/login')} className="text-xs sm:text-sm px-3">Sign In</Button>
-              <Button size="sm" onClick={() => router.push('/register')} className="bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs sm:text-sm px-3">Join Free</Button>
+              <Button variant="outline" size="sm" onClick={() => router.push('/login')} className="text-xs">Sign in</Button>
+              <Button size="sm" onClick={() => router.push('/register')} className="bg-gradient-to-r from-blue-600 to-purple-600 text-white text-xs border-0">Join free</Button>
             </div>
           </div>
         </nav>
-
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">{content}</main>
-
-        <footer className={cn('border-t py-5', themeMode === 'dark' ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white/50')}>
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center text-xs text-gray-500">
-            © {new Date().getFullYear()} Banana Social &nbsp;·&nbsp;
-            <Link href="/privacy" className="hover:text-gray-900 dark:hover:text-white">Privacy</Link>&nbsp;·&nbsp;
-            <Link href="/terms" className="hover:text-gray-900 dark:hover:text-white">Terms</Link>
-          </div>
+        <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">{inner}</main>
+        <footer className={cn('border-t py-5 text-center text-xs text-gray-500', dark ? 'border-gray-800' : 'border-gray-100')}>
+          © {new Date().getFullYear()} Banana Social &nbsp;·&nbsp;
+          <Link href="/privacy" className="hover:underline">Privacy</Link>&nbsp;·&nbsp;
+          <Link href="/terms" className="hover:underline">Terms</Link>
         </footer>
       </div>
     </RoleThemeProvider>
