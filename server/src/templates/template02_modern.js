@@ -14,7 +14,6 @@ module.exports = {
     const avatar = avatarTag(d.avatar, d.fullName, 90, '#2AA198');
     return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;600;700&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'DM Sans',sans-serif;background:#fff;color:#1a1a1a;padding:48px 56px;max-width:840px;margin:auto}
   .header{display:flex;align-items:center;gap:28px;border-bottom:3px solid #2AA198;padding-bottom:24px;margin-bottom:32px}

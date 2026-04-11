@@ -9,7 +9,7 @@ import {
   Bookmark, BarChart3, Send, Trash2, Edit, Plus, AlertTriangle, Loader2,
   ChevronRight, Lock, FileStack, Zap, CheckCircle, Clock, Globe,
   DollarSign, Star, Award, Target, Shield, Hash, Phone, Mail,
-  Building, ClipboardList
+  Building, ClipboardList, Briefcase
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
@@ -30,7 +30,6 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/Alert';
 import { Progress } from '@/components/ui/Progress';
 import { AttachmentListSection } from './AttachmentList';
-import { ProposalsSection } from './Proposals';
 import { AddendumList } from './AddendumForm';
 import InviteCompaniesModal from '@/components/tenders2.0/InviteCompaniesModal';
 import BidCard from '@/components/bids/BidCard';
@@ -39,6 +38,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/social/ui/Alert-Dialog';
 import TenderStatusBadge from './TenderStatusBadge';
+import { useTenderProposals } from '@/hooks/useProposal';
+import { ProposalListCard } from '@/components/proposals/ProposalListCard';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 interface OwnerTenderDetailsProps {
@@ -326,6 +327,76 @@ const LoadingSkeleton = () => (
 
 const fadeInUp = { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -8 } };
 
+// ─── Freelance Proposals Tab ──────────────────────────────────────────────────
+const FreelanceProposalsTab: React.FC<{
+  tenderId: string;
+  ownerRole: 'company' | 'organization';
+  tenderStatus: string;
+  totalApplications: number;
+}> = ({ tenderId, ownerRole, tenderStatus, totalApplications }) => {
+  const router = useRouter();
+  const { data, isLoading } = useTenderProposals(tenderId, { limit: 50 });
+  const proposals = data?.proposals ?? [];
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className={cn('h-24 rounded-xl animate-pulse', colorClasses.bg.secondary)} />
+        ))}
+      </div>
+    );
+  }
+
+  const detailBase = `/${ownerRole}/tenders/proposals`;
+
+  return (
+    <div className="space-y-4">
+      {/* Summary */}
+      <div className={cn('flex items-center justify-between p-3 rounded-xl border', colorClasses.bg.secondary, colorClasses.border.gray200)}>
+        <div className="flex items-center gap-2">
+          <Users className="w-4 h-4 text-blue-500" />
+          <p className={cn('text-sm font-semibold', colorClasses.text.primary)}>
+            {proposals.length} proposal{proposals.length !== 1 ? 's' : ''} received
+          </p>
+        </div>
+        {proposals.length > 0 && (
+          <button
+            onClick={() => router.push(`/dashboard/${ownerRole}/tenders/proposals?tenderId=${tenderId}`)}
+            className="text-xs font-semibold text-[#F1BB03] hover:underline flex items-center gap-1"
+          >
+            View all <ChevronRight className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+
+      {proposals.length === 0 ? (
+        <div className={cn('flex flex-col items-center gap-3 py-10 rounded-xl border', colorClasses.border.gray200, colorClasses.bg.secondary)}>
+          <Users className={cn('w-12 h-12 opacity-20', colorClasses.text.muted)} />
+          <p className={cn('font-semibold', colorClasses.text.primary)}>No proposals yet</p>
+          <p className={cn('text-sm', colorClasses.text.muted)}>
+            {tenderStatus === 'published'
+              ? 'Freelancers will appear here once they apply.'
+              : 'Publish your tender to start receiving proposals.'}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {proposals.map((proposal) => (
+            <div
+              key={proposal._id}
+              onClick={() => router.push(`/dashboard/${detailBase}/${proposal._id}`)}
+              className="cursor-pointer"
+            >
+              <ProposalListCard proposal={proposal as any} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export const OwnerTenderDetails: React.FC<OwnerTenderDetailsProps> = ({
   tenderId, tenderType, ownerRole = 'company', onEdit, onDelete, className,
@@ -408,6 +479,8 @@ export const OwnerTenderDetails: React.FC<OwnerTenderDetailsProps> = ({
     else deleteProfessional(tenderId, { onSuccess: () => onDelete?.() });
   };
   const handlePublish = () => {
+    // Guard: only publish if tender is in draft state
+    if (status !== 'draft') return;
     if (tenderType === 'freelance') publishFreelance(tenderId);
     else publishProfessional(tenderId);
   };
@@ -676,6 +749,95 @@ export const OwnerTenderDetails: React.FC<OwnerTenderDetailsProps> = ({
                     </div>
                   </SectionCard>
                 )}
+
+                {tenderType === 'freelance' && (
+                  <>
+                    {/* Engagement & Budget */}
+                    {(t?.details?.engagementType || t?.details?.budget || t?.details?.salaryRange) && (
+                      <SectionCard icon={<DollarSign className="w-4 h-4 text-emerald-500" />} title="Engagement & Budget">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {t.details?.engagementType && (
+                            <InfoItem label="Engagement Type" value={safeVal(t.details.engagementType).replace(/_/g, ' ')} icon={<Briefcase className="w-4 h-4" />} badge />
+                          )}
+                          {t.details?.budget?.min != null && (
+                            <InfoItem
+                              label="Budget Range"
+                              value={`${t.details.budget.currency ?? 'ETB'} ${Number(t.details.budget.min).toLocaleString()} – ${Number(t.details.budget.max ?? t.details.budget.min).toLocaleString()}`}
+                              icon={<DollarSign className="w-4 h-4" />}
+                            />
+                          )}
+                          {t.details?.salaryRange?.min != null && (
+                            <InfoItem
+                              label="Salary Range"
+                              value={`${t.details.salaryRange.currency ?? 'ETB'} ${Number(t.details.salaryRange.min).toLocaleString()} – ${Number(t.details.salaryRange.max ?? t.details.salaryRange.min).toLocaleString()} / ${t.details.salaryRange.period ?? 'month'}`}
+                              icon={<DollarSign className="w-4 h-4" />}
+                            />
+                          )}
+                          {t.details?.weeklyHours != null && (
+                            <InfoItem label="Weekly Hours" value={`${t.details.weeklyHours} hrs/week`} icon={<Clock className="w-4 h-4" />} />
+                          )}
+                          {t.details?.isNegotiable && (
+                            <InfoItem label="Budget" value="Negotiable" icon={<DollarSign className="w-4 h-4" />} badge />
+                          )}
+                        </div>
+                      </SectionCard>
+                    )}
+
+                    {/* Project Details */}
+                    <SectionCard icon={<Target className="w-4 h-4 text-blue-500" />} title="Project Details">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {t.details?.experienceLevel && (
+                          <InfoItem label="Experience Level" value={safeVal(t.details.experienceLevel)} icon={<Star className="w-4 h-4" />} badge />
+                        )}
+                        {t.details?.projectType && (
+                          <InfoItem label="Project Type" value={safeVal(t.details.projectType).replace(/_/g, ' ')} icon={<FileText className="w-4 h-4" />} badge />
+                        )}
+                        {t.details?.locationType && (
+                          <InfoItem label="Location" value={safeVal(t.details.locationType).replace(/_/g, ' ')} icon={<Globe className="w-4 h-4" />} badge />
+                        )}
+                        {t.details?.estimatedTimeline?.value && (
+                          <InfoItem label="Timeline" value={`${t.details.estimatedTimeline.value} ${t.details.estimatedTimeline.unit ?? 'weeks'}`} icon={<Clock className="w-4 h-4" />} />
+                        )}
+                        {t.details?.numberOfPositions != null && (
+                          <InfoItem label="Positions" value={String(t.details.numberOfPositions)} icon={<Users className="w-4 h-4" />} />
+                        )}
+                        {t.details?.languagePreference && (
+                          <InfoItem label="Language" value={safeVal(t.details.languagePreference)} icon={<Globe className="w-4 h-4" />} />
+                        )}
+                        {t.details?.ndaRequired && (
+                          <InfoItem label="NDA Required" value="Yes" icon={<Shield className="w-4 h-4" />} badge />
+                        )}
+                        {t.details?.portfolioRequired && (
+                          <InfoItem label="Portfolio Required" value="Yes" icon={<FileText className="w-4 h-4" />} badge />
+                        )}
+                        {t.maxApplications != null && (
+                          <InfoItem label="Max Applications" value={String(t.maxApplications)} icon={<Users className="w-4 h-4" />} />
+                        )}
+                      </div>
+                    </SectionCard>
+
+                    {/* Screening Questions */}
+                    {t?.details?.screeningQuestions?.length > 0 && (
+                      <SectionCard icon={<ClipboardList className="w-4 h-4 text-purple-500" />} title="Screening Questions">
+                        <ol className="space-y-2">
+                          {t.details.screeningQuestions.map((q: any, i: number) => (
+                            <li key={i} className={cn('flex items-start gap-2 text-sm', colorClasses.text.secondary)}>
+                              <span className="shrink-0 w-5 h-5 rounded-full bg-[#F1BB03]/20 text-[#0A2540] dark:text-[#F1BB03] text-[10px] font-bold flex items-center justify-center mt-0.5">
+                                {i + 1}
+                              </span>
+                              <span className="flex-1 break-words">
+                                {q.question ?? q.text ?? safeVal(q)}
+                                {q.required && (
+                                  <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-600 dark:bg-red-950/20 dark:text-red-400 font-semibold">Required</span>
+                                )}
+                              </span>
+                            </li>
+                          ))}
+                        </ol>
+                      </SectionCard>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
@@ -764,21 +926,12 @@ export const OwnerTenderDetails: React.FC<OwnerTenderDetailsProps> = ({
                     )}
                   </div>
                 ) : (
-                  /* FIX 6: Freelance tenders → ProposalsSection (unchanged) */
-                  <ProposalsSection
+                  /* FIX 6: Freelance tenders → load proposals from API and show ProposalListCard */
+                  <FreelanceProposalsTab
                     tenderId={tenderId}
-                    tenderType={tenderType}
-                    workflowType={workflowType as 'open' | 'closed'}
+                    ownerRole={ownerRole}
                     tenderStatus={status}
-                    deadline={deadline ?? new Date()}
-                    isOwner
-                    applications={t?.applications ?? []}
                     totalApplications={totalBids}
-                    bids={[]}
-                    totalBids={0}
-                    sealedBids={0}
-                    onRevealBids={() => revealBids(tenderId)}
-                    isRevealing={revealingBids}
                   />
                 )}
               </>

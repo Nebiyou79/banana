@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "Banana",
+    "slug": "banana-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FBBF24"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.banana.app",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Allow Banana to access your photos to upload profile pictures and portfolio images.",
+        "NSCameraUsageDescription": "Allow Banana to use your camera to take profile pictures.",
+        "NSDocumentsFolderUsageDescription": "Allow Banana to access documents for CV uploads."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#FBBF24"
+      },
+      "package": "com.banana.app",
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "CAMERA"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/icon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Banana to access your photos."
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ]
+    ],
+    "scheme": "banana"
+  }
+}

@@ -1,5 +1,7 @@
 // src/components/cv-generator/GeneratedCVActions.tsx
-// Action panel shown after preview: generate PDF, download, set as primary, regenerate.
+// Uses Tailwind colorClasses for proper dark/light mode + useResponsive for layout.
+
+'use client';
 
 import React, { useState } from 'react';
 import { GeneratedCV, CVTemplate } from '@/services/cvGeneratorService';
@@ -19,12 +21,10 @@ interface Props {
   onBack: () => void;
 }
 
-function fmtSize(bytes: number) {
+function fmtSize(bytes: number): string {
   if (!bytes) return '';
-  const mb = bytes / (1024 * 1024);
-  if (mb >= 1) return `${mb.toFixed(1)} MB`;
-  const kb = bytes / 1024;
-  return `${kb.toFixed(0)} KB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.round(bytes / 1024)} KB`;
 }
 
 export const GeneratedCVActions: React.FC<Props> = ({
@@ -32,198 +32,191 @@ export const GeneratedCVActions: React.FC<Props> = ({
   isDownloading, generateError, onGenerate, onRegenerate, onDownload, onBack,
 }) => {
   const { breakpoint, getTouchTargetSize } = useResponsive();
-  const isMobile = breakpoint === 'mobile';
-  const [description, setDescription] = useState('');
-  const [setAsPrimary, setAsPrimaryFlag] = useState(false);
+  const isMobile  = breakpoint === 'mobile';
+  const [desc, setDesc]       = useState('');
+  const [primary, setPrimary] = useState(false);
 
-  const accent = selectedTemplate?.primaryColor || '#2AA198';
+  const accent = selectedTemplate?.primaryColor || colors.teal;
 
-  const ActionBtn = ({
-    onClick, disabled, loading, label, secondary = false
+  // ── Button component ───────────────────────────────────────────────────────
+  const Btn = ({
+    onClick, label, loading = false, secondary = false, disabled = false,
   }: {
-    onClick: () => void; disabled?: boolean; loading?: boolean;
-    label: string; secondary?: boolean;
+    onClick: () => void; label: string;
+    loading?: boolean; secondary?: boolean; disabled?: boolean;
   }) => (
     <button
       onClick={onClick}
       disabled={disabled || loading}
-      className={getTouchTargetSize('md')}
-      style={{
-        flex: isMobile ? '1 1 100%' : '1 1 auto',
-        padding: '10px 20px',
-        borderRadius: 8,
-        border: secondary ? `1.5px solid ${accent}` : 'none',
-        background: secondary ? 'transparent' : accent,
-        color: secondary ? accent : '#fff',
-        fontSize: 13, fontWeight: 700,
-        cursor: disabled || loading ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.6 : 1,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-        transition: 'all 0.15s ease',
-      }}
+      className={`
+        ${getTouchTargetSize('md')}
+        inline-flex items-center justify-center gap-2
+        px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold
+        transition-all duration-150 whitespace-nowrap
+        ${disabled || loading ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98] cursor-pointer'}
+        ${secondary
+          ? 'border-[1.5px] bg-transparent'
+          : 'border-0 text-white'
+        }
+      `}
+      style={secondary
+        ? { borderColor: accent, color: accent }
+        : { background: loading ? `${accent}cc` : accent }
+      }
     >
-      {loading ? (
-        <>
-          <span style={{
-            width: 14, height: 14, border: `2px solid ${secondary ? accent : 'rgba(255,255,255,0.5)'}`,
-            borderTopColor: 'transparent', borderRadius: '50%',
-            animation: 'spin 0.7s linear infinite', display: 'inline-block',
-          }} />
-          {label}
-        </>
-      ) : label}
+      {loading && (
+        <span
+          className="w-3 h-3 rounded-full border-2 border-t-transparent animate-spin flex-shrink-0"
+          style={{ borderColor: secondary ? `${accent} transparent ${accent} ${accent}` : 'rgba(255,255,255,0.4) transparent rgba(255,255,255,0.4) rgba(255,255,255,0.4)' }}
+        />
+      )}
+      {label}
     </button>
   );
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+  // ── Metadata pill ──────────────────────────────────────────────────────────
+  const Pill = ({ label, value }: { label: string; value: string }) => (
+    <span className={`
+      inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full
+      bg-[#F5F5F5] dark:bg-[#333333] ${colorClasses.text.muted}
+    `}>
+      <span className={`font-bold ${colorClasses.text.secondary}`}>{label}:</span>
+      {value}
+    </span>
+  );
 
-      {/* ── Not yet generated ─────────────────────────────── */}
+  // ─────────────────────────────────────────────────────────────────────────
+  return (
+    <div className="flex flex-col gap-5">
+
+      {/* ── PRE-GENERATE ─────────────────────────────────────────────────── */}
       {!generatedCV && (
-        <div style={{
-          background: '#fff',
-          borderRadius: 12,
-          border: '1px solid #e5e7eb',
-          padding: isMobile ? 16 : 24,
-        }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#0A2540', marginBottom: 4 }}>
-            Generate Your CV
+        <div>
+          <h3 className={`text-sm sm:text-base font-bold mb-1 ${colorClasses.text.primary}`}>
+            Ready to generate
           </h3>
-          <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 16, lineHeight: 1.6 }}>
-            Your profile data will be baked into a{' '}
-            <strong>{selectedTemplate?.name || 'selected'}</strong> PDF and saved to your CV library.
+          <p className={`text-xs sm:text-sm mb-4 leading-relaxed ${colorClasses.text.muted}`}>
+            Your profile data will be compiled into a{' '}
+            <strong className={colorClasses.text.secondary}>
+              {selectedTemplate?.name ?? 'selected'}
+            </strong>{' '}
+            PDF and automatically saved to your CV library.
           </p>
 
-          {/* Optional description */}
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>
-              Label (optional)
+          {/* Label */}
+          <div className="mb-3">
+            <label className={`block text-xs font-semibold mb-1.5 ${colorClasses.text.secondary}`}>
+              Label
+              <span className={`font-normal ml-1 ${colorClasses.text.muted}`}>(optional)</span>
             </label>
             <input
               type="text"
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder={`e.g. "Updated for Product Manager roles"`}
-              maxLength={120}
-              style={{
-                width: '100%', padding: '8px 12px', borderRadius: 6,
-                border: '1px solid #d1d5db', fontSize: 13,
-                outline: 'none', background: '#fafafa',
-              }}
+              value={desc}
+              onChange={e => setDesc(e.target.value)}
+              placeholder='e.g. "Updated for PM roles"'
+              maxLength={100}
+              className={`
+                w-full px-3 py-2 rounded-lg text-xs sm:text-sm outline-none transition-colors
+                border ${colorClasses.border.secondary}
+                bg-[#F9FAFB] dark:bg-[#1E2D3D]
+                ${colorClasses.text.primary}
+                placeholder:text-[#A0A0A0]
+                focus:border-[${accent}]
+              `}
+              style={{ '--tw-ring-color': accent } as React.CSSProperties}
+              onFocus={e => (e.currentTarget.style.borderColor = accent)}
+              onBlur={e  => (e.currentTarget.style.borderColor = '')}
             />
           </div>
 
-          {/* Set as primary toggle */}
-          <label style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            cursor: 'pointer', fontSize: 13, color: '#374151', marginBottom: 16,
-          }}>
+          {/* Primary toggle */}
+          <label className={`flex items-center gap-2.5 cursor-pointer mb-4 select-none`}>
             <input
               type="checkbox"
-              checked={setAsPrimary}
-              onChange={e => setAsPrimaryFlag(e.target.checked)}
-              style={{ width: 15, height: 15, accentColor: accent }}
+              checked={primary}
+              onChange={e => setPrimary(e.target.checked)}
+              className="w-4 h-4 rounded flex-shrink-0"
+              style={{ accentColor: accent }}
             />
-            Set as my primary CV
+            <span className={`text-xs sm:text-sm ${colorClasses.text.secondary}`}>
+              Set as my primary CV
+            </span>
           </label>
 
+          {/* Error */}
           {generateError && (
-            <div style={{
-              background: '#FEF2F2', border: '1px solid #FCA5A5',
-              borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#B91C1C', marginBottom: 12,
-            }}>
-              ⚠ {generateError}
+            <div className="flex items-start gap-2 text-[#EF4444] bg-[#FEE2E2] dark:bg-[#7F1D1D] border border-[#EF4444]/30 rounded-lg px-3 py-2.5 mb-4">
+              <span className="flex-shrink-0 text-sm">⚠</span>
+              <span className="text-xs leading-relaxed">{generateError}</span>
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <ActionBtn
-              label="← Back to Templates"
-              onClick={onBack}
-              secondary
-            />
-            <ActionBtn
-              label={isGenerating ? 'Generating PDF…' : '⬇ Generate & Save PDF'}
-              onClick={() => onGenerate({ description: description.trim() || undefined, setAsPrimary })}
+          {/* Buttons */}
+          <div className={`flex gap-2 ${isMobile ? 'flex-col' : 'flex-row flex-wrap'}`}>
+            <Btn label="← Back" onClick={onBack} secondary />
+            <Btn
+              label={isGenerating ? 'Generating…' : '⬇ Generate PDF'}
+              onClick={() => onGenerate({ description: desc.trim() || undefined, setAsPrimary: primary })}
               loading={isGenerating}
             />
           </div>
         </div>
       )}
 
-      {/* ── Generated successfully ─────────────────────────── */}
+      {/* ── POST-GENERATE ─────────────────────────────────────────────────── */}
       {generatedCV && (
         <div>
           {/* Success banner */}
-          <div style={{
-            background: `${accent}12`,
-            border: `1px solid ${accent}40`,
-            borderRadius: 12,
-            padding: isMobile ? 14 : 20,
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 14,
-            marginBottom: 16,
-          }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 8,
-              background: accent, display: 'flex',
-              alignItems: 'center', justifyContent: 'center',
-              fontSize: 20, flexShrink: 0,
-            }}>✓</div>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#0A2540' }}>
-                CV Generated Successfully!
-              </div>
-              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>
-                {generatedCV.originalName} · {fmtSize(generatedCV.size)}
-              </div>
-              <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>
-                {generatedCV.isPrimary ? '⭐ Set as primary CV' : 'Saved to your CV library'}
-              </div>
+          <div
+            className="flex items-start gap-3 rounded-xl p-4 mb-4 border"
+            style={{
+              background: `${accent}0e`,
+              borderColor: `${accent}30`,
+            }}
+          >
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center text-xl font-bold text-white flex-shrink-0"
+              style={{ background: accent }}
+            >✓</div>
+            <div className="min-w-0">
+              <p className={`text-sm font-bold ${colorClasses.text.primary}`}>
+                CV Generated!
+              </p>
+              <p className={`text-xs mt-0.5 truncate ${colorClasses.text.muted}`}>
+                {generatedCV.originalName}
+                {generatedCV.size ? ` · ${fmtSize(generatedCV.size)}` : ''}
+              </p>
+              <p className={`text-[10px] mt-0.5 ${colorClasses.text.muted}`}>
+                {generatedCV.isPrimary ? '⭐ Primary CV' : 'Saved to your CV library'}
+              </p>
             </div>
           </div>
 
-          {/* Action buttons */}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <ActionBtn
+          {/* Buttons */}
+          <div className={`flex gap-2 mb-4 ${isMobile ? 'flex-col' : 'flex-row flex-wrap'}`}>
+            <Btn
               label={isDownloading ? 'Downloading…' : '⬇ Download PDF'}
               onClick={() => onDownload(generatedCV._id, generatedCV.originalName)}
               loading={isDownloading}
             />
-            <ActionBtn
+            <Btn
               label={isRegenerating ? 'Regenerating…' : '↺ Regenerate'}
               onClick={() => selectedTemplate && onRegenerate(generatedCV._id, selectedTemplate.id)}
               loading={isRegenerating}
               secondary
             />
-            <ActionBtn
-              label="← Choose Different Template"
-              onClick={onBack}
-              secondary
-            />
+            <Btn label="← Templates" onClick={onBack} secondary />
           </div>
 
-          {/* CV metadata pills */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>
-            {[
-              { label: 'Template', value: selectedTemplate?.name || generatedCV.templateId },
-              { label: 'Format', value: 'PDF' },
-              { label: 'Size', value: fmtSize(generatedCV.size) },
-              { label: 'Generated', value: new Date(generatedCV.generatedAt).toLocaleDateString() },
-            ].map(p => (
-              <span key={p.label} style={{
-                fontSize: 11, background: '#f3f4f6',
-                borderRadius: 20, padding: '3px 10px', color: '#6B7280',
-              }}>
-                <span style={{ fontWeight: 600, color: '#374151' }}>{p.label}:</span> {p.value}
-              </span>
-            ))}
+          {/* Metadata */}
+          <div className="flex flex-wrap gap-1.5">
+            <Pill label="Template" value={selectedTemplate?.name ?? generatedCV.templateId} />
+            <Pill label="Format"   value="PDF" />
+            {generatedCV.size && <Pill label="Size" value={fmtSize(generatedCV.size)} />}
+            <Pill label="Created"  value={new Date(generatedCV.generatedAt).toLocaleDateString()} />
           </div>
         </div>
       )}
-
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 };

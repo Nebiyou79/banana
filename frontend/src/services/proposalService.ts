@@ -124,6 +124,7 @@ export interface ProposalTender {
 }
 
 export interface Proposal {
+  id: string;
   _id: string;
   tender: ProposalTender;
   freelancer: ProposalUser;

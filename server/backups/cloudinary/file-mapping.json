@@ -887,5 +887,19 @@
     "uploadedAt": "2026-04-02T13:06:36.402Z",
     "fileType": "image",
     "size": 1756901
+  },
+  "bananalink/images/covers/69cd1866f6bca443da4ff37e/Project (20250928125619)": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\Project (20250928125619)_8e5762a8_2026-04-06T11-16-14-694Z.jpg",
+    "originalName": "Project (20250928125619).jpg",
+    "uploadedAt": "2026-04-06T11:16:14.702Z",
+    "fileType": "image",
+    "size": 526844
+  },
+  "bananalink/images/avatars/69cd1866f6bca443da4ff37e/219983": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\219983_6c4141da_2026-04-06T11-16-47-789Z.png",
+    "originalName": "219983.png",
+    "uploadedAt": "2026-04-06T11:16:47.791Z",
+    "fileType": "image",
+    "size": 22932
   }
 }

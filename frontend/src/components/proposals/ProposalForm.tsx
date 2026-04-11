@@ -761,8 +761,11 @@ export function ProposalForm({ tender, freelancerProfile, initialDraft, onSucces
     portfolioLinks: cleanPortfolioLinks(portfolioLinks),
   };
 
+  // Only auto-save when proposal is a draft — never auto-save submitted/awarded/etc.
+  const isDraftStatus = !initialDraft || initialDraft.status === 'draft';
+
   const { saveState, forceSave } = useProposalAutoSave({
-    proposalId,
+    proposalId: isDraftStatus ? proposalId : null,
     formData: autoSaveData,
     isDirty,
     isSubmitting,
@@ -899,8 +902,8 @@ export function ProposalForm({ tender, freelancerProfile, initialDraft, onSucces
   return (
     <div className="max-w-2xl mx-auto space-y-6">
 
-      {/* Draft banner */}
-      {initialDraft && useDraft && (
+      {/* Draft banner — shown only when we have a pre-existing draft (not yet adopted into form state) */}
+      {initialDraft && useDraft && !proposalId && (
         <DraftBanner
           draft={initialDraft}
           onContinue={() => {}}
@@ -909,8 +912,8 @@ export function ProposalForm({ tender, freelancerProfile, initialDraft, onSucces
         />
       )}
 
-      {/* Auto-save status */}
-      {proposalId && (
+      {/* Auto-save status — only when draft is active and no banner is showing */}
+      {proposalId && !(initialDraft && useDraft && !proposalId) && (
         <div className={cn(
           'flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs',
           colorClasses.bg.secondary, colorClasses.border.gray200,
@@ -931,7 +934,7 @@ export function ProposalForm({ tender, freelancerProfile, initialDraft, onSucces
             <span className={colorClasses.text.muted}>Up to date</span>
           )}
           {saveState === 'error' && (
-            <span className={colorClasses.text.red}>Save failed</span>
+            <span className={colorClasses.text.red}>Save failed — will retry</span>
           )}
         </div>
       )}

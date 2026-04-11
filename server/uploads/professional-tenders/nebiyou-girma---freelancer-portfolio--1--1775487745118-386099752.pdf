@@ -1,0 +1,121 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R 8 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 5322 >>
+stream
+0.49 0.23 0.93 rg
+0 772 595 70 re f
+0 0 0 rg
+BT /FB 20 Tf 1 1 1 rg 50 797 Td (nebiyou girma) Tj 0 0 0 rg ET
+BT /F1 10 Tf 50 752 Td (@import url\('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=s) Tj ET
+BT /F1 10 Tf 50 738 Td (*{box-sizing:border-box;margin:0;padding:0}) Tj ET
+BT /F1 10 Tf 50 724 Td (body{font-family:'Plus Jakarta Sans',sans-serif;background:#fafafa;color:#1a1a2e;min-height:100vh}) Tj ET
+BT /F1 10 Tf 50 710 Td (.hero{background:linear-gradient\(135deg,#7C3AED 0%,#4C1D95 50%,#2563EB 100%\);padding:40px 48px;color:#fff;disp) Tj ET
+BT /F1 10 Tf 50 696 Td (.avatar-wrap img,.initials{width:96px;height:96px;border-radius:12px;object-fit:cover;border:3px solid rgba\(25) Tj ET
+BT /F1 10 Tf 50 682 Td (.initials{display:inline-flex;align-items:center;justify-content:center;background:rgba\(255,255,255,0.15\);font) Tj ET
+BT /F1 10 Tf 50 668 Td (.hero-info h1{font-size:26px;font-weight:800;color:#fff}) Tj ET
+BT /F1 10 Tf 50 654 Td (.hero-info .tagline{font-size:14px;color:rgba\(255,255,255,0.8\);margin-top:3px;font-weight:500}) Tj ET
+BT /F1 10 Tf 50 640 Td (.hero-info .contacts{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px}) Tj ET
+BT /F1 10 Tf 50 626 Td (.hero-info .contact{font-size:11px;color:rgba\(255,255,255,0.75\)}) Tj ET
+BT /F1 10 Tf 50 612 Td (.hero-info .social-wrap{display:flex;gap:10px;margin-top:8px}) Tj ET
+BT /F1 10 Tf 50 598 Td (.hero-info .social{font-size:11px;color:#c4b5fd;text-decoration:none}) Tj ET
+BT /F1 10 Tf 50 584 Td (.content{display:grid;grid-template-columns:1fr 300px;gap:0;background:#fff}) Tj ET
+BT /F1 10 Tf 50 570 Td (.main-col{padding:32px 36px;border-right:1px solid #f3f4f6;display:flex;flex-direction:column;gap:28px}) Tj ET
+BT /F1 10 Tf 50 556 Td (.side-col{padding:32px 24px;background:#fafafa;display:flex;flex-direction:column;gap:22px}) Tj ET
+BT /F1 10 Tf 50 542 Td (.sec-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#7C3AED;margin-bot) Tj ET
+BT /F1 10 Tf 50 528 Td (.sec-title::after{content:'';flex:1;height:2px;background:linear-gradient\(90deg,#ede9fe,transparent\)}) Tj ET
+BT /F1 10 Tf 50 514 Td (.bio{font-size:13px;color:#4B5563;line-height:1.8}) Tj ET
+BT /F1 10 Tf 50 500 Td (.port-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}) Tj ET
+BT /F1 10 Tf 50 486 Td (.port-card{background:#f5f3ff;border-radius:10px;padding:14px;border:1px solid #ede9fe;transition:box-shadow .) Tj ET
+BT /F1 10 Tf 50 472 Td (.port-card .title{font-weight:700;font-size:13px;color:#4C1D95}) Tj ET
+BT /F1 10 Tf 50 458 Td (.port-card .role-line{font-size:11px;color:#7C3AED;font-weight:600;margin-top:2px}) Tj ET
+BT /F1 10 Tf 50 444 Td (.port-card .desc{font-size:12px;color:#6B7280;line-height:1.55;margin-top:5px}) Tj ET
+BT /F1 10 Tf 50 430 Td (.port-card .tech-wrap{display:flex;flex-wrap:wrap;gap:3px;margin-top:7px}) Tj ET
+BT /F1 10 Tf 50 416 Td (.port-card .tech{font-size:10px;background:#ede9fe;color:#7C3AED;padding:2px 6px;border-radius:4px}) Tj ET
+BT /F1 10 Tf 50 402 Td (.exp-item{padding-left:14px;border-left:2px solid #ede9fe;margin-bottom:14px}) Tj ET
+BT /F1 10 Tf 50 388 Td (.exp-item .role{font-weight:700;font-size:13px;color:#1a1a2e}) Tj ET
+BT /F1 10 Tf 50 374 Td (.exp-item .company{font-size:12px;color:#7C3AED;font-weight:600}) Tj ET
+BT /F1 10 Tf 50 360 Td (.exp-item .dates{font-size:11px;color:#9ca3af;margin:2px 0}) Tj ET
+BT /F1 10 Tf 50 346 Td (.exp-item .desc{font-size:12px;color:#6B7280;line-height:1.6;margin-top:4px}) Tj ET
+BT /F1 10 Tf 50 332 Td (.side-blk h3{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#7C3AED;border-b) Tj ET
+BT /F1 10 Tf 50 318 Td (.skill-tag{display:inline-block;background:#f5f3ff;color:#4C1D95;font-size:11px;font-weight:600;padding:4px 10) Tj ET
+BT /F1 10 Tf 50 304 Td (.edu-item{margin-bottom:12px}) Tj ET
+BT /F1 10 Tf 50 290 Td (.edu-item .deg{font-weight:700;font-size:12px;color:#1a1a2e}) Tj ET
+BT /F1 10 Tf 50 276 Td (.edu-item .inst{font-size:11px;color:#7C3AED}) Tj ET
+BT /F1 10 Tf 50 262 Td (.edu-item .dt{font-size:10px;color:#9ca3af}) Tj ET
+BT /F1 10 Tf 50 248 Td (.cert-item{padding:8px 10px;background:#f5f3ff;border-radius:6px;margin-bottom:6px;border-left:3px solid #7C3A) Tj ET
+BT /F1 10 Tf 50 234 Td (.cert-item .cn{font-size:12px;font-weight:700;color:#1a1a2e}) Tj ET
+BT /F1 10 Tf 50 220 Td (.cert-item .ci{font-size:10px;color:#7C3AED}) Tj ET
+BT /F1 10 Tf 50 206 Td (.footer{text-align:center;font-size:9px;color:#d1d5db;padding:12px;background:#f9fafb;border-top:1px solid #f3) Tj ET
+BT /F1 10 Tf 50 192 Td (nebiyou girma) Tj ET
+BT /F1 10 Tf 50 178 Td (  nebawale1111@gmail.com) Tj ET
+0.49 0.23 0.93 RG 1 w 50 162 m 545 162 l S 0 0 0 RG 0.5 w
+BT /FB 11 Tf 50 162 Td (  0977809831) Tj ET
+BT /F1 10 Tf 50 145 Td (  San Francisco, USA) Tj ET
+BT /F1 10 Tf 50 131 Td (  https://getbananalink.com/) Tj ET
+BT /F1 10 Tf 50 117 Td (About Mei AM a fullstack senior software developer) Tj ET
+BT /F1 10 Tf 50 103 Td (Work Experience) Tj ET
+BT /F1 10 Tf 50 89 Td (Senior Full Stack Developer) Tj ET
+BT /F1 10 Tf 50 75 Td (Banana Solutions) Tj ET
+BT /F1 10 Tf 50 61 Td (Dec 2025   Present) Tj ET
+BT /F1 10 Tf 50 47 Td (I created and managing getbananalink.com and other websites and solutions) Tj ET
+BT /F1 8 Tf 0.6 0.6 0.6 rg 50 30 Td (Page 1 of 2) Tj 0 0 0 rg ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 5 0 R /Resources << /Font << /F1 3 0 R /FB 4 0 R >> >> >>
+endobj
+7 0 obj
+<< /Length 899 >>
+stream
+0.49 0.23 0.93 rg
+0 772 595 70 re f
+0 0 0 rg
+BT /F1 10 Tf 50 782 Td (Maldif Realesate) Tj ET
+BT /F1 10 Tf 50 768 Td (Mar 2025   Nov 2025) Tj ET
+BT /F1 10 Tf 50 754 Td (Junior Software Developer) Tj ET
+BT /F1 10 Tf 50 740 Td (Junior Software Enginnering) Tj ET
+BT /F1 10 Tf 50 726 Td (Quantum Technologies) Tj ET
+BT /F1 10 Tf 50 712 Td (Sep 2024   Feb 2025) Tj ET
+BT /F1 10 Tf 50 698 Td (Junior Software Developer) Tj ET
+BT /F1 10 Tf 50 684 Td (Skills) Tj ET
+BT /F1 10 Tf 50 670 Td (reactnext-jstypescripttailwind cssreact nativenodeexpress js) Tj ET
+BT /F1 10 Tf 50 656 Td (Education) Tj ET
+BT /F1 10 Tf 50 642 Td (Bachlor Of Software enginerringMekelle UniverstySep 2018   Jun 2024) Tj ET
+BT /F1 10 Tf 50 628 Td (Certifications) Tj ET
+BT /F1 10 Tf 50 614 Td (ClaudeAmazon) Tj ET
+BT /F1 10 Tf 50 600 Td (Generated April 6, 2026) Tj ET
+BT /F1 8 Tf 0.6 0.6 0.6 rg 50 30 Td (Page 2 of 2) Tj 0 0 0 rg ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 7 0 R /Resources << /Font << /F1 3 0 R /FB 4 0 R >> >> >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000127 00000 n 
+0000000224 00000 n 
+0000000326 00000 n 
+0000005700 00000 n 
+0000005836 00000 n 
+0000006786 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R >>
+startxref
+6922
+%%EOF

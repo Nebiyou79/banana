@@ -117,6 +117,14 @@ const STEPS = [
         accentColor: 'from-purple-600 to-purple-500',
         dotColor: 'bg-purple-500',
     },
+    {
+        id: 4,
+        label: 'Review',
+        title: 'Review & Publish',
+        subtitle: 'Check everything before publishing',
+        accentColor: 'from-[#0A2540] to-[#1a3a5c]',
+        dotColor: 'bg-[#0A2540]',
+    },
 ] as const;
 
 const FILE_TYPE_COLORS: Record<string, string> = {
@@ -243,7 +251,7 @@ function ProgressStepper({
 /** Mobile horizontal step bar */
 function MobileStepBar({ currentStep, completedSteps }: { currentStep: number; completedSteps: Set<number> }) {
     return (
-        <div className="lg:hidden flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6">
             {STEPS.map((s, idx) => {
                 const isDone = completedSteps.has(s.id);
                 const isActive = currentStep === s.id;
@@ -251,21 +259,21 @@ function MobileStepBar({ currentStep, completedSteps }: { currentStep: number; c
                     <div key={s.id} className="flex items-center flex-1">
                         <div className="flex flex-col items-center gap-1">
                             <div className={`
-                w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all
+                w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all
                 ${isDone ? 'bg-[#F1BB03] text-[#0A2540]' : isActive ? 'bg-[#0A2540] text-white ring-2 ring-[#F1BB03]/40 ring-offset-1' : `border-2 ${colorClasses.border.primary} ${colorClasses.text.muted}`}
               `}>
                                 {isDone ? (
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                     </svg>
                                 ) : s.id}
                             </div>
-                            <span className={`text-[10px] font-medium ${isActive ? colorClasses.text.primary : colorClasses.text.muted}`}>
+                            <span className={`text-[9px] font-medium hidden sm:block ${isActive ? colorClasses.text.primary : colorClasses.text.muted}`}>
                                 {s.label}
                             </span>
                         </div>
                         {idx < STEPS.length - 1 && (
-                            <div className={`flex-1 h-0.5 mx-2 mb-4 transition-colors ${isDone ? 'bg-[#F1BB03]' : colorClasses.border.primary}`} />
+                            <div className={`flex-1 h-0.5 mx-1.5 mb-3 sm:mb-4 transition-colors ${isDone ? 'bg-[#F1BB03]' : colorClasses.border.primary}`} />
                         )}
                     </div>
                 );
@@ -939,6 +947,7 @@ const { breakpoint, getTouchTargetSize } = useResponsive();
         1: ['title', 'briefDescription', 'procurementCategory', 'procurementSubcategory', 'deadline'],
         2: ['engagementType', 'experienceLevel', 'projectType', 'locationType'],
         3: ['description'],
+        4: [],
     };
 
     const goNext = async () => {
@@ -1150,6 +1159,17 @@ const { breakpoint, getTouchTargetSize } = useResponsive();
                         min={tomorrowMin()}
                         className={getInputClass()}
                     />
+                    {/* Remaining days countdown */}
+                    {watch('deadline') && (() => {
+                        const diff = new Date(watch('deadline')).getTime() - Date.now();
+                        const days = Math.ceil(diff / 86_400_000);
+                        if (days <= 0) return null;
+                        return (
+                            <p className={`text-xs mt-1.5 font-medium ${days <= 3 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                {days === 1 ? '1 day remaining' : `${days} days remaining`}
+                            </p>
+                        );
+                    })()}
                 </Field>
 
                 <Field
@@ -1475,7 +1495,7 @@ const { breakpoint, getTouchTargetSize } = useResponsive();
                                     render={({ field }) => (
                                         <select {...field} className={`${getInputClass()} flex-1`}>
                                             {TIMELINE_UNITS.map((u) => (
-                                                <option key={u} value={u}>{u}</option>
+                                                <option key={u} value={u}>{u.charAt(0).toUpperCase() + u.slice(1)}</option>
                                             ))}
                                         </select>
                                     )}
@@ -1485,6 +1505,7 @@ const { breakpoint, getTouchTargetSize } = useResponsive();
 
                         <Field
                             label="Number of Positions"
+                            hint="How many people do you need?"
                             error={errors.numberOfPositions?.message}
                         >
                             <input
@@ -1496,6 +1517,8 @@ const { breakpoint, getTouchTargetSize } = useResponsive();
                                 type="number"
                                 className={getInputClass()}
                                 placeholder="1"
+                                min={1}
+                                max={50}
                             />
                         </Field>
                     </div>
@@ -1743,32 +1766,214 @@ const { breakpoint, getTouchTargetSize } = useResponsive();
         </div>
     );
 
+    // ─── Step 4: Review & Submit ──────────────────────────────────────────────
+    const renderStep4 = () => {
+        const values = watch();
+        const deadline = values.deadline ? new Date(values.deadline) : null;
+        const daysLeft = deadline ? Math.ceil((deadline.getTime() - Date.now()) / 86_400_000) : null;
+
+        const engagementLabels: Record<EngagementType, string> = {
+            fixed_price: 'Fixed Price',
+            hourly: 'Hourly Rate',
+            fixed_salary: 'Fixed Salary',
+            negotiable: 'Negotiable',
+        };
+
+        const ReviewRow = ({ label, value }: { label: string; value?: string | null }) => {
+            if (!value) return null;
+            return (
+                <div className="flex items-start justify-between gap-4 py-2.5 border-b last:border-0" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                    <span className={`text-xs font-medium shrink-0 ${colorClasses.text.muted}`}>{label}</span>
+                    <span className={`text-sm font-semibold text-right break-words ${colorClasses.text.primary}`}>{value}</span>
+                </div>
+            );
+        };
+
+        const ReviewSection = ({ title, icon, children, onEdit, stepNum }: {
+            title: string; icon: React.ReactNode; children: React.ReactNode; onEdit: () => void; stepNum: number;
+        }) => (
+            <div className={`rounded-2xl border overflow-hidden ${colorClasses.bg.primary} ${colorClasses.border.primary}`}>
+                <div className={`flex items-center justify-between px-5 py-3.5 border-b ${colorClasses.border.primary} ${colorClasses.bg.secondary}`}>
+                    <div className="flex items-center gap-2.5">
+                        <span className={`text-sm ${colorClasses.text.muted}`}>{icon}</span>
+                        <h3 className={`text-sm font-bold ${colorClasses.text.primary}`}>{title}</h3>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onEdit}
+                        className="text-xs font-semibold text-[#F1BB03] hover:underline flex items-center gap-1"
+                    >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        Edit
+                    </button>
+                </div>
+                <div className="px-5 py-1">{children}</div>
+            </div>
+        );
+
+        const budgetSummary = () => {
+            if (values.engagementType === 'fixed_price' || values.engagementType === 'hourly') {
+                const min = values.budget?.min;
+                const max = values.budget?.max;
+                const cur = values.budget?.currency ?? 'ETB';
+                if (min || max) return `${cur} ${min?.toLocaleString() ?? '0'} – ${max?.toLocaleString() ?? '0'}`;
+            }
+            if (values.engagementType === 'fixed_salary') {
+                const min = values.salaryRange?.min;
+                const max = values.salaryRange?.max;
+                const cur = values.salaryRange?.currency ?? 'ETB';
+                const per = values.salaryRange?.period ?? 'monthly';
+                if (min || max) return `${cur} ${min?.toLocaleString() ?? '0'} – ${max?.toLocaleString() ?? '0'} / ${per}`;
+            }
+            if (values.engagementType === 'negotiable') return 'Negotiable (open to proposals)';
+            return null;
+        };
+
+        return (
+            <div className="space-y-4">
+                {/* Publish readiness banner */}
+                <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
+                    <svg className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                        <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Ready to publish</p>
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
+                            Review your tender below. Click <strong>Save &amp; Publish</strong> to go live, or <strong>Save as Draft</strong> to continue editing later.
+                        </p>
+                    </div>
+                </div>
+
+                {/* Step 1 Summary */}
+                <ReviewSection title="Basics & Category" icon={
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                } onEdit={() => goToStep(1)} stepNum={1}>
+                    <ReviewRow label="Title" value={values.title} />
+                    <ReviewRow label="Summary" value={values.briefDescription} />
+                    <ReviewRow
+                        label="Category"
+                        value={[values.procurementCategory, values.procurementSubcategory].filter(Boolean).join(' › ')}
+                    />
+                    <ReviewRow
+                        label="Deadline"
+                        value={deadline
+                            ? `${deadline.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}${daysLeft && daysLeft > 0 ? ` · ${daysLeft} days left` : ''}`
+                            : null}
+                    />
+                    {values.maxApplications && (
+                        <ReviewRow label="Max Applications" value={String(values.maxApplications)} />
+                    )}
+                </ReviewSection>
+
+                {/* Step 2 Summary */}
+                <ReviewSection title="Project Details & Budget" icon={
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                } onEdit={() => goToStep(2)} stepNum={2}>
+                    <ReviewRow label="Engagement" value={engagementLabels[values.engagementType]} />
+                    <ReviewRow label="Budget" value={budgetSummary()} />
+                    {values.engagementType === 'hourly' && values.weeklyHours && (
+                        <ReviewRow label="Weekly Hours" value={`${values.weeklyHours} hrs/week`} />
+                    )}
+                    <ReviewRow
+                        label="Experience"
+                        value={values.experienceLevel ? values.experienceLevel.charAt(0).toUpperCase() + values.experienceLevel.slice(1) : null}
+                    />
+                    <ReviewRow label="Project Type" value={values.projectType?.replace(/_/g, ' ')} />
+                    <ReviewRow label="Location" value={values.locationType?.replace(/_/g, ' ')} />
+                    <ReviewRow
+                        label="Timeline"
+                        value={values.estimatedTimeline?.value
+                            ? `${values.estimatedTimeline.value} ${values.estimatedTimeline.unit}`
+                            : null}
+                    />
+                    <ReviewRow
+                        label="Positions"
+                        value={values.numberOfPositions ? String(values.numberOfPositions) : null}
+                    />
+                    {values.skillsRequired?.length > 0 && (
+                        <div className="py-2.5 border-b last:border-0" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                            <p className={`text-xs font-medium mb-2 ${colorClasses.text.muted}`}>Required Skills</p>
+                            <div className="flex flex-wrap gap-1.5">
+                                {values.skillsRequired.map((s) => (
+                                    <span key={s} className="px-2 py-0.5 rounded-full text-xs font-medium bg-[#F1BB03]/15 text-[#0A2540] dark:text-[#F1BB03] border border-[#F1BB03]/30">
+                                        {s}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    {(values.ndaRequired || values.portfolioRequired) && (
+                        <div className="flex gap-2 flex-wrap py-2.5">
+                            {values.ndaRequired && (
+                                <span className="text-xs px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 font-semibold">NDA Required</span>
+                            )}
+                            {values.portfolioRequired && (
+                                <span className="text-xs px-2.5 py-1 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 font-semibold">Portfolio Required</span>
+                            )}
+                        </div>
+                    )}
+                </ReviewSection>
+
+                {/* Step 3 Summary */}
+                <ReviewSection title="Description & Screening" icon={
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                } onEdit={() => goToStep(3)} stepNum={3}>
+                    {values.description && (
+                        <div className="py-2.5 border-b last:border-0" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                            <p className={`text-xs font-medium mb-1.5 ${colorClasses.text.muted}`}>Description preview</p>
+                            <p className={`text-sm leading-relaxed line-clamp-4 ${colorClasses.text.secondary}`}>
+                                {values.description.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()}
+                            </p>
+                        </div>
+                    )}
+                    {values.screeningQuestions?.length > 0 && (
+                        <div className="py-2.5">
+                            <p className={`text-xs font-medium mb-2 ${colorClasses.text.muted}`}>
+                                {values.screeningQuestions.length} screening question{values.screeningQuestions.length !== 1 ? 's' : ''}
+                            </p>
+                            <ol className="space-y-1">
+                                {values.screeningQuestions.slice(0, 3).map((q, i) => (
+                                    <li key={i} className={`text-xs flex items-start gap-2 ${colorClasses.text.secondary}`}>
+                                        <span className="shrink-0 w-4 h-4 rounded-full bg-[#F1BB03]/20 text-[#0A2540] dark:text-[#F1BB03] text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                                        <span className="line-clamp-1">{q.text}</span>
+                                    </li>
+                                ))}
+                                {values.screeningQuestions.length > 3 && (
+                                    <li className={`text-xs ${colorClasses.text.muted}`}>+ {values.screeningQuestions.length - 3} more…</li>
+                                )}
+                            </ol>
+                        </div>
+                    )}
+                    {newFiles.length > 0 && (
+                        <ReviewRow label="Attachments" value={`${newFiles.length} file${newFiles.length !== 1 ? 's' : ''} staged`} />
+                    )}
+                    {isEdit && watchDescription && !newFiles.length && (
+                        <p className={`text-xs py-2 ${colorClasses.text.muted}`}>Existing attachments will be kept.</p>
+                    )}
+                </ReviewSection>
+            </div>
+        );
+    };
+
     // ─── Render ────────────────────────────────────────────────────────────────
     return (
         <div className={isMutating ? 'opacity-60 pointer-events-none select-none' : ''}>
 
-            {/* Mobile progress bar */}
+            {/* Step bar — mobile and desktop top bar (no sidebar) */}
             <MobileStepBar currentStep={step} completedSteps={completedSteps} />
 
-            {/* Layout: sidebar stepper (desktop) + form card */}
-            <div className="flex gap-6 items-start">
+            {/* Form card — full width on all screen sizes */}
+            <div className={`w-full rounded-2xl border shadow-sm ${colorClasses.bg.primary} ${colorClasses.border.primary}`}>
+                <div className="p-6">
+                    <StepHeader step={currentStep} />
 
-                {/* Sidebar stepper — desktop only */}
-                <ProgressStepper
-                    currentStep={step}
-                    completedSteps={completedSteps}
-                    onStepClick={goToStep}
-                />
-
-                {/* Form card */}
-                <div className={`flex-1 min-w-0 rounded-2xl border shadow-sm ${colorClasses.bg.primary} ${colorClasses.border.primary}`}>
-                    <div className="p-6">
-                        <StepHeader step={currentStep} />
-
-                        {step === 1 && renderStep1()}
-                        {step === 2 && renderStep2()}
-                        {step === 3 && renderStep3()}
-                    </div>
+                    {step === 1 && renderStep1()}
+                    {step === 2 && renderStep2()}
+                    {step === 3 && renderStep3()}
+                    {step === 4 && renderStep4()}
+                </div>
 
                     {/* ── Sticky footer navigation ── */}
                     <div className={`
@@ -1810,22 +2015,25 @@ const { breakpoint, getTouchTargetSize } = useResponsive();
                             )}
                         </div>
 
-                        {/* Right: Next / Submit */}
+                        {/* Right: Next / Continue / Submit */}
                         <div className="flex items-center gap-3">
                             {step < STEPS.length ? (
+                                /* Steps 1-3: Continue button */
                                 <button
                                     type="button"
                                     onClick={goNext}
                                     className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold text-white bg-[#0A2540] hover:bg-[#0A2540]/90 transition-colors shadow-sm"
                                 >
-                                    Next
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                                    </svg>
+                                    {step === 3 ? 'Review →' : 'Continue'}
+                                    {step < 3 && (
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                        </svg>
+                                    )}
                                 </button>
                             ) : (
+                                /* Step 4: Save Draft + Publish */
                                 <>
-                                    {/* FIX: action passed directly — no publishAfterSave state race */}
                                     <SubmitButton
                                         action="draft"
                                         variant="secondary"
@@ -1855,7 +2063,6 @@ const { breakpoint, getTouchTargetSize } = useResponsive();
                         </div>
                     </div>
                 </div>
-            </div>
         </div>
     );
 }

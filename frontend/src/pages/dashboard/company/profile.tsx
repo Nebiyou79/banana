@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // pages/dashboard/company/profile.tsx - UPDATED FOR CREATE/UPDATE LOGIC
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
@@ -10,10 +11,11 @@ import CompanyForm from '@/components/company/CompanyForm';
 import CompanyHero from '@/components/company/CompanyHero';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Pencil, Building2, MapPin, Phone, Globe, FileText, Users, Calendar, Plus, Save, ArrowLeft } from 'lucide-react';
+import { Pencil, Building2, MapPin, Phone, Globe, FileText, Users, Calendar, Plus, ArrowLeft } from 'lucide-react';
 import Button from '@/components/forms/Button';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import { colorClasses } from '@/utils/color';
 
 export default function CompanyProfilePage() {
   const { user, isLoading: authLoading, refetchUser } = useAuth();
@@ -217,70 +219,113 @@ export default function CompanyProfilePage() {
     );
   }
 
-  // No company profile exists - show create prompt
-  if (!company) {
-    return (
-      <DashboardLayout requiredRole="company">
-        <div className="min-h-screen bg-background">
-          <div className="container mx-auto px-4 py-8">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h1 className="text-4xl font-bold text-foreground">Company Profile</h1>
-                <p className="text-xl text-muted-foreground mt-2">Set up your company profile to get started</p>
-              </div>
-              <Button onClick={handleCreateClick} size="lg">
-                <Plus className="w-5 h-5 mr-2" />
-                Create Profile
-              </Button>
+// No company profile exists - show create prompt
+if (!company) {
+  return (
+    <DashboardLayout requiredRole="company">
+      <div className={`min-h-screen ${colorClasses.bg.secondary}`}>
+        <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
+
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 sm:mb-8">
+            <div>
+              <h1 className={`text-2xl sm:text-3xl lg:text-4xl font-bold ${colorClasses.text.primary}`}>
+                Company Profile
+              </h1>
+              <p className={`text-sm sm:text-base lg:text-lg mt-2 ${colorClasses.text.secondary}`}>
+                Set up your company profile to get started
+              </p>
             </div>
 
-            {/* Empty State */}
-            <Card className="border-l-4 border-l-blue-500 shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-2xl text-foreground">
-                  <Building2 className="w-6 h-6" />
-                  Create Your Company Profile
-                </CardTitle>
-                <CardDescription className="text-lg text-muted-foreground">
-                  Set up your company profile to start posting jobs and building your employer brand.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-muted-foreground">
-                    <div className="flex flex-col items-center text-center gap-2 p-4 bg-blue-50 rounded-lg">
-                      <Users className="w-8 h-8 text-blue-600" />
-                      <span className="font-semibold">Attract Top Talent</span>
-                      <p>Showcase your company culture and values</p>
-                    </div>
-                    <div className="flex flex-col items-center text-center gap-2 p-4 bg-green-50 rounded-lg">
-                      <Building2 className="w-8 h-8 text-green-600" />
-                      <span className="font-semibold">Build Employer Brand</span>
-                      <p>Establish your company as an employer of choice</p>
-                    </div>
-                    <div className="flex flex-col items-center text-center gap-2 p-4 bg-purple-50 rounded-lg">
-                      <Calendar className="w-8 h-8 text-purple-600" />
-                      <span className="font-semibold">Post Unlimited Jobs</span>
-                      <p>Find the perfect candidates for your openings</p>
-                    </div>
-                  </div>
-                  <div className="text-center pt-4">
-                    <Button onClick={handleCreateClick} size="lg" className="px-8">
-                      <Plus className="w-5 h-5 mr-2" />
-                      Create Company Profile
-                    </Button>
-                    <p className="text-sm text-muted-foreground mt-4">
-                      It only takes a few minutes to set up your profile
+            <Button
+              onClick={handleCreateClick}
+              size="lg"
+              className="w-full sm:w-auto"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              Create Profile
+            </Button>
+          </div>
+
+          {/* Empty State */}
+          <Card className={`shadow-lg border-l-4 ${colorClasses.border.blue600}`}>
+            <CardHeader>
+              <CardTitle className={`flex items-center gap-2 text-lg sm:text-xl lg:text-2xl ${colorClasses.text.primary}`}>
+                <Building2 className="w-5 h-5 sm:w-6 sm:h-6" />
+                Create Your Company Profile
+              </CardTitle>
+
+              <CardDescription className={`text-sm sm:text-base ${colorClasses.text.secondary}`}>
+                Set up your company profile to start posting jobs and building your employer brand.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent>
+              <div className="space-y-6">
+
+                {/* Features */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 text-sm">
+
+                  {/* Item 1 */}
+                  <div className={`flex flex-col items-center text-center gap-2 p-4 rounded-lg ${colorClasses.bg.blueLight}`}>
+                    <Users className={`w-7 h-7 sm:w-8 sm:h-8 ${colorClasses.text.blue}`} />
+                    <span className={`font-semibold ${colorClasses.text.primary}`}>
+                      Attract Top Talent
+                    </span>
+                    <p className={colorClasses.text.secondary}>
+                      Showcase your company culture and values
                     </p>
                   </div>
+
+                  {/* Item 2 */}
+                  <div className={`flex flex-col items-center text-center gap-2 p-4 rounded-lg ${colorClasses.bg.greenLight}`}>
+                    <Building2 className={`w-7 h-7 sm:w-8 sm:h-8 ${colorClasses.text.green}`} />
+                    <span className={`font-semibold ${colorClasses.text.primary}`}>
+                      Build Employer Brand
+                    </span>
+                    <p className={colorClasses.text.secondary}>
+                      Establish your company as an employer of choice
+                    </p>
+                  </div>
+
+                  {/* Item 3 */}
+                  <div className={`flex flex-col items-center text-center gap-2 p-4 rounded-lg ${colorClasses.bg.purpleLight}`}>
+                    <Calendar className={`w-7 h-7 sm:w-8 sm:h-8 ${colorClasses.text.purple}`} />
+                    <span className={`font-semibold ${colorClasses.text.primary}`}>
+                      Post Unlimited Jobs
+                    </span>
+                    <p className={colorClasses.text.secondary}>
+                      Find the perfect candidates for your openings
+                    </p>
+                  </div>
+
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+
+                {/* CTA */}
+                <div className="text-center pt-4">
+                  <Button
+                    onClick={handleCreateClick}
+                    size="lg"
+                    className="w-full sm:w-auto px-6 sm:px-8"
+                  >
+                    <Plus className="w-5 h-5 mr-2" />
+                    Create Company Profile
+                  </Button>
+
+                  <p className={`text-sm mt-4 ${colorClasses.text.secondary}`}>
+                    It only takes a few minutes to set up your profile
+                  </p>
+                </div>
+
+              </div>
+            </CardContent>
+          </Card>
+
         </div>
-      </DashboardLayout>
-    );
-  }
+      </div>
+    </DashboardLayout>
+  );
+}
 
   // View mode - Company exists
   return (

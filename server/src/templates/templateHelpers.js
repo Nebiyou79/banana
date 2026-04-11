@@ -62,4 +62,19 @@ function sectionHead(title, color = '#0A2540', borderColor = '#FFD700') {
   return `<div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:${color};border-bottom:2px solid ${borderColor};padding-bottom:5px;margin-bottom:14px;">${escHtml(title)}</div>`;
 }
 
-module.exports = { escHtml, avatarTag, socialLine, skillBadges, sectionHead };
+/**
+ * Return a safe system font stack for the given family type.
+ * Used by newer templates that want consistent cross-platform typography
+ * without relying on external fonts (which are stripped in the sandbox).
+ * @param {'sans'|'serif'|'mono'} type
+ */
+function systemFont(type = 'sans') {
+  const stacks = {
+    sans:  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    serif: 'Georgia, "Times New Roman", Times, serif',
+    mono:  '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace',
+  };
+  return stacks[type] || stacks.sans;
+}
+
+module.exports = { escHtml, avatarTag, socialLine, skillBadges, sectionHead, systemFont };

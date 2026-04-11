@@ -142,6 +142,21 @@ export function ProposalListCard({ proposal, onClick }: Props) {
               </p>
             )}
           </div>
+          {/* View Details button — always visible */}
+          {onClick && (
+            <div className="mt-3 flex justify-end">
+              <span className={cn(
+                'inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all',
+                'bg-[#F1BB03]/10 text-[#0A2540] dark:text-[#F1BB03] hover:bg-[#F1BB03]/20',
+                'border border-[#F1BB03]/30',
+              )}>
+                View Details
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </article>

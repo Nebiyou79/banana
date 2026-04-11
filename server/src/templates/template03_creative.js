@@ -14,7 +14,6 @@ module.exports = {
     const avatar = avatarTag(d.avatar, d.fullName, 100, '#F1BB03');
     return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600;700&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Space Grotesk',sans-serif;background:#111;color:#eee;display:flex;min-height:100vh}
   .left{width:260px;min-width:260px;padding:40px 24px;border-right:1px solid #222;display:flex;flex-direction:column;gap:28px}

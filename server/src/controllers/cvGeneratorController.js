@@ -1,395 +1,221 @@
 // backend/src/controllers/cvGeneratorController.js
-// Handles CV generation, preview, download, and attachment to user profile.
-// Follows the same patterns as candidateController.js in this codebase.
+// Updated: normalizeCandidateData is now async (fetches avatar as base64).
 
-const path  = require('path');
-const fs    = require('fs');
-const User  = require('../models/User');
-const { normalizeCandidateData } = require('../utils/cvDataNormalizer');
+'use strict';
+
+const path = require('path');
+const fs   = require('fs');
+const User = require('../models/User');
+const { normalizeCandidateData }    = require('../utils/cvDataNormalizer');
 const { renderTemplate, listTemplates } = require('../utils/cvTemplateRenderer');
-const { htmlToPdf } = require('../utils/cvPdfGenerator');
-
-// ─────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────
+const { htmlToPdf }                 = require('../utils/cvPdfGenerator');
 
 const UPLOAD_BASE = process.env.UPLOAD_BASE_PATH || path.join(process.cwd(), 'uploads');
 const CV_GEN_DIR  = path.join(UPLOAD_BASE, 'cv');
 
+const TEMPLATE_COLORS = {
+  executive:'0.04 0.15 0.25', modern:'0.16 0.64 0.60', creative:'0.07 0.07 0.07',
+  professional:'0.29 0.34 0.38', elegant:'0.48 0.18 0.26', tech:'0.06 0.72 0.51',
+  infographic:'1.00 0.55 0.26', compact:'0.15 0.39 0.92', academic:'0.11 0.31 0.85',
+  freelancer:'0.49 0.23 0.93', startup:'0.96 0.25 0.37', minimal:'0.07 0.09 0.13',
+  geometric:'0.92 0.35 0.05', timeline:'0.31 0.27 0.90', nordic:'0.03 0.57 0.70',
+  impact:'0.85 0.47 0.02', retro:'0.57 0.25 0.05', healthcare:'0.05 0.58 0.53',
+  magazine:'0.75 0.09 0.36', glass:'0.39 0.40 0.95',
+};
+
 function ensureCvDir() {
-  if (!fs.existsSync(CV_GEN_DIR)) {
-    fs.mkdirSync(CV_GEN_DIR, { recursive: true });
-  }
+  if (!fs.existsSync(CV_GEN_DIR)) fs.mkdirSync(CV_GEN_DIR, { recursive: true });
 }
 
 function handleError(error, res, msg = 'Internal server error') {
-  console.error('[cvGeneratorController]', error);
-  if (error.name === 'CastError') {
-    return res.status(400).json({ success: false, message: 'Invalid ID format' });
-  }
-  return res.status(500).json({ success: false, message: msg });
+  console.error('[cvGeneratorController]', error.message || error);
+  if (error.name === 'CastError') return res.status(400).json({ success: false, message: 'Invalid ID format' });
+  return res.status(500).json({ success: false, message: msg, detail: String(error.message || '') });
 }
 
-// ─────────────────────────────────────────────────────────────
-// GET /api/v1/candidate/cv-generator/templates
-// List all available templates with metadata
-// ─────────────────────────────────────────────────────────────
-exports.getTemplates = (req, res) => {
+function fmtCV(cv) {
+  return {
+    _id: cv._id, fileName: cv.fileName, originalName: cv.originalName,
+    size: cv.size, uploadedAt: cv.uploadedAt, isPrimary: cv.isPrimary,
+    mimetype: cv.mimetype, fileExtension: cv.fileExtension,
+    description: cv.description, fileUrl: cv.fileUrl, downloadUrl: cv.downloadUrl,
+    isGenerated: cv.isGenerated, templateId: cv.templateId, generatedAt: cv.generatedAt,
+  };
+}
+
+function resolveFile(cv) {
+  const name = cv.fileName || cv.filename;
+  if (!name) return null;
+  return [
+    path.join(CV_GEN_DIR, name),
+    path.join(process.cwd(), 'uploads', 'cv', name),
+    cv.filePath,
+  ].filter(Boolean).find(p => { try { return fs.existsSync(p); } catch(_){ return false; } }) || null;
+}
+
+function tplLabel(id) {
+  return ({
+    executive:'Executive Classic', modern:'Modern Minimal', creative:'Creative Bold',
+    professional:'Professional', elegant:'Elegant Serif', tech:'Tech Developer',
+    infographic:'Infographic', compact:'Compact One-Page', academic:'Academic',
+    freelancer:'Freelancer Portfolio', startup:'Startup', minimal:'Pure Minimal',
+    geometric:'Geometric', timeline:'Timeline', nordic:'Nordic',
+    impact:'High Impact', retro:'Retro Type', healthcare:'Healthcare',
+    magazine:'Magazine', glass:'Glass & Gradient',
+  })[id] || id;
+}
+
+// ─── GET /templates ──────────────────────────────────────────────────────────
+exports.getTemplates = (_req, res) => {
   try {
-    const templates = listTemplates();
-    res.json({ success: true, data: { templates, count: templates.length } });
-  } catch (error) {
-    handleError(error, res, 'Failed to list templates');
-  }
+    res.json({ success: true, data: { templates: listTemplates(), count: listTemplates().length } });
+  } catch (e) { handleError(e, res, 'Failed to list templates'); }
 };
 
-// ─────────────────────────────────────────────────────────────
-// POST /api/v1/candidate/cv-generator/preview
-// Body: { templateId }
-// Returns raw HTML for inline browser preview (no file written)
-// ─────────────────────────────────────────────────────────────
+// ─── POST /preview ───────────────────────────────────────────────────────────
 exports.previewCV = async (req, res) => {
   try {
     const { templateId = 'modern' } = req.body;
-    const userId = req.user.userId;
+    const user = await User.findById(req.user.userId)
+      .select('-passwordHash -loginAttempts -lockUntil').lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    const user = await User.findById(userId)
-      .select('-passwordHash -loginAttempts -lockUntil')
-      .lean();
+    // ASYNC — fetches avatar as base64 data URI
+    const candidateData = await normalizeCandidateData(user);
 
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    const candidateData = normalizeCandidateData(user);
-    const html = renderTemplate(templateId, candidateData);
+    let html;
+    try { html = renderTemplate(templateId, candidateData); }
+    catch (e) { return res.status(400).json({ success: false, message: e.message }); }
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('X-CV-Template', templateId);
-    res.send(html);
-
-  } catch (error) {
-    if (error.message && error.message.startsWith('CV template')) {
-      return res.status(400).json({ success: false, message: error.message });
-    }
-    handleError(error, res, 'Failed to generate CV preview');
-  }
+    res.setHeader('Cache-Control', 'no-cache');
+    return res.send(html);
+  } catch (e) { handleError(e, res, 'Failed to generate preview'); }
 };
 
-// ─────────────────────────────────────────────────────────────
-// POST /api/v1/candidate/cv-generator/generate
-// Body: { templateId, description, setAsPrimary }
-// Generates PDF, saves to disk, attaches to user's cvs[]
-// ─────────────────────────────────────────────────────────────
+// ─── POST /generate ──────────────────────────────────────────────────────────
 exports.generateCV = async (req, res) => {
   const { templateId = 'modern', description, setAsPrimary = false } = req.body;
   const userId = req.user.userId;
-
   let pdfPath = null;
 
   try {
     ensureCvDir();
-
-    // 1. Fetch user
-    const user = await User.findById(userId)
-      .select('-passwordHash -loginAttempts -lockUntil')
-      .lean();
-
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+    const userLean = await User.findById(userId)
+      .select('-passwordHash -loginAttempts -lockUntil').lean();
+    if (!userLean) return res.status(404).json({ success: false, message: 'User not found' });
+    if ((userLean.cvs || []).length >= 10) {
+      return res.status(400).json({ success: false, message: 'Maximum 10 CVs reached. Delete one first.', code: 'CV_LIMIT_REACHED' });
     }
 
-    // 2. Check CV limit
-    if (user.cvs && user.cvs.length >= 10) {
-      return res.status(400).json({
-        success: false,
-        message: 'Maximum 10 CVs allowed. Please delete an existing CV before generating a new one.',
-        code: 'CV_LIMIT_REACHED'
-      });
-    }
+    // ASYNC — fetches avatar
+    const candidateData = await normalizeCandidateData(userLean);
 
-    // 3. Normalise data + render HTML
-    const candidateData = normalizeCandidateData(user);
-    const html = renderTemplate(templateId, candidateData);
+    let html;
+    try { html = renderTemplate(templateId, candidateData); }
+    catch (e) { return res.status(400).json({ success: false, message: e.message }); }
 
-    // 4. Write PDF
-    const timestamp   = Date.now();
-    const safeSlug    = (user.name || 'cv').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase().slice(0, 30);
-    const fileName    = `${safeSlug}-${templateId}-${timestamp}.pdf`;
-    pdfPath           = path.join(CV_GEN_DIR, fileName);
+    const fileName  = `${(userLean.name||'cv').replace(/[^a-zA-Z0-9]/g,'-').toLowerCase().slice(0,30)}-${templateId}-${Date.now()}.pdf`;
+    pdfPath = path.join(CV_GEN_DIR, fileName);
 
-    await htmlToPdf(html, pdfPath);
-
-    // Verify file was created
-    if (!fs.existsSync(pdfPath)) {
-      throw new Error('PDF generation produced no output file');
-    }
-
-    const fileStats = fs.statSync(pdfPath);
-
-    // 5. Build CV record (same shape as localFileUpload CVs)
-    const cvData = {
-      fileName,
-      originalName:     `${user.name || 'CV'} - ${_templateLabel(templateId)}.pdf`,
-      filePath:         pdfPath,
-      fileUrl:          `/uploads/cv/${fileName}`,
-      downloadUrl:      `/uploads/download/cv/${fileName}`,
-      mimetype:         'application/pdf',
-      size:             fileStats.size,
-      fileExtension:    'pdf',
-      uploadedAt:       new Date(),
-      isPrimary:        false,
-      description:      description || `Generated CV — ${_templateLabel(templateId)} template`,
-      downloadCount:    0,
-      viewCount:        0,
-      // Extended fields for generated CVs
-      isGenerated:      true,
-      templateId,
-      generatedAt:      new Date(),
-      generationSource: 'cv-generator',
-    };
-
-    // 6. Attach to user via existing addCV model method
-    const userDoc = await User.findById(userId);
-    await userDoc.addCV(cvData);
-
-    if (setAsPrimary) {
-      const newCV = userDoc.cvs[userDoc.cvs.length - 1];
-      await userDoc.setPrimaryCV(newCV._id.toString());
-    }
-
-    // 7. Refresh and return new CV
-    const updatedUser = await User.findById(userId).select('cvs');
-    const newCV = updatedUser.cvs[updatedUser.cvs.length - 1];
-
-    res.status(201).json({
-      success: true,
-      message: 'CV generated and saved successfully',
-      data: {
-        cv: {
-          _id:          newCV._id,
-          fileName:     newCV.fileName,
-          originalName: newCV.originalName,
-          size:         newCV.size,
-          uploadedAt:   newCV.uploadedAt,
-          isPrimary:    newCV.isPrimary,
-          mimetype:     newCV.mimetype,
-          fileExtension: newCV.fileExtension,
-          description:  newCV.description,
-          fileUrl:      newCV.fileUrl,
-          downloadUrl:  newCV.downloadUrl,
-          isGenerated:  newCV.isGenerated,
-          templateId:   newCV.templateId,
-          generatedAt:  newCV.generatedAt,
-        },
-        totalCVs:    updatedUser.cvs.length,
-        primaryCVId: updatedUser.cvs.find(c => c.isPrimary)?._id?.toString(),
-      }
+    await htmlToPdf(html, pdfPath, {
+      ...candidateData,
+      primaryColor: TEMPLATE_COLORS[templateId] || '0.04 0.15 0.25',
     });
 
-  } catch (error) {
-    // Clean up orphan file if PDF was partially written
-    if (pdfPath && fs.existsSync(pdfPath)) {
-      try { fs.unlinkSync(pdfPath); } catch (_) { /* ignore */ }
+    if (!fs.existsSync(pdfPath) || fs.statSync(pdfPath).size < 200) {
+      throw new Error('PDF generation produced no valid output');
     }
 
-    if (error.message && error.message.startsWith('CV template')) {
-      return res.status(400).json({ success: false, message: error.message });
+    const stats   = fs.statSync(pdfPath);
+    const userDoc = await User.findById(userId);
+    await userDoc.addCV({
+      fileName, originalName: `${userLean.name||'CV'} - ${tplLabel(templateId)}.pdf`,
+      filePath: pdfPath, fileUrl: `/uploads/cv/${fileName}`,
+      downloadUrl: `/uploads/download/cv/${fileName}`,
+      mimetype: 'application/pdf', size: stats.size, fileExtension: 'pdf',
+      uploadedAt: new Date(), isPrimary: false,
+      description: description || `Generated — ${tplLabel(templateId)} template`,
+      downloadCount: 0, viewCount: 0,
+      isGenerated: true, templateId, generatedAt: new Date(), generationSource: 'cv-generator',
+    });
+
+    if (setAsPrimary) {
+      const nCV = userDoc.cvs[userDoc.cvs.length - 1];
+      await userDoc.setPrimaryCV(nCV._id.toString());
     }
-    handleError(error, res, 'Failed to generate CV');
+
+    const updated = await User.findById(userId).select('cvs');
+    const newCV   = updated.cvs[updated.cvs.length - 1];
+    res.status(201).json({
+      success: true, message: 'CV generated successfully',
+      data: { cv: fmtCV(newCV), totalCVs: updated.cvs.length, primaryCVId: updated.cvs.find(c=>c.isPrimary)?._id?.toString() },
+    });
+  } catch (e) {
+    if (pdfPath && fs.existsSync(pdfPath)) try { fs.unlinkSync(pdfPath); } catch(_){}
+    handleError(e, res, 'Failed to generate CV');
   }
 };
 
-// ─────────────────────────────────────────────────────────────
-// GET /api/v1/candidate/cv-generator/download/:cvId
-// Streams the generated PDF for download (same as downloadCV)
-// ─────────────────────────────────────────────────────────────
+// ─── GET /download/:cvId ─────────────────────────────────────────────────────
 exports.downloadGeneratedCV = async (req, res) => {
   try {
     const { cvId } = req.params;
-    const userId   = req.user.userId;
-
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
+    const user = await User.findById(req.user.userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     const cv = user.getCVById(cvId);
-    if (!cv) {
-      return res.status(404).json({ success: false, message: 'CV not found' });
-    }
-
-    const filePath = _resolveFilePath(cv);
-    if (!filePath) {
-      return res.status(404).json({ success: false, message: 'CV file not found on server' });
-    }
-
+    if (!cv) return res.status(404).json({ success: false, message: 'CV not found' });
+    const filePath = resolveFile(cv);
+    if (!filePath) return res.status(404).json({ success: false, message: 'File not found on server' });
     await user.incrementCVDownloadCount(cvId);
-
-    res.set({
-      'Content-Disposition': `attachment; filename="${encodeURIComponent(cv.originalName || cv.fileName)}"`,
-      'Content-Type':        cv.mimetype || 'application/pdf',
-      'Content-Length':      cv.size,
-      'Cache-Control':       'no-cache, no-store, must-revalidate',
-    });
-
+    res.set({ 'Content-Disposition': `attachment; filename="${encodeURIComponent(cv.originalName||cv.fileName)}"`, 'Content-Type': 'application/pdf', 'Content-Length': cv.size, 'Cache-Control': 'no-cache' });
     fs.createReadStream(filePath).pipe(res);
-
-  } catch (error) {
-    handleError(error, res, 'Failed to download generated CV');
-  }
+  } catch (e) { handleError(e, res, 'Failed to download CV'); }
 };
 
-// ─────────────────────────────────────────────────────────────
-// POST /api/v1/candidate/cv-generator/regenerate/:cvId
-// Body: { templateId }
-// Deletes the old PDF, generates a fresh one with new template
-// ─────────────────────────────────────────────────────────────
+// ─── POST /regenerate/:cvId ──────────────────────────────────────────────────
 exports.regenerateCV = async (req, res) => {
   try {
     const { cvId } = req.params;
     const { templateId = 'modern' } = req.body;
-    const userId   = req.user.userId;
-
     ensureCvDir();
+    const userDoc = await User.findById(req.user.userId);
+    if (!userDoc) return res.status(404).json({ success: false, message: 'User not found' });
+    const existing = userDoc.getCVById(cvId);
+    if (!existing) return res.status(404).json({ success: false, message: 'CV not found' });
+    const oldPath = resolveFile(existing);
+    if (oldPath) try { fs.unlinkSync(oldPath); } catch(_){}
 
-    const userDoc = await User.findById(userId);
-    if (!userDoc) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+    const userLean = await User.findById(req.user.userId).select('-passwordHash').lean();
+    const candidateData = await normalizeCandidateData(userLean);
+    let html;
+    try { html = renderTemplate(templateId, candidateData); }
+    catch (e) { return res.status(400).json({ success: false, message: e.message }); }
 
-    const existingCV = userDoc.getCVById(cvId);
-    if (!existingCV) {
-      return res.status(404).json({ success: false, message: 'CV not found' });
-    }
-
-    // Delete old file
-    const oldPath = _resolveFilePath(existingCV);
-    if (oldPath && fs.existsSync(oldPath)) {
-      try { fs.unlinkSync(oldPath); } catch (_) { /* ignore */ }
-    }
-
-    // Re-render and generate new PDF
-    const userLean = await User.findById(userId).select('-passwordHash').lean();
-    const candidateData = normalizeCandidateData(userLean);
-    const html = renderTemplate(templateId, candidateData);
-
-    const timestamp  = Date.now();
-    const safeSlug   = (userDoc.name || 'cv').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase().slice(0, 30);
-    const fileName   = `${safeSlug}-${templateId}-${timestamp}.pdf`;
+    const fileName   = `${(userDoc.name||'cv').replace(/[^a-zA-Z0-9]/g,'-').toLowerCase().slice(0,30)}-${templateId}-${Date.now()}.pdf`;
     const newPdfPath = path.join(CV_GEN_DIR, fileName);
+    await htmlToPdf(html, newPdfPath, { ...candidateData, primaryColor: TEMPLATE_COLORS[templateId]||'0.04 0.15 0.25' });
 
-    await htmlToPdf(html, newPdfPath);
-
-    const fileStats = fs.statSync(newPdfPath);
-
-    // Update the CV subdocument in-place
-    const cvIdx = userDoc.cvs.findIndex(c => c._id.toString() === cvId);
-    if (cvIdx === -1) {
-      return res.status(404).json({ success: false, message: 'CV not found' });
-    }
-
-    userDoc.cvs[cvIdx].fileName    = fileName;
-    userDoc.cvs[cvIdx].filePath    = newPdfPath;
-    userDoc.cvs[cvIdx].fileUrl     = `/uploads/cv/${fileName}`;
-    userDoc.cvs[cvIdx].downloadUrl = `/uploads/download/cv/${fileName}`;
-    userDoc.cvs[cvIdx].size        = fileStats.size;
-    userDoc.cvs[cvIdx].templateId  = templateId;
-    userDoc.cvs[cvIdx].generatedAt = new Date();
-    userDoc.cvs[cvIdx].originalName = `${userDoc.name || 'CV'} - ${_templateLabel(templateId)}.pdf`;
-
-    await userDoc.save();
-
-    const updatedCV = userDoc.cvs[cvIdx];
-
-    res.json({
-      success: true,
-      message: 'CV regenerated successfully',
-      data: {
-        cv: {
-          _id:          updatedCV._id,
-          fileName:     updatedCV.fileName,
-          originalName: updatedCV.originalName,
-          size:         updatedCV.size,
-          uploadedAt:   updatedCV.uploadedAt,
-          isPrimary:    updatedCV.isPrimary,
-          mimetype:     updatedCV.mimetype,
-          fileExtension: updatedCV.fileExtension,
-          description:  updatedCV.description,
-          fileUrl:      updatedCV.fileUrl,
-          downloadUrl:  updatedCV.downloadUrl,
-          isGenerated:  updatedCV.isGenerated,
-          templateId:   updatedCV.templateId,
-          generatedAt:  updatedCV.generatedAt,
-        }
-      }
+    const stats = fs.statSync(newPdfPath);
+    const idx   = userDoc.cvs.findIndex(c => c._id.toString() === cvId);
+    if (idx === -1) return res.status(404).json({ success: false, message: 'CV index not found' });
+    Object.assign(userDoc.cvs[idx], {
+      fileName, filePath: newPdfPath,
+      fileUrl: `/uploads/cv/${fileName}`, downloadUrl: `/uploads/download/cv/${fileName}`,
+      size: stats.size, templateId, generatedAt: new Date(),
+      originalName: `${userDoc.name||'CV'} - ${tplLabel(templateId)}.pdf`,
     });
-
-  } catch (error) {
-    handleError(error, res, 'Failed to regenerate CV');
-  }
+    await userDoc.save();
+    res.json({ success: true, message: 'CV regenerated', data: { cv: fmtCV(userDoc.cvs[idx]) } });
+  } catch (e) { handleError(e, res, 'Failed to regenerate CV'); }
 };
 
-// ─────────────────────────────────────────────────────────────
-// GET /api/v1/candidate/cv-generator/list
-// Returns only the generated CVs from the user's cvs[]
-// ─────────────────────────────────────────────────────────────
+// ─── GET /list ───────────────────────────────────────────────────────────────
 exports.listGeneratedCVs = async (req, res) => {
   try {
-    const userId = req.user.userId;
-
-    const user = await User.findById(userId).select('cvs').lean();
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    const generated = (user.cvs || []).filter(cv => cv.isGenerated);
-
-    res.json({
-      success: true,
-      data: {
-        cvs:   generated,
-        count: generated.length,
-      }
-    });
-
-  } catch (error) {
-    handleError(error, res, 'Failed to list generated CVs');
-  }
+    const user = await User.findById(req.user.userId).select('cvs').lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    const generated = (user.cvs||[]).filter(c => c.isGenerated);
+    res.json({ success: true, data: { cvs: generated, count: generated.length } });
+  } catch (e) { handleError(e, res, 'Failed to list CVs'); }
 };
-
-// ─────────────────────────────────────────────────────────────
-// Private helpers
-// ─────────────────────────────────────────────────────────────
-
-function _resolveFilePath(cv) {
-  const filename = cv.fileName || cv.filename;
-  if (!filename) return null;
-
-  const candidates = [
-    path.join(CV_GEN_DIR, filename),
-    path.join(process.cwd(), 'uploads', 'cv', filename),
-    cv.filePath,
-  ].filter(Boolean);
-
-  for (const p of candidates) {
-    if (p && fs.existsSync(p)) return p;
-  }
-  return null;
-}
-
-function _templateLabel(templateId) {
-  const labels = {
-    executive:    'Executive Classic',
-    modern:       'Modern Minimal',
-    creative:     'Creative Bold',
-    professional: 'Professional',
-    elegant:      'Elegant Serif',
-    tech:         'Tech Developer',
-    infographic:  'Infographic',
-    compact:      'Compact One-Page',
-    academic:     'Academic',
-    freelancer:   'Freelancer Portfolio',
-  };
-  return labels[templateId] || templateId;
-}

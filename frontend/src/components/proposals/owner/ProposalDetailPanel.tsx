@@ -2,13 +2,35 @@
 // components/proposals/owner/ProposalDetailPanel.tsx
 'use client';
 import React from 'react';
-import { ProposalStatusBadge }    from './shared/ProposalStatusBadge';
-import { ProposalBidSummary }     from './shared/ProposalBidSummary';
-import { MilestoneTimeline }      from './shared/MilestoneTimeline';
-import { ScreeningAnswersView }   from './shared/ScreeningAnswersView';
-import { ProposalAttachmentList } from './shared/ProposalAttachmentList';
-import { FreelancerProfilePreview } from './FreelancerProfilePreview';
+import {  Award, Globe } from 'lucide-react';
+import { ProposalStatusBadge }    from '../shared/ProposalStatusBadge';
+import { ProposalBidSummary }     from '../shared/ProposalBidSummary';
+import { MilestoneTimeline }      from '../shared/MilestoneTimeline';
+import { ScreeningAnswersView }   from '../shared/ScreeningAnswersView';
+import { ProposalAttachmentList } from '../shared/ProposalAttachmentList';
 import type { Proposal, ProposalStatus } from '@/services/proposalService';
+
+interface Props {
+  proposal: Proposal;
+  onStatusUpdate: (status: ProposalStatus, data?: Record<string, unknown>) => void;
+  onShortlist: () => void;
+  isUpdatingStatus?: boolean;
+}
+
+function formatDate(d?: string) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function InfoChip({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-0.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl px-3 py-2.5 border border-slate-100 dark:border-slate-700">
+      <span className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">{label}</span>
+      <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 capitalize">{value}</span>
+    </div>
+  );
+}
+
 
 interface Props {
   proposal: Proposal;
@@ -108,22 +130,6 @@ export function ProposalDetailPanel({ proposal, onStatusUpdate, onShortlist, isU
         <section>
           <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Screening Answers</h3>
           <ScreeningAnswersView answers={proposal.screeningAnswers} />
-        </section>
-      )}
-
-      {/* ── Attachments ─────────────────────────────────────────────────── */}
-      {proposal.attachments && proposal.attachments.length > 0 && (
-        <section>
-          <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Attachments</h3>
-          <ProposalAttachmentList attachments={proposal.attachments} />
-        </section>
-      )}
-
-      {/* ── Freelancer Profile Preview ───────────────────────────────────── */}
-      {profile && (
-        <section>
-          <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">About the Freelancer</h3>
-          <FreelancerProfilePreview freelancerProfile={profile} user={freelancer} />
         </section>
       )}
 

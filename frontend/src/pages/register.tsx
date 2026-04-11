@@ -32,7 +32,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import OTPVerification from '@/components/auth/OTPVerification';
 import { SleekButton } from '@/components/ui/SleekButton';
-import { colors, lightTheme, darkTheme } from '@/utils/color';
+import { colors, lightTheme, darkTheme, colorClasses } from '@/utils/color';
 import { promoCodeService } from '@/services/promoCodeService';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -288,19 +288,20 @@ export default function RegisterPage() {
     },
   });
 
-  if (requiresVerification) {
-    return (
-      <div
-        className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8"
-        style={{ backgroundColor: lightTheme.bg.secondary }}
-      >
+if (requiresVerification) {
+  return (
+    <div
+      className={`min-h-screen flex items-center justify-center px-4 sm:px-6 ${colorClasses.bg.secondary}`}
+    >
+      <div className="w-full">
         <OTPVerification
           email={verificationEmail}
           onBack={() => setRequiresVerification(false)}
         />
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   return (
     <div

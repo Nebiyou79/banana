@@ -1,5 +1,7 @@
 // src/components/cv-generator/TemplateSelector.tsx
-// Grid of template cards. Clicking one selects and triggers preview.
+// Uses Tailwind colorClasses for dark/light mode, useResponsive for grid layout.
+
+'use client';
 
 import React from 'react';
 import { CVTemplate } from '@/services/cvGeneratorService';
@@ -14,127 +16,133 @@ interface Props {
 }
 
 const STYLE_ICONS: Record<string, string> = {
-  classic:      '🏛️',
-  modern:       '✦',
-  creative:     '🎨',
-  professional: '💼',
-  elegant:      '✒️',
-  tech:         '⌨️',
-  infographic:  '📊',
-  compact:      '📄',
-  academic:     '🎓',
-  freelancer:   '🚀',
+  classic: '🏛️', modern: '✦', creative: '🎨', professional: '💼',
+  elegant: '✒️', tech: '⌨️', infographic: '📊', compact: '📄',
+  academic: '🎓', freelancer: '🚀', startup: '🌟', minimal: '◻',
+  geometric: '⬡', timeline: '📅', nordic: '❄️', impact: '💥',
+  retro: '📻', healthcare: '⚕️', magazine: '📰', glass: '💎',
 };
 
+// Skeleton placeholder
+function SkeletonCard() {
+  return (
+    <div className="rounded-xl overflow-hidden animate-pulse">
+      <div className="h-16 sm:h-20 bg-[#E5E5E5] dark:bg-[#4B5563]" />
+      <div className="p-2 sm:p-3 bg-[#F5F5F5] dark:bg-[#333333]">
+        <div className="h-2.5 bg-[#D1D5DB] dark:bg-[#6B7280] rounded mb-2 w-3/4" />
+        <div className="h-2 bg-[#E5E5E5] dark:bg-[#4B5563] rounded w-1/2" />
+      </div>
+    </div>
+  );
+}
+
 export const TemplateSelector: React.FC<Props> = ({
-  templates, selectedId, onSelect, isLoading
+  templates, selectedId, onSelect, isLoading,
 }) => {
   const { breakpoint, getTouchTargetSize } = useResponsive();
   const isMobile = breakpoint === 'mobile';
+  const isTablet = breakpoint === 'tablet';
+
+  // Responsive grid columns
+  const gridCols = isMobile
+    ? 'grid-cols-2'
+    : isTablet
+    ? 'grid-cols-3'
+    : 'grid-cols-4';
 
   if (isLoading) {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: 16 }}>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} style={{
-            borderRadius: 12,
-            background: '#f3f4f6',
-            height: isMobile ? 120 : 160,
-            animation: 'pulse 1.5s ease-in-out infinite',
-          }} />
-        ))}
-      </div>
+      <>
+        <p className={`text-xs mb-3 ${colorClasses.text.muted}`}>Loading templates…</p>
+        <div className={`grid ${gridCols} gap-2.5 sm:gap-3`}>
+          {Array.from({ length: isMobile ? 6 : 8 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+      </>
     );
   }
 
   return (
     <div>
-      <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 16 }}>
-        Choose a design — your profile data will fill it automatically.
+      <p className={`text-xs sm:text-sm mb-3 sm:mb-4 ${colorClasses.text.muted}`}>
+        {templates.length} designs available · your profile data fills each one automatically
       </p>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fill, minmax(200px, 1fr))',
-        gap: isMobile ? 10 : 16,
-      }}>
+
+      <div className={`grid ${gridCols} gap-2.5 sm:gap-3`}>
         {templates.map(tpl => {
           const isSelected = tpl.id === selectedId;
           return (
             <button
               key={tpl.id}
               onClick={() => onSelect(tpl)}
-              className={getTouchTargetSize('md')}
-              style={{
-                border: isSelected ? `3px solid ${tpl.primaryColor}` : '2px solid #e5e7eb',
-                borderRadius: 12,
-                padding: 0,
-                background: '#fff',
-                cursor: 'pointer',
-                overflow: 'hidden',
-                transition: 'all 0.18s ease',
-                transform: isSelected ? 'scale(1.02)' : 'scale(1)',
-                boxShadow: isSelected
-                  ? `0 4px 20px ${tpl.primaryColor}40`
-                  : '0 1px 4px rgba(0,0,0,0.08)',
-                textAlign: 'left',
-              }}
+              aria-pressed={isSelected}
+              aria-label={`Select ${tpl.name} template`}
+              className={`
+                ${getTouchTargetSize('sm')}
+                flex flex-col rounded-xl overflow-hidden cursor-pointer
+                border-2 transition-all duration-150 text-left
+                focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
+                ${isSelected
+                  ? 'scale-[1.03] shadow-lg'
+                  : 'border-[#E5E5E5] dark:border-[#4B5563] hover:border-[#A0A0A0] dark:hover:border-[#6B7280] hover:shadow-md'
+                }
+              `}
+              style={isSelected ? {
+                borderColor: tpl.primaryColor,
+                boxShadow: `0 4px 18px ${tpl.primaryColor}30`,
+              } : {}}
             >
-              {/* Thumbnail gradient swatch */}
-              <div style={{
-                background: tpl.thumbnailGradient,
-                height: isMobile ? 70 : 100,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: isMobile ? 24 : 32,
-                position: 'relative',
-              }}>
-                {STYLE_ICONS[tpl.style] || '📄'}
+              {/* Gradient thumbnail */}
+              <div
+                className="relative flex items-center justify-center flex-shrink-0"
+                style={{
+                  background: tpl.thumbnailGradient,
+                  height: isMobile ? 60 : 80,
+                  fontSize: isMobile ? 20 : 26,
+                }}
+              >
+                <span role="img" aria-hidden="true">{STYLE_ICONS[tpl.style] ?? '📄'}</span>
+
+                {/* Selected badge */}
                 {isSelected && (
-                  <div style={{
-                    position: 'absolute', top: 8, right: 8,
-                    width: 22, height: 22, borderRadius: '50%',
-                    background: '#fff', display: 'flex', alignItems: 'center',
-                    justifyContent: 'center', fontSize: 13,
-                  }}>✓</div>
+                  <div
+                    className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-white flex items-center justify-center text-[10px] font-bold shadow"
+                    style={{ color: tpl.primaryColor }}
+                  >✓</div>
                 )}
               </div>
 
               {/* Info */}
-              <div style={{ padding: isMobile ? '8px 10px' : '10px 14px' }}>
-                <div style={{
-                  fontSize: isMobile ? 12 : 13,
-                  fontWeight: 700,
-                  color: isSelected ? tpl.primaryColor : '#0A2540',
-                  marginBottom: 2,
-                }}>{tpl.name}</div>
+              <div className={`flex-1 p-2 sm:p-2.5 ${colorClasses.bg.primary}`}>
+                <p
+                  className="text-[11px] sm:text-xs font-bold leading-snug mb-1"
+                  style={{ color: isSelected ? tpl.primaryColor : undefined }}
+                >
+                  {!isSelected && <span className={colorClasses.text.primary}>{tpl.name}</span>}
+                  {isSelected && tpl.name}
+                </p>
+
+                {/* Description — only on tablet/desktop */}
                 {!isMobile && (
-                  <div style={{ fontSize: 11, color: '#9ca3af', lineHeight: 1.4 }}>
-                    {tpl.description.length > 60 ? `${tpl.description.slice(0, 60)}…` : tpl.description}
-                  </div>
+                  <p className={`text-[10px] leading-snug line-clamp-2 mb-1.5 ${colorClasses.text.muted}`}>
+                    {tpl.description}
+                  </p>
                 )}
-                <div style={{
-                  marginTop: 6,
-                  display: 'inline-block',
-                  fontSize: 10,
-                  fontWeight: 600,
-                  color: tpl.primaryColor,
-                  background: `${tpl.primaryColor}18`,
-                  padding: '2px 7px',
-                  borderRadius: 20,
-                  textTransform: 'capitalize',
-                }}>{tpl.style}</div>
+
+                {/* Style badge */}
+                <span
+                  className="inline-block text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
+                  style={{
+                    color: tpl.primaryColor,
+                    background: `${tpl.primaryColor}18`,
+                  }}
+                >{tpl.style}</span>
               </div>
             </button>
           );
         })}
       </div>
-
-      <style>{`
-        @keyframes pulse {
-          0%,100%{opacity:1} 50%{opacity:0.5}
-        }
-      `}</style>
     </div>
   );
 };

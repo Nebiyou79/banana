@@ -7,13 +7,17 @@ import React, { useCallback, useState } from 'react';
 import {
   FileStack, Upload, Loader2, File, Download, Trash2,
   FileText, FileImage, FileArchive, FileSpreadsheet,
-  FileVideo, FileAudio, Calendar, ExternalLink,
+  FileVideo, FileAudio, Calendar
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { colorClasses } from '@/utils/color';
 import { SectionCard } from '@/components/tenders/shared/SectionCard';
-import { useUploadFreelanceAttachments } from '@/hooks/useFreelanceTender';
+import {
+  useUploadFreelanceAttachments,
+  useDownloadFreelanceAttachment,
+  useDeleteFreelanceAttachment,
+} from '@/hooks/useFreelanceTender';
 import {
   useUploadProfessionalAttachments,
   useDownloadProfessionalAttachment,
@@ -93,33 +97,51 @@ const AttachmentItem: React.FC<{
   onDelete?: (id: string) => void;
 }> = ({ attachment, tenderId, tenderType, isOwner, onDelete }) => {
   const a = attachment as any;
-  const { mutate: downloadAttachment, isPending: downloading } = useDownloadProfessionalAttachment();
-  const { mutate: deleteAttachment, isPending: deleting } = useDeleteProfessionalAttachment();
+  // Use the correct hook per tender type
+  const { mutate: downloadProfessional, isPending: downloadingPR } = useDownloadProfessionalAttachment();
+  const { mutate: downloadFreelance, isPending: downloadingFL } = useDownloadFreelanceAttachment();
+  const { mutate: deleteProfessional, isPending: deletingPR } = useDeleteProfessionalAttachment();
+  const { mutate: deleteFreelance, isPending: deletingFL } = useDeleteFreelanceAttachment();
   const { toast } = useToast();
+
+  const downloading = tenderType === 'freelance' ? downloadingFL : downloadingPR;
+  const deleting = tenderType === 'freelance' ? deletingFL : deletingPR;
 
   const handleDownload = () => {
     if (tenderType === 'professional') {
-      downloadAttachment(
+      downloadProfessional(
         { tenderId, attachmentId: a._id, filename: a.originalName || a.fileName || 'document' },
         { onError: () => toast({ title: 'Download failed', variant: 'destructive' }) }
       );
     } else {
-      // For freelance tenders, open the URL directly
-      if (a.url || a.downloadUrl) {
-        window.open(a.url ?? a.downloadUrl, '_blank', 'noopener,noreferrer');
-      }
+      // FIX: Use the blob-stream download hook — never use static /uploads/ URL
+      downloadFreelance(
+        { tenderId, attachmentId: a._id },
+        { onError: () => toast({ title: 'Download failed', variant: 'destructive' }) }
+      );
     }
   };
 
   const handleDelete = () => {
     if (!isOwner) return;
-    deleteAttachment(
-      { id: tenderId, attachmentId: a._id },
-      {
-        onSuccess: () => onDelete?.(a._id),
-        onError: () => toast({ title: 'Delete failed', variant: 'destructive' }),
-      }
-    );
+    if (tenderType === 'professional') {
+      deleteProfessional(
+        { id: tenderId, attachmentId: a._id },
+        {
+          onSuccess: () => onDelete?.(a._id),
+          onError: () => toast({ title: 'Delete failed', variant: 'destructive' }),
+        }
+      );
+    } else {
+      // FIX: Use freelance delete hook — not the professional one
+      deleteFreelance(
+        { id: tenderId, attachmentId: a._id },
+        {
+          onSuccess: () => onDelete?.(a._id),
+          onError: () => toast({ title: 'Delete failed', variant: 'destructive' }),
+        }
+      );
+    }
   };
 
   const typeLabel = docTypeLabel[a.documentType] ?? a.documentType ?? 'Document';

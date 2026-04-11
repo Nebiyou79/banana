@@ -645,7 +645,7 @@ const ResultsHeader = ({ results, total, page, pages, query, layout, onLayout, d
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
           <h2 className={cn('text-xl font-black', dark ? 'text-white' : 'text-gray-900')}>
-            {query ? <><span className="font-normal text-gray-500">Results for </span>"{query}"</> : `${total.toLocaleString()} results`}
+            {query ? <><span className="font-normal text-gray-500">Results for </span>`{query}`</> : `${total.toLocaleString()} results`}
           </h2>
           <p className="text-sm text-gray-500 mt-0.5">Showing {results.length} of {total.toLocaleString()} · Page {page}/{pages}</p>
         </div>
