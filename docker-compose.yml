@@ -15,10 +15,11 @@ services:
       APP_URL: https://getbananalink.com
       BASE_URL: https://getbananalink.com
       CORS_ORIGIN: https://getbananalink.com
-      # ADD: BACKEND_URL to prevent localhost fallback in file URLs
       BACKEND_URL: https://getbananalink.com
-      # ADD: UPLOAD_BASE_PATH for consistent path resolution
       UPLOAD_BASE_PATH: /app/uploads
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     volumes:
       - uploads_volume:/app/uploads
     restart: unless-stopped
@@ -29,7 +30,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 60s
 
   frontend:
     build:
@@ -44,6 +45,9 @@ services:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: https://getbananalink.com/api/v1
       NEXT_PUBLIC_BACKEND_URL: https://getbananalink.com
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     depends_on:
       backend:
         condition: service_healthy
@@ -63,3 +67,5 @@ volumes:
 networks:
   app-network:
     driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "true"
