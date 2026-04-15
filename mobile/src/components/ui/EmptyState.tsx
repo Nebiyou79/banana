@@ -1,72 +1,46 @@
+/**
+ * mobile/src/components/common/EmptyState.tsx
+ * Performance-List-Specialist: every list needs an empty state.
+ */
+
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/themeStore';
-import { Button } from './Button';
 
 interface EmptyStateProps {
-  icon?: keyof typeof Ionicons.glyphMap;
-  title: string;
-  description?: string;
+  icon?:        string;
+  title:        string;
+  subtitle?:    string;
   actionLabel?: string;
-  onAction?: () => void;
+  onAction?:    () => void;
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({
-  icon = 'file-tray-outline',
-  title,
-  description,
-  actionLabel,
-  onAction,
+  icon = 'search-outline', title, subtitle, actionLabel, onAction,
 }) => {
-  const { theme } = useThemeStore();
-  const { colors } = theme;
-
+  const { theme: { colors } } = useThemeStore();
   return (
-    <View style={styles.container}>
-      <View style={[styles.iconWrap, { backgroundColor: colors.borderLight }]}>
-        <Ionicons name={icon} size={48} color={colors.textMuted} />
+    <View style={s.wrap}>
+      <View style={[s.iconWrap, { backgroundColor: colors.primaryLight }]}>
+        <Ionicons name={icon as any} size={40} color={colors.primary} />
       </View>
-      <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
-      {description && (
-        <Text style={[styles.description, { color: colors.textMuted }]}>
-          {description}
-        </Text>
-      )}
+      <Text style={[s.title, { color: colors.text }]}>{title}</Text>
+      {subtitle && <Text style={[s.subtitle, { color: colors.textMuted }]}>{subtitle}</Text>}
       {actionLabel && onAction && (
-        <View style={styles.action}>
-          <Button title={actionLabel} onPress={onAction} size="md" />
-        </View>
+        <TouchableOpacity style={[s.btn, { backgroundColor: colors.primary }]} onPress={onAction} activeOpacity={0.8}>
+          <Text style={s.btnText}>{actionLabel}</Text>
+        </TouchableOpacity>
       )}
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 40,
-  },
-  iconWrap: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  description: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    maxWidth: 280,
-  },
-  action: { marginTop: 24 },
+const s = StyleSheet.create({
+  wrap:     { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, minHeight: 300 },
+  iconWrap: { width: 80, height: 80, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  title:    { fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
+  subtitle: { fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  btn:      { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
+  btnText:  { color: '#fff', fontSize: 15, fontWeight: '600' },
 });

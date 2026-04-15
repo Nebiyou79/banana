@@ -1,9 +1,12 @@
+// src/components/auth/AuthHeader.tsx
+// Usage: <AuthHeader title="Welcome back" subtitle="Sign in to continue" />
+
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useThemes';
 
 interface AuthHeaderProps {
-  title: string;
+  title:     string;
   subtitle?: string;
   showLogo?: boolean;
 }
@@ -13,17 +16,41 @@ export const AuthHeader: React.FC<AuthHeaderProps> = ({
   subtitle,
   showLogo = true,
 }) => {
-  const { theme } = useThemeStore();
-  const { colors, typography } = theme;
+  const { colors, type, spacing } = useTheme();
 
   return (
-    <View style={styles.container}>
-      {showLogo && <Text style={styles.logo}>🍌</Text>}
-      <Text style={[styles.title, { color: colors.text, fontSize: typography['3xl'] }]}>
+    <View style={[styles.container, { marginBottom: spacing['2xl'] }]}>
+      {showLogo && (
+        <View
+          style={[
+            styles.logoBg,
+            {
+              backgroundColor: colors.accentBg,
+              borderColor:     colors.borderAccent,
+              marginBottom:    spacing.lg,
+            },
+          ]}
+        >
+          <Text style={styles.logoEmoji}>🍌</Text>
+        </View>
+      )}
+
+      <Text style={[type.display, { color: colors.textPrimary, textAlign: 'center' }]}>
         {title}
       </Text>
+
       {subtitle ? (
-        <Text style={[styles.subtitle, { color: colors.textMuted, fontSize: typography.base }]}>
+        <Text
+          style={[
+            type.bodyLg,
+            {
+              color:           colors.textMuted,
+              textAlign:       'center',
+              marginTop:       spacing.sm,
+              paddingHorizontal: spacing.xl,
+            },
+          ]}
+        >
           {subtitle}
         </Text>
       ) : null}
@@ -32,8 +59,20 @@ export const AuthHeader: React.FC<AuthHeaderProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: { alignItems: 'center', marginBottom: 32 },
-  logo:      { fontSize: 52, marginBottom: 12 },
-  title:     { fontWeight: '800', textAlign: 'center', letterSpacing: -0.5, marginBottom: 8 },
-  subtitle:  { textAlign: 'center', lineHeight: 22, paddingHorizontal: 16 },
+  container: {
+    alignItems: 'center',
+  },
+  logoBg: {
+    width:           76,
+    height:          76,
+    borderRadius:    22,
+    borderWidth:     1.5,
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  logoEmoji: {
+    fontSize: 40,
+  },
 });
+
+export default AuthHeader;

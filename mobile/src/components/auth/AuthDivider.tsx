@@ -1,70 +1,38 @@
+// src/components/auth/AuthDivider.tsx
+// Usage: <AuthDivider label="or continue with" />
+
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useThemeStore } from '../../store/themeStore';
-
-// ─── AuthDivider ──────────────────────────────────────────────────────────────
+import { useTheme } from '../../hooks/useThemes';
 
 interface AuthDividerProps {
   label?: string;
 }
 
-export const AuthDivider: React.FC<AuthDividerProps> = ({ label = 'or continue with' }) => {
-  const { theme } = useThemeStore();
-  const { colors, typography } = theme;
+export const AuthDivider: React.FC<AuthDividerProps> = ({
+  label = 'or continue with',
+}) => {
+  const { colors, type, spacing } = useTheme();
 
   return (
-    <View style={styles.dividerRow}>
-      <View style={[styles.line, { backgroundColor: colors.border }]} />
-      <Text style={[styles.dividerText, { color: colors.textMuted, fontSize: typography.sm }]}>
+    <View style={[styles.row, { marginVertical: spacing.xl }]}>
+      <View style={[styles.line, { backgroundColor: colors.borderPrimary }]} />
+      <Text
+        style={[
+          type.caption,
+          { color: colors.textMuted, marginHorizontal: spacing.sm },
+        ]}
+      >
         {label}
       </Text>
-      <View style={[styles.line, { backgroundColor: colors.border }]} />
-    </View>
-  );
-};
-
-// ─── FormError ────────────────────────────────────────────────────────────────
-
-interface FormErrorProps {
-  message?: string;
-  visible?: boolean;
-}
-
-export const FormError: React.FC<FormErrorProps> = ({ message, visible = true }) => {
-  const { theme } = useThemeStore();
-  const { colors, borderRadius, typography } = theme;
-
-  if (!visible || !message) return null;
-
-  return (
-    <View
-      style={[
-        styles.errorBox,
-        { backgroundColor: colors.errorLight, borderRadius: borderRadius.lg, borderColor: colors.error },
-      ]}
-    >
-      <Text style={[styles.errorText, { color: colors.error, fontSize: typography.sm }]}>
-        {message}
-      </Text>
+      <View style={[styles.line, { backgroundColor: colors.borderPrimary }]} />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  // Divider
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginVertical: 20,
-  },
+  row:  { flexDirection: 'row', alignItems: 'center' },
   line: { flex: 1, height: 1 },
-  dividerText: { fontWeight: '500' },
-  // Error
-  errorBox: {
-    borderWidth: 1,
-    padding: 12,
-    marginBottom: 12,
-  },
-  errorText: { fontWeight: '500', lineHeight: 18 },
 });
+
+export default AuthDivider;

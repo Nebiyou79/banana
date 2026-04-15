@@ -1,18 +1,28 @@
+// src/screens/auth/ForgotPasswordScreen.tsx
+
 import React from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform,
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
-import { Input } from '../../components/ui/Input';
-import { Button } from '../../components/ui/Button';
-import { AuthHeader } from '../../components/auth/AuthHeader';
-import { FormError } from '../../components/auth/AuthDivider';
+
+import { useTheme }       from '../../hooks/useThemes';
+import { Input }          from '../../components/ui/Input';
+import { Button }         from '../../components/ui/Button';
+import { AuthHeader }     from '../../components/auth/AuthHeader';
+import { FormError }      from '../../components/auth/FormError';
 import { useForgotPassword } from '../../hooks/useAuth';
 
 const schema = z.object({
@@ -21,94 +31,128 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 export const ForgotPasswordScreen: React.FC = () => {
-  const { theme } = useThemeStore();
-  const { colors, typography, spacing, borderRadius } = theme;
-  const navigation = useNavigation<any>();
-  const forgotPassword = useForgotPassword();
+  const { colors, type, spacing, isDark } = useTheme();
+  const navigation      = useNavigation<any>();
+  const forgotPassword  = useForgotPassword();
 
   const { control, handleSubmit } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { email: '' },
   });
 
-  const onSubmit = handleSubmit((data) => forgotPassword.mutate(data));
-  const apiError = (forgotPassword.error as any)?.response?.data?.message;
+  const onSubmit   = handleSubmit((data) => forgotPassword.mutate(data));
+  const apiError   = (forgotPassword.error as any)?.response?.data?.message;
+  const isSuccess  = forgotPassword.isSuccess;
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bgPrimary }]}
+      edges={['top', 'bottom']}
     >
-      <ScrollView
-        contentContainerStyle={[styles.scroll, { padding: spacing[6] }]}
-        keyboardShouldPersistTaps="handled"
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Back */}
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back-outline" size={22} color={colors.text} />
-        </TouchableOpacity>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingHorizontal: spacing.screen },
+          ]}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Back */}
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={styles.backBtn}
+            accessibilityLabel="Go back"
+          >
+            <Ionicons name="arrow-back-outline" size={22} color={colors.textPrimary} />
+          </Pressable>
 
-        <AuthHeader
-          title="Forgot password?"
-          subtitle="Enter your email and we'll send you a reset code."
-          showLogo={false}
-        />
+          <AuthHeader
+            title="Forgot password?"
+            subtitle="Enter your email and we'll send you a reset code."
+            showLogo={false}
+          />
 
-        <FormError message={apiError} />
+          <FormError message={apiError} visible={!!apiError} />
 
-        <Controller
-          control={control}
-          name="email"
-          render={({ field, fieldState }) => (
-            <Input
-              label="Email address"
-              placeholder="you@example.com"
-              value={field.value}
-              onChangeText={field.onChange}
-              error={fieldState.error?.message}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              returnKeyType="done"
-              onSubmitEditing={onSubmit}
-              leftIcon={<Ionicons name="mail-outline" size={18} color={colors.textMuted} />}
-            />
+          {/* Success banner */}
+          {isSuccess && (
+            <View
+              style={[
+                styles.successBox,
+                {
+                  backgroundColor: colors.successBg,
+                  borderColor:     colors.success,
+                  borderRadius:    12,
+                  padding:         spacing.md,
+                  marginBottom:    spacing.md,
+                },
+              ]}
+            >
+              <Ionicons name="checkmark-circle-outline" size={18} color={colors.success} />
+              <Text style={[type.bodySm, { color: colors.success, flex: 1 }]}>
+                Reset code sent! Check your email inbox.
+              </Text>
+            </View>
           )}
-        />
 
-        {forgotPassword.isSuccess && (
-          <View style={[styles.successBox, { backgroundColor: colors.successLight, borderRadius: borderRadius.lg }]}>
-            <Ionicons name="checkmark-circle-outline" size={18} color={colors.success} />
-            <Text style={[styles.successText, { color: colors.success, fontSize: typography.sm }]}>
-              Reset code sent! Check your email inbox.
+          <Controller
+            control={control}
+            name="email"
+            render={({ field, fieldState }) => (
+              <Input
+                label="Email address"
+                placeholder="you@example.com"
+                value={field.value}
+                onChangeText={field.onChange}
+                error={fieldState.error?.message}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                returnKeyType="done"
+                onSubmitEditing={onSubmit}
+                leftIcon={
+                  <Ionicons name="mail-outline" size={18} color={colors.textMuted} />
+                }
+              />
+            )}
+          />
+
+          <Button
+            title="Send Reset Code"
+            onPress={onSubmit}
+            loading={forgotPassword.isPending}
+            disabled={isSuccess}
+            fullWidth
+            size="lg"
+            style={{ marginTop: spacing.lg }}
+          />
+
+          {/* Back to Login */}
+          <Pressable
+            onPress={() => navigation.navigate('Login')}
+            style={styles.backToLogin}
+            accessibilityLabel="Back to login"
+          >
+            <Ionicons name="arrow-back-outline" size={14} color={colors.accent} />
+            <Text style={[type.bodySm, { color: colors.accent, fontWeight: '600' }]}>
+              Back to login
             </Text>
-          </View>
-        )}
-
-        <Button
-          title="Send Reset Code"
-          onPress={onSubmit}
-          loading={forgotPassword.isPending}
-          fullWidth size="lg"
-          style={{ marginTop: 16 }}
-          leftIcon={<Ionicons name="paper-plane-outline" size={18} color="#fff" />}
-        />
-
-        <TouchableOpacity style={styles.backToLogin} onPress={() => navigation.navigate('Login')}>
-          <Ionicons name="arrow-back-outline" size={14} color={colors.primary} />
-          <Text style={[styles.backToLoginText, { color: colors.primary, fontSize: typography.sm }]}>
-            Back to login
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  scroll:        { flexGrow: 1 },
-  backBtn:       { marginBottom: 24 },
-  successBox:    { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, marginTop: 8 },
-  successText:   { flex: 1, fontWeight: '500' },
-  backToLogin:   { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 24 },
-  backToLoginText: { fontWeight: '600' },
+  safe:        { flex: 1 },
+  scroll:      { flexGrow: 1, paddingTop: 16, paddingBottom: 40 },
+  backBtn:     { marginBottom: 24 },
+  successBox:  { flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderWidth: 1 },
+  backToLogin: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 24 },
 });
+
+export default ForgotPasswordScreen;

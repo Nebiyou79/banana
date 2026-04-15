@@ -14,6 +14,7 @@ export interface Education {
 }
 
 export interface Experience {
+  position: string;
   company: string;
   title: string;
   startDate: string;

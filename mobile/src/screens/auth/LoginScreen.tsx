@@ -1,39 +1,45 @@
+// src/screens/auth/LoginScreen.tsx
+
 import React, { useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform,
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
-import { Input } from '../../components/ui/Input';
-import { Button } from '../../components/ui/Button';
-import { AuthHeader } from '../../components/auth/AuthHeader';
-import { AuthDivider, FormError } from '../../components/auth/AuthDivider';
-import { SocialAuthButtons } from '../../components/auth/SocialAuthButtons';
-import { useLogin } from '../../hooks/useAuth';
-import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
-// ─── Schema ───────────────────────────────────────────────────────────────────
+import { useTheme }          from '../../hooks/useTheme';
+import { Input }             from '../../components/ui/Input';
+import { Button }            from '../../components/ui/Button';
+import { AuthHeader }        from '../../components/auth/AuthHeader';
+import { AuthDivider }       from '../../components/auth/AuthDivider';
+import { FormError }         from '../../components/auth/FormError';
+import { SocialAuthButtons } from '../../components/auth/SocialAuthButtons';
+import { useLogin }          from '../../hooks/useAuth';
+import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
 const schema = z.object({
   email:    z.string().email('Enter a valid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 type FormData = z.infer<typeof schema>;
-type Nav = NativeStackNavigationProp<AuthStackParamList>;
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
+type Nav      = NativeStackNavigationProp<AuthStackParamList>;
 
 export const LoginScreen: React.FC = () => {
-  const { theme } = useThemeStore();
-  const { colors, typography, spacing } = theme;
+  const { colors, type, spacing, isDark } = useTheme();
   const navigation = useNavigation<Nav>();
-  const login = useLogin();
+  const login      = useLogin();
   const [showPassword, setShowPassword] = useState(false);
 
   const { control, handleSubmit } = useForm<FormData>({
@@ -43,122 +49,138 @@ export const LoginScreen: React.FC = () => {
 
   const onSubmit = handleSubmit((data) => login.mutate(data));
 
-  // ── Error extraction ──────────────────────────────────────────────────────
-  // login.error comes from Axios. Two cases:
-  //   1. Network error (no .response) → phone can't reach the server
-  //   2. Backend 4xx/5xx → .response.data.message contains the reason
   const apiError = (() => {
     const err = login.error as any;
     if (!err) return undefined;
-    if (!err.response) return 'Cannot reach the server. Check your network or API URL in .env';
+    if (!err.response) return 'Cannot reach the server. Check your network.';
     return err.response?.data?.message ?? 'Login failed. Please try again.';
   })();
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bgPrimary }]}
+      edges={['top', 'bottom']}
     >
-      <ScrollView
-        contentContainerStyle={[s.scroll, { padding: spacing[5] }]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <AuthHeader
-          title="Welcome back"
-          subtitle="Sign in to your Banana account"
-        />
-
-        {/* API error banner — visible prop prevents hidden-error bug */}
-        <FormError message={apiError} visible={!!apiError} />
-
-        {/* Email */}
-        <Controller
-          control={control}
-          name="email"
-          render={({ field, fieldState }) => (
-            <Input
-              label="Email address"
-              placeholder="you@example.com"
-              value={field.value}
-              onChangeText={field.onChange}
-              error={fieldState.error?.message}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              returnKeyType="next"
-              leftIcon={<Ionicons name="mail-outline" size={18} color={colors.textMuted} />}
-            />
-          )}
-        />
-
-        {/* Password */}
-        <Controller
-          control={control}
-          name="password"
-          render={({ field, fieldState }) => (
-            <Input
-              label="Password"
-              placeholder="Enter your password"
-              value={field.value}
-              onChangeText={field.onChange}
-              error={fieldState.error?.message}
-              secureTextEntry={!showPassword}
-              returnKeyType="done"
-              onSubmitEditing={onSubmit}
-              leftIcon={<Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} />}
-              rightIcon={
-                <TouchableOpacity onPress={() => setShowPassword((v) => !v)}>
-                  <Ionicons
-                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={18}
-                    color={colors.textMuted}
-                  />
-                </TouchableOpacity>
-              }
-            />
-          )}
-        />
-
-        {/* Forgot password */}
-        <TouchableOpacity
-          style={s.forgotRow}
-          onPress={() => navigation.navigate('ForgotPassword')}
+        <ScrollView
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingHorizontal: spacing.screen, paddingVertical: spacing['3xl'] },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={{ color: colors.primary, fontSize: typography.sm, fontWeight: '600' }}>
-            Forgot your password?
-          </Text>
-        </TouchableOpacity>
+          <AuthHeader
+            title="Welcome back"
+            subtitle="Sign in to your Banana account"
+          />
 
-        {/* Sign In */}
-        <Button
-          title="Sign In"
-          onPress={onSubmit}
-          loading={login.isPending}
-          fullWidth
-          size="lg"
-        />
+          <FormError message={apiError} visible={!!apiError} />
 
-        <AuthDivider />
-        <SocialAuthButtons />
+          {/* Email */}
+          <Controller
+            control={control}
+            name="email"
+            render={({ field, fieldState }) => (
+              <Input
+                label="Email address"
+                placeholder="you@example.com"
+                value={field.value}
+                onChangeText={field.onChange}
+                error={fieldState.error?.message}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                returnKeyType="next"
+                leftIcon={
+                  <Ionicons name="mail-outline" size={18} color={colors.textMuted} />
+                }
+              />
+            )}
+          />
 
-        {/* Register link */}
-        <View style={s.bottomRow}>
-          <Text style={{ color: colors.textMuted, fontSize: typography.base }}>
-            Don't have an account?{' '}
-          </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-            <Text style={{ color: colors.primary, fontSize: typography.base, fontWeight: '700' }}>
-              Sign Up
+          {/* Password */}
+          <Controller
+            control={control}
+            name="password"
+            render={({ field, fieldState }) => (
+              <Input
+                label="Password"
+                placeholder="Enter your password"
+                value={field.value}
+                onChangeText={field.onChange}
+                error={fieldState.error?.message}
+                secureTextEntry={!showPassword}
+                returnKeyType="done"
+                onSubmitEditing={onSubmit}
+                leftIcon={
+                  <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} />
+                }
+                rightIcon={
+                  <Pressable
+                    onPress={() => setShowPassword((v) => !v)}
+                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    <Ionicons
+                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={18}
+                      color={colors.textMuted}
+                    />
+                  </Pressable>
+                }
+              />
+            )}
+          />
+
+          {/* Forgot password */}
+          <Pressable
+            onPress={() => navigation.navigate('ForgotPassword')}
+            style={styles.forgotRow}
+            accessibilityLabel="Forgot your password?"
+          >
+            <Text style={[type.bodySm, { color: colors.accent, fontWeight: '600' }]}>
+              Forgot your password?
             </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          </Pressable>
+
+          {/* Sign In */}
+          <Button
+            title="Sign In"
+            onPress={onSubmit}
+            loading={login.isPending}
+            fullWidth
+            size="lg"
+            style={{ marginTop: spacing.sm }}
+          />
+
+          <AuthDivider />
+          <SocialAuthButtons />
+
+          {/* Register link */}
+          <View style={styles.bottomRow}>
+            <Text style={[type.body, { color: colors.textMuted }]}>
+              Don't have an account?{' '}
+            </Text>
+            <Pressable onPress={() => navigation.navigate('Register')}>
+              <Text style={[type.body, { color: colors.accent, fontWeight: '700' }]}>
+                Sign Up
+              </Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
-const s = StyleSheet.create({
-  scroll:    { flexGrow: 1, justifyContent: 'center', paddingVertical: 40 },
-  forgotRow: { alignSelf: 'flex-end', marginBottom: 8, marginTop: -4 },
+const styles = StyleSheet.create({
+  safe:      { flex: 1 },
+  scroll:    { flexGrow: 1, justifyContent: 'center' },
+  forgotRow: { alignSelf: 'flex-end', marginTop: -4, marginBottom: 12 },
   bottomRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 28 },
 });
+
+export default LoginScreen;

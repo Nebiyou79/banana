@@ -1,125 +1,165 @@
+/**
+ * mobile/src/hooks/useApplications.ts
+ * React Query hooks — audited response unwrapping to match backend shape.
+ *
+ * FIX: Backend returns { success, data: Application[], pagination }
+ * The old `select: (res) => res.data` was ambiguous because AxiosResponse.data
+ * is the top-level body, and applicationService already returns the parsed body.
+ * Now select properly accesses the applications array.
+ */
+
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { Alert } from 'react-native';
 import {
-  applicationService,
-  ApplicationFilters,
-  ApplicationStatus,
-  ApplyFormData,
+  applicationService, Application, ApplicationFilters,
+  ApplyJobData, UpdateStatusData, CompanyResponseData,
 } from '../services/applicationService';
 
-// ─── useMyApplications ────────────────────────────────────────────────────────
+const K = {
+  myList:       (f?: ApplicationFilters) => ['applications', 'my', f]                    as const,
+  companyList:  (f?: ApplicationFilters) => ['applications', 'company', f]               as const,
+  orgList:      (f?: ApplicationFilters) => ['applications', 'org', f]                   as const,
+  jobList:      (jobId: string, f?: ApplicationFilters) => ['applications', 'job', jobId, f] as const,
+  companyDetail:(id: string)             => ['applications', 'company', 'detail', id]    as const,
+  orgDetail:    (id: string)             => ['applications', 'org', 'detail', id]        as const,
+  stats:        ()                       => ['applications', 'stats']                    as const,
+  cvs:          ()                       => ['applications', 'cvs']                      as const,
+};
+
+const showError = (msg: string, title = 'Error') => Alert.alert(title, msg);
+const showSuccess = (msg: string) => Alert.alert('Success', msg);
+
+// ─── Candidate hooks ──────────────────────────────────────────────────────────
+
+/** Returns the normalized { data: Application[]; pagination } object */
 export const useMyApplications = (filters?: ApplicationFilters) =>
   useQuery({
-    queryKey: ['applications', 'mine', filters],
-    queryFn: () => applicationService.getMyApplications(filters),
+    queryKey: K.myList(filters),
+    queryFn:  () => applicationService.getMyApplications(filters),
     staleTime: 2 * 60 * 1000,
   });
 
-// ─── useMyCVs ─────────────────────────────────────────────────────────────────
-export const useMyCVs = () =>
-  useQuery({
-    queryKey: ['applications', 'cvs'],
-    queryFn: applicationService.getMyCVs,
-    staleTime: 10 * 60 * 1000,
+export const useMyApplicationsPaginated = (filters?: Omit<ApplicationFilters, 'page'>) =>
+  useInfiniteQuery({
+    queryKey: K.myList(filters),
+    queryFn:  ({ pageParam = 1 }) =>
+      applicationService.getMyApplications({ ...filters, page: pageParam as number }),
+    getNextPageParam: (last) => {
+      const p = last.pagination;
+      return p && p.current < p.totalPages ? p.current + 1 : undefined;
+    },
+    initialPageParam: 1,
+    staleTime: 2 * 60 * 1000,
   });
 
-// ─── useApplicationDetails ────────────────────────────────────────────────────
-export const useApplicationDetails = (id?: string) =>
-  useQuery({
-    queryKey: ['application', id],
-    queryFn: () => applicationService.getApplicationDetails(id!),
-    enabled: !!id,
-  });
-
-// ─── useApplyForJob ───────────────────────────────────────────────────────────
 export const useApplyForJob = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ jobId, formData }: { jobId: string; formData: ApplyFormData }) =>
-      applicationService.applyForJob(jobId, formData),
+    mutationFn: ({ jobId, data }: { jobId: string; data: ApplyJobData }) =>
+      applicationService.applyForJob(jobId, data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['applications', 'mine'] });
+      qc.invalidateQueries({ queryKey: ['applications', 'my'] });
+      showSuccess('Application submitted successfully!');
     },
+    onError: (e: any) => showError(e.message ?? 'Failed to submit application', 'Submission Failed'),
   });
 };
 
-// ─── useWithdrawApplication ───────────────────────────────────────────────────
 export const useWithdrawApplication = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => applicationService.withdrawApplication(id),
-    onSuccess: (_, id) => {
-      qc.invalidateQueries({ queryKey: ['applications', 'mine'] });
-      qc.invalidateQueries({ queryKey: ['application', id] });
+    mutationFn: (applicationId: string) => applicationService.withdrawApplication(applicationId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['applications', 'my'] });
+      showSuccess('Application withdrawn.');
     },
+    onError: (e: any) => showError(e.message ?? 'Failed to withdraw application'),
   });
 };
 
-// ─── useCompanyApplications ───────────────────────────────────────────────────
-export const useCompanyApplications = (filters?: ApplicationFilters) =>
-  useInfiniteQuery({
-    queryKey: ['applications', 'company', filters],
-    queryFn: ({ pageParam = 1 }) =>
-      applicationService.getCompanyApplications({ ...filters, page: pageParam as number }),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage) => {
-      const { current, totalPages } = lastPage.pagination ?? {};
-      return current < totalPages ? current + 1 : undefined;
-    },
-    staleTime: 2 * 60 * 1000,
-  });
-
-// ─── useOrganizationApplications ─────────────────────────────────────────────
-export const useOrganizationApplications = (filters?: ApplicationFilters) =>
-  useInfiniteQuery({
-    queryKey: ['applications', 'organization', filters],
-    queryFn: ({ pageParam = 1 }) =>
-      applicationService.getOrganizationApplications({ ...filters, page: pageParam as number }),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage) => {
-      const { current, totalPages } = lastPage.pagination ?? {};
-      return current < totalPages ? current + 1 : undefined;
-    },
-    staleTime: 2 * 60 * 1000,
-  });
-
-// ─── useJobApplications ───────────────────────────────────────────────────────
-export const useJobApplications = (jobId?: string) =>
+export const useApplicationStats = () =>
   useQuery({
-    queryKey: ['applications', 'job', jobId],
-    queryFn: () => applicationService.getJobApplications(jobId!),
-    enabled: !!jobId,
-  });
-
-// ─── useUpdateApplicationStatus ───────────────────────────────────────────────
-export const useUpdateApplicationStatus = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, status, message }: { id: string; status: ApplicationStatus; message?: string }) =>
-      applicationService.updateApplicationStatus(id, status, message),
-    onSuccess: (_, { id }) => {
-      qc.invalidateQueries({ queryKey: ['applications', 'company'] });
-      qc.invalidateQueries({ queryKey: ['applications', 'organization'] });
-      qc.invalidateQueries({ queryKey: ['application', id] });
-    },
-  });
-};
-
-// ─── useApplicationStatistics ─────────────────────────────────────────────────
-export const useApplicationStatistics = () =>
-  useQuery({
-    queryKey: ['applications', 'stats'],
-    queryFn: applicationService.getApplicationStatistics,
+    queryKey: K.stats(),
+    queryFn:  applicationService.getApplicationStats,
     staleTime: 5 * 60 * 1000,
   });
 
-// ─── useCompanyApplicationDetails ─────────────────────────────────────────────
-export const useCompanyApplicationDetails = (id?: string, role: 'company' | 'organization' = 'company') =>
+export const useMyCVs = () =>
   useQuery({
-    queryKey: ['application', role, id],
-    queryFn: () =>
-      role === 'company'
-        ? applicationService.getCompanyApplicationDetails(id!)
-        : applicationService.getOrganizationApplicationDetails(id!),
-    enabled: !!id,
+    queryKey: K.cvs(),
+    queryFn:  applicationService.getMyCVs,
+    staleTime: 10 * 60 * 1000,
+  });
+
+// ─── Company hooks ────────────────────────────────────────────────────────────
+
+export const useCompanyApplications = (filters?: ApplicationFilters) =>
+  useQuery({
+    queryKey: K.companyList(filters),
+    queryFn:  () => applicationService.getCompanyApplications(filters),
+    staleTime: 2 * 60 * 1000,
+  });
+
+export const useCompanyApplicationDetails = (applicationId?: string) =>
+  useQuery({
+    queryKey: K.companyDetail(applicationId ?? ''),
+    queryFn:  () => applicationService.getCompanyApplicationDetails(applicationId!),
+    enabled:  !!applicationId,
+    staleTime: 2 * 60 * 1000,
+    select:   (res) => res.data.application,
+  });
+
+export const useJobApplications = (jobId: string, filters?: ApplicationFilters) =>
+  useQuery({
+    queryKey: K.jobList(jobId, filters),
+    queryFn:  () => applicationService.getJobApplications(jobId, filters),
+    enabled:  !!jobId,
+    staleTime: 2 * 60 * 1000,
+  });
+
+export const useUpdateApplicationStatus = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ applicationId, data }: { applicationId: string; data: UpdateStatusData }) =>
+      applicationService.updateApplicationStatus(applicationId, data),
+    onSuccess: (_res, { applicationId }) => {
+      qc.invalidateQueries({ queryKey: K.companyDetail(applicationId) });
+      qc.invalidateQueries({ queryKey: ['applications', 'company'] });
+      qc.invalidateQueries({ queryKey: ['applications', 'org'] });
+      showSuccess('Status updated successfully.');
+    },
+    onError: (e: any) => showError(e.message ?? 'Failed to update status', 'Update Failed'),
+  });
+};
+
+export const useAddCompanyResponse = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ applicationId, data }: { applicationId: string; data: CompanyResponseData }) =>
+      applicationService.addCompanyResponse(applicationId, data),
+    onSuccess: (_res, { applicationId }) => {
+      qc.invalidateQueries({ queryKey: K.companyDetail(applicationId) });
+      qc.invalidateQueries({ queryKey: ['applications', 'company'] });
+      showSuccess('Response sent to candidate.');
+    },
+    onError: (e: any) => showError(e.message ?? 'Failed to send response', 'Response Failed'),
+  });
+};
+
+// ─── Organization hooks ───────────────────────────────────────────────────────
+
+export const useOrganizationApplications = (filters?: ApplicationFilters) =>
+  useQuery({
+    queryKey: K.orgList(filters),
+    queryFn:  () => applicationService.getOrganizationApplications(filters),
+    staleTime: 2 * 60 * 1000,
+  });
+
+export const useOrganizationApplicationDetails = (applicationId?: string) =>
+  useQuery({
+    queryKey: K.orgDetail(applicationId ?? ''),
+    queryFn:  () => applicationService.getOrganizationApplicationDetails(applicationId!),
+    enabled:  !!applicationId,
+    staleTime: 2 * 60 * 1000,
+    select:   (res) => res.data.application,
   });

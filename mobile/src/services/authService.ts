@@ -1,3 +1,24 @@
+/**
+ * authService.ts
+ *
+ * CRITICAL FIX HISTORY
+ * ────────────────────
+ * The backend registerUser controller does:
+ *
+ *   const { name, email, password, confirmPassword, role, promoCode } = req.body;
+ *   if (password !== confirmPassword) → 400 "Passwords do not match"
+ *
+ * The old mobile service sent:
+ *   { name, email, password, role, referralCode }          ← WRONG
+ *
+ * It never sent `confirmPassword` so the backend received undefined,
+ * which never equals password → every register attempt returned 400.
+ *
+ * It also used `referralCode` but backend reads `promoCode` → referrals silently ignored.
+ *
+ * This file fixes both issues permanently.
+ */
+
 import api from '../lib/api';
 import { AUTH } from '../constants/api';
 import { setToken, setRole, setUserId, clearAll } from '../lib/storage';
@@ -53,46 +74,43 @@ export interface AuthResponse {
     requiresVerification?: boolean;
     email?: string;
   };
-  // backend also returns these at root level on some error responses
-  requiresVerification?: boolean;
-  email?: string;
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 export const authService = {
 
-  // ── Register ─────────────────────────────────────────────────────────────
-  //
-  // ROOT CAUSE OF "Passwords do not match" BUG:
-  // The backend registerUser does:
-  //   const { name, email, password, confirmPassword, role, promoCode } = req.body;
-  //   if (password !== confirmPassword) → 400 "Passwords do not match"
-  //
-  // The old mobile code never sent `confirmPassword` at all, so the backend
-  // received undefined, which !== password, causing the error on every register.
-  //
-  // Also: backend field for referral is `promoCode`, not `referralCode`.
-  //
+  /**
+   * POST /auth/register
+   *
+   * Backend requires:
+   *   name, email, password, confirmPassword  ← both required and must match
+   *   role                                    ← must be one of the valid roles
+   *   promoCode                               ← optional referral code (NOT referralCode)
+   *
+   * Backend ALWAYS responds with requiresVerification: true and sends an OTP email.
+   * No token is returned here — token only arrives after verifyOtp().
+   */
   register: async (data: RegisterData): Promise<AuthResponse> => {
     const payload = {
       name:            data.name,
       email:           data.email,
       password:        data.password,
-      confirmPassword: data.password,        // ← REQUIRED: backend validates this matches password
+      confirmPassword: data.password,      // ← THE FIX: backend requires this field
       role:            data.role,
-      promoCode:       data.referralCode,    // ← REQUIRED: backend field is promoCode not referralCode
+      promoCode:       data.referralCode,  // ← THE FIX: backend reads promoCode not referralCode
     };
 
     const res = await api.post<AuthResponse>(AUTH.REGISTER, payload);
 
-    // Registration always enters OTP verification flow (requiresVerification: true).
-    // No token is returned here. Token only arrives after verifyOtp().
-    // We intentionally do NOT call setToken/setRole/setUserId here.
+    // Registration never returns a token — do NOT try to persist anything here.
+    // Token arrives only after OTP verification (verifyOtp below).
     return res.data;
   },
 
-  // ── Login ────────────────────────────────────────────────────────────────
+  /**
+   * POST /auth/login
+   */
   login: async (data: LoginData): Promise<AuthResponse> => {
     const res = await api.post<AuthResponse>(AUTH.LOGIN, data);
     const { user, token } = res.data.data ?? {};
@@ -104,27 +122,32 @@ export const authService = {
     return res.data;
   },
 
-  // ── Logout ───────────────────────────────────────────────────────────────
+  /**
+   * POST /auth/logout
+   */
   logout: async (): Promise<void> => {
     try {
       await api.post(AUTH.LOGOUT);
     } catch {
-      // Always clear storage regardless of API failure
+      // Always clear storage even if API call fails
     } finally {
       await clearAll();
     }
   },
 
-  // ── Get current user ─────────────────────────────────────────────────────
-  // Backend returns { success: true, data: { user: { _id, name, email, role, ... } } }
+  /**
+   * GET /auth/me
+   * Backend returns { success, data: { user: {...} } }
+   */
   getCurrentUser: async (): Promise<AuthUser> => {
     const res = await api.get<{ success: boolean; data: { user: AuthUser } }>(AUTH.ME);
     return res.data.data.user;
   },
 
-  // ── Verify OTP (email confirmation after register) ───────────────────────
-  // On success backend returns: { success, data: { user, token } }
-  // We persist token + role + userId immediately.
+  /**
+   * POST /auth/verify-otp
+   * Called after registration. Backend returns user + token on success.
+   */
   verifyOtp: async (data: OtpData): Promise<AuthResponse> => {
     const res = await api.post<AuthResponse>(AUTH.VERIFY_OTP, data);
     const { user, token } = res.data.data ?? {};
@@ -136,34 +159,42 @@ export const authService = {
     return res.data;
   },
 
-  // ── Resend OTP ───────────────────────────────────────────────────────────
+  /**
+   * POST /auth/resend-otp
+   */
   resendOtp: async (email: string): Promise<AuthResponse> => {
     const res = await api.post<AuthResponse>(AUTH.RESEND_OTP, { email });
     return res.data;
   },
 
-  // ── Forgot password ──────────────────────────────────────────────────────
+  /**
+   * POST /auth/forgot-password
+   */
   forgotPassword: async (data: ForgotPasswordData): Promise<AuthResponse> => {
     const res = await api.post<AuthResponse>(AUTH.FORGOT_PASSWORD, data);
     return res.data;
   },
 
-  // ── Verify reset OTP ─────────────────────────────────────────────────────
+  /**
+   * POST /auth/verify-reset-otp
+   */
   verifyResetOtp: async (data: OtpData): Promise<AuthResponse> => {
     const res = await api.post<AuthResponse>(AUTH.VERIFY_RESET_OTP, data);
     return res.data;
   },
 
-  // ── Reset password ────────────────────────────────────────────────────────
-  // Backend field names differ from our internal types:
-  //   - uses "token" not "otp"
-  //   - uses "password" not "newPassword"
-  //   - requires "confirmPassword"
+  /**
+   * POST /auth/reset-password
+   *
+   * Backend reads: { email, token, password, confirmPassword }
+   * Our internal type uses: { email, otp, newPassword }
+   * We map them here so the rest of the app keeps clean types.
+   */
   resetPassword: async (data: ResetPasswordData): Promise<AuthResponse> => {
     const payload = {
       email:           data.email,
-      token:           data.otp,           // backend uses "token"
-      password:        data.newPassword,   // backend uses "password"
+      token:           data.otp,           // backend reads "token"
+      password:        data.newPassword,   // backend reads "password"
       confirmPassword: data.newPassword,   // backend validates match
     };
     const res = await api.post<AuthResponse>(AUTH.RESET_PASSWORD, payload);

@@ -1,74 +1,75 @@
+// src/screens/auth/OnboardingScreen.tsx
+// No Reanimated, no core Animated — pure FlatList + state-driven dots.
+
 import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
+  Pressable,
   Dimensions,
-  Animated,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
   ViewToken,
+  StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 import { setOnboardingSeen } from '../../lib/storage';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 interface Slide {
-  id: string;
-  emoji: string;
-  title: string;
-  subtitle: string;
-  gradientColors: [string, string];
-  accentColor: string;
+  id:             string;
+  emoji:          string;
+  title:          string;
+  subtitle:       string;
+  gradients:      [string, string];
+  accentColor:    string;
+  cardBg:         string;
 }
 
 const SLIDES: Slide[] = [
   {
-    id: '1',
-    emoji: '🎯',
-    title: 'Find Your\nDream Job',
-    subtitle:
-      'Browse thousands of opportunities from top companies and organizations across Ethiopia.',
-    gradientColors: ['#EFF6FF', '#DBEAFE'],
-    accentColor: '#2563EB',
+    id:          '1',
+    emoji:       '🎯',
+    title:       'Find Your\nDream Job',
+    subtitle:    'Browse thousands of opportunities from top companies and organizations.',
+    gradients:   ['#EFF6FF', '#DBEAFE'],
+    accentColor: '#3B82F6',
+    cardBg:      '#FFFFFF',
   },
   {
-    id: '2',
-    emoji: '💼',
-    title: 'Showcase Your\nPortfolio',
-    subtitle:
-      'Build a standout freelancer profile, list your services, and attract premium clients.',
-    gradientColors: ['#F5F3FF', '#EDE9FE'],
-    accentColor: '#7C3AED',
+    id:          '2',
+    emoji:       '💼',
+    title:       'Showcase Your\nPortfolio',
+    subtitle:    'Build a standout freelancer profile and attract premium clients.',
+    gradients:   ['#ECFDF5', '#D1FAE5'],
+    accentColor: '#10B981',
+    cardBg:      '#FFFFFF',
   },
   {
-    id: '3',
-    emoji: '🚀',
-    title: 'Grow Your\nBusiness',
-    subtitle:
-      'Post jobs, discover talent, and manage your team — all in one powerful platform.',
-    gradientColors: ['#F0FDF4', '#DCFCE7'],
-    accentColor: '#059669',
+    id:          '3',
+    emoji:       '🚀',
+    title:       'Grow Your\nBusiness',
+    subtitle:    'Post tenders, discover talent, and manage projects all in one place.',
+    gradients:   ['#F5F3FF', '#EDE9FE'],
+    accentColor: '#8B5CF6',
+    cardBg:      '#FFFFFF',
   },
 ];
 
-type OnboardingNavProp = NativeStackNavigationProp<AuthStackParamList, 'Onboarding'>;
+type Nav = NativeStackNavigationProp<AuthStackParamList, 'Onboarding'>;
 
 export const OnboardingScreen: React.FC = () => {
-  const navigation = useNavigation<OnboardingNavProp>();
-  const { theme } = useThemeStore();
-  const { colors, borderRadius, typography } = theme;
+  const navigation    = useNavigation<Nav>();
+  const { type, spacing, radius, shadows } = useTheme();
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
-  const scrollX = useRef(new Animated.Value(0)).current;
 
   const handleFinish = async () => {
     await setOnboardingSeen();
@@ -77,7 +78,7 @@ export const OnboardingScreen: React.FC = () => {
 
   const handleNext = () => {
     if (currentIndex < SLIDES.length - 1) {
-      flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
+      flatListRef.current?.scrollToIndex({ index: currentIndex + 1, animated: true });
     } else {
       handleFinish();
     }
@@ -85,51 +86,70 @@ export const OnboardingScreen: React.FC = () => {
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (viewableItems[0]?.index !== null && viewableItems[0]?.index !== undefined) {
-        setCurrentIndex(viewableItems[0].index);
-      }
+      const idx = viewableItems[0]?.index;
+      if (idx !== null && idx !== undefined) setCurrentIndex(idx);
     },
   ).current;
 
-  const renderSlide = ({ item }: { item: Slide }) => (
-    <View style={[styles.slide, { width }]}>
-      <LinearGradient
-        colors={item.gradientColors}
-        style={styles.slideGradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        {/* Decorative card */}
-        <View style={[styles.card, { backgroundColor: colors.surface, ...theme.shadows.lg }]}>
-          <Text style={styles.slideEmoji}>{item.emoji}</Text>
-        </View>
-
-        {/* Text */}
-        <View style={styles.textContainer}>
-          <Text style={[styles.slideTitle, { color: colors.text, fontSize: typography['3xl'] }]}>
-            {item.title}
-          </Text>
-          <Text style={[styles.slideSubtitle, { color: colors.textSecondary, fontSize: typography.md }]}>
-            {item.subtitle}
-          </Text>
-        </View>
-      </LinearGradient>
-    </View>
-  );
-
   const currentSlide = SLIDES[currentIndex];
 
-  return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Skip button */}
-      <TouchableOpacity style={styles.skipButton} onPress={handleFinish}>
-        <Text style={[styles.skipText, { color: colors.textMuted, fontSize: typography.base }]}>
-          Skip
+  const renderSlide = ({ item }: { item: Slide }) => (
+    <LinearGradient
+      colors={item.gradients}
+      style={[styles.slide, { width }]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+    >
+      {/* Big emoji card */}
+      <View
+        style={[
+          styles.emojiCard,
+          { backgroundColor: item.cardBg, borderRadius: 40 },
+          shadows.lg,
+        ]}
+      >
+        <Text style={styles.slideEmoji}>{item.emoji}</Text>
+      </View>
+
+      {/* Text block */}
+      <View style={styles.textBlock}>
+        <Text
+          style={[
+            type.display,
+            { color: '#0F172A', textAlign: 'center', marginBottom: spacing.md },
+          ]}
+        >
+          {item.title}
         </Text>
-      </TouchableOpacity>
+        <Text
+          style={[
+            type.bodyLg,
+            { color: '#475569', textAlign: 'center', lineHeight: 26 },
+          ]}
+        >
+          {item.subtitle}
+        </Text>
+      </View>
+    </LinearGradient>
+  );
+
+  return (
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" />
+
+      {/* Skip */}
+      <SafeAreaView style={styles.skipWrapper} edges={['top']}>
+        <Pressable
+          onPress={handleFinish}
+          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+          accessibilityLabel="Skip onboarding"
+        >
+          <Text style={[type.body, { color: '#64748B', fontWeight: '600' }]}>Skip</Text>
+        </Pressable>
+      </SafeAreaView>
 
       {/* Slides */}
-      <Animated.FlatList
+      <FlatList
         ref={flatListRef}
         data={SLIDES}
         keyExtractor={(item) => item.id}
@@ -137,177 +157,137 @@ export const OnboardingScreen: React.FC = () => {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-          { useNativeDriver: false },
-        )}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50 }}
         scrollEventThrottle={16}
+        style={{ flex: 1 }}
       />
 
-      {/* Bottom controls */}
-      <View style={[styles.bottomContainer, { backgroundColor: colors.background }]}>
+      {/* Bottom bar */}
+      <SafeAreaView
+        style={[styles.bottomBar, { backgroundColor: '#FFFFFF' }]}
+        edges={['bottom']}
+      >
         {/* Dots */}
-        <View style={styles.dotsContainer}>
-          {SLIDES.map((_, index) => {
-            const inputRange = [
-              (index - 1) * width,
-              index * width,
-              (index + 1) * width,
-            ];
-            const dotWidth = scrollX.interpolate({
-              inputRange,
-              outputRange: [8, 24, 8],
-              extrapolate: 'clamp',
-            });
-            const dotOpacity = scrollX.interpolate({
-              inputRange,
-              outputRange: [0.3, 1, 0.3],
-              extrapolate: 'clamp',
-            });
-            return (
-              <Animated.View
-                key={index}
-                style={[
-                  styles.dot,
-                  {
-                    width: dotWidth,
-                    opacity: dotOpacity,
-                    backgroundColor: currentSlide.accentColor,
-                  },
-                ]}
-              />
-            );
-          })}
+        <View style={styles.dotsRow}>
+          {SLIDES.map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.dot,
+                {
+                  backgroundColor: i === currentIndex ? currentSlide.accentColor : '#CBD5E1',
+                  width:           i === currentIndex ? 24 : 8,
+                  borderRadius:    4,
+                },
+              ]}
+            />
+          ))}
         </View>
 
-        {/* Next / Get Started button */}
-        <TouchableOpacity
-          style={[
-            styles.nextButton,
+        {/* Next / Get Started */}
+        <Pressable
+          onPress={handleNext}
+          style={({ pressed }) => [
+            styles.nextBtn,
             {
               backgroundColor: currentSlide.accentColor,
-              borderRadius: borderRadius.xl,
+              borderRadius:    radius.xl,
+              opacity:         pressed ? 0.88 : 1,
             },
           ]}
-          onPress={handleNext}
-          activeOpacity={0.85}
+          accessibilityLabel={
+            currentIndex === SLIDES.length - 1 ? 'Get Started' : 'Next slide'
+          }
         >
-          <Text style={[styles.nextButtonText, { fontSize: typography.md }]}>
+          <Text style={[type.button, { color: '#FFFFFF' }]}>
             {currentIndex === SLIDES.length - 1 ? 'Get Started 🍌' : 'Next →'}
           </Text>
-        </TouchableOpacity>
+        </Pressable>
 
         {/* Login link */}
         <View style={styles.loginRow}>
-          <Text style={[styles.loginPrompt, { color: colors.textMuted, fontSize: typography.sm }]}>
+          <Text style={[type.bodySm, { color: '#94A3B8' }]}>
             Already have an account?{' '}
           </Text>
-          <TouchableOpacity
+          <Pressable
             onPress={() => {
               setOnboardingSeen();
               navigation.replace('Login');
             }}
           >
-            <Text style={[styles.loginLink, { color: currentSlide.accentColor, fontSize: typography.sm }]}>
+            <Text
+              style={[
+                type.bodySm,
+                { color: currentSlide.accentColor, fontWeight: '700' },
+              ]}
+            >
               Sign In
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
-      </View>
+      </SafeAreaView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  skipButton: {
+  root:    { flex: 1, backgroundColor: '#FFFFFF' },
+
+  skipWrapper: {
     position: 'absolute',
-    top: 56,
-    right: 24,
-    zIndex: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    top:      0,
+    right:    20,
+    zIndex:   10,
+    paddingTop: 12,
   },
-  skipText: {
-    fontWeight: '500',
-  },
+
   slide: {
-    flex: 1,
-  },
-  slideGradient: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    flex:            1,
+    alignItems:      'center',
+    justifyContent:  'center',
     paddingHorizontal: 32,
-    paddingTop: 80,
-    paddingBottom: 40,
+    paddingTop:      80,
+    paddingBottom:   32,
   },
-  card: {
-    width: 180,
-    height: 180,
-    borderRadius: 40,
+  emojiCard: {
+    width:          180,
+    height:         180,
+    alignItems:     'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 48,
+    marginBottom:   44,
   },
-  slideEmoji: {
-    fontSize: 90,
-  },
-  textContainer: {
-    alignItems: 'center',
-    paddingHorizontal: 8,
-  },
-  slideTitle: {
-    fontWeight: '800',
-    textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 40,
-    letterSpacing: -0.5,
-  },
-  slideSubtitle: {
-    textAlign: 'center',
-    lineHeight: 24,
-    fontWeight: '400',
-  },
-  bottomContainer: {
+  slideEmoji: { fontSize: 90 },
+  textBlock:  { alignItems: 'center', paddingHorizontal: 8 },
+
+  bottomBar: {
     paddingHorizontal: 28,
-    paddingTop: 24,
-    paddingBottom: 48,
-    alignItems: 'center',
-    gap: 20,
+    paddingTop:        24,
+    paddingBottom:     8,
+    alignItems:        'center',
+    gap:               20,
+    borderTopWidth:    1,
+    borderTopColor:    'rgba(0,0,0,0.06)',
   },
-  dotsContainer: {
+  dotsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    alignItems:    'center',
+    gap:           6,
   },
   dot: {
-    height: 8,
+    height:       8,
     borderRadius: 4,
   },
-  nextButton: {
-    width: '100%',
+  nextBtn: {
+    width:          '100%',
     paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  nextButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    letterSpacing: 0.3,
+    alignItems:     'center',
   },
   loginRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
-  loginPrompt: {
-    fontWeight: '400',
-  },
-  loginLink: {
-    fontWeight: '700',
+    alignItems:    'center',
+    paddingBottom: 4,
   },
 });
+
+export default OnboardingScreen;

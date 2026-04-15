@@ -1,70 +1,78 @@
+// src/components/auth/PasswordStrength.tsx
+// Usage: <PasswordStrength password={watchedPassword} />
+
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useThemes';
 
 interface PasswordStrengthProps {
   password: string;
 }
 
-const getStrength = (pw: string): { score: number; label: string; color: string } => {
+interface StrengthResult {
+  score: number;
+  label: string;
+  color: string;
+}
+
+const analyze = (pw: string): StrengthResult => {
   let score = 0;
-  if (pw.length >= 8) score++;
-  if (/[A-Z]/.test(pw)) score++;
-  if (/[0-9]/.test(pw)) score++;
+  if (pw.length >= 8)            score++;
+  if (/[A-Z]/.test(pw))         score++;
+  if (/[0-9]/.test(pw))         score++;
   if (/[^A-Za-z0-9]/.test(pw)) score++;
 
-  const map = [
-    { label: '', color: '#E2E8F0' },
-    { label: 'Weak', color: '#DC2626' },
-    { label: 'Fair', color: '#D97706' },
-    { label: 'Good', color: '#2563EB' },
-    { label: 'Strong', color: '#059669' },
+  const map: StrengthResult[] = [
+    { score: 0, label: '',       color: '' },
+    { score: 1, label: 'Weak',   color: '#EF4444' },
+    { score: 2, label: 'Fair',   color: '#F59E0B' },
+    { score: 3, label: 'Good',   color: '#3B82F6' },
+    { score: 4, label: 'Strong', color: '#10B981' },
   ];
-  return { score, ...map[score] };
+  return map[score];
 };
 
 export const PasswordStrength: React.FC<PasswordStrengthProps> = ({ password }) => {
-  const { theme } = useThemeStore();
-  const { score, label, color } = useMemo(() => getStrength(password), [password]);
+  const { colors, type, spacing } = useTheme();
+  const { score, label, color }   = useMemo(() => analyze(password), [password]);
 
   if (!password) return null;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { marginTop: spacing.sm }]}>
       <View style={styles.bars}>
-        {[1, 2, 3, 4].map((i) => (
+        {[1, 2, 3, 4].map((bar) => (
           <View
-            key={i}
+            key={bar}
             style={[
               styles.bar,
-              { backgroundColor: i <= score ? color : theme.colors.skeleton },
+              {
+                backgroundColor: bar <= score ? color : colors.borderPrimary,
+                borderRadius:    999,
+              },
             ]}
           />
         ))}
       </View>
       {label ? (
-        <Text style={[styles.label, { color }]}>{label}</Text>
+        <Text style={[type.caption, { color, marginTop: 4 }]}>
+          {label} password
+        </Text>
       ) : null}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    marginTop: 8,
-    gap: 6,
-  },
+  container: {},
   bars: {
     flexDirection: 'row',
-    gap: 4,
+    gap:           4,
   },
   bar: {
-    flex: 1,
+    flex:   1,
     height: 4,
-    borderRadius: 99,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: '600',
   },
 });
+
+export default PasswordStrength;

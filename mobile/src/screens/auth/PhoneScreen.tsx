@@ -1,61 +1,107 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useThemeStore } from '../../store/themeStore';
+// src/screens/auth/PhoneScreen.tsx
+// Shows a "coming soon" placeholder for phone-based auth.
 
-interface ComingSoonScreenProps {
-  title: string;
+import React from 'react';
+import { View, Text, Pressable, StyleSheet, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { Ionicons }      from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme }       from '../../hooks/useTheme';
+
+interface ComingSoonProps {
+  title:       string;
   description: string;
-  icon: string;
+  icon:        React.ComponentProps<typeof Ionicons>['name'];
 }
 
-const ComingSoonLayout: React.FC<ComingSoonScreenProps> = ({ title, description, icon }) => {
-  const { theme } = useThemeStore();
-  const { colors, typography, borderRadius } = theme;
+const ComingSoonLayout: React.FC<ComingSoonProps> = ({ title, description, icon }) => {
+  const { colors, type, spacing, radius, isDark } = useTheme();
   const navigation = useNavigation<any>();
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bgPrimary }]}
+      edges={['top', 'bottom']}
+    >
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+
       {/* Back */}
-      <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-        <Ionicons name="arrow-back-outline" size={22} color={colors.text} />
-      </TouchableOpacity>
+      <Pressable
+        onPress={() => navigation.goBack()}
+        style={[styles.backBtn, { paddingHorizontal: spacing.screen }]}
+        accessibilityLabel="Go back"
+      >
+        <Ionicons name="arrow-back-outline" size={22} color={colors.textPrimary} />
+      </Pressable>
 
       <View style={styles.content}>
-        {/* Gradient icon circle */}
+        {/* Icon circle */}
         <LinearGradient
-          colors={['#FBBF24', '#F97316']}
+          colors={[colors.accent, colors.accentDark]}
           style={[styles.iconCircle, { borderRadius: 48 }]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
         >
-          <Ionicons name={icon as any} size={52} color="#fff" />
+          <Ionicons name={icon} size={48} color="#fff" />
         </LinearGradient>
 
-        {/* Coming soon badge */}
-        <View style={[styles.badge, { backgroundColor: colors.banana, borderRadius: borderRadius.full }]}>
-          <Text style={styles.badgeText}>Coming Soon</Text>
+        {/* Badge */}
+        <View
+          style={[
+            styles.badge,
+            {
+              backgroundColor: colors.warningBg,
+              borderRadius:    radius.full,
+              paddingHorizontal: 14,
+              paddingVertical:   5,
+            },
+          ]}
+        >
+          <Text style={[type.label, { color: colors.warning }]}>
+            Coming Soon
+          </Text>
         </View>
 
-        <Text style={[styles.title, { color: colors.text, fontSize: typography['2xl'] }]}>
+        <Text style={[type.h2, { color: colors.textPrimary, textAlign: 'center' }]}>
           {title}
         </Text>
-        <Text style={[styles.desc, { color: colors.textMuted, fontSize: typography.base }]}>
+        <Text
+          style={[
+            type.body,
+            {
+              color:           colors.textMuted,
+              textAlign:       'center',
+              lineHeight:      22,
+              paddingHorizontal: spacing['2xl'],
+            },
+          ]}
+        >
           {description}
         </Text>
       </View>
 
       {/* Use email instead */}
-      <TouchableOpacity
-        style={[styles.altBtn, { borderColor: colors.border, borderRadius: borderRadius.xl }]}
+      <Pressable
         onPress={() => navigation.navigate('Login')}
+        style={({ pressed }) => [
+          styles.altBtn,
+          {
+            borderColor:     colors.accent,
+            borderRadius:    radius.xl,
+            marginHorizontal: spacing.screen,
+            marginBottom:    spacing['2xl'],
+            opacity:         pressed ? 0.8 : 1,
+          },
+        ]}
+        accessibilityLabel="Use email instead"
       >
-        <Ionicons name="mail-outline" size={18} color={colors.primary} />
-        <Text style={[styles.altText, { color: colors.primary, fontSize: typography.base }]}>
+        <Ionicons name="mail-outline" size={18} color={colors.accent} />
+        <Text style={[type.body, { color: colors.accent, fontWeight: '600' }]}>
           Use email instead
         </Text>
-      </TouchableOpacity>
-    </View>
+      </Pressable>
+    </SafeAreaView>
   );
 };
 
@@ -76,27 +122,31 @@ export const PhoneOtpScreen: React.FC = () => (
 );
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24 },
-  backBtn:   { marginBottom: 12 },
+  safe:    { flex: 1 },
+  backBtn: { paddingTop: 12, marginBottom: 8 },
   content: {
-    flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16,
+    flex:            1,
+    justifyContent:  'center',
+    alignItems:      'center',
+    gap:             16,
+    paddingHorizontal: 24,
   },
   iconCircle: {
-    width: 96, height: 96,
-    justifyContent: 'center', alignItems: 'center',
-    marginBottom: 8,
+    width:          96,
+    height:         96,
+    alignItems:     'center',
+    justifyContent: 'center',
+    marginBottom:   8,
   },
-  badge: { paddingHorizontal: 14, paddingVertical: 5 },
-  badgeText: { fontSize: 12, fontWeight: '800', color: '#1C1917' },
-  title: { fontWeight: '800', textAlign: 'center' },
-  desc: {
-    textAlign: 'center', lineHeight: 22,
-    paddingHorizontal: 24, color: '#64748B',
-  },
+  badge: {},
   altBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, borderWidth: 1.5, paddingVertical: 14,
-    marginBottom: 32,
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'center',
+    gap:            8,
+    borderWidth:    1.5,
+    paddingVertical: 15,
   },
-  altText: { fontWeight: '600' },
 });
+
+export default PhoneRegisterScreen;

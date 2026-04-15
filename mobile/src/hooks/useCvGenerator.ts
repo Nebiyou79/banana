@@ -1,49 +1,56 @@
 /**
  * src/hooks/useCvGenerator.ts
- * React Query hooks for the CV Generator feature.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * React Query hooks for the CV Generator module.
+ * Parity: mirrors web useCVGenerator.ts logic — same loading flags, error
+ * handling, and optimistic invalidation.
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Sharing from 'expo-sharing';
-import { cvGeneratorService, GenerateCVPayload } from '../services/cvGeneratorService';
+import {
+  cvGeneratorService,
+  GenerateCVPayload,
+} from '../services/cvGeneratorService';
 import toast from '../lib/toast';
 
 // ─── Query Keys ───────────────────────────────────────────────────────────────
 
 export const CV_KEYS = {
-  templates:  ['cv', 'templates'] as const,
-  generated:  ['cv', 'generated'] as const,
+  templates: ['cv', 'templates']  as const,
+  generated: ['cv', 'generated']  as const,
 };
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
-/** Fetch all available CV templates. Templates rarely change — long stale time. */
+/** All available CV templates. Templates rarely change — 1-hour stale. */
 export const useTemplates = () =>
   useQuery({
     queryKey: CV_KEYS.templates,
     queryFn:  cvGeneratorService.getTemplates,
-    staleTime: 60 * 60 * 1000, // 1 hour
+    staleTime: 60 * 60 * 1000,
   });
 
-/** Fetch user's list of previously generated CVs. */
+/** User's list of previously generated CVs. */
 export const useGeneratedCVs = () =>
   useQuery({
     queryKey: CV_KEYS.generated,
     queryFn:  cvGeneratorService.listGeneratedCVs,
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    staleTime: 2 * 60 * 1000,
   });
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
 /**
  * Generate a brand-new PDF CV.
- * ⚠️  SLOW mutation — show a full-screen blocking overlay.
- *     The caller should check `generateCV.isPending` and render a Modal.
+ * ⚠️  SLOW — show a full-screen blocking overlay (isPending check).
+ * Mirrors web generateCV() — same GenerateCVPayload shape.
  */
 export const useGenerateCV = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: GenerateCVPayload) => cvGeneratorService.generateCV(payload),
+    mutationFn: (payload: GenerateCVPayload) =>
+      cvGeneratorService.generateCV(payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: CV_KEYS.generated });
       toast.success('CV generated and saved to your library!');
@@ -56,7 +63,7 @@ export const useGenerateCV = () => {
 
 /**
  * Regenerate an existing CV (same or new template).
- * Also slow — show the same blocking overlay.
+ * Mirrors web regenerateCV().
  */
 export const useRegenerateCV = () => {
   const qc = useQueryClient();
@@ -74,12 +81,8 @@ export const useRegenerateCV = () => {
 };
 
 /**
- * Download a generated CV to device and immediately open the system share sheet.
- *
- * Flow:
- *   1. Download binary PDF via expo-file-system → local URI
- *   2. Open expo-sharing share sheet for that URI
- *   3. User can save to Files, send via WhatsApp, email, etc.
+ * Download CV to device then open system share sheet.
+ * Flow: download binary → expo-sharing share sheet.
  */
 export const useDownloadCV = () =>
   useMutation({
@@ -87,8 +90,8 @@ export const useDownloadCV = () =>
       cvGeneratorService.downloadCVToDevice(cvId, fileName),
     onSuccess: async (localUri: string) => {
       try {
-        const isAvailable = await Sharing.isAvailableAsync();
-        if (isAvailable) {
+        const available = await Sharing.isAvailableAsync();
+        if (available) {
           await Sharing.shareAsync(localUri, {
             mimeType:    'application/pdf',
             dialogTitle: 'Share or Save your CV',
@@ -98,7 +101,7 @@ export const useDownloadCV = () =>
           toast.info('CV saved to your device storage.');
         }
       } catch {
-        // Sharing was cancelled — not an error
+        // Share sheet was dismissed — not an error
       }
     },
     onError: (err: any) => {

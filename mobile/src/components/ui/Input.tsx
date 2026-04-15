@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   TextInputProps,
+  ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/themeStore';
@@ -16,6 +17,10 @@ interface InputProps extends Omit<TextInputProps, 'style'> {
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   secureTextEntry?: boolean;
+  /** Overrides for the outer wrapper View (e.g. flex: 1) */
+  style?: ViewStyle;
+  /** Overrides applied directly to the TextInput (e.g. color, backgroundColor) */
+  inputStyle?: ViewStyle;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -25,6 +30,8 @@ export const Input: React.FC<InputProps> = ({
   rightIcon,
   secureTextEntry,
   editable = true,
+  style,
+  inputStyle,
   ...rest
 }) => {
   const { theme } = useThemeStore();
@@ -39,7 +46,7 @@ export const Input: React.FC<InputProps> = ({
     : colors.border;
 
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, style]}>
       {label && (
         <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
       )}
@@ -51,6 +58,7 @@ export const Input: React.FC<InputProps> = ({
             borderRadius: borderRadius.lg,
             backgroundColor: editable ? colors.inputBg : colors.borderLight,
           },
+          inputStyle,
         ]}
       >
         {leftIcon && <View style={styles.leftIcon}>{leftIcon}</View>}
@@ -91,8 +99,8 @@ export const Input: React.FC<InputProps> = ({
 };
 
 const styles = StyleSheet.create({
-  wrapper: { marginBottom: 4 },
-  label: { fontSize: 13, fontWeight: '500', marginBottom: 6 },
+  wrapper:   { marginBottom: 4 },
+  label:     { fontSize: 13, fontWeight: '500', marginBottom: 6 },
   container: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -100,8 +108,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     minHeight: 48,
   },
-  input: { fontSize: 15, paddingVertical: 10 },
-  leftIcon: { marginRight: 10 },
+  input:     { fontSize: 15, paddingVertical: 10 },
+  leftIcon:  { marginRight: 10 },
   rightIcon: { marginLeft: 8 },
   errorText: { fontSize: 12, marginTop: 4, marginLeft: 2 },
 });

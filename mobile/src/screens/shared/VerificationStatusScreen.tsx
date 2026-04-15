@@ -1,190 +1,294 @@
-import React from 'react';
+/**
+ * src/screens/shared/VerificationStatusScreen.tsx
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Premium mobile verification dashboard.
+ * Skeleton loading states, FlashList for checklist, haptic-ready CTAs.
+ */
+
+import React, { useCallback } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, ActivityIndicator,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Animated,
+  StatusBar,
+  Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScrollView } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { useQuery } from '@tanstack/react-query';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore }  from '../../store/authStore';
-import { verificationService, VERIFICATION_FALLBACK } from '../../services/verificationService';
+import {
+  useMyVerificationStatus,
+} from '../../hooks/useVerification';
+import { verificationService, VERIFICATION_FALLBACK, VerificationDetails } from '../../services/verificationService';
 
-// ─── Role accent colours ──────────────────────────────────────────────────────
 const ROLE_COLOR: Record<string, string> = {
   candidate:    '#F59E0B',
   freelancer:   '#10B981',
   company:      '#3B82F6',
   organization: '#8B5CF6',
+  admin:        '#EF4444',
 };
 
-const useAccent = () => {
-  const { role } = useAuthStore();
-  return ROLE_COLOR[role ?? 'candidate'] ?? '#F59E0B';
-};
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
 
-// ─── Check row ────────────────────────────────────────────────────────────────
-const CheckRow: React.FC<{
-  label: string;
-  done: boolean;
-  description: string;
-  accent: string;
-}> = ({ label, done, description, accent }) => {
+const Skeleton: React.FC<{ width?: number | string; height?: number; radius?: number }> = ({
+  width = '100%', height = 16, radius = 8,
+}) => {
   const { theme } = useThemeStore();
-  const { colors, typography } = theme;
+  const anim = React.useRef(new Animated.Value(0.4)).current;
+  React.useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1,   duration: 750, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.4, duration: 750, useNativeDriver: true }),
+      ]),
+    ).start();
+  }, []);
   return (
-    <View style={[vs.checkRow, { borderColor: colors.border }]}>
-      <View style={[vs.checkIcon, { backgroundColor: done ? accent + '20' : colors.border + '40' }]}>
-        <Ionicons
-          name={done ? 'checkmark-circle' : 'ellipse-outline'}
-          size={22}
-          color={done ? accent : colors.textMuted}
-        />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={[vs.checkLabel, { color: colors.text, fontSize: typography.base }]}>{label}</Text>
-        <Text style={[vs.checkDesc,  { color: colors.textMuted, fontSize: typography.xs }]}>{description}</Text>
-      </View>
-      {done && (
-        <View style={[vs.doneBadge, { backgroundColor: accent + '15' }]}>
-          <Text style={[vs.doneText, { color: accent, fontSize: typography.xs }]}>Done</Text>
-        </View>
-      )}
-    </View>
+    <Animated.View
+      style={{
+        width: typeof width === 'string'
+          ? width.endsWith('%')
+            ? `${parseFloat(width)}%` as `${number}%`
+            : width
+          : width,
+        height,
+        borderRadius: radius,
+        backgroundColor: theme.colors.border,
+        opacity: anim,
+      }}
+    />
   );
 };
+
+const SkeletonCard = () => (
+  <View style={{ gap: 14, padding: 20 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+      <Skeleton width={64} height={64} radius={32} />
+      <View style={{ flex: 1, gap: 8 }}>
+        <Skeleton height={18} width="60%" />
+        <Skeleton height={13} width="40%" />
+      </View>
+    </View>
+    <Skeleton height={10} />
+    <Skeleton height={10} width="80%" />
+    {[...Array(5)].map((_, i) => (
+      <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 }}>
+        <Skeleton width={38} height={38} radius={10} />
+        <View style={{ flex: 1, gap: 6 }}>
+          <Skeleton height={13} width="55%" />
+          <Skeleton height={11} width="70%" />
+        </View>
+        <Skeleton width={52} height={22} radius={12} />
+      </View>
+    ))}
+  </View>
+);
+
+// ─── Check item ───────────────────────────────────────────────────────────────
+
+interface CheckItem {
+  key: keyof VerificationDetails;
+  label: string;
+  description: string;
+}
+
+const CHECK_ITEMS: CheckItem[] = [
+  { key: 'profileVerified',   label: 'Profile Verified',   description: 'Basic profile information is complete and reviewed.' },
+  { key: 'emailVerified',     label: 'Email Verified',     description: 'Your email address has been confirmed.' },
+  { key: 'phoneVerified',     label: 'Phone Verified',     description: 'Your phone number has been confirmed.' },
+  { key: 'documentsVerified', label: 'Documents Verified', description: 'Identity or business documents have been reviewed.' },
+  { key: 'socialVerified',    label: 'Social Verified',    description: 'Your social profiles have been linked and verified.' },
+];
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
+
 export const VerificationStatusScreen: React.FC = () => {
   const { theme } = useThemeStore();
-  const { colors, typography, spacing } = theme;
+  const { colors, typography, borderRadius, shadows, spacing } = theme;
+  const { role }  = useAuthStore();
   const navigation = useNavigation<any>();
-  const accent = useAccent();
+  const accent     = ROLE_COLOR[role ?? 'candidate'] ?? '#F59E0B';
 
-  const { data, isLoading, refetch, isError } = useQuery({
-    queryKey: ['verification', 'me'],
-    queryFn: async () => {
-      const res = await verificationService.getMyStatus();
-      return res ?? VERIFICATION_FALLBACK ?? {
-        verificationStatus: 'none' as const,
-        verificationDetails: { profileVerified: false, socialVerified: false, documentsVerified: false, emailVerified: false, phoneVerified: false },
-        verificationMessage: '',
-      };
-    },
-    staleTime: 5 * 60 * 1000,
-    retry: (count, err: any) => err?.response?.status === 404 ? false : count < 1,
-  });
+  const { data, isLoading, refetch, isError } = useMyVerificationStatus();
 
-  const status  = data?.verificationStatus ?? 'none';
-  const details = data?.verificationDetails;
-  const badge   = verificationService.getBadgeConfig(status);
-  const progress = details ? verificationService.calculateProgress(details) : 0;
+  const safeData = data ?? VERIFICATION_FALLBACK;
+  const status   = safeData.verificationStatus;
+  const details  = safeData.verificationDetails;
+  const badge    = verificationService.getBadgeConfig(status);
+  const progress = verificationService.calculateProgress(details);
 
-  const checks = details ? [
-    { label: 'Profile Verified',   done: details.profileVerified,   description: 'Your basic profile information is complete and reviewed.' },
-    { label: 'Email Verified',     done: details.emailVerified,     description: 'Your email address has been confirmed.' },
-    { label: 'Phone Verified',     done: details.phoneVerified,     description: 'Your phone number has been confirmed.' },
-    { label: 'Documents Verified', done: details.documentsVerified, description: 'Identity or business documents have been reviewed.' },
-    { label: 'Social Verified',    done: details.socialVerified,    description: 'Your social profiles have been linked and verified.' },
-  ] : [];
+  const canRequest = verificationService.canRequestVerification(status, details.lastVerified);
+
+  const renderCheckItem = useCallback(({ item }: { item: CheckItem }) => {
+    const done = details[item.key] as boolean;
+    return (
+      <View style={[ci.row, { borderBottomColor: colors.border }]}>
+        <View style={[ci.icon, { backgroundColor: done ? accent + '18' : colors.border + '40', borderRadius: borderRadius.md }]}>
+          <Ionicons name={done ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={done ? accent : colors.textMuted} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: typography.sm, fontWeight: '700', color: colors.text }}>{item.label}</Text>
+          <Text style={{ fontSize: typography.xs, color: colors.textMuted, marginTop: 2, lineHeight: 15 }}>{item.description}</Text>
+        </View>
+        <View style={[ci.badge, { backgroundColor: done ? accent + '18' : colors.border + '40', borderRadius: 99 }]}>
+          <Text style={{ fontSize: 10, fontWeight: '700', color: done ? accent : colors.textMuted }}>
+            {done ? 'Done' : 'Pending'}
+          </Text>
+        </View>
+      </View>
+    );
+  }, [details, accent, colors, typography, borderRadius]);
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+        <StatusBar barStyle={theme.isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+        <View style={[s.header, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={{ fontSize: typography.lg, fontWeight: '700', color: colors.text }}>Verification</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <SkeletonCard />
+      </SafeAreaView>
+    );
+  }
+
+  if (isError) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
+        <Ionicons name="cloud-offline-outline" size={52} color={colors.textMuted} />
+        <Text style={{ color: colors.textMuted, fontSize: typography.base, marginTop: 12 }}>Failed to load status</Text>
+        <TouchableOpacity onPress={() => refetch()} style={[s.retryBtn, { borderColor: accent, borderRadius: borderRadius.lg, marginTop: 16 }]}>
+          <Text style={{ color: accent, fontWeight: '700', fontSize: typography.sm }}>Retry</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Header */}
-      <View style={[vs.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={vs.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={colors.text} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+      <StatusBar barStyle={theme.isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+
+      <View style={[s.header, { borderBottomColor: colors.border }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[vs.headerTitle, { color: colors.text, fontSize: typography.lg }]}>Verification</Text>
-        <View style={{ width: 36 }} />
+        <Text style={{ fontSize: typography.lg, fontWeight: '700', color: colors.text }}>Verification</Text>
+        <TouchableOpacity onPress={() => refetch()}>
+          <Ionicons name="refresh-outline" size={22} color={colors.textMuted} />
+        </TouchableOpacity>
       </View>
 
-      {isLoading ? (
-        <View style={vs.center}>
-          <ActivityIndicator color={accent} size="large" />
-        </View>
-      ) : isError ? (
-        <View style={vs.center}>
-          <Ionicons name="cloud-offline-outline" size={48} color={colors.textMuted} />
-          <Text style={[vs.emptyText, { color: colors.textMuted, fontSize: typography.base }]}>Failed to load</Text>
-          <TouchableOpacity style={[vs.retryBtn, { borderColor: accent }]} onPress={() => refetch()}>
-            <Text style={[{ color: accent, fontWeight: '600', fontSize: typography.sm }]}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <ScrollView contentContainerStyle={{ padding: spacing[5] }} showsVerticalScrollIndicator={false}>
-          {/* Status card */}
-          <View style={[vs.statusCard, { backgroundColor: badge.color + '12', borderColor: badge.color + '40' }]}>
-            <Ionicons name={badge.icon as any} size={40} color={badge.color} />
-            <Text style={[vs.statusLabel, { color: badge.color, fontSize: typography.xl }]}>{badge.label}</Text>
-            {data?.verificationMessage ? (
-              <Text style={[vs.statusMsg, { color: colors.textMuted, fontSize: typography.sm }]}>
-                {data.verificationMessage}
-              </Text>
-            ) : null}
+      <ScrollView contentContainerStyle={{ padding: spacing[4] ?? 16, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
 
-            {/* Progress bar */}
-            <View style={[vs.progBarBg, { backgroundColor: colors.border, marginTop: 14 }]}>
-              <View style={[vs.progBarFill, { width: `${progress}%` as any, backgroundColor: badge.color }]} />
+        {/* Status hero card */}
+        <View style={[s.heroCard, { backgroundColor: badge.color + '12', borderColor: badge.color + '35', borderRadius: borderRadius.xl, ...shadows.md }]}>
+          <View style={[s.heroBadgeIcon, { backgroundColor: badge.color + '20' }]}>
+            <Ionicons name={badge.icon as any} size={36} color={badge.color} />
+          </View>
+          <Text style={{ fontSize: typography.xl, fontWeight: '800', color: badge.color, marginTop: 12 }}>
+            {badge.label}
+          </Text>
+          {safeData.verificationMessage ? (
+            <Text style={{ fontSize: typography.sm, color: colors.textMuted, textAlign: 'center', marginTop: 6, lineHeight: 20 }}>
+              {safeData.verificationMessage}
+            </Text>
+          ) : null}
+
+          {/* Progress bar */}
+          <View style={[s.progBg, { backgroundColor: colors.border + '60', marginTop: 18 }]}>
+            <View style={[s.progFill, { width: `${progress}%` as any, backgroundColor: badge.color }]} />
+          </View>
+          <Text style={{ fontSize: typography.xs, color: colors.textMuted, marginTop: 8 }}>
+            {progress}% complete
+          </Text>
+
+          {/* Last verified */}
+          {details.lastVerified && (
+            <Text style={{ fontSize: typography.xs, color: colors.textMuted, marginTop: 6, fontStyle: 'italic' }}>
+              Last verified: {new Date(details.lastVerified).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+            </Text>
+          )}
+        </View>
+
+        {/* Admin notes */}
+        {details.verificationNotes && (
+          <View style={[s.noteCard, { backgroundColor: colors.infoLight ?? '#EFF6FF', borderRadius: borderRadius.lg, marginTop: 16 }]}>
+            <Ionicons name="clipboard-outline" size={15} color={colors.info ?? '#3B82F6'} />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={{ fontSize: typography.xs, fontWeight: '700', color: colors.info ?? '#3B82F6' }}>
+                Admin Notes
+              </Text>
+              <Text style={{ fontSize: typography.xs, color: colors.info ?? '#3B82F6', lineHeight: 16, marginTop: 3 }}>
+                {details.verificationNotes}
+              </Text>
             </View>
-            <Text style={[vs.progLabel, { color: colors.textMuted, fontSize: typography.xs }]}>
-              {progress}% complete
+          </View>
+        )}
+
+        {/* Checklist */}
+        <Text style={{ fontSize: typography.base, fontWeight: '700', color: colors.text, marginTop: 24, marginBottom: 12 }}>
+          Verification Checklist
+        </Text>
+        <View style={[s.checkList, { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: borderRadius.xl, ...shadows.sm }]}>
+          <FlashList
+            data={CHECK_ITEMS}
+            scrollEnabled={false}
+            renderItem={renderCheckItem}
+          />
+        </View>
+
+        {/* CTA */}
+        {canRequest && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('RequestVerification')}
+            style={[s.ctaBtn, { backgroundColor: accent, borderRadius: borderRadius.xl, marginTop: 24, ...shadows.lg }]}
+            activeOpacity={0.87}
+          >
+            <Ionicons name="shield-checkmark-outline" size={20} color="#fff" />
+            <Text style={{ fontSize: typography.base, fontWeight: '700', color: '#fff', marginLeft: 10 }}>
+              {status === 'none' ? 'Start Verification' : 'Complete Verification'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {status === 'full' && (
+          <View style={[s.fullyVerifiedBanner, { backgroundColor: '#D1FAE5', borderRadius: borderRadius.xl, marginTop: 24 }]}>
+            <Ionicons name="checkmark-circle" size={22} color="#059669" />
+            <Text style={{ fontSize: typography.sm, fontWeight: '700', color: '#059669', marginLeft: 10 }}>
+              Your account is fully verified ✓
             </Text>
           </View>
-
-          {/* Checks */}
-          <Text style={[vs.sectionTitle, { color: colors.text, fontSize: typography.base, marginTop: 8 }]}>
-            Verification Checklist
-          </Text>
-          <View style={[vs.checkList, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            {checks.map((c, i) => (
-              <CheckRow key={c.label} {...c} accent={accent} />
-            ))}
-          </View>
-
-          {/* CTA */}
-          {status !== 'full' && (
-            <TouchableOpacity
-              style={[vs.ctaBtn, { backgroundColor: accent }]}
-              onPress={() => navigation.navigate('RequestVerification')}
-            >
-              <Ionicons name="shield-checkmark-outline" size={18} color="#fff" />
-              <Text style={[vs.ctaText, { color: '#fff', fontSize: typography.base }]}>
-                Request Verification
-              </Text>
-            </TouchableOpacity>
-          )}
-        </ScrollView>
-      )}
-    </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const vs = StyleSheet.create({
-  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, paddingTop: 52, borderBottomWidth: 1 },
-  headerTitle: { fontWeight: '700' },
-  backBtn:     { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  center:      { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  emptyText:   { textAlign: 'center' },
-  retryBtn:    { borderWidth: 1, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 8, marginTop: 4 },
-  statusCard:  { borderWidth: 1, borderRadius: 20, padding: 24, alignItems: 'center', marginBottom: 24 },
-  statusLabel: { fontWeight: '800', marginTop: 10, marginBottom: 4 },
-  statusMsg:   { textAlign: 'center', lineHeight: 20 },
-  progBarBg:   { width: '100%', height: 8, borderRadius: 99, overflow: 'hidden' },
-  progBarFill: { height: 8, borderRadius: 99 },
-  progLabel:   { marginTop: 6 },
-  sectionTitle:{ fontWeight: '700', marginBottom: 12 },
-  checkList:   { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
-  checkRow:    { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1 },
-  checkIcon:   { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  checkLabel:  { fontWeight: '600', marginBottom: 2 },
-  checkDesc:   { lineHeight: 16 },
-  doneBadge:   { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99 },
-  doneText:    { fontWeight: '600' },
-  ctaBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, paddingVertical: 16, marginTop: 20 },
-  ctaText:     { fontWeight: '700' },
+const s = StyleSheet.create({
+  header:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  heroCard:   { borderWidth: 1, padding: 24, alignItems: 'center' },
+  heroBadgeIcon: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center' },
+  progBg:     { width: '100%', height: 8, borderRadius: 99, overflow: 'hidden' },
+  progFill:   { height: 8, borderRadius: 99 },
+  noteCard:   { flexDirection: 'row', alignItems: 'flex-start', padding: 14, borderWidth: 1, borderColor: '#BFDBFE' },
+  checkList:  { borderWidth: 1, overflow: 'hidden' },
+  ctaBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 18 },
+  fullyVerifiedBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16 },
+  retryBtn:   { paddingHorizontal: 24, paddingVertical: 12, borderWidth: 1.5 },
 });
 
-// Re-export for import convenience
-export { VERIFICATION_FALLBACK };
+const ci = StyleSheet.create({
+  row:   { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1 },
+  icon:  { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  badge: { paddingHorizontal: 10, paddingVertical: 4 },
+});

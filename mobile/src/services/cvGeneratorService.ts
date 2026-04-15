@@ -1,7 +1,10 @@
 /**
  * src/services/cvGeneratorService.ts
- * CV Generator — typed API layer.
- * All endpoints: /api/v1/candidate/cv-generator/*
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Parity: Aligned with frontend/src/services/cvGeneratorService.ts.
+ * Mobile extras: downloadCVToDevice (expo-file-system), getTemplateLabel map.
+ *
+ * Endpoint base: /candidate/cv-generator/*
  */
 
 import api from '../lib/api';
@@ -9,42 +12,49 @@ import { API_BASE } from '../constants/api';
 import { getToken } from '../lib/storage';
 import * as FileSystem from 'expo-file-system';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Types (1-to-1 with web) ─────────────────────────────────────────────────
 
 export interface CVTemplate {
-  id: string;
-  name: string;
-  description: string;
-  primaryColor: string;
-  style: string;
+  id:                string;
+  name:              string;
+  description:       string;
+  primaryColor:      string;
+  style:             string;
   thumbnailGradient: string;
 }
 
 export interface GeneratedCV {
-  _id: string;
-  fileName: string;
+  _id:           string;
+  fileName:      string;
   originalName?: string;
-  size?: number;
-  uploadedAt: string;
-  isPrimary: boolean;
-  mimetype?: string;
-  isGenerated: boolean;
-  templateId: string;
-  generatedAt: string;
-  fileUrl?: string;
-  downloadUrl?: string;
+  size?:         number;
+  uploadedAt:    string;
+  isPrimary:     boolean;
+  mimetype?:     string;
+  fileExtension?: string;
+  isGenerated:   boolean;
+  templateId:    string;
+  generatedAt:   string;
+  fileUrl?:      string;
+  downloadUrl?:  string;
   downloadCount?: number;
-  viewCount?: number;
-  description?: string;
+  viewCount?:    number;
+  description?:  string;
 }
 
+/** Matches web GeneratePayload */
 export interface GenerateCVPayload {
-  templateId: string;
-  description?: string;
+  templateId:    string;
+  description?:  string;
   setAsPrimary?: boolean;
 }
 
-// ─── Template label mapping ───────────────────────────────────────────────────
+/** Matches web RegeneratePayload */
+export interface RegenerateCVPayload {
+  templateId: string;
+}
+
+// ─── Template label map ───────────────────────────────────────────────────────
 
 export const TEMPLATE_LABELS: Record<string, string> = {
   executive:    'Executive Classic',
@@ -57,6 +67,16 @@ export const TEMPLATE_LABELS: Record<string, string> = {
   compact:      'Compact One-Page',
   academic:     'Academic',
   freelancer:   'Freelancer Portfolio',
+  startup:      'Startup Ready',
+  minimal:      'Minimal',
+  geometric:    'Geometric',
+  timeline:     'Timeline',
+  nordic:       'Nordic',
+  impact:       'Impact',
+  retro:        'Retro',
+  healthcare:   'Healthcare',
+  magazine:     'Magazine',
+  glass:        'Glass',
 };
 
 export const getTemplateLabel = (id: string): string =>
@@ -65,7 +85,10 @@ export const getTemplateLabel = (id: string): string =>
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 export const cvGeneratorService = {
-  /** List all available templates. Stale-time: 1 hour. */
+  /**
+   * GET /candidate/cv-generator/templates
+   * Matches web getTemplates()
+   */
   getTemplates: async (): Promise<CVTemplate[]> => {
     const res = await api.get<{ success: boolean; data: { templates: CVTemplate[] } }>(
       '/candidate/cv-generator/templates',
@@ -74,7 +97,10 @@ export const cvGeneratorService = {
     return res.data.data.templates;
   },
 
-  /** List generated CVs for current user. */
+  /**
+   * GET /candidate/cv-generator/list
+   * Matches web listGeneratedCVs()
+   */
   listGeneratedCVs: async (): Promise<GeneratedCV[]> => {
     const res = await api.get<{ success: boolean; data: { cvs: GeneratedCV[] } }>(
       '/candidate/cv-generator/list',
@@ -84,9 +110,9 @@ export const cvGeneratorService = {
   },
 
   /**
-   * Fetch HTML preview for a template.
-   * ⚠️  Returns RAW HTML STRING — not JSON.
-   *     Pass directly to <WebView source={{ html }} />.
+   * POST /candidate/cv-generator/preview  { templateId }
+   * Returns RAW HTML STRING — pass directly to <WebView source={{ html }} />
+   * Matches web previewCV()
    */
   previewCV: async (templateId: string): Promise<string> => {
     const res = await api.post<string>(
@@ -98,8 +124,9 @@ export const cvGeneratorService = {
   },
 
   /**
-   * Generate a PDF from the user's profile.
-   * ⚠️  SLOW — 3–15 seconds. Always show a blocking loading overlay.
+   * POST /candidate/cv-generator/generate
+   * SLOW (3–15 s). Always show a blocking loading overlay.
+   * Matches web generateCV() — same payload shape.
    */
   generateCV: async (payload: GenerateCVPayload): Promise<GeneratedCV> => {
     const res = await api.post<{
@@ -109,13 +136,16 @@ export const cvGeneratorService = {
     }>(
       '/candidate/cv-generator/generate',
       payload,
-      { timeout: 90_000 }, // generous timeout for PDF generation
+      { timeout: 90_000 },
     );
     if (!res.data.success) throw new Error(res.data.message ?? 'CV generation failed');
     return res.data.data.cv;
   },
 
-  /** Regenerate an existing CV with a (possibly different) template. */
+  /**
+   * POST /candidate/cv-generator/regenerate/:cvId  { templateId }
+   * Matches web regenerateCV()
+   */
   regenerateCV: async (cvId: string, templateId: string): Promise<GeneratedCV> => {
     const res = await api.post<{ success: boolean; data: { cv: GeneratedCV } }>(
       `/candidate/cv-generator/regenerate/${cvId}`,
@@ -127,18 +157,17 @@ export const cvGeneratorService = {
   },
 
   /**
-   * Download the PDF binary to the device document directory.
-   * Returns the local file URI (suitable for expo-sharing).
-   * Uses expo-file-system — cannot use fetch() for binary files.
+   * Mobile-only: download PDF binary to device via expo-file-system.
+   * Returns local file URI (suitable for expo-sharing).
+   * Content-Disposition filename extraction mirrors web downloadGeneratedCV().
    */
   downloadCVToDevice: async (cvId: string, fileName?: string): Promise<string> => {
     const token = await getToken();
     if (!token) throw new Error('Authentication required');
 
     const remoteUrl = `${API_BASE}/candidate/cv-generator/download/${cvId}`;
-    // Sanitise filename for file system
-    const safeName = (fileName ?? `cv-${cvId}.pdf`).replace(/[^a-zA-Z0-9._\-() ]/g, '_');
-    const localUri = `${FileSystem.documentDirectory}${safeName}`;
+    const safeName  = (fileName ?? `cv-${cvId}.pdf`).replace(/[^a-zA-Z0-9._\-() ]/g, '_');
+    const localUri  = `${FileSystem.documentDirectory}${safeName}`;
 
     const result = await FileSystem.downloadAsync(remoteUrl, localUri, {
       headers: { Authorization: `Bearer ${token}` },

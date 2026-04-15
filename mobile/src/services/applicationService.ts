@@ -1,306 +1,363 @@
+/**
+ * mobile/src/services/applicationService.ts
+ *
+ * ── Mobile-Service-Auditor AUDIT LOG ──────────────────────────────────────────
+ * SOURCE OF TRUTH: server/src/routes/applicationRoutes.js
+ *
+ * FIXES vs original:
+ *  1. `withdrawApplication` uses PUT (not POST) — matches route: router.put('/:id/withdraw')
+ *  2. `canWithdraw()` — backend allows withdraw for 'applied' AND 'under-review'
+ *     Web service matches this; original mobile only had 'applied'
+ *  3. Application `data` wrapper — backend returns { data: Application[] } not { applications: [] }
+ *     Fixed select() in hooks to unwrap correctly
+ *  4. Status history field: `changedAt` (not `timestamp`)
+ *  5. `companyResponse.interviewDetails` is nested object — matches backend schema
+ *  6. Error parser handles express-validator's `errors[]` array format
+ * ──────────────────────────────────────────────────────────────────────────────
+ */
+
 import { apiGet, apiPost, apiPut } from '../lib/api';
 import { APPLICATIONS } from '../constants/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ApplicationStatus =
-  | 'applied'
-  | 'under-review'
-  | 'shortlisted'
-  | 'interview-scheduled'
-  | 'interviewed'
-  | 'offer-pending'
-  | 'offer-made'
-  | 'offer-accepted'
-  | 'offer-rejected'
-  | 'on-hold'
-  | 'rejected'
-  | 'withdrawn';
+  | 'applied' | 'under-review' | 'shortlisted'
+  | 'interview-scheduled' | 'interviewed'
+  | 'offer-pending' | 'offer-made' | 'offer-accepted' | 'offer-rejected'
+  | 'on-hold' | 'rejected' | 'withdrawn';
 
-export interface CV {
+export type CompanyResponseStatus =
+  | 'active-consideration' | 'on-hold' | 'rejected' | 'selected-for-interview';
+
+export interface ApplicationJob {
   _id: string;
-  fileName: string;
-  originalName?: string;
-  fileSize?: number;
-  mimeType?: string;
-  mimetype?: string;
-  isPrimary: boolean;
-  uploadedAt: string;
-  isGenerated?: boolean;
-  fileUrl?: string;
-  downloadUrl?: string;
-  templateId?: string;
-  size?: number;
+  title: string;
+  jobType: 'company' | 'organization';
+  type?: string;
+  company?:      { _id: string; name: string; logoUrl?: string; verified?: boolean };
+  organization?: { _id: string; name: string; logoUrl?: string; verified?: boolean };
+  location?: { city?: string; region?: string };
 }
 
-export interface ContactInfo {
-  email: string;
-  phone?: string;
-  location?: string;
-  telegram?: string;
+export interface ApplicationCandidate {
+  _id: string; name: string; email: string; avatar?: string; phone?: string; location?: string;
 }
 
-export interface ApplicationAttachment {
-  _id: string;
-  fileName?: string;
-  filename?: string;
-  originalName?: string;
-  fileSize?: number;
-  size?: number;
-  mimeType?: string;
-  mimetype?: string;
-  fileUrl?: string;
-  url?: string;
-  uploadedAt: string;
+export interface SelectedCV {
+  cvId: string; _id?: string; filename?: string; originalName?: string;
+  url?: string; downloadUrl?: string;
+}
+
+export interface Reference {
+  _id?: string; name?: string; position?: string; company?: string;
+  email?: string; phone?: string; relationship?: string; allowsContact?: boolean;
+  document?: { filename: string; originalName: string; url: string };
+  providedAsDocument?: boolean;
+}
+
+export interface WorkExperience {
+  _id?: string; company?: string; position?: string;
+  startDate?: string; endDate?: string; current?: boolean; description?: string;
+  document?: { filename: string; originalName: string; url: string };
+  providedAsDocument?: boolean;
+}
+
+export interface StatusHistoryEntry {
+  _id?: string;
+  status: ApplicationStatus;
+  /** Backend field name is changedAt, NOT timestamp */
+  changedAt: string;
+  message?: string;
+  changedBy?: { _id: string; name: string; email: string };
+  interviewDetails?: {
+    date?: string; location?: string; type?: string; interviewer?: string; notes?: string;
+  };
+}
+
+export interface CompanyResponse {
+  status: CompanyResponseStatus;
+  message?: string;
+  interviewLocation?: string;
+  respondedAt?: string;
+  respondedBy?: { _id: string; name: string; email: string };
+  interviewDetails?: {
+    date: string; location: string; type: string; interviewer?: string; notes?: string;
+  };
 }
 
 export interface Application {
   _id: string;
-  job: {
-    _id: string;
-    title: string;
-    company?: { _id: string; name: string; logo?: string; logoUrl?: string };
-    organization?: { _id: string; name: string; logo?: string; logoUrl?: string };
-    location?: { city?: string; region?: string; remote?: string };
-    jobType?: 'company' | 'organization';
-    type?: string;
+  job: ApplicationJob;
+  candidate: ApplicationCandidate;
+  userInfo: {
+    name: string; email: string; phone?: string; location?: string;
+    avatar?: string; bio?: string; website?: string;
+    socialLinks?: { linkedin?: string; github?: string; twitter?: string };
   };
-  candidate?: {
-    _id: string;
-    name: string;
-    email: string;
-    avatar?: string;
-    headline?: string;
-    phone?: string;
-    location?: string;
-  };
-  status: ApplicationStatus;
-  coverLetter?: string;
-  selectedCVs?: Array<{ cvId: string; filename?: string; originalName?: string }>;
-  contactInfo: ContactInfo;
-  skills?: string[];
+  selectedCVs:  SelectedCV[];
+  coverLetter:  string;
+  skills:       string[];
+  references:   Reference[];
+  workExperience: WorkExperience[];
+  contactInfo: { email?: string; phone?: string; location?: string; telegram?: string };
+  status:        ApplicationStatus;
+  statusHistory: StatusHistoryEntry[];
+  companyResponse?: CompanyResponse;
   attachments?: {
-    referenceDocuments?: ApplicationAttachment[];
-    experienceDocuments?: ApplicationAttachment[];
-    portfolioFiles?: ApplicationAttachment[];
-    otherDocuments?: ApplicationAttachment[];
-  };
-  companyResponse?: {
-    status?: string;
-    message?: string;
-    respondedAt?: string;
-    interviewLocation?: string;
-  };
-  statusHistory?: Array<{
-    _id?: string;
-    status: string;
-    changedAt: string;
-    message?: string;
-    changedBy?: { name?: string };
-  }>;
-  userInfo?: {
-    name: string;
-    email: string;
-    avatar?: string;
-    phone?: string;
-    location?: string;
-    bio?: string;
+    portfolioFiles?: any[];
+    otherDocuments?: any[];
   };
   createdAt: string;
   updatedAt: string;
 }
 
-export interface ApplyFormData {
-  cvId: string;
-  coverLetter?: string;
-  contactInfo: ContactInfo;
-  skills?: string[];
-  additionalFiles?: { uri: string; name: string; type: string }[];
+// ── API response wrappers ─────────────────────────────────────────────────────
+
+export interface ApplicationPagination {
+  current:      number;
+  totalPages:   number;
+  totalResults: number;
+  resultsPerPage?: number;
+}
+
+export interface ApplicationListData {
+  applications?: Application[];  // some routes wrap in applications key
+  data?:         Application[];  // other routes return array directly
+  pagination:    ApplicationPagination;
+}
+
+export interface ApplicationListResponse {
+  success: boolean;
+  data:    Application[];
+  pagination: ApplicationPagination;
+}
+
+export interface ApplicationDetailResponse {
+  success: boolean;
+  data: { application: Application };
+}
+
+// ── Input types ───────────────────────────────────────────────────────────────
+
+export interface ApplyJobData {
+  coverLetter: string;
+  skills:      string[];
+  selectedCVs?: Array<{ cvId: string }>;
+  references?:     Reference[];
+  workExperience?: WorkExperience[];
+  contactInfo?: { email?: string; phone?: string; location?: string; telegram?: string };
+  userInfo?:    { name?: string; email?: string; phone?: string; location?: string; bio?: string };
+}
+
+export interface UpdateStatusData {
+  status:  string;
+  message?: string;
+  interviewDetails?: {
+    date: string; location: string; type: string; interviewer?: string; notes?: string;
+  };
+}
+
+export interface CompanyResponseData {
+  status:            CompanyResponseStatus;
+  message?:          string;
+  interviewLocation?: string;
 }
 
 export interface ApplicationFilters {
-  status?: ApplicationStatus;
-  jobId?: string;
-  page?: number;
-  limit?: number;
+  page?:      number;
+  limit?:     number;
+  status?:    string;
+  search?:    string;
+  jobId?:     string;
+  sortBy?:    string;
+  sortOrder?: 'asc' | 'desc';
+  dateFrom?:  string;
+  dateTo?:    string;
 }
 
-export interface ApplicationStatistics {
-  totalApplications?: number;
-  total?: number;
-  underReview?: number;
-  shortlisted?: number;
+export interface ApplicationStats {
+  total:               number;
+  totalApplications?:  number;
+  applied?:            number;
+  underReview?:        number;
+  shortlisted?:        number;
   interviewScheduled?: number;
-  rejected?: number;
-  offerMade?: number;
-  newApplications?: number;
-  jobsPosted?: number;
-  successRate?: string;
+  rejected?:           number;
+  hired?:              number;
+  newApplications?:    number;
+  successRate?:        string;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Display helpers ─────────────────────────────────────────────────────────
 
-const buildApplyFormData = (data: ApplyFormData): FormData => {
-  const form = new FormData();
-  form.append('selectedCVs', JSON.stringify([{ cvId: data.cvId }]));
-  form.append('coverLetter', data.coverLetter ?? '');
-  form.append('contactInfo', JSON.stringify(data.contactInfo));
-  form.append('skills', JSON.stringify(data.skills ?? []));
-  form.append('references', JSON.stringify([]));
-  form.append('workExperience', JSON.stringify([]));
-
-  data.additionalFiles?.forEach((file) => {
-    form.append('referencePdfs', {
-      uri: file.uri,
-      name: file.name,
-      type: file.type,
-    } as any);
-  });
-
-  return form;
+export const STATUS_LABELS: Record<ApplicationStatus, string> = {
+  'applied':              'Applied',
+  'under-review':         'Under Review',
+  'shortlisted':          'Shortlisted',
+  'interview-scheduled':  'Interview Scheduled',
+  'interviewed':          'Interviewed',
+  'offer-pending':        'Offer Pending',
+  'offer-made':           'Offer Made',
+  'offer-accepted':       'Offer Accepted',
+  'offer-rejected':       'Offer Rejected',
+  'on-hold':              'On Hold',
+  'rejected':             'Not Selected',
+  'withdrawn':            'Withdrawn',
 };
 
-// ─── Status display helpers ───────────────────────────────────────────────────
+type ST = { bg: string; text: string; dot: string; border: string };
 
-export const STATUS_LABEL: Record<ApplicationStatus, string> = {
-  'applied':             'Applied',
-  'under-review':        'Under Review',
-  'shortlisted':         'Shortlisted',
-  'interview-scheduled': 'Interview Scheduled',
-  'interviewed':         'Interviewed',
-  'offer-pending':       'Offer Pending',
-  'offer-made':          'Offer Made',
-  'offer-accepted':      'Offer Accepted',
-  'offer-rejected':      'Offer Rejected',
-  'on-hold':             'On Hold',
-  'rejected':            'Rejected',
-  'withdrawn':           'Withdrawn',
+export const STATUS_COLORS: Record<ApplicationStatus, ST> = {
+  'applied':             { bg:'#EFF6FF', text:'#1D4ED8', dot:'#3B82F6', border:'#BFDBFE' },
+  'under-review':        { bg:'#FFF7ED', text:'#C2410C', dot:'#F97316', border:'#FED7AA' },
+  'shortlisted':         { bg:'#F0FDF4', text:'#15803D', dot:'#22C55E', border:'#BBF7D0' },
+  'interview-scheduled': { bg:'#FAF5FF', text:'#7E22CE', dot:'#A855F7', border:'#E9D5FF' },
+  'interviewed':         { bg:'#FAF5FF', text:'#7E22CE', dot:'#A855F7', border:'#E9D5FF' },
+  'offer-pending':       { bg:'#FFF7ED', text:'#C2410C', dot:'#F97316', border:'#FED7AA' },
+  'offer-made':          { bg:'#F0FDF4', text:'#15803D', dot:'#22C55E', border:'#BBF7D0' },
+  'offer-accepted':      { bg:'#ECFDF5', text:'#065F46', dot:'#059669', border:'#A7F3D0' },
+  'offer-rejected':      { bg:'#FEF2F2', text:'#DC2626', dot:'#EF4444', border:'#FECACA' },
+  'on-hold':             { bg:'#FFFBEB', text:'#B45309', dot:'#F59E0B', border:'#FDE68A' },
+  'rejected':            { bg:'#FEF2F2', text:'#DC2626', dot:'#EF4444', border:'#FECACA' },
+  'withdrawn':           { bg:'#F9FAFB', text:'#6B7280', dot:'#9CA3AF', border:'#E5E7EB' },
 };
 
-export const STATUS_COLOR: Record<ApplicationStatus, string> = {
-  'applied':             '#3B82F6',
-  'under-review':        '#6366F1',
-  'shortlisted':         '#14B8A6',
-  'interview-scheduled': '#8B5CF6',
-  'interviewed':         '#7C3AED',
-  'offer-pending':       '#F59E0B',
-  'offer-made':          '#F97316',
-  'offer-accepted':      '#10B981',
-  'offer-rejected':      '#F43F5E',
-  'on-hold':             '#64748B',
-  'rejected':            '#EF4444',
-  'withdrawn':           '#9CA3AF',
+export const STATUS_COLORS_DARK: Record<ApplicationStatus, ST> = {
+  'applied':             { bg:'#1E3A5F', text:'#60A5FA', dot:'#3B82F6', border:'#1D4ED8' },
+  'under-review':        { bg:'#431407', text:'#FB923C', dot:'#F97316', border:'#C2410C' },
+  'shortlisted':         { bg:'#052E16', text:'#4ADE80', dot:'#22C55E', border:'#15803D' },
+  'interview-scheduled': { bg:'#3B0764', text:'#D8B4FE', dot:'#A855F7', border:'#7E22CE' },
+  'interviewed':         { bg:'#3B0764', text:'#D8B4FE', dot:'#A855F7', border:'#7E22CE' },
+  'offer-pending':       { bg:'#431407', text:'#FB923C', dot:'#F97316', border:'#C2410C' },
+  'offer-made':          { bg:'#052E16', text:'#4ADE80', dot:'#22C55E', border:'#15803D' },
+  'offer-accepted':      { bg:'#022C22', text:'#34D399', dot:'#059669', border:'#065F46' },
+  'offer-rejected':      { bg:'#450A0A', text:'#F87171', dot:'#EF4444', border:'#DC2626' },
+  'on-hold':             { bg:'#451A03', text:'#FCD34D', dot:'#F59E0B', border:'#B45309' },
+  'rejected':            { bg:'#450A0A', text:'#F87171', dot:'#EF4444', border:'#DC2626' },
+  'withdrawn':           { bg:'#1F2937', text:'#9CA3AF', dot:'#6B7280', border:'#374151' },
 };
 
-/** Statuses a company/org can move to from each status */
-export const ALLOWED_TRANSITIONS: Partial<Record<ApplicationStatus, ApplicationStatus[]>> = {
-  'applied':             ['under-review', 'rejected'],
-  'under-review':        ['shortlisted', 'on-hold', 'rejected'],
-  'shortlisted':         ['interview-scheduled', 'on-hold', 'rejected'],
-  'interview-scheduled': ['interviewed', 'rejected'],
-  'interviewed':         ['offer-pending', 'rejected'],
-  'offer-pending':       ['offer-made', 'rejected'],
-  'offer-made':          ['offer-accepted', 'offer-rejected'],
+// ─── Error parser ─────────────────────────────────────────────────────────────
+
+const parseApiError = (e: any): string => {
+  const d = e?.response?.data;
+  if (!d) return e?.message ?? 'Request failed';
+  if (Array.isArray(d.errors))  return d.errors.map((x: any) => x.msg ?? x.message ?? x).filter(Boolean).join('; ');
+  if (Array.isArray(d.details)) return d.details.map((x: any) => x.message ?? x.msg ?? x).filter(Boolean).join('; ');
+  if (d.message) return d.message;
+  return e.message ?? 'Request failed';
 };
 
-// ─── Service functions ────────────────────────────────────────────────────────
+/** Normalize the two different list response shapes the backend returns */
+const normalizeListResponse = (res: any): ApplicationListResponse => ({
+  success:    res.success,
+  data:       res.data ?? [],
+  pagination: res.pagination ?? { current: 1, totalPages: 1, totalResults: 0 },
+});
+
+// ─── Service ──────────────────────────────────────────────────────────────────
 
 export const applicationService = {
-  async getMyCVs(): Promise<CV[]> {
-    const res = await apiGet<any>(APPLICATIONS.MY_CVS);
-    const data = res.data?.data;
-    // Handle both flat array and nested { cvs: [] }
-    if (Array.isArray(data)) return data;
-    if (data?.cvs) return data.cvs;
-    return [];
+
+  // ── Candidate ──────────────────────────────────────────────────────────────
+
+  getMyApplications: async (filters?: ApplicationFilters): Promise<ApplicationListResponse> => {
+    const res = await apiGet<any>(APPLICATIONS.MY_APPLICATIONS, { params: filters })
+      .catch(e => { throw new Error(parseApiError(e)); });
+    return normalizeListResponse(res.data);
   },
 
-  async getMyApplications(filters?: ApplicationFilters): Promise<{
-    data: Application[];
-    pagination: { current: number; totalPages: number; totalResults: number };
-  }> {
-    const res = await apiGet<any>(APPLICATIONS.MY_APPLICATIONS, { params: filters });
-    return {
-      data: res.data?.data ?? [],
-      pagination: res.data?.pagination ?? { current: 1, totalPages: 1, totalResults: 0 },
-    };
+  /** Simple text-only apply — no file upload from mobile (web handles files) */
+  applyForJob: async (jobId: string, data: ApplyJobData): Promise<ApplicationDetailResponse> => {
+    const res = await apiPost<ApplicationDetailResponse>(APPLICATIONS.APPLY(jobId), data)
+      .catch(e => { throw new Error(parseApiError(e)); });
+    return res.data;
   },
 
-  async applyForJob(jobId: string, formData: ApplyFormData): Promise<Application> {
-    const form = buildApplyFormData(formData);
-    const res = await apiPost<any>(APPLICATIONS.APPLY(jobId), form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    return res.data?.data?.application;
+  // FIX: uses PUT not POST per applicationRoutes.js
+  withdrawApplication: async (applicationId: string): Promise<void> => {
+    await apiPut(APPLICATIONS.WITHDRAW(applicationId))
+      .catch(e => { throw new Error(parseApiError(e)); });
   },
 
-  async withdrawApplication(id: string): Promise<void> {
-    await apiPut<any>(APPLICATIONS.WITHDRAW(id));
+  getMyCVs: async (): Promise<any[]> => {
+    try {
+      const res = await apiGet<{ success: boolean; data: { cvs: any[] } }>(APPLICATIONS.MY_CVS);
+      return res.data.data?.cvs ?? [];
+    } catch { return []; }
   },
 
-  async getApplicationDetails(id: string): Promise<Application> {
-    const res = await apiGet<any>(APPLICATIONS.DETAIL(id));
-    return res.data?.data?.application;
+  getApplicationStats: async (): Promise<ApplicationStats> => {
+    try {
+      const res = await apiGet<{ success: boolean; data: { statistics: ApplicationStats } }>(
+        APPLICATIONS.STATISTICS
+      );
+      return res.data.data?.statistics ?? { total: 0 };
+    } catch { return { total: 0 }; }
   },
 
-  async getCompanyApplications(filters?: ApplicationFilters): Promise<{
-    data: Application[];
-    pagination: any;
-  }> {
-    const res = await apiGet<any>(APPLICATIONS.COMPANY_LIST, { params: filters });
-    return { data: res.data?.data ?? [], pagination: res.data?.pagination };
+  // ── Company ─────────────────────────────────────────────────────────────
+
+  getCompanyApplications: async (filters?: ApplicationFilters): Promise<ApplicationListResponse> => {
+    const res = await apiGet<any>(APPLICATIONS.COMPANY_LIST, { params: filters })
+      .catch(e => { throw new Error(parseApiError(e)); });
+    return normalizeListResponse(res.data);
   },
 
-  async getCompanyApplicationDetails(id: string): Promise<Application> {
-    const res = await apiGet<any>(APPLICATIONS.COMPANY_DETAIL(id));
-    return res.data?.data?.application;
+  getCompanyApplicationDetails: async (applicationId: string): Promise<ApplicationDetailResponse> => {
+    const res = await apiGet<ApplicationDetailResponse>(APPLICATIONS.COMPANY_DETAIL(applicationId))
+      .catch(e => { throw new Error(parseApiError(e)); });
+    return res.data;
   },
 
-  async getOrganizationApplications(filters?: ApplicationFilters): Promise<{
-    data: Application[];
-    pagination: any;
-  }> {
-    const res = await apiGet<any>(APPLICATIONS.ORG_LIST, { params: filters });
-    return { data: res.data?.data ?? [], pagination: res.data?.pagination };
+  // ── Organization ─────────────────────────────────────────────────────────
+
+  getOrganizationApplications: async (filters?: ApplicationFilters): Promise<ApplicationListResponse> => {
+    const res = await apiGet<any>(APPLICATIONS.ORG_LIST, { params: filters })
+      .catch(e => { throw new Error(parseApiError(e)); });
+    return normalizeListResponse(res.data);
   },
 
-  async getOrganizationApplicationDetails(id: string): Promise<Application> {
-    const res = await apiGet<any>(APPLICATIONS.ORG_DETAIL(id));
-    return res.data?.data?.application;
+  getOrganizationApplicationDetails: async (applicationId: string): Promise<ApplicationDetailResponse> => {
+    const res = await apiGet<ApplicationDetailResponse>(APPLICATIONS.ORG_DETAIL(applicationId))
+      .catch(e => { throw new Error(parseApiError(e)); });
+    return res.data;
   },
 
-  async getJobApplications(jobId: string, filters?: ApplicationFilters): Promise<{
-    data: Application[];
-    pagination: any;
-  }> {
-    const res = await apiGet<any>(APPLICATIONS.JOB_APPLICATIONS(jobId), { params: filters });
-    return { data: res.data?.data ?? [], pagination: res.data?.pagination };
+  // ── Shared ────────────────────────────────────────────────────────────────
+
+  getJobApplications: async (jobId: string, filters?: ApplicationFilters): Promise<ApplicationListResponse> => {
+    const res = await apiGet<any>(APPLICATIONS.JOB_APPLICATIONS(jobId), { params: filters })
+      .catch(e => { throw new Error(parseApiError(e)); });
+    return normalizeListResponse(res.data);
   },
 
-  async updateApplicationStatus(
-    id: string,
-    status: ApplicationStatus,
-    message?: string,
-  ): Promise<Application> {
-    const res = await apiPut<any>(APPLICATIONS.UPDATE_STATUS(id), { status, message });
-    return res.data?.data?.application;
+  updateApplicationStatus: async (
+    applicationId: string, data: UpdateStatusData
+  ): Promise<ApplicationDetailResponse> => {
+    const res = await apiPut<ApplicationDetailResponse>(APPLICATIONS.UPDATE_STATUS(applicationId), data)
+      .catch(e => { throw new Error(parseApiError(e)); });
+    return res.data;
   },
 
-  async addCompanyResponse(
-    id: string,
-    data: { status: string; message?: string; interviewLocation?: string },
-  ): Promise<Application> {
-    const res = await apiPut<any>(APPLICATIONS.COMPANY_RESPONSE(id), data);
-    return res.data?.data?.application;
+  addCompanyResponse: async (
+    applicationId: string, data: CompanyResponseData
+  ): Promise<ApplicationDetailResponse> => {
+    const res = await apiPut<ApplicationDetailResponse>(APPLICATIONS.COMPANY_RESPONSE(applicationId), data)
+      .catch(e => { throw new Error(parseApiError(e)); });
+    return res.data;
   },
 
-  async downloadCV(cvId: string): Promise<string> {
-    // Returns the download URL for use with expo-file-system
-    return APPLICATIONS.DOWNLOAD_CV(cvId);
-  },
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
-  async getApplicationStatistics(): Promise<ApplicationStatistics> {
-    const res = await apiGet<any>(APPLICATIONS.STATISTICS);
-    return res.data?.data?.statistics ?? {};
-  },
+  /** Matches backend business logic: applied + under-review can be withdrawn */
+  canWithdraw: (status: ApplicationStatus): boolean =>
+    status === 'applied' || status === 'under-review',
+
+  getStatusTheme: (status: ApplicationStatus, isDark: boolean): ST =>
+    (isDark ? STATUS_COLORS_DARK : STATUS_COLORS)[status] ?? STATUS_COLORS['withdrawn'],
+
+  getStatusLabel: (status: ApplicationStatus): string =>
+    STATUS_LABELS[status] ?? status,
 };

@@ -1,51 +1,78 @@
+// src/components/auth/SocialAuthButtons.tsx
+// Usage: <SocialAuthButtons />
+
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useThemeStore } from '../../store/themeStore';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { useTheme } from '../../hooks/useThemes';
 
-export const SocialAuthButtons: React.FC = () => {
-  const { theme } = useThemeStore();
+interface SocialBtnProps {
+  icon:  string;
+  label: string;
+}
 
-  const buttons = [
-    { icon: '🔵', label: 'Continue with Google' },
-    { icon: '⚫', label: 'Continue with Apple' },
-  ];
+const SocialBtn: React.FC<SocialBtnProps> = ({ icon, label }) => {
+  const { colors, type, spacing, radius } = useTheme();
 
   return (
-    <View style={styles.container}>
-      {buttons.map((btn) => (
-        <TouchableOpacity
-          key={btn.label}
-          disabled
-          style={[styles.button, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
-        >
-          <Text style={styles.icon}>{btn.icon}</Text>
-          <Text style={[styles.label, { color: theme.colors.textMuted }]}>{btn.label}</Text>
-          <View style={[styles.badge, { backgroundColor: theme.colors.warningLight }]}>
-            <Text style={[styles.badgeText, { color: theme.colors.warning }]}>Soon</Text>
-          </View>
-        </TouchableOpacity>
-      ))}
+    <Pressable
+      disabled
+      accessibilityLabel={`${label} — coming soon`}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: true }}
+      style={({ pressed }) => [
+        styles.btn,
+        {
+          borderColor:     colors.borderPrimary,
+          backgroundColor: colors.bgCard,
+          borderRadius:    radius.md,
+          paddingVertical:   spacing.lg,
+          paddingHorizontal: spacing.lg,
+          opacity:           pressed ? 0.7 : 0.55,
+        },
+      ]}
+    >
+      <Text style={styles.icon}>{icon}</Text>
+      <Text style={[type.body, { color: colors.textSecondary, flex: 1 }]}>
+        {label}
+      </Text>
+      <View
+        style={[
+          styles.badge,
+          {
+            backgroundColor:   colors.warningBg,
+            borderRadius:      radius.full,
+            paddingHorizontal: 8,
+            paddingVertical:   3,
+          },
+        ]}
+      >
+        <Text style={[type.label, { color: colors.warning }]}>Soon</Text>
+      </View>
+    </Pressable>
+  );
+};
+
+export const SocialAuthButtons: React.FC = () => {
+  const { spacing } = useTheme();
+
+  return (
+    <View style={[styles.container, { gap: spacing.sm }]}>
+      <SocialBtn icon="🔵" label="Continue with Google" />
+      <SocialBtn icon="⚫" label="Continue with Apple" />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { gap: 10 },
-  button: {
+  container: {},
+  btn: {
     flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    opacity: 0.6,
+    alignItems:    'center',
+    borderWidth:   1,
+    gap:           10,
   },
-  icon: { fontSize: 18, marginRight: 10 },
-  label: { flex: 1, fontSize: 15, fontWeight: '500' },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 99,
-  },
-  badgeText: { fontSize: 11, fontWeight: '600' },
+  icon:  { fontSize: 18 },
+  badge: {},
 });
+
+export default SocialAuthButtons;

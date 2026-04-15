@@ -1,128 +1,265 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+/**
+ * screens/candidate/ProfileScreen.tsx
+ *
+ * Read-only "mobile résumé" view for the Candidate.
+ * ─ ProfileHeader (avatar, cover, name, headline, verified badge)
+ * ─ FlashList-backed sections: Skills, Experience, Education, Certifications
+ * ─ Tappable links for social / website
+ */
+
+import React, { useCallback } from 'react';
+import {
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking,
+  ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore }  from '../../store/authStore';
-import { useProfile, useCandidateRoleProfile, useVerificationStatus } from '../../hooks/useProfile';
-import { roleProfileService } from '../../services/roleProfileService';
+import {
+  useProfile, useCandidateRoleProfile, useVerificationStatus,
+} from '../../hooks/useProfile';
+import {
+  ProfileHeader, SectionBlock, VerificationPill,
+} from '../../components/shared/ProfileAtoms';
 import type { CandidateStackParamList } from '../../navigation/CandidateNavigator';
 
 type Nav = NativeStackNavigationProp<CandidateStackParamList>;
 const ACCENT = '#F59E0B';
+
+// ─── Timeline Item (experience / education) ───────────────────────────────────
+
+interface TimelineItemProps {
+  title:    string;
+  subtitle: string;
+  meta:     string;
+  current?: boolean;
+}
+
+const TimelineItem: React.FC<TimelineItemProps> = React.memo(({ title, subtitle, meta, current }) => {
+  const { theme } = useThemeStore();
+  return (
+    <View style={[t.item, { borderLeftColor: current ? '#10B981' : ACCENT }]}>
+      <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 13 }}>{title}</Text>
+      <Text style={{ color: ACCENT, fontWeight: '600', fontSize: 12 }}>{subtitle}</Text>
+      <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>{meta}</Text>
+      {current && <Text style={{ color: '#10B981', fontSize: 10, fontWeight: '700', marginTop: 2 }}>● Current</Text>}
+    </View>
+  );
+});
+
+// ─── Certification Item ───────────────────────────────────────────────────────
+
+interface CertItemProps {
+  name:     string;
+  issuer:   string;
+  issued:   string;
+  credUrl?: string;
+}
+
+const CertItem: React.FC<CertItemProps> = React.memo(({ name, issuer, issued, credUrl }) => {
+  const { theme } = useThemeStore();
+  return (
+    <View style={[c.item, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+      <View style={[c.icon, { backgroundColor: '#6366F1' + '1A' }]}>
+        <Ionicons name="ribbon-outline" size={18} color="#6366F1" />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 13 }}>{name}</Text>
+        <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{issuer} · {issued}</Text>
+        {credUrl ? (
+          <TouchableOpacity onPress={() => Linking.openURL(credUrl)}>
+            <Text style={{ color: '#6366F1', fontSize: 11, marginTop: 2 }}>View credential ↗</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    </View>
+  );
+});
+
+// ─── Skill Chip ───────────────────────────────────────────────────────────────
+
+const Chip: React.FC<{ text: string }> = React.memo(({ text }) => (
+  <View style={chip.wrap}>
+    <Text style={chip.text}>{text}</Text>
+  </View>
+));
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export const CandidateProfileScreen: React.FC = () => {
   const { theme } = useThemeStore();
   const { colors, typography, spacing } = theme;
   const { user } = useAuthStore();
   const navigation = useNavigation<Nav>();
+
   const { data: profile, isLoading } = useProfile();
   const { data: roleProfile } = useCandidateRoleProfile();
   const { data: verification } = useVerificationStatus();
 
-  const avatarUrl = profile?.avatar?.secure_url ?? profile?.user?.avatar;
-  const initials  = (user?.name ?? 'U').split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 2);
+  const avatarUrl    = profile?.avatar?.secure_url ?? profile?.user?.avatar ?? null;
+  const coverUrl     = profile?.cover?.secure_url ?? null;
+  const vStatus      = verification?.verificationStatus ?? 'none';
+  const skills       = roleProfile?.skills ?? [];
+  const experience   = roleProfile?.experience ?? [];
+  const education    = roleProfile?.education ?? [];
+  const certs        = roleProfile?.certifications ?? [];
 
-  if (isLoading) return <View style={{ flex:1, alignItems:'center', justifyContent:'center', backgroundColor: colors.background }}><ActivityIndicator color={ACCENT}/></View>;
+  const fmtRange = useCallback((start?: string, end?: string, current?: boolean) => {
+    const s = start ? new Date(start).getFullYear().toString() : '?';
+    const e = current ? 'Present' : end ? new Date(end).getFullYear().toString() : '?';
+    return `${s} – ${e}`;
+  }, []);
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator color={ACCENT} />
+      </View>
+    );
+  }
 
   return (
-    <ScrollView style={{ flex:1, backgroundColor: colors.background }} showsVerticalScrollIndicator={false}>
-      {/* Cover */}
-      <View style={[s.cover, { backgroundColor: ACCENT + '30' }]}>
-        {profile?.cover?.secure_url && <Image source={{ uri: profile.cover.secure_url }} style={StyleSheet.absoluteFillObject} resizeMode="cover"/>}
-      </View>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.background }} showsVerticalScrollIndicator={false}>
 
-      {/* Avatar row */}
-      <View style={[s.avatarRow, { paddingHorizontal: spacing[5] }]}>
-        <View style={[s.avatarWrap, { borderColor: colors.background }]}>
-          {avatarUrl
-            ? <Image source={{ uri: avatarUrl }} style={s.avatar}/>
-            : <View style={[s.avatar, { backgroundColor: ACCENT, alignItems:'center', justifyContent:'center' }]}><Text style={{ color:'#fff', fontWeight:'800', fontSize: typography.xl }}>{initials}</Text></View>
-          }
-          {verification?.verificationStatus === 'full' && (
-            <View style={[s.badge, { backgroundColor: '#10B981' }]}><Ionicons name="checkmark" size={10} color="#fff"/></View>
-          )}
-        </View>
-        <TouchableOpacity style={[s.editBtn, { backgroundColor: ACCENT }]} onPress={() => navigation.navigate('EditProfile')}>
-          <Ionicons name="pencil" size={14} color="#fff"/>
-          <Text style={{ color:'#fff', fontWeight:'600', fontSize: typography.sm, marginLeft:4 }}>Edit</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Header */}
+      <ProfileHeader
+        name={user?.name ?? 'Candidate'}
+        headline={profile?.headline}
+        avatarUrl={avatarUrl}
+        coverUrl={coverUrl}
+        accentColor={ACCENT}
+        verifiedFull={vStatus === 'full'}
+        onEdit={() => navigation.navigate('EditProfile')}
+        rightSlot={<VerificationPill status={vStatus as any} />}
+      />
 
-      <View style={{ paddingHorizontal: spacing[5], paddingBottom: 40 }}>
-        <Text style={[s.name, { color: colors.text, fontSize: typography['2xl'] }]}>{user?.name}</Text>
-        {profile?.headline && <Text style={[s.headline, { color: colors.textMuted, fontSize: typography.base }]}>{profile.headline}</Text>}
-        {profile?.location && (
-          <View style={s.infoRow}>
-            <Ionicons name="location-outline" size={14} color={colors.textMuted}/>
-            <Text style={{ color: colors.textMuted, fontSize: typography.sm, marginLeft:4 }}>{profile.location}</Text>
-          </View>
-        )}
+      <View style={{ paddingHorizontal: spacing[5], paddingBottom: 48 }}>
 
-        {profile?.bio && (
-          <View style={[s.section, { borderColor: colors.border }]}>
-            <Text style={[s.sectionTitle, { color: colors.text }]}>About</Text>
-            <Text style={{ color: colors.textMuted, fontSize: typography.sm, lineHeight:20 }}>{profile.bio}</Text>
-          </View>
-        )}
-
-        {(roleProfile?.skills?.length ?? 0) > 0 && (
-          <View style={[s.section, { borderColor: colors.border }]}>
-            <Text style={[s.sectionTitle, { color: colors.text }]}>Skills</Text>
-            <View style={s.chips}>
-              {roleProfile!.skills.map((sk) => (
-                <View key={sk} style={[s.chip, { backgroundColor: ACCENT+'18', borderColor: ACCENT+'40' }]}>
-                  <Text style={{ color: ACCENT, fontSize: typography.xs, fontWeight:'600' }}>{sk}</Text>
-                </View>
-              ))}
+        {/* Info chips row */}
+        <View style={[s.infoRow, { marginTop: 12 }]}>
+          {profile?.location ? (
+            <View style={s.infoChip}>
+              <Ionicons name="location-outline" size={13} color={colors.textMuted} />
+              <Text style={[s.infoChipText, { color: colors.textMuted, fontSize: typography.xs }]}>{profile.location}</Text>
             </View>
-          </View>
-        )}
+          ) : null}
+          {profile?.website ? (
+            <TouchableOpacity style={s.infoChip} onPress={() => Linking.openURL(profile.website!)}>
+              <Ionicons name="globe-outline" size={13} color={colors.primary} />
+              <Text style={[s.infoChipText, { color: colors.primary, fontSize: typography.xs }]}>Website</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
 
-        {(roleProfile?.experience?.length ?? 0) > 0 && (
-          <View style={[s.section, { borderColor: colors.border }]}>
-            <Text style={[s.sectionTitle, { color: colors.text }]}>Experience</Text>
-            {roleProfile!.experience.map((exp, i) => (
-              <View key={i} style={s.timelineItem}>
-                <Text style={{ color: colors.text, fontWeight:'700', fontSize: typography.sm }}>{exp.title}</Text>
-                <Text style={{ color: ACCENT, fontWeight:'500', fontSize: typography.sm }}>{exp.company}</Text>
-                <Text style={{ color: colors.textMuted, fontSize: typography.xs }}>{roleProfileService.formatDateRange(exp.startDate, exp.endDate, exp.current)}</Text>
-              </View>
-            ))}
-          </View>
-        )}
+        {/* Bio */}
+        {profile?.bio ? (
+          <SectionBlock title="About">
+            <Text style={{ color: colors.textMuted, fontSize: typography.sm, lineHeight: 20 }}>
+              {profile.bio}
+            </Text>
+          </SectionBlock>
+        ) : null}
 
-        {(roleProfile?.education?.length ?? 0) > 0 && (
-          <View style={[s.section, { borderColor: colors.border }]}>
-            <Text style={[s.sectionTitle, { color: colors.text }]}>Education</Text>
-            {roleProfile!.education.map((edu, i) => (
-              <View key={i} style={s.timelineItem}>
-                <Text style={{ color: colors.text, fontWeight:'700', fontSize: typography.sm }}>{edu.degree}{edu.field ? ` · ${edu.field}` : ''}</Text>
-                <Text style={{ color: ACCENT, fontWeight:'500', fontSize: typography.sm }}>{edu.institution}</Text>
-                <Text style={{ color: colors.textMuted, fontSize: typography.xs }}>{roleProfileService.formatDateRange(edu.startDate, edu.endDate, edu.current)}</Text>
-              </View>
-            ))}
-          </View>
-        )}
+        {/* Skills */}
+        {skills.length > 0 ? (
+          <SectionBlock title="Skills">
+            <View style={s.chipWrap}>
+              {skills.map((sk) => <Chip key={sk} text={sk} />)}
+            </View>
+          </SectionBlock>
+        ) : null}
+
+        {/* Experience */}
+        {experience.length > 0 ? (
+          <SectionBlock title="Experience">
+            <View style={{ height: experience.length * 84 }}>
+              <FlashList
+                data={experience}
+                renderItem={({ item }) => (
+                  <TimelineItem
+                    title={item.title ?? item.position ?? ''}
+                    subtitle={item.company ?? ''}
+                    meta={fmtRange(item.startDate, item.endDate, item.current)}
+                    current={item.current}
+                  />
+                )}
+                keyExtractor={(_, i) => `exp-${i}`}
+                scrollEnabled={false}
+              />
+            </View>
+          </SectionBlock>
+        ) : null}
+
+        {/* Education */}
+        {education.length > 0 ? (
+          <SectionBlock title="Education">
+            <View style={{ height: education.length * 80 }}>
+              <FlashList
+                data={education}
+                renderItem={({ item }) => (
+                  <TimelineItem
+                    title={item.degree ? `${item.degree}${item.field ? ` · ${item.field}` : ''}` : item.institution ?? ''}
+                    subtitle={item.institution ?? ''}
+                    meta={fmtRange(item.startDate, item.endDate, item.current)}
+                    current={item.current}
+                  />
+                )}
+                keyExtractor={(_, i) => `edu-${i}`}
+                scrollEnabled={false}
+              />
+            </View>
+          </SectionBlock>
+        ) : null}
+
+        {/* Certifications */}
+        {certs.length > 0 ? (
+          <SectionBlock title="Certifications">
+            <View style={{ height: certs.length * 88 }}>
+              <FlashList
+                data={certs}
+                renderItem={({ item }) => (
+                  <CertItem
+                    name={item.name ?? ''}
+                    issuer={item.issuer ?? ''}
+                    issued={item.issueDate ? new Date(item.issueDate).toLocaleDateString('en', { month: 'short', year: 'numeric' }) : ''}
+                    credUrl={item.credentialUrl}
+                  />
+                )}
+                keyExtractor={(_, i) => `cert-${i}`}
+                scrollEnabled={false}
+              />
+            </View>
+          </SectionBlock>
+        ) : null}
+
       </View>
     </ScrollView>
   );
 };
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const s = StyleSheet.create({
-  cover:       { height: 140 },
-  avatarRow:   { flexDirection:'row', alignItems:'flex-end', justifyContent:'space-between', marginTop:-40, marginBottom:12 },
-  avatarWrap:  { width:84, height:84, borderRadius:42, borderWidth:3, overflow:'hidden' },
-  avatar:      { width:'100%', height:'100%' },
-  badge:       { position:'absolute', bottom:2, right:2, width:18, height:18, borderRadius:9, alignItems:'center', justifyContent:'center' },
-  editBtn:     { flexDirection:'row', alignItems:'center', paddingHorizontal:14, paddingVertical:8, borderRadius:99 },
-  name:        { fontWeight:'800', marginBottom:4 },
-  headline:    { marginBottom:6 },
-  infoRow:     { flexDirection:'row', alignItems:'center', marginBottom:4 },
-  section:     { borderTopWidth:1, paddingTop:16, marginTop:16 },
-  sectionTitle:{ fontWeight:'700', marginBottom:10, fontSize:15 },
-  chips:       { flexDirection:'row', flexWrap:'wrap', gap:8 },
-  chip:        { borderRadius:99, borderWidth:1, paddingHorizontal:10, paddingVertical:4 },
-  timelineItem:{ marginBottom:14 },
+  infoRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  infoChip:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#94A3B812', borderRadius: 99, paddingHorizontal: 10, paddingVertical: 4 },
+  infoChipText: { fontWeight: '500' },
+  chipWrap:     { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+});
+
+const t = StyleSheet.create({
+  item: { borderLeftWidth: 2, paddingLeft: 12, marginBottom: 16 },
+});
+
+const c = StyleSheet.create({
+  item: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 8 },
+  icon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+});
+
+const chip = StyleSheet.create({
+  wrap: { backgroundColor: ACCENT + '18', borderColor: ACCENT + '40', borderWidth: 1, borderRadius: 99, paddingHorizontal: 12, paddingVertical: 5 },
+  text: { color: ACCENT, fontSize: 12, fontWeight: '600' },
 });

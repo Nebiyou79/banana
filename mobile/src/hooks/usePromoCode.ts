@@ -1,6 +1,8 @@
 /**
  * src/hooks/usePromoCode.ts
- * React Query hooks for referral / promo-code feature.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * React Query hooks for the Referral / Promo Code module.
+ * Parity: matches web PromoCodeDashboard hook usage exactly.
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -10,22 +12,23 @@ import toast from '../lib/toast';
 // ─── Query Keys ───────────────────────────────────────────────────────────────
 
 export const PROMO_KEYS = {
-  stats:       ['promo', 'stats']              as const,
+  stats:       ['promo', 'stats']                    as const,
   leaderboard: (limit: number) => ['promo', 'leaderboard', limit] as const,
 };
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
-/** Authenticated user's referral statistics. */
+/** Current user's referral statistics + activity. */
 export const useMyReferralStats = (page = 1) =>
   useQuery({
     queryKey: PROMO_KEYS.stats,
     queryFn:  () => promoCodeService.getMyReferralStats(page),
     staleTime: 5 * 60 * 1000,
-    retry: 1,
+    retry:    1,
+    select:   (res) => res.data,   // unwrap to ReferralStatsData directly
   });
 
-/** Public leaderboard. */
+/** Public referral leaderboard. */
 export const useLeaderboard = (limit = 10) =>
   useQuery({
     queryKey: PROMO_KEYS.leaderboard(limit),
@@ -35,14 +38,17 @@ export const useLeaderboard = (limit = 10) =>
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
-/** Generate a referral code for the current user (one-time operation). */
+/**
+ * Generate referral code for current user (one-time).
+ * Mirrors web generateCode() handler in PromoCodeDashboard.
+ */
 export const useGenerateReferralCode = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: promoCodeService.generateMyReferralCode,
-    onSuccess: () => {
+    onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: PROMO_KEYS.stats });
-      toast.success('Your referral code is ready!');
+      toast.success(res.message ?? 'Your referral code is ready!');
     },
     onError: (err: any) => {
       toast.error(err?.message ?? 'Failed to generate referral code.');
@@ -52,10 +58,10 @@ export const useGenerateReferralCode = () => {
 
 /**
  * Validate a promo / referral code.
- * Does NOT auto-toast — let the calling screen handle result display.
+ * Uses useMutation (not useQuery) so validation is triggered on demand.
+ * Caller drives success/error UX — no auto-toast here (mirrors web behaviour).
  */
 export const useValidatePromoCode = () =>
   useMutation({
     mutationFn: (code: string) => promoCodeService.validatePromoCode(code),
-    // No onSuccess/onError toast — caller drives the UX
   });

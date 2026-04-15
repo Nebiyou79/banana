@@ -1,88 +1,124 @@
+// src/components/auth/RoleCard.tsx
+// Usage: <RoleCard role="candidate" label="Job Seeker" emoji="🎯" selected onPress={...} primaryColor="#3B82F6" />
+
 import React from 'react';
-import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useThemes';
 
 interface RoleCardProps {
-  role: string;
-  label: string;
-  description: string;
-  icon: string;
-  emoji: string;
-  selected: boolean;
-  onPress: () => void;
+  role:         string;
+  label:        string;
+  description:  string;
+  icon:         string;
+  emoji:        string;
+  selected:     boolean;
+  onPress:      () => void;
   primaryColor: string;
-  accentColor?: string;
 }
 
 export const RoleCard: React.FC<RoleCardProps> = ({
-  label, description, icon, emoji, selected, onPress, primaryColor,
+  label,
+  description,
+  emoji,
+  selected,
+  onPress,
+  primaryColor,
 }) => {
-  const { theme } = useThemeStore();
+  const { colors, type, spacing, radius, shadows } = useTheme();
 
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={onPress}
-      activeOpacity={0.85}
-      style={[
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={`${label}: ${description}`}
+      style={({ pressed }) => [
         styles.card,
+        shadows.sm,
         {
-          backgroundColor: theme.colors.surface,
-          borderColor: selected ? primaryColor : theme.colors.border,
-          borderWidth: selected ? 2 : 1,
+          backgroundColor: selected
+            ? `${primaryColor}14`
+            : colors.bgCard,
+          borderColor:  selected ? primaryColor : colors.borderPrimary,
+          borderWidth:  selected ? 2 : 1.5,
+          borderRadius: radius.lg,
+          padding:      spacing.lg,
+          marginBottom: spacing.sm,
+          opacity:      pressed ? 0.88 : 1,
         },
-        theme.shadows.sm,
       ]}
     >
-      <View style={[styles.iconBox, { backgroundColor: primaryColor + '18' }]}>
+      {/* Emoji badge */}
+      <View
+        style={[
+          styles.iconBox,
+          {
+            backgroundColor: `${primaryColor}18`,
+            borderRadius:    radius.md,
+          },
+        ]}
+      >
         <Text style={styles.emoji}>{emoji}</Text>
       </View>
+
+      {/* Label + description */}
       <View style={styles.content}>
-        <Text style={[styles.label, { color: theme.colors.text }]}>{label}</Text>
-        <Text style={[styles.desc, { color: theme.colors.textMuted }]}>{description}</Text>
+        <Text style={[type.h4, { color: colors.textPrimary }]}>{label}</Text>
+        <Text
+          style={[type.bodySm, { color: colors.textMuted, marginTop: 2 }]}
+          numberOfLines={2}
+        >
+          {description}
+        </Text>
       </View>
-      {selected ? (
-        <View style={[styles.check, { backgroundColor: primaryColor }]}>
-          <Ionicons name="checkmark" size={14} color="#fff" />
-        </View>
-      ) : (
-        <View style={[styles.checkEmpty, { borderColor: theme.colors.border }]} />
-      )}
-    </TouchableOpacity>
+
+      {/* Checkmark */}
+      <View
+        style={[
+          styles.check,
+          {
+            backgroundColor: selected ? primaryColor : 'transparent',
+            borderColor:     selected ? primaryColor : colors.borderPrimary,
+            borderRadius:    radius.full,
+          },
+        ]}
+      >
+        {selected && (
+          <Ionicons name="checkmark" size={13} color="#fff" />
+        )}
+      </View>
+    </Pressable>
   );
 };
 
 const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 10,
+    alignItems:    'center',
+    gap:           14,
   },
   iconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    alignItems: 'center',
+    width:          48,
+    height:         48,
+    alignItems:     'center',
     justifyContent: 'center',
-    marginRight: 14,
+    flexShrink:     0,
   },
-  emoji: { fontSize: 24 },
-  content: { flex: 1 },
-  label: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
-  desc: { fontSize: 13, lineHeight: 18 },
+  emoji: {
+    fontSize: 22,
+  },
+  content: {
+    flex: 1,
+  },
   check: {
-    width: 24,
-    height: 24,
-    borderRadius: 99,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkEmpty: {
-    width: 24,
-    height: 24,
-    borderRadius: 99,
+    width:       26,
+    height:      26,
     borderWidth: 1.5,
+    alignItems:  'center',
+    justifyContent: 'center',
+    flexShrink:  0,
   },
 });
+
+export default RoleCard;

@@ -1,47 +1,39 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { useRoute } from '@react-navigation/native';
-import { useThemeStore } from '../../store/themeStore';
+// src/screens/PlaceholderScreen.tsx
+// Drop-in placeholder for any unbuilt screen.
 
-/**
- * Placeholder screen used by all navigators until real screens are built.
- * Displays the route name so you can confirm navigation is working.
- */
+import React from 'react';
+import { View, Text, StyleSheet, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRoute }     from '@react-navigation/native';
+import { useTheme }     from '../../hooks/useTheme';
+
 export const PlaceholderScreen: React.FC = () => {
   const route = useRoute();
-  const { theme } = useThemeStore();
-  const { colors, typography } = theme;
+  const { colors, type, spacing, isDark } = useTheme();
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.emoji]}>🍌</Text>
-      <Text style={[styles.title, { color: colors.text, fontSize: typography['2xl'] }]}>
-        {route.name}
-      </Text>
-      <Text style={[styles.subtitle, { color: colors.textMuted, fontSize: typography.base }]}>
-        Coming soon — replace with real screen
-      </Text>
-    </View>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bgPrimary }]}
+      edges={['top', 'bottom']}
+    >
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+      <View style={[styles.content, { padding: spacing.screen }]}>
+        <Text style={styles.emoji}>🍌</Text>
+        <Text style={[type.h2, { color: colors.textPrimary, textAlign: 'center', marginBottom: spacing.sm }]}>
+          {route.name}
+        </Text>
+        <Text style={[type.body, { color: colors.textMuted, textAlign: 'center' }]}>
+          Coming soon — replace this with the real screen.
+        </Text>
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  emoji: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  title: {
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  subtitle: {
-    textAlign: 'center',
-  },
+  safe:    { flex: 1 },
+  content: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  emoji:   { fontSize: 64, marginBottom: 8 },
 });
+
+export default PlaceholderScreen;

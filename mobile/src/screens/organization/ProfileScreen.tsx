@@ -1,102 +1,148 @@
-import React from 'react';
+/**
+ * screens/organization/
+ * ─ DashboardScreen.tsx
+ * ─ ProfileScreen.tsx
+ * ─ EditProfileScreen.tsx
+ * ─ MoreScreen.tsx
+ *
+ * All four Organization role screens, strictly isolated from Company / Candidate styles.
+ * Accent colour: #8B5CF6 (violet).
+ */
+
+import React, { useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Image, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  ActivityIndicator, RefreshControl,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useQuery } from '@tanstack/react-query';
-import { useForm, Controller } from 'react-hook-form';
-import { useThemeStore } from '../../store/themeStore';
-import { useAuthStore }  from '../../store/authStore';
-import { useProfile, useCompanyRoleProfile, useVerificationStatus } from '../../hooks/useProfile';
-import { useUpdateProfile } from '../../hooks/useProfile';
-import { useLogout } from '../../hooks/useAuth';
-import { companyService } from '../../services/companyService';
-import { Input } from '../../components/ui/Input';
-import { useOrganizationRoleProfile } from '../../hooks/useProfile';
-import { organizationService } from '../../services/organizationService';
+
+import { useThemeStore }  from '../../store/themeStore';
+import { useAuthStore }   from '../../store/authStore';
+import {
+  useProfile,
+  useOrganizationRoleProfile,
+  useVerificationStatus,
+} from '../../hooks/useProfile';
+import {
+  ProfileHeader,
+  SectionBlock, VerificationPill,
+} from '../../components/shared/ProfileAtoms';
 import type { OrganizationStackParamList } from '../../navigation/OrganizationNavigator';
 
-type OrgNav = NativeStackNavigationProp<OrganizationStackParamList>;
-const O_ACCENT = '#8B5CF6';
+type Nav  = NativeStackNavigationProp<OrganizationStackParamList>;
+const ACC = '#8B5CF6';
 
+const OrgTag: React.FC<{ text: string }> = React.memo(({ text }) => (
+  <View style={[pt.tag, { backgroundColor: ACC + '18', borderColor: ACC + '40' }]}>
+    <Text style={[pt.tagText, { color: ACC }]}>{text}</Text>
+  </View>
+));
+
+const OrgInfoRow: React.FC<{ icon: string; label: string; value: string; href?: string }> = ({
+  icon, label, value, href,
+}) => {
+  const { theme } = useThemeStore();
+  return (
+    <View style={pt.ir}>
+      <View style={[pt.irIcon, { backgroundColor: ACC + '12' }]}>
+        <Ionicons name={icon as any} size={15} color={ACC} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: theme.colors.textMuted, fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</Text>
+        {href ? (
+          <TouchableOpacity onPress={() => Linking.openURL(href)}>
+            <Text style={{ color: ACC, fontSize: 13, fontWeight: '600' }}>{value}</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '600' }}>{value}</Text>
+        )}
+      </View>
+    </View>
+  );
+};
 
 export const OrganizationProfileScreen: React.FC = () => {
-  const { theme } = useThemeStore();
+  const { theme }  = useThemeStore();
   const { colors, typography, spacing } = theme;
-  const { user } = useAuthStore();
-  const navigation = useNavigation<OrgNav>();
+  const { user }   = useAuthStore();
+  const navigation = useNavigation<Nav>();
+
   const { data: profile, isLoading } = useProfile();
-  const { data: roleProfile } = useOrganizationRoleProfile();
-  const { data: verification } = useVerificationStatus();
-  const avatarUrl = profile?.avatar?.secure_url ?? profile?.user?.avatar;
-  const initials  = (user?.name??'O').split(' ').map((p)=>p[0]).join('').toUpperCase().slice(0,2);
-  if (isLoading) return <View style={{flex:1,alignItems:'center',justifyContent:'center',backgroundColor:colors.background}}><ActivityIndicator color={O_ACCENT}/></View>;
+  const { data: roleProfile }        = useOrganizationRoleProfile();
+  const { data: verification }       = useVerificationStatus();
+
+  const avatarUrl = profile?.avatar?.secure_url ?? null;
+  const coverUrl  = profile?.cover?.secure_url  ?? null;
+  const vStatus   = (verification?.verificationStatus ?? 'none') as any;
+  const values    = roleProfile?.values    ?? [];
+  const specialties = roleProfile?.specialties ?? [];
+
+  if (isLoading) {
+    return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}><ActivityIndicator color={ACC} /></View>;
+  }
+
   return (
-    <ScrollView style={{flex:1,backgroundColor:colors.background}} showsVerticalScrollIndicator={false}>
-      <View style={[cs.cover,{backgroundColor:O_ACCENT+'30'}]}>
-        {profile?.cover?.secure_url&&<Image source={{uri:profile.cover.secure_url}} style={StyleSheet.absoluteFillObject} resizeMode="cover"/>}
-      </View>
-      <View style={[cs.avatarRow,{paddingHorizontal:spacing[5]}]}>
-        <View style={[cs.avatarWrap,{borderColor:colors.background}]}>
-          {avatarUrl?<Image source={{uri:avatarUrl}} style={cs.avatar}/>:
-            <View style={[cs.avatar,{backgroundColor:O_ACCENT,alignItems:'center',justifyContent:'center'}]}><Text style={{color:'#fff',fontWeight:'800',fontSize:typography.xl}}>{initials}</Text></View>}
-          {verification?.verificationStatus==='full'&&<View style={[cs.badge,{backgroundColor:O_ACCENT}]}><Ionicons name="checkmark" size={10} color="#fff"/></View>}
-        </View>
-        <TouchableOpacity style={[cs.editBtn,{backgroundColor:O_ACCENT}]} onPress={()=>navigation.navigate('EditProfile')}>
-          <Ionicons name="pencil" size={14} color="#fff"/><Text style={{color:'#fff',fontWeight:'600',fontSize:typography.sm,marginLeft:4}}>Edit</Text>
-        </TouchableOpacity>
-      </View>
-      <View style={{paddingHorizontal:spacing[5],paddingBottom:40}}>
-        <Text style={{color:colors.text,fontWeight:'800',fontSize:typography['2xl'],marginBottom:4}}>{user?.name}</Text>
-        {profile?.headline&&<Text style={{color:colors.textMuted,fontSize:typography.base,marginBottom:6}}>{profile.headline}</Text>}
-        {profile?.bio&&<View style={[cs.section,{borderColor:colors.border}]}><Text style={cs.secTitle}>About</Text><Text style={{color:colors.textMuted,fontSize:typography.sm,lineHeight:20}}>{profile.bio}</Text></View>}
-        {roleProfile?.mission&&<View style={[cs.section,{borderColor:colors.border}]}><Text style={cs.secTitle}>Mission</Text><Text style={{color:colors.textMuted,fontSize:typography.sm,lineHeight:20}}>{roleProfile.mission}</Text></View>}
-        {(roleProfile?.values?.length??0)>0&&(
-          <View style={[cs.section,{borderColor:colors.border}]}>
-            <Text style={cs.secTitle}>Values</Text>
-            <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>
-              {roleProfile!.values.map((v)=>(
-                <View key={v} style={{borderRadius:99,borderWidth:1,paddingHorizontal:10,paddingVertical:4,backgroundColor:O_ACCENT+'18',borderColor:O_ACCENT+'40'}}><Text style={{color:O_ACCENT,fontSize:11,fontWeight:'600'}}>{v}</Text></View>
-              ))}
+    <ScrollView style={{ flex: 1, backgroundColor: colors.background }} showsVerticalScrollIndicator={false}>
+      <ProfileHeader
+        name={user?.name ?? 'Organization'}
+        headline={profile?.headline}
+        avatarUrl={avatarUrl}
+        coverUrl={coverUrl}
+        accentColor={ACC}
+        verifiedFull={vStatus === 'full'}
+        onEdit={() => navigation.navigate('EditProfile')}
+        rightSlot={<VerificationPill status={vStatus} />}
+      />
+
+      <View style={{ paddingHorizontal: spacing[5], paddingBottom: 48 }}>
+        {/* Contact */}
+        <SectionBlock title="Contact & Details">
+          {profile?.location && <OrgInfoRow icon="location-outline" label="Location" value={profile.location} />}
+          {profile?.website  && <OrgInfoRow icon="globe-outline"    label="Website"  value={profile.website} href={profile.website} />}
+          {profile?.phone    && <OrgInfoRow icon="call-outline"     label="Phone"    value={profile.phone} href={`tel:${profile.phone}`} />}
+        </SectionBlock>
+
+        {/* About */}
+        {profile?.bio && (
+          <SectionBlock title="About">
+            <Text style={{ color: colors.textMuted, fontSize: typography.sm, lineHeight: 20 }}>{profile.bio}</Text>
+          </SectionBlock>
+        )}
+
+        {/* Mission */}
+        {roleProfile?.mission && (
+          <SectionBlock title="Mission">
+            <Text style={{ color: colors.textMuted, fontSize: typography.sm, lineHeight: 20, fontStyle: 'italic' }}>"{roleProfile.mission}"</Text>
+          </SectionBlock>
+        )}
+
+        {/* Values */}
+        {values.length > 0 && (
+          <SectionBlock title="Values">
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {values.map((v) => <OrgTag key={v} text={v} />)}
             </View>
-          </View>
+          </SectionBlock>
+        )}
+
+        {/* Specialties */}
+        {specialties.length > 0 && (
+          <SectionBlock title="Areas of Focus">
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {specialties.map((sp) => <OrgTag key={sp} text={sp} />)}
+            </View>
+          </SectionBlock>
         )}
       </View>
     </ScrollView>
   );
 };
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const cs = StyleSheet.create({
-  card:       {borderRadius:16,borderWidth:1,padding:16,marginBottom:24},
-  row:        {flexDirection:'row',justifyContent:'space-between',marginBottom:8},
-  barBg:      {height:6,borderRadius:99,overflow:'hidden'},
-  barFill:    {height:6,borderRadius:99},
-  statsRow:   {flexDirection:'row',gap:10,flexWrap:'wrap'},
-  statCard:   {flex:1,minWidth:'44%',borderRadius:14,borderWidth:1,padding:14,alignItems:'center',gap:6},
-  statIcon:   {width:36,height:36,borderRadius:10,alignItems:'center',justifyContent:'center'},
-  statVal:    {fontWeight:'800',fontSize:22},
-  statLbl:    {fontSize:11,fontWeight:'500'},
-  jobRow:     {flexDirection:'row',alignItems:'center',borderRadius:12,borderWidth:1,padding:12,marginBottom:8},
-  statusPill: {borderRadius:99,paddingHorizontal:8,paddingVertical:3},
-  cover:      {height:140},
-  avatarRow:  {flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',marginTop:-40,marginBottom:12},
-  avatarWrap: {width:84,height:84,borderRadius:42,borderWidth:3,overflow:'hidden'},
-  avatar:     {width:'100%',height:'100%'},
-  badge:      {position:'absolute',bottom:2,right:2,width:18,height:18,borderRadius:9,alignItems:'center',justifyContent:'center'},
-  editBtn:    {flexDirection:'row',alignItems:'center',paddingHorizontal:14,paddingVertical:8,borderRadius:99},
-  section:    {borderTopWidth:1,paddingTop:16,marginTop:16},
-  secTitle:   {fontWeight:'700',marginBottom:10,fontSize:15},
-  header:     {flexDirection:'row',alignItems:'center',justifyContent:'space-between',padding:16,paddingTop:52,borderBottomWidth:1},
-  iconBtn:    {width:36,height:36,alignItems:'center',justifyContent:'center'},
-  userCard:   {flexDirection:'row',alignItems:'center',gap:14,borderRadius:16,borderWidth:1,padding:16,marginBottom:24},
-  moreAvatar: {width:56,height:56,borderRadius:28},
-  roleBadge:  {marginTop:4,alignSelf:'flex-start',paddingHorizontal:8,paddingVertical:2,borderRadius:99},
-  moreList:   {borderRadius:16,borderWidth:1,overflow:'hidden',marginBottom:24},
-  moreItem:   {flexDirection:'row',alignItems:'center',gap:12,padding:14},
-  moreIcon:   {width:36,height:36,borderRadius:10,alignItems:'center',justifyContent:'center'},
-  signOut:    {flexDirection:'row',alignItems:'center',justifyContent:'center',borderWidth:1,borderRadius:14,paddingVertical:14},
+const pt = StyleSheet.create({
+  tag:     { borderWidth: 1, borderRadius: 99, paddingHorizontal: 12, paddingVertical: 5 },
+  tagText: { fontSize: 12, fontWeight: '600' },
+  ir:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 14 },
+  irIcon:  { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
 });

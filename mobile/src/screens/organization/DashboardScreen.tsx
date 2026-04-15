@@ -1,76 +1,218 @@
-import React from 'react';
+/**
+ * screens/organization/
+ * ─ DashboardScreen.tsx
+ * ─ ProfileScreen.tsx
+ * ─ EditProfileScreen.tsx
+ * ─ MoreScreen.tsx
+ *
+ * All four Organization role screens, strictly isolated from Company / Candidate styles.
+ * Accent colour: #8B5CF6 (violet).
+ */
+ 
+import React, { useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Image, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+ RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useQuery } from '@tanstack/react-query';
-import { useForm, Controller } from 'react-hook-form';
-import { useThemeStore } from '../../store/themeStore';
-import { useAuthStore }  from '../../store/authStore';
-import { useProfile, useCompanyRoleProfile, useVerificationStatus } from '../../hooks/useProfile';
-import { useUpdateProfile } from '../../hooks/useProfile';
-import { useLogout } from '../../hooks/useAuth';
-import { companyService } from '../../services/companyService';
-import { Input } from '../../components/ui/Input';
-import { useOrganizationRoleProfile } from '../../hooks/useProfile';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+ 
+import { useThemeStore }  from '../../store/themeStore';
+import { useAuthStore }   from '../../store/authStore';
+import {
+  useProfile,
+
+} from '../../hooks/useProfile';
 import { organizationService } from '../../services/organizationService';
+import {
+ SkeletonCard,
+  StatTile,
+} from '../../components/shared/ProfileAtoms';
 import type { OrganizationStackParamList } from '../../navigation/OrganizationNavigator';
+ 
+type Nav  = NativeStackNavigationProp<OrganizationStackParamList>;
+const ACC = '#8B5CF6';
 
-type OrgNav = NativeStackNavigationProp<OrganizationStackParamList>;
-const O_ACCENT = '#8B5CF6';
-// ─── Shared stat card ─────────────────────────────────────────────────────────
+interface OrgJobRow {
+  _id: string; title: string; status: string; applicantCount?: number; deadline?: string;
+}
 
-const StatTile: React.FC<{ label: string; value: number; icon: string; color: string }> = ({ label, value, icon, color }) => {
+const OrgJobListItem: React.FC<{ item: OrgJobRow; onPress: () => void }> = React.memo(
+  ({ item, onPress }) => {
+    const { theme } = useThemeStore();
+    const isActive  = item.status === 'active';
+    return (
+      <TouchableOpacity
+        style={[dsh.jobRow, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+        onPress={onPress}
+        activeOpacity={0.75}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 13 }}>{item.title}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+            <View style={[dsh.pill, { backgroundColor: isActive ? '#10B98118' : theme.colors.border }]}>
+              <Text style={{ color: isActive ? '#10B981' : theme.colors.textMuted, fontSize: 10, fontWeight: '700' }}>{item.status}</Text>
+            </View>
+            {item.applicantCount !== undefined && (
+              <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
+                {item.applicantCount} applicant{item.applicantCount !== 1 ? 's' : ''}
+              </Text>
+            )}
+            {item.deadline && (
+              <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
+                Due {new Date(item.deadline).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
+              </Text>
+            )}
+          </View>
+        </View>
+        <Ionicons name="chevron-forward" size={15} color={theme.colors.textMuted} />
+      </TouchableOpacity>
+    );
+  },
+);
+
+const QuickAction: React.FC<{
+  icon: string; label: string; sub?: string; color: string; onPress: () => void;
+}> = React.memo(({ icon, label, sub, color, onPress }) => {
   const { theme } = useThemeStore();
   return (
-    <View style={[cs.statCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-      <View style={[cs.statIcon, { backgroundColor: color + '18' }]}>
+    <TouchableOpacity
+      style={[dsh.qa, { backgroundColor: color + '10', borderColor: color + '28' }]}
+      onPress={onPress}
+      activeOpacity={0.75}
+    >
+      <View style={[dsh.qaIcon, { backgroundColor: color + '1A' }]}>
         <Ionicons name={icon as any} size={20} color={color} />
       </View>
-      <Text style={[cs.statVal, { color: theme.colors.text }]}>{value}</Text>
-      <Text style={[cs.statLbl, { color: theme.colors.textMuted }]}>{label}</Text>
-    </View>
-  );
-};
-export const OrganizationDashboardScreen: React.FC = () => {
-  const { theme } = useThemeStore();
-  const { colors, typography, spacing } = theme;
-  const { user } = useAuthStore();
-  const { data: profile } = useProfile();
-  const { data: stats, isLoading } = useQuery({ queryKey:['org','stats'], queryFn: organizationService.getDashboardStats, staleTime:5*60*1000 });
-  const { data: jobs } = useQuery({ queryKey:['org','jobs'], queryFn: organizationService.getMyJobs, staleTime:5*60*1000 });
-  const completion = profile?.profileCompletion?.percentage ?? 0;
-  return (
-    <ScrollView style={{flex:1,backgroundColor:colors.background}} contentContainerStyle={{padding:spacing[5],paddingTop:56}} showsVerticalScrollIndicator={false}>
-      <Text style={{color:colors.textMuted,fontWeight:'500',marginBottom:2,fontSize:typography.sm}}>Welcome back 👋</Text>
-      <Text style={{color:colors.text,fontWeight:'800',fontSize:typography['2xl'],marginBottom:20,letterSpacing:-0.5}}>{user?.name}</Text>
-      <View style={[cs.card,{backgroundColor:colors.surface,borderColor:colors.border}]}>
-        <View style={cs.row}><Text style={{color:colors.text,fontWeight:'600'}}>Organization profile</Text><Text style={{color:O_ACCENT,fontWeight:'700'}}>{completion}%</Text></View>
-        <View style={[cs.barBg,{backgroundColor:colors.border}]}><View style={[cs.barFill,{width:`${completion}%` as any,backgroundColor:O_ACCENT}]}/></View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 13 }}>{label}</Text>
+        {sub ? <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>{sub}</Text> : null}
       </View>
-      <Text style={{color:colors.text,fontWeight:'700',marginBottom:12,fontSize:typography.base}}>Overview</Text>
-      {isLoading?<ActivityIndicator color={O_ACCENT} style={{marginVertical:20}}/>:(
-        <View style={cs.statsRow}>
-          <StatTile label="Jobs"         value={stats?.totalJobs??0}         icon="briefcase"      color={O_ACCENT}/>
-          <StatTile label="Active"       value={stats?.activeJobs??0}        icon="radio-button-on" color="#10B981"/>
-          <StatTile label="Applications" value={stats?.totalApplications??0} icon="document-text"  color="#F59E0B"/>
-          <StatTile label="New"          value={stats?.newApplications??0}   icon="notifications"   color="#EF4444"/>
+      <Ionicons name="chevron-forward" size={15} color={theme.colors.textMuted} />
+    </TouchableOpacity>
+  );
+});
+
+export const OrganizationDashboardScreen: React.FC = () => {
+  const { theme }   = useThemeStore();
+  const { colors, typography, spacing } = theme;
+  const { user }    = useAuthStore();
+  const navigation  = useNavigation<Nav>();
+  const qc          = useQueryClient();
+
+  const { data: profile }                = useProfile();
+  const { data: stats, isLoading: sLoad, refetch: rs } = useQuery({
+    queryKey: ['org', 'stats'],
+    queryFn:  organizationService.getDashboardStats,
+    staleTime: 5 * 60 * 1000,
+  });
+  const { data: jobs, isLoading: jLoad, refetch: rj } = useQuery({
+    queryKey: ['org', 'jobs'],
+    queryFn:  organizationService.getMyJobs,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const completion = profile?.profileCompletion?.percentage ?? 0;
+  const recentJobs = (jobs ?? []).slice(0, 5);
+  const isLoading  = sLoad || jLoad;
+
+  const onRefresh = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['profile'] });
+    rs(); rj();
+  }, [qc, rs, rj]);
+
+  const renderJob = useCallback(({ item }: { item: OrgJobRow }) => (
+    <OrgJobListItem
+      item={item}
+      onPress={() => navigation.navigate('ApplicationList', { jobId: item._id, jobTitle: item.title })}
+    />
+  ), [navigation]);
+
+  return (
+    <ScrollView
+      style={{ flex: 1, backgroundColor: colors.background }}
+      contentContainerStyle={{ paddingTop: 56, paddingBottom: 40 }}
+      showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={ACC} />}
+    >
+      {/* Greeting */}
+      <View style={[dsh.greeting, { paddingHorizontal: spacing[5] }]}>
+        <View>
+          <Text style={{ color: colors.textMuted, fontSize: typography.sm, fontWeight: '500' }}>Welcome back 👋</Text>
+          <Text style={{ color: colors.text, fontWeight: '800', fontSize: typography['2xl'], letterSpacing: -0.5 }}>
+            {user?.name?.split(' ')[0] ?? 'Organization'}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={[dsh.iconBtn, { backgroundColor: ACC + '18' }]}
+          onPress={() => navigation.navigate('EditProfile')}
+        >
+          <Ionicons name="people" size={20} color={ACC} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Strength */}
+      <View style={[dsh.card, { backgroundColor: colors.surface, borderColor: colors.border, marginHorizontal: spacing[5] }]}>
+        <View style={dsh.row}>
+          <Text style={{ color: colors.text, fontWeight: '600', fontSize: typography.sm }}>Organization profile</Text>
+          <Text style={{ color: ACC, fontWeight: '800', fontSize: typography.sm }}>{completion}%</Text>
+        </View>
+        <View style={[dsh.barBg, { backgroundColor: colors.border }]}>
+          <View style={[dsh.barFill, { width: `${completion}%` as any, backgroundColor: ACC }]} />
+        </View>
+        <Text style={{ color: colors.textMuted, fontSize: typography.xs, marginTop: 4 }}>
+          {completion < 100 ? 'Complete your profile to unlock all features' : '✓ Profile complete'}
+        </Text>
+      </View>
+
+      {/* Stats */}
+      <View style={[dsh.sectionRow, { paddingHorizontal: spacing[5] }]}>
+        <Text style={{ color: colors.text, fontWeight: '700', fontSize: typography.base }}>Overview</Text>
+      </View>
+
+      {isLoading ? (
+        <View style={[dsh.skeleRow, { paddingHorizontal: spacing[5] }]}>
+          {[0, 1, 2, 3].map((k) => <SkeletonCard key={k} height={88} style={{ flex: 1 }} />)}
+        </View>
+      ) : (
+        <View style={[dsh.grid, { paddingHorizontal: spacing[5] }]}>
+          <StatTile label="Jobs"         value={stats?.totalJobs ?? 0}         icon="briefcase-outline"     color={ACC}      />
+          <StatTile label="Active"       value={stats?.activeJobs ?? 0}        icon="radio-button-on"       color="#10B981"  />
+          <StatTile label="Applications" value={stats?.totalApplications ?? 0} icon="document-text-outline" color="#F59E0B"  />
+          <StatTile label="New Today"    value={stats?.newApplications ?? 0}   icon="notifications-outline" color="#EF4444"  />
         </View>
       )}
-      {(jobs?.length??0)>0&&(
+
+      {/* Quick actions */}
+      <View style={[dsh.sectionRow, { paddingHorizontal: spacing[5] }]}>
+        <Text style={{ color: colors.text, fontWeight: '700', fontSize: typography.base }}>Quick Actions</Text>
+      </View>
+      <View style={{ paddingHorizontal: spacing[5], gap: 10 }}>
+        <QuickAction icon="add-circle-outline"        label="Post Opportunity"   sub="Jobs, volunteering, internships" color={ACC}      onPress={() => navigation.navigate('OrgJobCreate')} />
+        <QuickAction icon="people-outline"             label="View Applicants"   sub="Review and manage candidates"   color="#6366F1"  onPress={() => navigation.navigate('OrgJobList')} />
+        <QuickAction icon="shield-checkmark-outline"   label="Get Verified"     sub="Boost trust with applicants"    color="#10B981"  onPress={() => navigation.navigate('VerificationStatus')} />
+      </View>
+
+      {/* Recent postings */}
+      {recentJobs.length > 0 && (
         <>
-          <Text style={{color:colors.text,fontWeight:'700',marginBottom:12,fontSize:typography.base,marginTop:20}}>Recent Postings</Text>
-          {jobs!.slice(0,4).map((job)=>(
-            <View key={job._id} style={[cs.jobRow,{backgroundColor:colors.surface,borderColor:colors.border}]}>
-              <View style={{flex:1}}><Text style={{color:colors.text,fontWeight:'600',fontSize:typography.sm}}>{job.title}</Text></View>
-              <View style={[cs.statusPill,{backgroundColor:job.status==='active'?'#10B981'+'18':colors.border}]}>
-                <Text style={{color:job.status==='active'?'#10B981':colors.textMuted,fontSize:10,fontWeight:'600'}}>{job.status}</Text>
-              </View>
-            </View>
-          ))}
+          <View style={[dsh.sectionRow, { paddingHorizontal: spacing[5] }]}>
+            <Text style={{ color: colors.text, fontWeight: '700', fontSize: typography.base }}>Recent Postings</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('OrgJobList')}>
+              <Text style={{ color: ACC, fontSize: typography.xs, fontWeight: '600' }}>See all →</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={{ height: recentJobs.length * 90, paddingHorizontal: spacing[5] }}>
+            <FlashList
+              data={recentJobs}
+              renderItem={renderJob}
+              keyExtractor={(item) => item._id}
+              scrollEnabled={false}
+            />
+          </View>
         </>
       )}
     </ScrollView>
@@ -79,33 +221,18 @@ export const OrganizationDashboardScreen: React.FC = () => {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const cs = StyleSheet.create({
-  card:       {borderRadius:16,borderWidth:1,padding:16,marginBottom:24},
-  row:        {flexDirection:'row',justifyContent:'space-between',marginBottom:8},
-  barBg:      {height:6,borderRadius:99,overflow:'hidden'},
-  barFill:    {height:6,borderRadius:99},
-  statsRow:   {flexDirection:'row',gap:10,flexWrap:'wrap'},
-  statCard:   {flex:1,minWidth:'44%',borderRadius:14,borderWidth:1,padding:14,alignItems:'center',gap:6},
-  statIcon:   {width:36,height:36,borderRadius:10,alignItems:'center',justifyContent:'center'},
-  statVal:    {fontWeight:'800',fontSize:22},
-  statLbl:    {fontSize:11,fontWeight:'500'},
-  jobRow:     {flexDirection:'row',alignItems:'center',borderRadius:12,borderWidth:1,padding:12,marginBottom:8},
-  statusPill: {borderRadius:99,paddingHorizontal:8,paddingVertical:3},
-  cover:      {height:140},
-  avatarRow:  {flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',marginTop:-40,marginBottom:12},
-  avatarWrap: {width:84,height:84,borderRadius:42,borderWidth:3,overflow:'hidden'},
-  avatar:     {width:'100%',height:'100%'},
-  badge:      {position:'absolute',bottom:2,right:2,width:18,height:18,borderRadius:9,alignItems:'center',justifyContent:'center'},
-  editBtn:    {flexDirection:'row',alignItems:'center',paddingHorizontal:14,paddingVertical:8,borderRadius:99},
-  section:    {borderTopWidth:1,paddingTop:16,marginTop:16},
-  secTitle:   {fontWeight:'700',marginBottom:10,fontSize:15},
-  header:     {flexDirection:'row',alignItems:'center',justifyContent:'space-between',padding:16,paddingTop:52,borderBottomWidth:1},
-  iconBtn:    {width:36,height:36,alignItems:'center',justifyContent:'center'},
-  userCard:   {flexDirection:'row',alignItems:'center',gap:14,borderRadius:16,borderWidth:1,padding:16,marginBottom:24},
-  moreAvatar: {width:56,height:56,borderRadius:28},
-  roleBadge:  {marginTop:4,alignSelf:'flex-start',paddingHorizontal:8,paddingVertical:2,borderRadius:99},
-  moreList:   {borderRadius:16,borderWidth:1,overflow:'hidden',marginBottom:24},
-  moreItem:   {flexDirection:'row',alignItems:'center',gap:12,padding:14},
-  moreIcon:   {width:36,height:36,borderRadius:10,alignItems:'center',justifyContent:'center'},
-  signOut:    {flexDirection:'row',alignItems:'center',justifyContent:'center',borderWidth:1,borderRadius:14,paddingVertical:14},
+const dsh = StyleSheet.create({
+  greeting:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  iconBtn:    { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  card:       { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 28 },
+  row:        { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  barBg:      { height: 8, borderRadius: 99, overflow: 'hidden', marginBottom: 4 },
+  barFill:    { height: 8, borderRadius: 99 },
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 28, marginBottom: 12 },
+  grid:       { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  skeleRow:   { flexDirection: 'row', gap: 10 },
+  jobRow:     { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 8 },
+  pill:       { borderRadius: 99, paddingHorizontal: 8, paddingVertical: 3 },
+  qa:         { flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 1, borderRadius: 14, padding: 14 },
+  qaIcon:     { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
 });
