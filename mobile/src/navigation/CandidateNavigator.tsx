@@ -32,6 +32,7 @@ export type CandidateTabParamList = {
 
 export type CandidateStackParamList = {
   CandidateTabs:       undefined;
+  Profile:         undefined;
   EditProfile:         undefined;
   VerificationStatus:  undefined;
   RequestVerification: undefined;
@@ -94,6 +95,7 @@ const CandidateTabs: React.FC = () => {
 export const CandidateNavigator: React.FC = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="CandidateTabs"       component={CandidateTabs} />
+        <Stack.Screen name="Profile"         component={CandidateProfileScreen}/>
     <Stack.Screen name="EditProfile"         component={CandidateEditProfileScreen}
       options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
     <Stack.Screen name="VerificationStatus"  component={VerificationStatusScreen} />

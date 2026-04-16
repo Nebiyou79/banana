@@ -34,6 +34,17 @@ export const CandidateMoreScreen: React.FC = () => {
   const vStatus   = verification?.verificationStatus ?? 'none';
 
   const sections: { title: string; items: MoreItem[] }[] = [
+        {
+      title: 'Profile',
+      items: [
+        {
+          icon: 'shield-checkmark-outline',
+          label: 'Profile',
+          color: vStatus === 'full' ? '#10B981' : ACCENT,
+          screen: 'Profile',
+        },
+      ],
+    },
     {
       title: 'Account',
       items: [

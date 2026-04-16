@@ -1,9 +1,25 @@
+/**
+ * screens/organization/EditProfileScreen.tsx
+ *
+ * Organization profile editor.
+ * - ProfileImageUploader replaces LogoUpload (square avatar, type="avatar")
+ * - useEffect reset() fix
+ * - Organization type pill selector
+ * - Values + Specialties as tag chip editors
+ * - Registration number, secondary phone fields
+ * - Sticky header
+ */
 
-import React, { useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Image, Alert, KeyboardAvoidingView, Platform, Linking,
-  ActivityIndicator, RefreshControl,
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -11,78 +27,58 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import * as ImagePicker from 'expo-image-picker';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { useThemeStore }  from '../../store/themeStore';
-import {
-  useProfile,
-  useOrganizationRoleProfile,
-  useUpdateProfile,
-} from '../../hooks/useProfile';
-import { Input } from '../../components/ui/Input';
-import { toast } from '../../lib/toast';
-import api     from '../../lib/api';
+import { useThemeStore }    from '../../store/themeStore';
+import { useProfile, useOrganizationRoleProfile, useUpdateProfile } from '../../hooks/useProfile';
+import { Input }            from '../../components/ui/Input';
+import { SkeletonCard }     from '../../components/shared/ProfileAtoms';
+import { ProfileImageUploader } from '../../components/shared/ProfileImageUploader';
+import { toast }            from '../../lib/toast';
 import type { OrganizationStackParamList } from '../../navigation/OrganizationNavigator';
 
 type Nav  = NativeStackNavigationProp<OrganizationStackParamList>;
 const ACC = '#8B5CF6';
 
-const orgSchema = z.object({
-  headline:         z.string().max(200).optional(),
-  bio:              z.string().max(1000).optional(),
-  location:         z.string().max(100).optional(),
-  phone:            z.string().max(20).optional(),
-  secondaryPhone:   z.string().max(20).optional(),
-  website:          z.string().url('Enter a valid URL').optional().or(z.literal('')),
-  mission:          z.string().max(500).optional(),
-  organizationType: z.enum(['non-profit', 'government', 'educational', 'healthcare', 'other']).optional(),
+// ─── Schema ───────────────────────────────────────────────────────────────────
+
+const ORG_TYPES = ['non-profit', 'government', 'educational', 'healthcare', 'other'] as const;
+type OrgType = typeof ORG_TYPES[number];
+
+const schema = z.object({
+  headline:           z.string().max(200).optional(),
+  bio:                z.string().max(1000).optional(),
+  location:           z.string().max(100).optional(),
+  phone:              z.string().max(20).optional(),
+  secondaryPhone:     z.string().max(20).optional(),
+  website:            z.string().url('Enter a valid URL').optional().or(z.literal('')),
+  mission:            z.string().max(500).optional(),
+  organizationType:   z.enum(ORG_TYPES).optional(),
   registrationNumber: z.string().regex(/^[0-9]{10}$/, '10 digits required').optional().or(z.literal('')),
 });
 
-type OrgForm = z.infer<typeof orgSchema>;
+type FormValues = z.infer<typeof schema>;
 
-const LogoUpload: React.FC = () => {
+const ORG_TYPE_LABELS: Record<OrgType, string> = {
+  'non-profit':  'Non-Profit',
+  'government':  'Government',
+  'educational': 'Educational',
+  'healthcare':  'Healthcare',
+  'other':       'Other',
+};
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+const SecLabel: React.FC<{ children: string }> = ({ children }) => {
   const { theme } = useThemeStore();
-  const [busy, setBusy] = React.useState(false);
-  const qc = useQueryClient();
-
-  const pick = useCallback(async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { toast.warning('Permission required to pick an image.'); return; }
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85,
-      allowsEditing: true, aspect: [1, 1],
-    });
-    if (res.canceled || !res.assets?.length) return;
-    setBusy(true);
-    try {
-      const form = new FormData();
-      form.append('avatar', { uri: res.assets[0].uri, name: `logo-${Date.now()}.jpg`, type: 'image/jpeg' } as any);
-      await api.post('/profile/avatar', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60_000 });
-      qc.invalidateQueries({ queryKey: ['profile'] });
-      toast.success('Logo updated!');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Upload failed.');
-    } finally { setBusy(false); }
-  }, [qc]);
-
   return (
-    <TouchableOpacity
-      style={[ep.logoRow, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-      onPress={pick} disabled={busy} activeOpacity={0.8}
-    >
-      {busy ? <ActivityIndicator color={ACC} /> : <Ionicons name="image-outline" size={22} color={ACC} />}
-      <View style={{ flex: 1 }}>
-        <Text style={{ color: theme.colors.text, fontWeight: '600', fontSize: 13 }}>{busy ? 'Uploading…' : 'Upload Organization Logo'}</Text>
-        <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>JPG, PNG, WebP · Max 5 MB · Square</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
-    </TouchableOpacity>
+    <Text style={{ color: theme.colors.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 24, marginBottom: 10 }}>
+      {children}
+    </Text>
   );
 };
 
-const OrgField: React.FC<{ label: string; error?: string; children: React.ReactNode; half?: boolean }> = ({
+const Field: React.FC<{ label: string; error?: string; children: React.ReactNode; half?: boolean }> = ({
   label, error, children, half,
 }) => {
   const { theme } = useThemeStore();
@@ -95,149 +91,241 @@ const OrgField: React.FC<{ label: string; error?: string; children: React.ReactN
   );
 };
 
-const ORG_TYPES: { value: OrgForm['organizationType']; label: string }[] = [
-  { value: 'non-profit',  label: 'Non-Profit' },
-  { value: 'government',  label: 'Government' },
-  { value: 'educational', label: 'Educational' },
-  { value: 'healthcare',  label: 'Healthcare' },
-  { value: 'other',       label: 'Other' },
-];
+// ─── Tag editor (values / specialties) ───────────────────────────────────────
+
+const TagEditor: React.FC<{
+  label: string; tags: string[]; placeholder: string;
+  onAdd: (s: string) => void; onRemove: (i: number) => void; max?: number;
+}> = ({ label, tags, placeholder, onAdd, onRemove, max = 20 }) => {
+  const { theme } = useThemeStore();
+  const [draft, setDraft] = useState('');
+  const submit = () => {
+    const s = draft.trim();
+    if (s && !tags.includes(s) && tags.length < max) { onAdd(s); setDraft(''); }
+  };
+  return (
+    <View style={{ marginBottom: 16 }}>
+      <Text style={{ color: theme.colors.textMuted, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>{label}</Text>
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+        <Input placeholder={placeholder} value={draft} onChangeText={setDraft} style={{ flex: 1 }} returnKeyType="done" onSubmitEditing={submit} />
+        <TouchableOpacity style={[te.addBtn, { backgroundColor: ACC }]} onPress={submit}>
+          <Ionicons name="add" size={20} color="#fff" />
+        </TouchableOpacity>
+      </View>
+      <View style={te.chips}>
+        {tags.map((t, i) => (
+          <TouchableOpacity key={i} style={[te.chip, { backgroundColor: `${ACC}18`, borderColor: `${ACC}30` }]} onPress={() => onRemove(i)}>
+            <Text style={{ color: ACC, fontSize: 12, fontWeight: '600' }}>{t}</Text>
+            <Ionicons name="close" size={11} color={ACC} />
+          </TouchableOpacity>
+        ))}
+      </View>
+      <Text style={{ color: theme.colors.textMuted, fontSize: 10, marginTop: 4 }}>{tags.length}/{max} · Tap to remove</Text>
+    </View>
+  );
+};
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
 
 export const OrganizationEditProfileScreen: React.FC = () => {
   const { theme }  = useThemeStore();
   const { colors, typography, spacing } = theme;
   const navigation = useNavigation<Nav>();
   const qc         = useQueryClient();
-  const { data: profile } = useProfile();
-  const { data: rp }      = useOrganizationRoleProfile();
-  const updateProfile     = useUpdateProfile();
 
-  const { control, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm<OrgForm>({
-    resolver: zodResolver(orgSchema),
-    defaultValues: {
-      headline:           profile?.headline ?? '',
-      bio:                profile?.bio      ?? '',
-      location:           profile?.location ?? '',
-      phone:              profile?.phone    ?? '',
-      secondaryPhone:     (profile as any)?.secondaryPhone ?? '',
-      website:            profile?.website  ?? '',
-      mission:            rp?.mission ?? '',
-    },
-  });
+  const { data: profile, isLoading: pLoading } = useProfile();
+  const { data: rp,      isLoading: rpLoading } = useOrganizationRoleProfile();
+  const updateProfile = useUpdateProfile();
+
+  const [values,     setValues]     = useState<string[]>([]);
+  const [specialties, setSpecialties] = useState<string[]>([]);
+
+  const { control, handleSubmit, watch, setValue, reset, formState: { errors, isSubmitting } } =
+    useForm<FormValues>({
+      resolver: zodResolver(schema),
+      defaultValues: {
+        headline: '', bio: '', location: '', phone: '', secondaryPhone: '',
+        website: '', mission: '', organizationType: 'non-profit', registrationNumber: '',
+      },
+    });
+
+  useEffect(() => {
+    if (!profile) return;
+    const prof = profile as unknown as Record<string, unknown>;
+    const rpData = rp as Record<string, unknown> | undefined ?? {};
+
+    setValues((rpData.values as string[]) ?? []);
+    setSpecialties((rpData.specialties as string[]) ?? []);
+
+    reset({
+      headline:           profile.headline ?? '',
+      bio:                profile.bio      ?? '',
+      location:           profile.location ?? '',
+      phone:              profile.phone    ?? '',
+      secondaryPhone:     (prof.secondaryPhone as string) ?? '',
+      website:            profile.website  ?? '',
+      mission:            (rpData.mission as string) ?? '',
+      organizationType:   (rpData.organizationType as OrgType) ?? 'non-profit',
+      registrationNumber: (rpData.registrationNumber as string) ?? '',
+    });
+  }, [profile, rp, reset]);
 
   const selectedType = watch('organizationType');
 
   const onSave = handleSubmit((data) => {
-    updateProfile.mutate(data as any, {
-      onSuccess: () => { qc.invalidateQueries({ queryKey: ['profile'] }); navigation.goBack(); },
-      onError:   (err: any) => toast.error(err?.response?.data?.message ?? 'Save failed.'),
+    const payload = {
+      ...data,
+      organizationValues: values,
+      specialties,
+    };
+    updateProfile.mutate(payload as unknown as Parameters<typeof updateProfile.mutate>[0], {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: ['profile'] });
+        qc.invalidateQueries({ queryKey: ['organization', 'roleProfile'] });
+        navigation.goBack();
+      },
+      onError: (err: unknown) => {
+        const msg = (err as Record<string, Record<string, string>>)?.response?.data ?? 'Save failed.';
+        toast.error(msg);
+      },
     });
   });
 
-  const inp = { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text };
+  const inp = { backgroundColor: colors.inputBg, borderColor: colors.border };
+  const isLoading = pLoading || rpLoading;
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: 80, paddingHorizontal: spacing[5], gap: 16 }}>
+        <SkeletonCard height={88} radius={16} style={{ width: 88 }} />
+        <SkeletonCard height={44} radius={10} />
+        <SkeletonCard height={44} radius={10} />
+        <SkeletonCard height={88} radius={10} />
+      </View>
+    );
+  }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={[ep.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={ep.iconBtn}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Sticky header */}
+      <View style={[hdr.bar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={hdr.iconBtn}>
           <Ionicons name="close" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={{ color: colors.text, fontWeight: '700', fontSize: typography.lg }}>Edit Organization</Text>
-        <TouchableOpacity onPress={onSave} disabled={isSubmitting} style={ep.saveArea}>
+        <TouchableOpacity onPress={onSave} disabled={isSubmitting} style={hdr.saveBtn}>
           {isSubmitting ? <ActivityIndicator color={ACC} /> : <Text style={{ color: ACC, fontWeight: '700', fontSize: typography.base }}>Save</Text>}
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: spacing[5] }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ padding: spacing[5], paddingTop: 64 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
-        <Text style={[ep.group, { color: colors.textMuted }]}>LOGO</Text>
-        <LogoUpload />
+        {/* Square logo uploader */}
+        <ProfileImageUploader
+          currentAvatarUrl={(profile as Record<string, Record<string, string>> | undefined)?.avatar?.secure_url}
+          accentColor={ACC}
+          type="avatar"
+          avatarShape="square"
+          showDeleteButtons
+        />
 
-        <Text style={[ep.group, { color: colors.textMuted }]}>ORGANIZATION TYPE</Text>
+        {/* Organization type */}
+        <SecLabel>Organization Type</SecLabel>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
           {ORG_TYPES.map((t) => (
             <TouchableOpacity
-              key={t.value}
-              style={[ep.typePill, {
-                backgroundColor: selectedType === t.value ? ACC + '18' : colors.surface,
-                borderColor:     selectedType === t.value ? ACC       : colors.border,
+              key={t}
+              style={[typePill.btn, {
+                backgroundColor: selectedType === t ? `${ACC}18` : colors.surface,
+                borderColor:     selectedType === t ? ACC       : colors.border,
               }]}
-              onPress={() => setValue('organizationType', t.value)}
+              onPress={() => setValue('organizationType', t)}
             >
-              <Text style={{ color: selectedType === t.value ? ACC : colors.textMuted, fontWeight: '600', fontSize: 12 }}>
-                {t.label}
+              <Text style={{ color: selectedType === t ? ACC : colors.textMuted, fontWeight: '600', fontSize: 12 }}>
+                {ORG_TYPE_LABELS[t]}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <Text style={[ep.group, { color: colors.textMuted }]}>DETAILS</Text>
-
+        {/* Details */}
+        <SecLabel>Organization Details</SecLabel>
         <Controller control={control} name="headline"
           render={({ field }) => (
-            <OrgField label="Tagline" error={errors.headline?.message}>
-              <Input value={field.value} onChangeText={field.onChange} placeholder="e.g. Empowering Communities" style={inp} />
-            </OrgField>
+            <Field label="Tagline" error={errors.headline?.message}>
+              <Input value={field.value} onChangeText={field.onChange} placeholder="e.g. Empowering Communities" inputStyle={inp} />
+            </Field>
           )}
         />
         <Controller control={control} name="bio"
           render={({ field }) => (
-            <OrgField label="About your Organization" error={errors.bio?.message}>
-              <Input value={field.value} onChangeText={field.onChange} placeholder="What you do and who you serve…" multiline numberOfLines={4} style={inp} />
-            </OrgField>
+            <Field label="About" error={errors.bio?.message}>
+              <Input value={field.value} onChangeText={field.onChange} placeholder="What you do and who you serve…" multiline numberOfLines={4} inputStyle={inp} />
+            </Field>
           )}
         />
         <Controller control={control} name="mission"
           render={({ field }) => (
-            <OrgField label="Mission Statement">
-              <Input value={field.value} onChangeText={field.onChange} placeholder="Our mission is to…" multiline numberOfLines={3} style={inp} />
-            </OrgField>
+            <Field label="Mission Statement">
+              <Input value={field.value} onChangeText={field.onChange} placeholder="Our mission is to…" multiline numberOfLines={3} inputStyle={inp} />
+            </Field>
           )}
         />
-
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <Controller control={control} name="location"
             render={({ field }) => (
-              <OrgField label="Location" half>
-                <Input value={field.value} onChangeText={field.onChange} placeholder="City, Country" style={inp} leftIcon={<Ionicons name="location-outline" size={15} color={colors.textMuted} />} />
-              </OrgField>
+              <Field label="Location" half>
+                <Input value={field.value} onChangeText={field.onChange} placeholder="City, Country" inputStyle={inp} leftIcon={<Ionicons name="location-outline" size={15} color={colors.textMuted} />} />
+              </Field>
             )}
           />
           <Controller control={control} name="registrationNumber"
             render={({ field }) => (
-              <OrgField label="Reg. Number (10 digits)" half error={errors.registrationNumber?.message}>
-                <Input value={field.value} onChangeText={field.onChange} placeholder="0000000000" keyboardType="number-pad" style={inp} />
-              </OrgField>
+              <Field label="Reg. No (10 digits)" half error={errors.registrationNumber?.message}>
+                <Input value={field.value} onChangeText={field.onChange} placeholder="0000000000" keyboardType="number-pad" maxLength={10} inputStyle={inp} />
+              </Field>
             )}
           />
         </View>
-
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <Controller control={control} name="phone"
             render={({ field }) => (
-              <OrgField label="Primary Phone" half>
-                <Input value={field.value} onChangeText={field.onChange} placeholder="+1 555 000" keyboardType="phone-pad" style={inp} leftIcon={<Ionicons name="call-outline" size={15} color={colors.textMuted} />} />
-              </OrgField>
+              <Field label="Primary Phone" half>
+                <Input value={field.value} onChangeText={field.onChange} placeholder="+1 555 000" keyboardType="phone-pad" inputStyle={inp} leftIcon={<Ionicons name="call-outline" size={15} color={colors.textMuted} />} />
+              </Field>
             )}
           />
           <Controller control={control} name="secondaryPhone"
             render={({ field }) => (
-              <OrgField label="Secondary Phone" half>
-                <Input value={field.value} onChangeText={field.onChange} placeholder="+1 555 001" keyboardType="phone-pad" style={inp} leftIcon={<Ionicons name="call-outline" size={15} color={colors.textMuted} />} />
-              </OrgField>
+              <Field label="Secondary Phone" half error={errors.secondaryPhone?.message}>
+                <Input value={field.value} onChangeText={field.onChange} placeholder="+1 555 001" keyboardType="phone-pad" inputStyle={inp} leftIcon={<Ionicons name="call-outline" size={15} color={colors.textMuted} />} />
+              </Field>
             )}
           />
         </View>
-
         <Controller control={control} name="website"
           render={({ field }) => (
-            <OrgField label="Website" error={errors.website?.message}>
-              <Input value={field.value} onChangeText={field.onChange} placeholder="https://yourorg.org" keyboardType="url" autoCapitalize="none" style={inp} leftIcon={<Ionicons name="globe-outline" size={15} color={colors.textMuted} />} />
-            </OrgField>
+            <Field label="Website" error={errors.website?.message}>
+              <Input value={field.value} onChangeText={field.onChange} placeholder="https://yourorg.org" keyboardType="url" autoCapitalize="none" inputStyle={inp} leftIcon={<Ionicons name="globe-outline" size={15} color={colors.textMuted} />} />
+            </Field>
           )}
+        />
+
+        {/* Values & Specialties tag editors */}
+        <TagEditor
+          label="Values"
+          tags={values}
+          placeholder="Add a value…"
+          onAdd={(s) => setValues((prev) => [...prev, s])}
+          onRemove={(i) => setValues((prev) => prev.filter((_, j) => j !== i))}
+        />
+
+        <TagEditor
+          label="Areas of Focus / Specialties"
+          tags={specialties}
+          placeholder="Add a specialty…"
+          onAdd={(s) => setSpecialties((prev) => [...prev, s])}
+          onRemove={(i) => setSpecialties((prev) => prev.filter((_, j) => j !== i))}
         />
 
         <View style={{ height: 40 }} />
@@ -245,13 +333,21 @@ export const OrganizationEditProfileScreen: React.FC = () => {
     </KeyboardAvoidingView>
   );
 };
+
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const ep = StyleSheet.create({
-  header:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, paddingTop: 52, borderBottomWidth: StyleSheet.hairlineWidth },
-  iconBtn:  { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  saveArea: { minWidth: 60, alignItems: 'flex-end', justifyContent: 'center', height: 44 },
-  group:    { fontWeight: '700', fontSize: 10, letterSpacing: 1, marginTop: 24, marginBottom: 10 },
-  logoRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 4 },
-  typePill: { borderWidth: 1, borderRadius: 99, paddingHorizontal: 14, paddingVertical: 7 },
+const hdr = StyleSheet.create({
+  bar:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, padding: 16, paddingTop: Platform.OS === 'ios' ? 52 : 20, borderBottomWidth: StyleSheet.hairlineWidth },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  saveBtn: { minWidth: 60, alignItems: 'flex-end', justifyContent: 'center', height: 44 },
+});
+
+const typePill = StyleSheet.create({
+  btn: { borderWidth: 1.5, borderRadius: 99, paddingHorizontal: 14, paddingVertical: 7 },
+});
+
+const te = StyleSheet.create({
+  addBtn: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  chips:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  chip:   { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 99, paddingHorizontal: 10, paddingVertical: 5 },
 });

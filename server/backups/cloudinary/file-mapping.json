@@ -971,5 +971,26 @@
     "uploadedAt": "2026-04-13T15:23:03.602Z",
     "fileType": "image",
     "size": 181089
+  },
+  "bananalink/images/avatars/69d129e2d00fce655221d8fd/D43F888D-69F0-4C2E-B431-770595A14DAD": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\D43F888D-69F0-4C2E-B431-770595A14DAD_ba3150ab_2026-04-15T13-43-01-672Z.jpg",
+    "originalName": "D43F888D-69F0-4C2E-B431-770595A14DAD.jpg",
+    "uploadedAt": "2026-04-15T13:43:01.674Z",
+    "fileType": "image",
+    "size": 91439
+  },
+  "bananalink/images/avatars/69d129e2d00fce655221d8fd/avatar-1776260803969": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\avatar-1776260803969_d9e1fde1_2026-04-15T13-46-47-474Z.jpg",
+    "originalName": "avatar-1776260803969.jpg",
+    "uploadedAt": "2026-04-15T13:46:47.475Z",
+    "fileType": "image",
+    "size": 97452
+  },
+  "bananalink/images/covers/69d129e2d00fce655221d8fd/cover-1776260815920": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\cover-1776260815920_5a151ee4_2026-04-15T13-46-58-749Z.jpg",
+    "originalName": "cover-1776260815920.jpg",
+    "uploadedAt": "2026-04-15T13:46:58.751Z",
+    "fileType": "image",
+    "size": 91439
   }
 }

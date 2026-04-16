@@ -13,8 +13,6 @@ import { useAuthStore }  from '../../store/authStore';
 import { useProfile, useCompanyRoleProfile, useVerificationStatus } from '../../hooks/useProfile';
 import { useUpdateProfile } from '../../hooks/useProfile';
 import { useLogout } from '../../hooks/useAuth';
-import { companyService } from '../../services/companyService';
-import { Input } from '../../components/ui/Input';
 import type { CompanyStackParamList } from '../../navigation/CompanyNavigator';
 
 type CompanyNav = NativeStackNavigationProp<CompanyStackParamList>;
