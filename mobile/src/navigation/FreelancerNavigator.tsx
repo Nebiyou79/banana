@@ -1,205 +1,216 @@
+/**
+ * navigation/freelancer/FreelancerNavigator.tsx
+ * Role: Freelancer — 5 main tabs + full stack for all built screens.
+ *
+ * Tab structure:
+ *   1. Home     → FreelancerDashboardScreen
+ *   2. Tenders  → Top tabs: Browse | Saved | Proposals  (placeholders — not built yet)
+ *   3. Social   → Shared SocialNavigator
+ *   4. Profile  → FreelancerProfileScreen
+ *   5. More     → FreelancerMoreScreen (stack with portfolio, services, certs, reviews, etc.)
+ */
+
 import React from 'react';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../store/themeStore';
+import { TouchableOpacity } from 'react-native';
+import { createBottomTabNavigator }      from '@react-navigation/bottom-tabs';
+import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
+import { createNativeStackNavigator }    from '@react-navigation/native-stack';
+import { useNavigation }                 from '@react-navigation/native';
+import { Ionicons }                      from '@expo/vector-icons';
+import { useThemeStore }                 from '../store/themeStore';
 
-// ─── Existing screens ─────────────────────────────────────────────────────────
-import { FreelancerDashboardScreen }   from '../screens/freelancer/DashboardScreen';
-import { FreelancerProfileScreen }     from '../screens/freelancer/ProfileScreen';
-import { FreelancerMoreScreen }        from '../screens/freelancer/MoreScreen';
-import { FreelancerEditProfileScreen } from '../screens/freelancer/EditProfileScreen';
+// ─── Types ────────────────────────────────────────────────────
+import {
+  FreelancerMainTabParamList,
+  FreelancerTendersTabParamList,
+} from './types';
 
-// ─── NEW: Portfolio ───────────────────────────────────────────────────────────
-import { PortfolioListScreen }    from '../screens/freelancer/PortfolioListScreen';
-import { PortfolioDetailsScreen } from '../screens/freelancer/PortfolioDetailsScreen';
+// ─── Shared ───────────────────────────────────────────────────
+import SocialNavigator  from './SocialNavigator';
+import PlaceholderScreen from '../screens/auth/PlaceholderScreen';
+
+// ─── Freelancer screens ───────────────────────────────────────
+import { FreelancerDashboardScreen }      from '../screens/freelancer/DashboardScreen';
+import { FreelancerProfileScreen }        from '../screens/freelancer/ProfileScreen';
+import { FreelancerEditProfileScreen }    from '../screens/freelancer/EditProfileScreen';
+import { FreelancerMoreScreen }           from '../screens/freelancer/MoreScreen';
+
+// Portfolio
+import { PortfolioListScreen }            from '../screens/freelancer/PortfolioListScreen';
+import { PortfolioDetailsScreen }         from '../screens/freelancer/PortfolioDetailsScreen';
 import { AddPortfolioScreen, EditPortfolioScreen } from '../screens/freelancer/PortfolioFormScreens';
 
-// ─── NEW: Services ────────────────────────────────────────────────────────────
-import { ServicesListScreen } from '../screens/freelancer/ServicesListScreen';
+// Services & Certs
+import { ServicesListScreen }             from '../screens/freelancer/ServicesListScreen';
+import { CertificationsListScreen }       from '../screens/freelancer/CertificationsListScreen';
 
-// ─── NEW: Certifications ──────────────────────────────────────────────────────
-import { CertificationsListScreen } from '../screens/freelancer/CertificationsListScreen';
+// Reviews
+import { FreelancerMyReviewsScreen }      from '../screens/freelancer/FreelancerMyReviewsScreen';
 
-// ─── Shared / Product screens ─────────────────────────────────────────────────
-import { ProductMarketplaceScreen } from '../screens/products/ProductMarketplaceScreen';
-import { ProductDetailsScreen }     from '../screens/products/ProductDetailsScreen';
-import { VerificationStatusScreen } from '../screens/shared/VerificationStatusScreen';
-import { RequestVerificationScreen }from '../screens/shared/RequestVerificationScreen';
-import { ReferralScreen }           from '../screens/shared/ReferralScreen';
+// Freelancer Marketplace (company/org browses freelancers — freelancer can view own public listing)
+import { FreelancerMarketplaceScreen }    from '../screens/freelancer/FreelancerMarketplaceScreen';
+import { FreelancerDetailScreen }         from '../screens/freelancer/FreelancerDetailScreen';
+import { FreelancerShortlistScreen }      from '../screens/freelancer/FreelancerShortlistScreen';
 
-// ─── Param Lists ──────────────────────────────────────────────────────────────
+// Shared screens
+import { VerificationStatusScreen }       from '../screens/shared/VerificationStatusScreen';
+import { RequestVerificationScreen }      from '../screens/shared/RequestVerificationScreen';
+import { ReferralScreen }                 from '../screens/shared/ReferralScreen';
 
-export type FreelancerTabParamList = {
-  Dashboard:  undefined;
-  Shop:       undefined;
-  Profile:    undefined;
-  More:       undefined;
-};
+// Products
+import { ProductMarketplaceScreen }       from '../screens/products/ProductMarketplaceScreen';
+import { ProductDetailsScreen }           from '../screens/products/ProductDetailsScreen';
 
+// ─── Param list ───────────────────────────────────────────────
 export type FreelancerStackParamList = {
-  // Root tabs
-  FreelancerTabs:       undefined;
+  // Tabs
+  MainTabs: undefined;
 
   // Profile
-  EditProfile:          undefined;
-
-  // Verification
-  VerificationStatus:   undefined;
-  RequestVerification:  undefined;
+  EditProfile: undefined;
 
   // Portfolio
-  PortfolioList:        undefined;
-  PortfolioDetails:     { itemId: string };
-  AddPortfolio:         undefined;
-  EditPortfolio:        { itemId: string };
+  PortfolioList:    undefined;
+  PortfolioDetails: { itemId: string };
+  AddPortfolio:     undefined;
+  EditPortfolio:    { itemId: string };
 
-  // Services
-  ServicesList:         undefined;
+  // Services & certs
+  ServicesList:       undefined;
+  CertificationsList: undefined;
 
-  // Certifications
-  CertificationsList:   undefined;
+  // Reviews
+  MyReviews: undefined;
+
+  // Freelancer Marketplace
+  FreelancerMarketplace: undefined;
+  FreelancerDetail:      { freelancerId: string };
+  FreelancerShortlist:   undefined;
+
+  // Verification
+  VerificationStatus:  undefined;
+  RequestVerification: undefined;
+
+  // Referral
+  Referral:    undefined;
+  Leaderboard: undefined;
 
   // Products
-  ProductMarketplace:   undefined;
-  ProductDetails:       { productId: string };
-
-  // Referral / Leaderboard
-  Referral:             undefined;
-  Leaderboard:          undefined;
+  ProductMarketplace: undefined;
+  ProductDetails:     { productId: string };
 };
 
-// ─── Bottom Tab Navigator ─────────────────────────────────────────────────────
+// ─── Navigators ───────────────────────────────────────────────
+const MainTab       = createBottomTabNavigator<FreelancerMainTabParamList>();
+const TendersTopTab = createMaterialTopTabNavigator<FreelancerTendersTabParamList>();
+const Stack         = createNativeStackNavigator<FreelancerStackParamList>();
 
-const Tab   = createBottomTabNavigator<FreelancerTabParamList>();
-const Stack = createNativeStackNavigator<FreelancerStackParamList>();
-
-type IoniconName = keyof typeof Ionicons.glyphMap;
-
-const TAB_ICONS: Record<string, [IoniconName, IoniconName]> = {
-  Dashboard: ['grid',               'grid-outline'],
-  Shop:      ['storefront',         'storefront-outline'],
-  Profile:   ['person',             'person-outline'],
-  More:      ['ellipsis-horizontal','ellipsis-horizontal-outline'],
-};
-
-const FreelancerTabs: React.FC = () => {
+// ─── Tenders top-tab navigator (all placeholders — not built yet) ─
+function FreelancerTendersNavigator() {
+  const nav = useNavigation<any>();
   const { theme } = useThemeStore();
   const { colors } = theme;
 
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown:           false,
-        tabBarActiveTintColor:   '#10B981',
+    <TendersTopTab.Navigator
+      screenOptions={{
+        tabBarActiveTintColor:   colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor:  colors.border,
-          paddingBottom:   6,
-          paddingTop:      6,
-          height:          60,
-          elevation:       8,
-          shadowColor:     '#000',
-          shadowOpacity:   0.08,
-          shadowRadius:    8,
-          shadowOffset:    { width: 0, height: -2 },
-        },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarIndicatorStyle:    { backgroundColor: colors.primary },
+        tabBarStyle:             { backgroundColor: colors.surface },
+      }}
+    >
+      <TendersTopTab.Screen name="TendersList"   component={PlaceholderScreen} options={{ title: 'Tenders' }} />
+      <TendersTopTab.Screen name="SavedTenders"  component={PlaceholderScreen} options={{ title: 'Saved' }} />
+      <TendersTopTab.Screen name="Proposals"     component={PlaceholderScreen} options={{ title: 'Proposals' }} />
+      <TendersTopTab.Screen
+        name="BackToHome"
+        component={FreelancerDashboardScreen}
+
+      />
+    </TendersTopTab.Navigator>
+  );
+}
+
+// ─── Social wrapper ───────────────────────────────────────────
+function FreelancerSocialNavigator() {
+  return <SocialNavigator parentNavigationKey="Home" />;
+}
+
+// ─── Main tab bar ─────────────────────────────────────────────
+function FreelancerTabNavigator() {
+  const { theme } = useThemeStore();
+  const { colors } = theme;
+
+  return (
+    <MainTab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor:   colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle:             { backgroundColor: colors.surface },
         tabBarIcon: ({ focused, color, size }) => {
-          const [active, inactive] = TAB_ICONS[route.name] ?? ['circle', 'circle-outline'];
-          return (
-            <Ionicons
-              name={(focused ? active : inactive) as IoniconName}
-              size={size}
-              color={color}
-            />
-          );
+          const icons: Record<string, [string, string]> = {
+            Home:    ['home-outline',          'home'],
+            Tenders: ['document-text-outline', 'document-text'],
+            Social:  ['globe-outline',         'globe'],
+            Profile: ['person-outline',        'person'],
+            More:    ['menu-outline',          'menu'],
+          };
+          const [outline, filled] = icons[route.name] ?? ['ellipse-outline', 'ellipse'];
+          return <Ionicons name={(focused ? filled : outline) as any} size={size} color={color} />;
         },
       })}
     >
-      <Tab.Screen
-        name="Dashboard"
-        component={FreelancerDashboardScreen}
-        options={{ title: 'Home' }}
-      />
-      <Tab.Screen
-        name="Shop"
-        component={ProductMarketplaceScreen as React.ComponentType<object>}
-        options={{ title: 'Shop' }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={FreelancerProfileScreen}
-        options={{ title: 'Profile' }}
-      />
-      <Tab.Screen
-        name="More"
-        component={FreelancerMoreScreen}
-        options={{ title: 'More' }}
-      />
-    </Tab.Navigator>
+      <MainTab.Screen name="Home"    component={FreelancerDashboardScreen} />
+      <MainTab.Screen name="Tenders" component={FreelancerTendersNavigator} />
+      <MainTab.Screen name="Social"  component={FreelancerSocialNavigator} />
+      <MainTab.Screen name="Profile" component={FreelancerProfileScreen}   />
+      <MainTab.Screen name="More"    component={FreelancerMoreScreen}       />
+    </MainTab.Navigator>
   );
-};
+}
 
-// ─── Root Stack Navigator ─────────────────────────────────────────────────────
+// ─── Root stack ───────────────────────────────────────────────
+export default function FreelancerNavigator() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {/* Tab root */}
+      <Stack.Screen name="MainTabs" component={FreelancerTabNavigator} />
 
-export const FreelancerNavigator: React.FC = () => (
-  <Stack.Navigator screenOptions={{ headerShown: false }}>
-    {/* ── Root tabs ───────────────────────────────────────────── */}
-    <Stack.Screen
-      name="FreelancerTabs"
-      component={FreelancerTabs}
-    />
+      {/* Profile */}
+      <Stack.Screen name="EditProfile" component={FreelancerEditProfileScreen} />
 
-    {/* ── Profile ─────────────────────────────────────────────── */}
-    <Stack.Screen
-      name="EditProfile"
-      component={FreelancerEditProfileScreen}
-      options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-    />
+      {/* Portfolio */}
+      <Stack.Screen name="PortfolioList"    component={PortfolioListScreen}    />
+      <Stack.Screen name="PortfolioDetails" component={PortfolioDetailsScreen} />
+      <Stack.Screen name="AddPortfolio"     component={AddPortfolioScreen}     />
+      <Stack.Screen name="EditPortfolio"    component={EditPortfolioScreen}    />
 
-    {/* ── Verification ────────────────────────────────────────── */}
-    <Stack.Screen name="VerificationStatus"  component={VerificationStatusScreen} />
-    <Stack.Screen name="RequestVerification" component={RequestVerificationScreen} />
+      {/* Services & Certs */}
+      <Stack.Screen name="ServicesList"       component={ServicesListScreen}       />
+      <Stack.Screen name="CertificationsList" component={CertificationsListScreen} />
 
-    {/* ── Portfolio ───────────────────────────────────────────── */}
-    <Stack.Screen
-      name="PortfolioList"
-      component={PortfolioListScreen}
-    />
-    <Stack.Screen
-      name="PortfolioDetails"
-      component={PortfolioDetailsScreen}
-    />
-    <Stack.Screen
-      name="AddPortfolio"
-      component={AddPortfolioScreen}
-      options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-    />
-    <Stack.Screen
-      name="EditPortfolio"
-      component={EditPortfolioScreen}
-      options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-    />
+      {/* Reviews */}
+      <Stack.Screen name="MyReviews" component={FreelancerMyReviewsScreen} />
 
-    {/* ── Services ────────────────────────────────────────────── */}
-    <Stack.Screen
-      name="ServicesList"
-      component={ServicesListScreen}
-    />
+      {/* Freelancer Marketplace */}
+      <Stack.Screen name="FreelancerMarketplace" component={(props : any) => <FreelancerMarketplaceScreen {...props} />}
+       />
+      <Stack.Screen name="FreelancerDetail"      component={FreelancerDetailScreen}      />
+      <Stack.Screen name="FreelancerShortlist"   component={FreelancerShortlistScreen}   />
 
-    {/* ── Certifications ──────────────────────────────────────── */}
-    <Stack.Screen
-      name="CertificationsList"
-      component={CertificationsListScreen}
-    />
+      {/* Verification */}
+      <Stack.Screen name="VerificationStatus"  component={VerificationStatusScreen}  />
+      <Stack.Screen name="RequestVerification" component={RequestVerificationScreen} />
 
-    {/* ── Products ────────────────────────────────────────────── */}
-    <Stack.Screen name="ProductMarketplace" component={ProductMarketplaceScreen} />
-    <Stack.Screen name="ProductDetails"     component={ProductDetailsScreen} />
+      {/* Referral */}
+      <Stack.Screen name="Referral"    component={ReferralScreen}    />
+      <Stack.Screen name="Leaderboard" component={PlaceholderScreen} />
 
-    {/* ── Referral ────────────────────────────────────────────── */}
-    <Stack.Screen name="Referral" component={ReferralScreen} />
-  </Stack.Navigator>
-);
+      {/* Products */}
+      <Stack.Screen name="ProductMarketplace" component={ProductMarketplaceScreen} />
+      <Stack.Screen name="ProductDetails"     component={ProductDetailsScreen}     />
+    </Stack.Navigator>
+  );
+}

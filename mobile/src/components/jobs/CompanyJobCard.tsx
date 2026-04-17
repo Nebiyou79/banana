@@ -8,7 +8,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert } from 'react
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/themeStore';
 import { Job } from '../../services/jobService';
-import { getJobStatusColor, formatDeadline, formatPostedDate } from '../../utils/jobHelpers';
+import { getJobStatusColor, formatDeadline, formatPostedDate, formatLocation } from '../../utils/jobHelpers';
 
 interface Props {
   job:                Job;
@@ -72,7 +72,8 @@ export const CompanyJobCard = React.memo<Props>(({ job, onEdit, onDelete, onView
       <View style={s.meta}>
         <View style={s.metaItem}>
           <Ionicons name="location-outline" size={12} color={c.textMuted} />
-          <Text style={[s.metaText, { color: c.textMuted }]}>{job.location?.region ?? 'N/A'}</Text>
+          {/* ✅ FIX: use formatLocation instead of raw job.location?.region */}
+          <Text style={[s.metaText, { color: c.textMuted }]}>{formatLocation(job.location)}</Text>
         </View>
         <View style={s.metaItem}>
           <Ionicons name="time-outline" size={12} color={c.textMuted} />

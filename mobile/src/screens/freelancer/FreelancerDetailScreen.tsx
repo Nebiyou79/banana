@@ -35,8 +35,8 @@ import {
   useToggleShortlist,
   useSubmitReview,
 } from '../../hooks/useFreelancerMarketplace';
-import { StarRating } from '../../components/freelancers/StarRating';
-import { ReviewCard } from '../../components/freelancers/ReviewCard';
+import { StarRating } from '../../components/freelancer/StarRating';
+import { ReviewCard } from '../../components/freelancer/ReviewCard';
 import { FreelancersStackParamList } from './FreelancerMarketplaceScreen';
 import { FreelancerService, FreelancerCertification, PortfolioItem } from '../../services/freelancerMarketplaceService';
 

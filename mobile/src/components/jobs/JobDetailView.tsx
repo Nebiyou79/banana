@@ -23,6 +23,7 @@ import {
   getExperienceLevelLabel,
   getSalaryModeConfig,
   getCompanyInitials,
+  formatLocation,
 } from '../../utils/jobHelpers';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -242,7 +243,7 @@ export const JobDetailView: React.FC<JobDetailViewProps> = ({ job, role = 'candi
       {/* Job details */}
       <SectionCard title="Job Details" icon="briefcase-outline" iconColor="#3B82F6" colors={c}>
         <InfoRow icon="briefcase-outline"   label="Employment Type"  value={getJobTypeLabel(job.type)} colors={c} />
-        <InfoRow icon="location-outline"    label="Location"         value={[job.location?.city, job.location?.region].filter(Boolean).join(', ') || 'Remote'} colors={c} />
+        <InfoRow icon="location-outline"    label="Location"         value={formatLocation(job.location)} colors={c} />
         <InfoRow icon="wifi-outline"        label="Remote Policy"    value={job.remote?.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()) ?? 'On-site'} colors={c} />
         {job.applicationDeadline && (
           <InfoRow icon="calendar-outline" label="Application Deadline" value={formatDate(job.applicationDeadline)} colors={c} />

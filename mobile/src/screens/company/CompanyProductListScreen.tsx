@@ -10,15 +10,21 @@ import {
   ActivityIndicator,
   StatusBar,
 } from 'react-native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { CompositeScreenProps } from '@react-navigation/native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { MaterialTopTabScreenProps } from '@react-navigation/material-top-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/themeStore';
 import { useCompanyProducts, useDeleteProduct, useUpdateProductStatus } from '../../hooks/useProducts';
 import { CompanyProductCard } from '../../components/products/CompanyProductCard';
 import { Product } from '../../services/productService';
+import type { CompanyProfileTabParamList, CompanyMoreStackParamList } from '../../navigation/types';
 import { CompanyStackParamList } from '../../navigation/CompanyNavigator';
 
-type Props = NativeStackScreenProps<CompanyStackParamList, 'CompanyProductList'>;
+type Props = CompositeScreenProps<
+  MaterialTopTabScreenProps<CompanyProfileTabParamList, 'Products'>,
+  NativeStackScreenProps<CompanyStackParamList, 'CompanyProductList'>
+>;
 
 type StatusFilter = 'all' | 'active' | 'draft' | 'out_of_stock' | 'discontinued';
 

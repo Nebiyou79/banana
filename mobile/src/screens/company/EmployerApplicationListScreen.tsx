@@ -1,164 +1,176 @@
 /**
- * mobile/src/screens/company/EmployerApplicationListScreen.tsx
- * 
- * FlashList of candidate applications for a specific job.
- * Used by both Company and Organization roles.
+ * src/screens/company/EmployerApplicationListScreen.tsx
+ * Company/org applications list — used by both roles (role-aware via authStore).
  */
-
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import {
+  View, Text, StyleSheet, TouchableOpacity, TextInput,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/themeStore';
-import { useJobApplications, useUpdateApplicationStatus } from '../../hooks/useApplications';
-import { Application, ApplicationStatus, STATUS_LABELS, STATUS_COLORS, STATUS_COLORS_DARK } from '../../services/applicationService';
+import { useAuthStore } from '../../store/authStore';
+import {
+  useJobApplicationsPaginated,
+  useCompanyApplicationsPaginated,
+  useOrgApplicationsPaginated,
+  useUpdateApplicationStatus,
+} from '../../hooks/useApplications';
+import { Application, ApplicationFilters, ApplicationStatus } from '../../services/applicationService';
 import { ApplicantCard } from '../../components/application/ApplicantCard';
-import { ScreenHeader } from '../../components/shared/ScreenHeader';
 import { ListSkeleton } from '../../components/skeletons';
 import { EmptyState } from '../../components/ui/EmptyState';
 
 interface Props {
   navigation: any;
-  route: { params: { jobId: string; jobTitle: string } };
+  route: { params?: { jobId?: string; jobTitle?: string } };
 }
 
 const STATUS_TABS = [
-  { key: undefined,              label: 'All' },
-  { key: 'applied',             label: 'Applied' },
-  { key: 'under-review',        label: 'Reviewing' },
-  { key: 'shortlisted',         label: 'Shortlisted' },
-  { key: 'interview-scheduled', label: 'Interview' },
-  { key: 'rejected',            label: 'Rejected' },
+  { key: undefined,            label: 'All',        color: '#64748B' },
+  { key: 'applied',            label: 'New',        color: '#3B82F6' },
+  { key: 'under-review',       label: 'Reviewing',  color: '#F59E0B' },
+  { key: 'shortlisted',        label: 'Shortlisted',color: '#10B981' },
+  { key: 'interview-scheduled',label: 'Interview',  color: '#8B5CF6' },
+  { key: 'rejected',           label: 'Rejected',   color: '#EF4444' },
 ] as const;
 
 export const EmployerApplicationListScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { jobId, jobTitle } = route.params;
   const { theme } = useThemeStore();
+  const { user }  = useAuthStore();
   const c = theme.colors;
 
-  const [activeTab, setActiveTab] = useState<string | undefined>(undefined);
+  const jobId    = route.params?.jobId;
+  const jobTitle = route.params?.jobTitle;
+  const isOrg    = user?.role === 'organization';
+
+  const [activeStatus, setActiveStatus] = useState<string | undefined>(undefined);
+  const [search, setSearch] = useState('');
+
+  const filters: Omit<ApplicationFilters, 'page'> = useMemo(() =>
+    ({ status: activeStatus, limit: 20 }),
+    [activeStatus],
+  );
+
+  // Pick correct hook based on whether we're drilling into a specific job or viewing all
+  const jobQ     = useJobApplicationsPaginated(jobId ?? '', filters);
+  const companyQ = useCompanyApplicationsPaginated(filters);
+  const orgQ     = useOrgApplicationsPaginated(filters);
+
+  const activeQ  = jobId ? jobQ : (isOrg ? orgQ : companyQ);
+  const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage, refetch } = activeQ;
+
   const updateMut = useUpdateApplicationStatus();
 
-  const { data, isLoading, refetch, isRefetching } = useJobApplications(jobId, {
-    status: activeTab,
-    limit: 50,
-  } as any);
+  const allApps: Application[] = useMemo(
+    () => (data?.pages ?? []).flatMap(p => p.data),
+    [data],
+  );
 
-  const SC = theme.isDark ? STATUS_COLORS_DARK : STATUS_COLORS;
+  const apps = useMemo(() => {
+    if (!search.trim()) return allApps;
+    const q = search.toLowerCase();
+    return allApps.filter(a =>
+      (a.userInfo?.name ?? a.candidate?.name ?? '').toLowerCase().includes(q) ||
+      (a.userInfo?.email ?? a.candidate?.email ?? '').toLowerCase().includes(q) ||
+      (a.job?.title ?? '').toLowerCase().includes(q),
+    );
+  }, [allApps, search]);
 
-  // Safely unwrap — service returns { data: Application[], pagination }
-  const applications: Application[] = useMemo(() => {
-    const raw = (data as any);
-    return raw?.data ?? raw?.applications ?? [];
-  }, [data]);
+  const total = data?.pages[0]?.pagination?.totalResults ?? 0;
 
-  const handleShortlist = useCallback((app: Application) => {
-    updateMut.mutate({ applicationId: app._id, data: { status: 'shortlisted' } });
-  }, [updateMut]);
-
-  const handleReject = useCallback((app: Application) => {
-    updateMut.mutate({ applicationId: app._id, data: { status: 'rejected' } });
+  const handleQuickUpdate = useCallback((applicationId: string, status: ApplicationStatus) => {
+    updateMut.mutate({ applicationId, data: { status } });
   }, [updateMut]);
 
   const renderItem = useCallback(({ item }: { item: Application }) => (
     <ApplicantCard
       application={item}
       onPress={() => navigation.navigate('ApplicationDetail', { applicationId: item._id })}
-      onShortlist={() => handleShortlist(item)}
-      onReject={() => handleReject(item)}
+      onShortlist={() => handleQuickUpdate(item._id, 'shortlisted')}
+      onReject={() => handleQuickUpdate(item._id, 'rejected')}
+      onScheduleInterview={() => {
+        navigation.navigate('ApplicationDetail', { applicationId: item._id });
+      }}
     />
-  ), [navigation, handleShortlist, handleReject]);
+  ), [navigation, handleQuickUpdate]);
 
   return (
     <SafeAreaView style={[s.root, { backgroundColor: c.background }]} edges={['top']}>
-      <ScreenHeader
-        title="Applicants"
-        subtitle={jobTitle}
-        onBack={() => navigation.goBack()}
-      />
-
-      {/* Stats row */}
-      <View style={[s.statsBar, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-        <View style={s.stat}>
-          <Text style={[s.statVal, { color: c.text }]}>{applications.length}</Text>
-          <Text style={[s.statLabel, { color: c.textMuted }]}>Total</Text>
-        </View>
-        <View style={[s.statDiv, { backgroundColor: c.border }]} />
-        <View style={s.stat}>
-          <Text style={[s.statVal, { color: '#22C55E' }]}>
-            {applications.filter(a => a.status === 'shortlisted').length}
+      {/* Header */}
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+          <Ionicons name="arrow-back" size={22} color={c.text} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={[s.title, { color: c.text }]} numberOfLines={1}>
+            {jobTitle ?? 'Applications'}
           </Text>
-          <Text style={[s.statLabel, { color: c.textMuted }]}>Shortlisted</Text>
-        </View>
-        <View style={[s.statDiv, { backgroundColor: c.border }]} />
-        <View style={s.stat}>
-          <Text style={[s.statVal, { color: '#A855F7' }]}>
-            {applications.filter(a => a.status === 'interview-scheduled').length}
-          </Text>
-          <Text style={[s.statLabel, { color: c.textMuted }]}>Interviews</Text>
+          <Text style={[s.subtitle, { color: c.textMuted }]}>{total} applicant{total !== 1 ? 's' : ''}</Text>
         </View>
       </View>
 
+      {/* Search */}
+      <View style={[s.searchRow, { backgroundColor: c.surface, borderColor: c.border }]}>
+        <Ionicons name="search-outline" size={16} color={c.textMuted} />
+        <TextInput
+          style={[s.searchInput, { color: c.text }]}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search by name or email..."
+          placeholderTextColor={c.placeholder ?? c.textMuted}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch('')}>
+            <Ionicons name="close-circle" size={16} color={c.textMuted} />
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* Status tabs */}
-      <View style={[s.tabBar, { borderBottomColor: c.border }]}>
+      <View style={[s.tabsWrapper, { borderBottomColor: c.border }]}>
         <FlashList
-          data={STATUS_TABS as any}
-          horizontal
+          data={STATUS_TABS as unknown as any[]}
+          horizontal 
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10 }}
-          renderItem={({ item }: any) => {
-            const active = activeTab === item.key;
-            const count = item.key
-              ? applications.filter(a => a.status === item.key).length
-              : applications.length;
+          contentContainerStyle={{ paddingHorizontal: 12 }}
+          renderItem={({ item: tab }) => {
+            const active = activeStatus === tab.key;
             return (
               <TouchableOpacity
-                style={[s.tab, {
-                  backgroundColor: active ? c.primary : c.inputBg,
-                  borderColor: active ? c.primary : c.border,
-                }]}
-                onPress={() => setActiveTab(item.key)}
-                activeOpacity={0.7}
+                onPress={() => setActiveStatus(tab.key as any)}
+                style={[s.tab, active && { borderBottomColor: tab.color, borderBottomWidth: 2 }]}
               >
-                <Text style={[s.tabText, { color: active ? '#fff' : c.textSecondary }]}>
-                  {item.label}
+                <Text style={[s.tabText, { color: active ? tab.color : c.textMuted }, active && { fontWeight: '700' }]}>
+                  {tab.label}
                 </Text>
-                {count > 0 && (
-                  <View style={[s.tabBadge, { backgroundColor: active ? 'rgba(255,255,255,0.25)' : c.border }]}>
-                    <Text style={[s.tabBadgeText, { color: active ? '#fff' : c.textMuted }]}>{count}</Text>
-                  </View>
-                )}
               </TouchableOpacity>
             );
           }}
-          keyExtractor={(item: any) => String(item.key ?? 'all')}
+          keyExtractor={item => String(item.key ?? 'all')}
         />
       </View>
 
       {/* List */}
       {isLoading ? (
-        <ListSkeleton count={5} type="application" />
+        <ListSkeleton count={4} type="application" />
       ) : (
         <FlashList
-          data={activeTab
-            ? applications.filter(a => a.status === activeTab)
-            : applications
-          }
+          data={apps}
           renderItem={renderItem}
           keyExtractor={item => item._id}
           contentContainerStyle={s.list}
-          ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+          onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage(); }}
+          onEndReachedThreshold={0.4}
           onRefresh={refetch}
-          refreshing={isRefetching}
+          refreshing={false}
+          ListFooterComponent={isFetchingNextPage ? <ListSkeleton count={2} type="application" /> : null}
           ListEmptyComponent={
             <EmptyState
               icon="people-outline"
-              title="No applications"
-              subtitle={activeTab
-                ? `No ${STATUS_LABELS[activeTab as ApplicationStatus] ?? activeTab} applications for this job`
-                : 'No candidates have applied for this position yet'
-              }
+              title={activeStatus ? `No ${activeStatus} applications` : 'No applications yet'}
+              subtitle="Applications will appear here once candidates apply."
             />
           }
         />
@@ -168,16 +180,15 @@ export const EmployerApplicationListScreen: React.FC<Props> = ({ navigation, rou
 };
 
 const s = StyleSheet.create({
-  root:         { flex: 1 },
-  statsBar:     { flexDirection: 'row', paddingVertical: 12, borderBottomWidth: 1 },
-  stat:         { flex: 1, alignItems: 'center' },
-  statDiv:      { width: 1 },
-  statVal:      { fontSize: 20, fontWeight: '800' },
-  statLabel:    { fontSize: 11, marginTop: 2 },
-  tabBar:       { borderBottomWidth: StyleSheet.hairlineWidth },
-  tab:          { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, marginRight: 8, gap: 6 },
-  tabText:      { fontSize: 13, fontWeight: '600' },
-  tabBadge:     { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
-  tabBadgeText: { fontSize: 10, fontWeight: '700' },
-  list:         { padding: 16 },
+  root:       { flex: 1 },
+  header:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, gap: 12 },
+  backBtn:    { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  title:      { fontSize: 18, fontWeight: '800' },
+  subtitle:   { fontSize: 12, marginTop: 1 },
+  searchRow:  { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginBottom: 4, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, gap: 8 },
+  searchInput:{ flex: 1, fontSize: 14 },
+  tabsWrapper:{ borderBottomWidth: StyleSheet.hairlineWidth, marginBottom: 4 },
+  tab:        { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 5 },
+  tabText:    { fontSize: 12 },
+  list:       { padding: 14 },
 });

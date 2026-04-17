@@ -132,3 +132,39 @@ export const getCompanyInitials = (name?: string): string => {
     .toUpperCase()
     .slice(0, 2) || 'CO';
 };
+/**
+ * THE OBJECT-CHILD FIREWALL
+ * Always use this — NEVER render job.location directly inside <Text>.
+ * Handles every possible shape the backend can return.
+ */
+export const formatLocation = (location?: {
+  region?: string;
+  city?: string;
+  subCity?: string;
+  woreda?: string;
+  specificLocation?: string;
+  country?: string;
+} | string | null | any): string => {
+  if (location === null || location === undefined) return 'Ethiopia';
+  // Already a plain string — return as-is
+  if (typeof location === 'string') return location || 'Ethiopia';
+  // Object shape — extract the most human-readable part
+  if (typeof location === 'object') {
+    const loc = location as any;
+    const city = typeof loc.city === 'string' ? loc.city.trim() : '';
+    const region = typeof loc.region === 'string'
+      ? loc.region.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+      : '';
+    const specific = typeof loc.specificLocation === 'string' ? loc.specificLocation.trim() : '';
+    const subCity = typeof loc.subCity === 'string' ? loc.subCity.trim() : '';
+
+    if (specific) return specific;
+    if (city && region && city.toLowerCase() !== region.toLowerCase()) return `${city}, ${region}`;
+    if (city) return city;
+    if (region) return region;
+    if (subCity) return subCity;
+    const country = typeof loc.country === 'string' ? loc.country.trim() : '';
+    if (country) return country;
+  }
+  return 'Ethiopia';
+};

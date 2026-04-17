@@ -1,166 +1,184 @@
 /**
- * mobile/src/components/applications/ApplicantCard.tsx
- *
- * Employer-facing applicant row card for the Applicant List screen.
- * Mirrors the web frontend's applicant listing inside company/org dashboards.
- *
- * Shows: candidate name/avatar, email, status badge, skills preview,
- *        applied date, and quick action buttons.
+ * src/components/application/ApplicantCard.tsx
+ * Employer-facing applicant card for the applications list.
+ * Shows candidate avatar, skills, cover letter preview, quick actions.
  */
-
-import React, { useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import React, { memo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/themeStore';
 import {
-  Application,
-  ApplicationStatus,
-  STATUS_LABELS,
-  STATUS_COLORS,
-  STATUS_COLORS_DARK,
+  Application, ApplicationStatus,
+  STATUS_LABELS, STATUS_COLORS, STATUS_COLORS_DARK,
 } from '../../services/applicationService';
-import { formatDate, getCompanyInitials } from '../../utils/jobHelpers';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+const formatDate = (d?: string): string => {
+  if (!d) return '';
+  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const getInitials = (name?: string) =>
+  (name ?? '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 
 interface ApplicantCardProps {
   application: Application;
   onPress: () => void;
   onShortlist?: () => void;
   onReject?: () => void;
+  onScheduleInterview?: () => void;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
-export const ApplicantCard: React.FC<ApplicantCardProps> = ({
-  application, onPress, onShortlist, onReject,
+export const ApplicantCard = memo<ApplicantCardProps>(({
+  application, onPress, onShortlist, onReject, onScheduleInterview,
 }) => {
-  const { theme: { colors, isDark, shadows } } = useThemeStore();
-  const c = colors;
-
-  const scale = useRef(new Animated.Value(1)).current;
-  const onIn  = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start();
-  const onOut = () => Animated.spring(scale, { toValue: 1,    useNativeDriver: true, speed: 50 }).start();
+  const { theme } = useThemeStore();
+  const c = theme.colors;
+  const isDark = theme.isDark;
 
   const SC = isDark ? STATUS_COLORS_DARK : STATUS_COLORS;
   const sc = SC[application.status] ?? SC.applied;
 
-  const initials = getCompanyInitials(application.userInfo?.name ?? application.candidate?.name ?? 'C');
+  const candidate = application.candidate;
+  const userInfo  = application.userInfo;
+  const name      = userInfo?.name ?? candidate?.name ?? 'Candidate';
+  const email     = userInfo?.email ?? candidate?.email ?? '';
+  const avatar    = candidate?.avatar;
+  const initials  = getInitials(name);
 
-  const isShortlisted = application.status === 'shortlisted' ||
-                        application.status === 'interview-scheduled' ||
-                        application.status === 'offer-made';
-  const isRejected    = application.status === 'rejected' || application.status === 'withdrawn';
+  const isShortlisted = application.status === 'shortlisted';
+  const isRejected    = application.status === 'rejected';
+  const isInterviewed = ['interview-scheduled', 'interviewed'].includes(application.status);
+
+  const cvCount  = application.selectedCVs?.length ?? 0;
+  const refCount = (application.references ?? []).filter(r => r.name).length;
+  const expCount = (application.workExperience ?? []).filter(e => e.company).length;
 
   return (
-    <TouchableOpacity onPress={onPress} onPressIn={onIn} onPressOut={onOut} activeOpacity={1}>
-      <Animated.View style={[s.card, { backgroundColor: c.card, borderColor: c.border, transform: [{ scale }] }, shadows.sm]}>
-
-        {/* ── Header ── */}
-        <View style={s.header}>
-          {/* Avatar */}
-          <View style={[s.avatar, { backgroundColor: c.primaryLight }]}>
-            <Text style={[s.avatarText, { color: c.primary }]}>{initials}</Text>
-          </View>
-
-          {/* Name + email */}
-          <View style={{ flex: 1 }}>
-            <Text style={[s.name, { color: c.text }]} numberOfLines={1}>
-              {application.userInfo?.name ?? 'Candidate'}
-            </Text>
-            <Text style={[s.email, { color: c.textSecondary }]} numberOfLines={1}>
-              {application.userInfo?.email ?? '—'}
-            </Text>
-            {application.userInfo?.phone && (
-              <Text style={[s.phone, { color: c.textMuted }]}>{application.userInfo.phone}</Text>
-            )}
-          </View>
-
-          {/* Status badge */}
-          <View style={[s.statusBadge, { backgroundColor: sc.bg }]}>
-            <View style={[s.statusDot, { backgroundColor: sc.dot }]} />
-            <Text style={[s.statusText, { color: sc.text }]}>{STATUS_LABELS[application.status]}</Text>
-          </View>
-        </View>
-
-        {/* ── Skills ── */}
-        {(application.skills ?? []).length > 0 && (
-          <View style={s.skillsRow}>
-            {application.skills!.slice(0, 4).map(sk => (
-              <View key={sk} style={[s.skillTag, { backgroundColor: isDark ? '#1F2937' : '#F3F4F6' }]}>
-                <Text style={[s.skillTagText, { color: c.textSecondary }]}>{sk}</Text>
-              </View>
-            ))}
-            {application.skills!.length > 4 && (
-              <Text style={[s.skillMore, { color: c.textMuted }]}>+{application.skills!.length - 4}</Text>
-            )}
+    <TouchableOpacity onPress={onPress} activeOpacity={0.82} style={[ac.card, { backgroundColor: c.card ?? c.surface, borderColor: c.border }]}>
+      {/* Header */}
+      <View style={ac.header}>
+        {avatar ? (
+          <Image source={{ uri: avatar }} style={ac.avatar} />
+        ) : (
+          <View style={[ac.avatarFallback, { backgroundColor: c.primary }]}>
+            <Text style={ac.avatarInitials}>{initials}</Text>
           </View>
         )}
 
-        {/* ── Cover letter preview ── */}
-        {application.coverLetter && (
-          <Text style={[s.coverPreview, { color: c.textMuted }]} numberOfLines={2}>
-            {application.coverLetter}
+        <View style={ac.headerInfo}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={[ac.name, { color: c.text }]} numberOfLines={1}>{name}</Text>
+          </View>
+          <Text style={[ac.email, { color: c.textMuted }]} numberOfLines={1}>{email}</Text>
+          {userInfo?.phone && (
+            <Text style={[ac.phone, { color: c.textMuted }]}>{userInfo.phone}</Text>
+          )}
+        </View>
+
+        <View style={[ac.statusBadge, { backgroundColor: sc.bg, borderColor: sc.border }]}>
+          <View style={[ac.statusDot, { backgroundColor: sc.dot }]} />
+          <Text style={[ac.statusText, { color: sc.text }]}>
+            {STATUS_LABELS[application.status as ApplicationStatus] ?? application.status}
           </Text>
-        )}
-
-        {/* ── Footer ── */}
-        <View style={[s.footer, { borderTopColor: c.border }]}>
-          <View style={s.dateRow}>
-            <Ionicons name="calendar-outline" size={12} color={c.textMuted} />
-            <Text style={[s.date, { color: c.textMuted }]}>Applied {formatDate(application.createdAt)}</Text>
-          </View>
-
-          <View style={s.actions}>
-            {!isRejected && !isShortlisted && onShortlist && (
-              <TouchableOpacity style={[s.actionBtn, { backgroundColor: c.successLight, borderColor: c.success }]}
-                onPress={onShortlist} activeOpacity={0.7}>
-                <Ionicons name="checkmark" size={14} color={c.success} />
-                <Text style={[s.actionBtnText, { color: c.success }]}>Shortlist</Text>
-              </TouchableOpacity>
-            )}
-            {!isRejected && onReject && (
-              <TouchableOpacity style={[s.actionBtn, { backgroundColor: c.errorLight, borderColor: c.error }]}
-                onPress={onReject} activeOpacity={0.7}>
-                <Ionicons name="close" size={14} color={c.error} />
-                <Text style={[s.actionBtnText, { color: c.error }]}>Reject</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={s.viewBtn} onPress={onPress} activeOpacity={0.7}>
-              <Text style={[s.viewText, { color: c.primary }]}>Review</Text>
-              <Ionicons name="chevron-forward" size={14} color={c.primary} />
-            </TouchableOpacity>
-          </View>
         </View>
-      </Animated.View>
+      </View>
+
+      {/* Stats strip */}
+      <View style={[ac.statsRow, { backgroundColor: `${c.border}30`, borderColor: c.border }]}>
+        <StatChip icon="document-outline" label={`${cvCount} CV`} c={c} />
+        <View style={[ac.statDiv, { backgroundColor: c.border }]} />
+        <StatChip icon="sparkles-outline" label={`${application.skills?.length ?? 0} skills`} c={c} />
+        <View style={[ac.statDiv, { backgroundColor: c.border }]} />
+        <StatChip icon="briefcase-outline" label={`${expCount} exp`} c={c} />
+        <View style={[ac.statDiv, { backgroundColor: c.border }]} />
+        <StatChip icon="people-outline" label={`${refCount} refs`} c={c} />
+      </View>
+
+      {/* Skills */}
+      {(application.skills ?? []).length > 0 && (
+        <View style={ac.skillsRow}>
+          {application.skills.slice(0, 4).map((sk, i) => (
+            <View key={i} style={[ac.skillTag, { backgroundColor: `${c.primary}10` }]}>
+              <Text style={[ac.skillTagText, { color: c.primary }]}>{sk}</Text>
+            </View>
+          ))}
+          {application.skills.length > 4 && (
+            <Text style={[ac.skillMore, { color: c.textMuted }]}>+{application.skills.length - 4}</Text>
+          )}
+        </View>
+      )}
+
+      {/* Cover letter preview */}
+      {application.coverLetter && (
+        <Text style={[ac.coverPreview, { color: c.textMuted }]} numberOfLines={2}>
+          {application.coverLetter}
+        </Text>
+      )}
+
+      {/* Footer: date + actions */}
+      <View style={[ac.footer, { borderTopColor: c.border }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Ionicons name="calendar-outline" size={12} color={c.textMuted} />
+          <Text style={[ac.date, { color: c.textMuted }]}>{formatDate(application.createdAt)}</Text>
+        </View>
+        <View style={ac.actions}>
+          {!isRejected && !isShortlisted && onShortlist && (
+            <QuickBtn icon="checkmark-circle-outline" label="Shortlist" onPress={onShortlist}
+              color="#10B981" bg="#ECFDF5" />
+          )}
+          {!isRejected && !isInterviewed && onScheduleInterview && (
+            <QuickBtn icon="calendar-outline" label="Interview" onPress={onScheduleInterview}
+              color="#8B5CF6" bg="#F5F3FF" />
+          )}
+          {!isRejected && onReject && (
+            <QuickBtn icon="close-circle-outline" label="Reject" onPress={onReject}
+              color="#EF4444" bg="#FEF2F2" />
+          )}
+        </View>
+      </View>
     </TouchableOpacity>
   );
-};
+});
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+ApplicantCard.displayName = 'ApplicantCard';
 
-const s = StyleSheet.create({
-  card:        { borderRadius: 16, borderWidth: 1, padding: 16 },
-  header:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  avatar:      { width: 46, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  avatarText:  { fontSize: 18, fontWeight: '700' },
-  name:        { fontSize: 15, fontWeight: '700' },
-  email:       { fontSize: 13, marginTop: 2 },
-  phone:       { fontSize: 12, marginTop: 1 },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, gap: 4, alignSelf: 'flex-start' },
-  statusDot:   { width: 6, height: 6, borderRadius: 3 },
-  statusText:  { fontSize: 11, fontWeight: '600' },
-  skillsRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
-  skillTag:    { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 16 },
-  skillTagText:{ fontSize: 12 },
-  skillMore:   { fontSize: 12, alignSelf: 'center' },
-  coverPreview:{ fontSize: 13, lineHeight: 18, marginTop: 8, fontStyle: 'italic' },
-  footer:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 10, borderTopWidth: 1, flexWrap: 'wrap', gap: 8 },
-  dateRow:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  date:        { fontSize: 11 },
-  actions:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  actionBtn:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, gap: 4 },
-  actionBtnText:{ fontSize: 12, fontWeight: '600' },
-  viewBtn:     { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  viewText:    { fontSize: 13, fontWeight: '600' },
+const StatChip = ({ icon, label, c }: any) => (
+  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1, justifyContent: 'center' }}>
+    <Ionicons name={icon} size={12} color={c.textMuted} />
+    <Text style={{ fontSize: 11, color: c.textMuted, fontWeight: '500' }}>{label}</Text>
+  </View>
+);
+
+const QuickBtn = ({ icon, label, onPress, color, bg }: any) => (
+  <TouchableOpacity onPress={onPress} style={[ac.quickBtn, { backgroundColor: bg }]}>
+    <Ionicons name={icon} size={14} color={color} />
+    <Text style={[ac.quickBtnText, { color }]}>{label}</Text>
+  </TouchableOpacity>
+);
+
+const ac = StyleSheet.create({
+  card:          { borderRadius: 16, borderWidth: 1, padding: 14, marginBottom: 10 },
+  header:        { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 10 },
+  avatar:        { width: 52, height: 52, borderRadius: 14, resizeMode: 'cover' },
+  avatarFallback:{ width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  avatarInitials:{ color: '#fff', fontWeight: '700', fontSize: 18 },
+  headerInfo:    { flex: 1 },
+  name:          { fontSize: 15, fontWeight: '700' },
+  email:         { fontSize: 12, marginTop: 2 },
+  phone:         { fontSize: 12, marginTop: 1 },
+  statusBadge:   { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
+  statusDot:     { width: 6, height: 6, borderRadius: 3 },
+  statusText:    { fontSize: 10, fontWeight: '700' },
+  statsRow:      { flexDirection: 'row', borderRadius: 10, borderWidth: 1, marginBottom: 10, overflow: 'hidden', paddingVertical: 8 },
+  statDiv:       { width: 1 },
+  skillsRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
+  skillTag:      { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  skillTagText:  { fontSize: 11, fontWeight: '600' },
+  skillMore:     { fontSize: 11, alignSelf: 'center' },
+  coverPreview:  { fontSize: 12, lineHeight: 17, marginBottom: 10, fontStyle: 'italic' },
+  footer:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
+  date:          { fontSize: 11 },
+  actions:       { flexDirection: 'row', gap: 6 },
+  quickBtn:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8 },
+  quickBtnText:  { fontSize: 11, fontWeight: '700' },
 });

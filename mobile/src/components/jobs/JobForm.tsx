@@ -1,817 +1,871 @@
 /**
- * mobile/src/components/jobs/JobForm.tsx
- *
- * ── Master-Form-Architect skill applied ──────────────────────────────────────
- * - Zod schema mirrors server/src/models/Job.js + createJobValidation
- * - react-hook-form for all state — no manual useState for inputs
- * - KeyboardAwareScrollView prevents keyboard from covering inputs
- * - isEdit mode: resets form with initialData on mount
- * - Dynamic requirements/skills/benefits arrays
- * - Smart pickers for region, type, experience, salaryMode
- * - Salary fields conditionally shown based on salaryMode
+ * src/components/jobs/JobForm.tsx
+ * ─────────────────────────────────────────────────────────────────────────────
+ * COMPANY job create/edit form.
+ *  - react-hook-form + Zod — mirrors server createJobValidation exactly
+ *  - Every dropdown uses SelectPicker (works on iOS & Android)
+ *  - Dynamic arrays for requirements, skills, responsibilities, benefits
+ *  - Multi-step: Basic → Details → Salary → Preview
+ *  - isEdit mode: populates from initialData
  * ─────────────────────────────────────────────────────────────────────────────
  */
-
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
-  Platform, Alert, Modal, FlatList, Switch,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView,
+  Switch, Platform, Alert,
 } from 'react-native';
-import { useForm, useFieldArray, Controller, SubmitHandler } from 'react-hook-form';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/themeStore';
+import { SelectPicker } from '../ui/SelectPicker';
+import { TagInput } from '../ui/TagInput';
+import { FormField } from '../ui/FormField';
 import {
-  Job, CreateJobData, UpdateJobData,
+  Job, CreateJobData,
   ETHIOPIAN_REGIONS, JOB_TYPES, EXPERIENCE_LEVELS,
-  SALARY_MODES, EDUCATION_LEVELS, SalaryModeValue,
+  SALARY_MODES, EDUCATION_LEVELS,
 } from '../../services/jobService';
 
-// ─── Zod schema — mirrors server createJobValidation ─────────────────────────
+// ─── Job Categories (mirrors frontend/src/services/jobService.ts) ─────────────
+const JOB_CATEGORIES = [
+  // Technology
+  { value: 'software-engineer', label: 'Software Engineer', group: 'Technology' },
+  { value: 'web-developer', label: 'Web Developer', group: 'Technology' },
+  { value: 'mobile-developer', label: 'Mobile Developer', group: 'Technology' },
+  { value: 'data-scientist', label: 'Data Scientist', group: 'Technology' },
+  { value: 'it-support', label: 'IT Support', group: 'Technology' },
+  { value: 'network-engineer', label: 'Network Engineer', group: 'Technology' },
+  { value: 'cybersecurity', label: 'Cybersecurity', group: 'Technology' },
+  { value: 'ui-ux-designer', label: 'UI/UX Designer', group: 'Technology' },
+  { value: 'devops', label: 'DevOps Engineer', group: 'Technology' },
+  // Business
+  { value: 'accountant', label: 'Accountant', group: 'Business & Finance' },
+  { value: 'finance-officer', label: 'Finance Officer', group: 'Business & Finance' },
+  { value: 'auditor', label: 'Auditor', group: 'Business & Finance' },
+  { value: 'business-analyst', label: 'Business Analyst', group: 'Business & Finance' },
+  { value: 'project-manager', label: 'Project Manager', group: 'Business & Finance' },
+  { value: 'operations-manager', label: 'Operations Manager', group: 'Business & Finance' },
+  // Marketing
+  { value: 'marketing-manager', label: 'Marketing Manager', group: 'Marketing & Sales' },
+  { value: 'sales-representative', label: 'Sales Representative', group: 'Marketing & Sales' },
+  { value: 'digital-marketing', label: 'Digital Marketing', group: 'Marketing & Sales' },
+  { value: 'content-creator', label: 'Content Creator', group: 'Marketing & Sales' },
+  { value: 'brand-manager', label: 'Brand Manager', group: 'Marketing & Sales' },
+  // HR
+  { value: 'hr-manager', label: 'HR Manager', group: 'Human Resources' },
+  { value: 'recruitment-officer', label: 'Recruitment Officer', group: 'Human Resources' },
+  { value: 'training-development', label: 'Training & Development', group: 'Human Resources' },
+  // Health
+  { value: 'doctor', label: 'Doctor', group: 'Healthcare' },
+  { value: 'nurse', label: 'Nurse', group: 'Healthcare' },
+  { value: 'pharmacist', label: 'Pharmacist', group: 'Healthcare' },
+  { value: 'health-officer', label: 'Health Officer', group: 'Healthcare' },
+  // Education
+  { value: 'teacher', label: 'Teacher', group: 'Education' },
+  { value: 'lecturer', label: 'Lecturer', group: 'Education' },
+  { value: 'trainer', label: 'Trainer', group: 'Education' },
+  // Engineering
+  { value: 'civil-engineer', label: 'Civil Engineer', group: 'Engineering' },
+  { value: 'mechanical-engineer', label: 'Mechanical Engineer', group: 'Engineering' },
+  { value: 'electrical-engineer', label: 'Electrical Engineer', group: 'Engineering' },
+  { value: 'construction-manager', label: 'Construction Manager', group: 'Engineering' },
+  // Legal
+  { value: 'lawyer', label: 'Lawyer', group: 'Legal' },
+  { value: 'legal-advisor', label: 'Legal Advisor', group: 'Legal' },
+  // Other
+  { value: 'driver', label: 'Driver', group: 'Other' },
+  { value: 'security-guard', label: 'Security Guard', group: 'Other' },
+  { value: 'receptionist', label: 'Receptionist', group: 'Other' },
+  { value: 'office-assistant', label: 'Office Assistant', group: 'Other' },
+  { value: 'other', label: 'Other', group: 'Other' },
+];
 
+const WORK_ARRANGEMENTS = [
+  { value: 'office', label: 'Office Based' },
+  { value: 'field-work', label: 'Field Work' },
+  { value: 'both', label: 'Office & Field' },
+];
+
+const REMOTE_OPTIONS = [
+  { value: 'on-site', label: 'On-Site' },
+  { value: 'hybrid', label: 'Hybrid' },
+  { value: 'remote', label: 'Fully Remote' },
+];
+
+const CURRENCIES = [
+  { value: 'ETB', label: 'ETB - Ethiopian Birr' },
+  { value: 'USD', label: 'USD - US Dollar' },
+  { value: 'EUR', label: 'EUR - Euro' },
+];
+
+const SALARY_PERIODS = [
+  { value: 'monthly', label: 'Per Month' },
+  { value: 'yearly', label: 'Per Year' },
+  { value: 'daily', label: 'Per Day' },
+  { value: 'hourly', label: 'Per Hour' },
+];
+
+const DEMOGRAPHIC_SEX = [
+  { value: 'any', label: 'Any' },
+  { value: 'male', label: 'Male Only' },
+  { value: 'female', label: 'Female Only' },
+];
+
+// ─── Zod Schema ───────────────────────────────────────────────────────────────
 const jobSchema = z.object({
-  title: z.string()
-    .min(5, 'Title must be at least 5 characters')
-    .max(100, 'Title cannot exceed 100 characters'),
-  description: z.string()
-    .min(50, 'Description must be at least 50 characters')
-    .max(5000, 'Description cannot exceed 5000 characters'),
-  shortDescription: z.string().max(200).optional(),
-  category: z.string().min(1, 'Category is required'),
-  type: z.enum(['full-time','part-time','contract','internship','temporary','volunteer','remote','hybrid']),
-  experienceLevel: z.enum(['fresh-graduate','entry-level','mid-level','senior-level','managerial','director','executive']),
-  educationLevel: z.string().optional(),
-  candidatesNeeded: z.number({ invalid_type_error: 'Must be a number' }).int().min(1, 'At least 1 candidate required'),
-  region: z.string().min(1, 'Region is required'),
-  city: z.string().optional(),
-  country: z.string().default('Ethiopia'),
+  title:              z.string().min(5, 'Title must be at least 5 characters').max(100),
+  description:        z.string().min(50, 'Description must be at least 50 characters').max(5000),
+  shortDescription:   z.string().max(200).optional(),
+  category:           z.string().min(1, 'Category is required'),
+  type:               z.string().min(1, 'Job type is required'),
+  experienceLevel:    z.string().min(1, 'Experience level is required'),
+  educationLevel:     z.string().optional(),
+  candidatesNeeded:   z.string().min(1).transform(v => parseInt(v) || 1),
+  region:             z.string().min(1, 'Region is required'),
+  city:               z.string().optional(),
   applicationDeadline: z.string().min(1, 'Deadline is required'),
-  salaryMode: z.enum(['range','hidden','negotiable','company-scale']),
-  salaryMin: z.number().optional(),
-  salaryMax: z.number().optional(),
-  salaryCurrency: z.string().optional(),
-  salaryPeriod: z.string().optional(),
-  isApplyEnabled: z.boolean().default(true),
-  remote: z.enum(['remote','hybrid','on-site']).default('on-site'),
-  featured: z.boolean().default(false),
-  urgent: z.boolean().default(false),
-  status: z.enum(['draft','active']).default('draft'),
-  requirements:    z.array(z.object({ value: z.string() })).default([]),
-  responsibilities:z.array(z.object({ value: z.string() })).default([]),
-  skills:          z.array(z.object({ value: z.string() })).default([]),
-  benefits:        z.array(z.object({ value: z.string() })).default([]),
-  jobNumber: z.string().optional(),
-}).superRefine((data, ctx) => {
-  if (data.salaryMode === 'range') {
-    if (!data.salaryCurrency) {
-      ctx.addIssue({ code: 'custom', path: ['salaryCurrency'], message: 'Currency required for salary range' });
-    }
-    if (data.salaryMin !== undefined && data.salaryMax !== undefined && data.salaryMin > data.salaryMax) {
-      ctx.addIssue({ code: 'custom', path: ['salaryMax'], message: 'Max must be greater than min' });
-    }
-  }
-  const dl = new Date(data.applicationDeadline);
-  if (isNaN(dl.getTime()) || dl <= new Date()) {
-    ctx.addIssue({ code: 'custom', path: ['applicationDeadline'], message: 'Deadline must be a future date' });
-  }
+  salaryMode:         z.string().min(1),
+  salaryMin:          z.string().optional(),
+  salaryMax:          z.string().optional(),
+  salaryCurrency:     z.string().optional(),
+  salaryPeriod:       z.string().optional(),
+  remote:             z.string().optional(),
+  workArrangement:    z.string().optional(),
+  isApplyEnabled:     z.boolean().default(true),
+  demographicSex:     z.string().optional(),
+  jobNumber:          z.string().optional(),
+  requirements:       z.array(z.string()).optional(),
+  skills:             z.array(z.string()).optional(),
+  responsibilities:   z.array(z.string()).optional(),
+  benefits:           z.array(z.string()).optional(),
+  featured:           z.boolean().default(false),
+  urgent:             z.boolean().default(false),
 });
 
-type FormValues = z.infer<typeof jobSchema>;
-
-// ─── Transform helpers ────────────────────────────────────────────────────────
-
-const toFormValues = (job?: Job | null): Partial<FormValues> => {
-  if (!job) return {};
-  const dl = job.applicationDeadline
-    ? new Date(job.applicationDeadline).toISOString().split('T')[0]
-    : '';
-  return {
-    title:             job.title,
-    description:       job.description,
-    shortDescription:  job.shortDescription,
-    category:          job.category,
-    type:              job.type,
-    experienceLevel:   job.experienceLevel,
-    educationLevel:    job.educationLevel,
-    candidatesNeeded:  job.candidatesNeeded,
-    region:            job.location?.region,
-    city:              job.location?.city,
-    country:           job.location?.country ?? 'Ethiopia',
-    applicationDeadline: dl,
-    salaryMode:        job.salaryMode,
-    salaryMin:         job.salary?.min,
-    salaryMax:         job.salary?.max,
-    salaryCurrency:    job.salary?.currency,
-    salaryPeriod:      job.salary?.period ?? 'monthly',
-    isApplyEnabled:    job.isApplyEnabled,
-    remote:            job.remote,
-    featured:          job.featured ?? false,
-    urgent:            job.urgent ?? false,
-    status:            (job.status === 'active' ? 'active' : 'draft'),
-    requirements:      (job.requirements ?? []).map(v => ({ value: v })),
-    responsibilities:  (job.responsibilities ?? []).map(v => ({ value: v })),
-    skills:            (job.skills ?? []).map(v => ({ value: v })),
-    benefits:          (job.benefits ?? []).map(v => ({ value: v })),
-    jobNumber:         job.jobNumber,
-  };
-};
-
-const fromFormValues = (v: FormValues): CreateJobData => {
-  const deadline = new Date(v.applicationDeadline);
-  deadline.setUTCHours(23, 59, 59, 999);
-
-  const data: CreateJobData = {
-    title:               v.title,
-    description:         v.description,
-    shortDescription:    v.shortDescription,
-    category:            v.category,
-    type:                v.type,
-    experienceLevel:     v.experienceLevel,
-    educationLevel:      v.educationLevel,
-    candidatesNeeded:    v.candidatesNeeded,
-    location:            { region: v.region as any, city: v.city, country: v.country },
-    applicationDeadline: deadline.toISOString(),
-    salaryMode:          v.salaryMode,
-    isApplyEnabled:      v.isApplyEnabled,
-    remote:              v.remote,
-    featured:            v.featured,
-    urgent:              v.urgent,
-    status:              v.status,
-    requirements:        v.requirements.map(r => r.value).filter(Boolean),
-    responsibilities:    v.responsibilities.map(r => r.value).filter(Boolean),
-    skills:              v.skills.map(r => r.value).filter(Boolean),
-    benefits:            v.benefits.map(r => r.value).filter(Boolean),
-    jobNumber:           v.jobNumber,
-  };
-
-  if (v.salaryMode === 'range' && (v.salaryMin || v.salaryMax)) {
-    data.salary = {
-      min:      v.salaryMin,
-      max:      v.salaryMax,
-      currency: v.salaryCurrency ?? 'ETB',
-      period:   v.salaryPeriod ?? 'monthly',
-    };
-  }
-
-  return data;
-};
+type JobFormValues = z.infer<typeof jobSchema>;
 
 // ─── Props ────────────────────────────────────────────────────────────────────
-
 interface JobFormProps {
-  initialData?: Job | null;
-  isOrg?:       boolean;
-  onSubmit:     (data: CreateJobData, isDraft: boolean) => Promise<void>;
-  onCancel?:    () => void;
-  isLoading?:   boolean;
+  initialData?: Job;
+  onSubmit: (data: CreateJobData, isDraft: boolean) => Promise<void>;
+  onCancel: () => void;
+  isLoading?: boolean;
+  isOrg?: boolean;
 }
 
-// ─── Reusable sub-components ──────────────────────────────────────────────────
+// ─── Steps ────────────────────────────────────────────────────────────────────
+const STEPS = ['Basic Info', 'Details', 'Salary', 'Preview'];
 
-const FieldLabel: React.FC<{ label: string; required?: boolean; colors: any }> = ({ label, required, colors }) => (
-  <Text style={[fld.label, { color: colors.textSecondary }]}>
-    {label}{required && <Text style={{ color: colors.error }}> *</Text>}
-  </Text>
-);
+// ─── Helper: tomorrow ISO string ─────────────────────────────────────────────
+const tomorrowISO = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().split('T')[0];
+};
 
-const FieldError: React.FC<{ msg?: string; colors: any }> = ({ msg, colors }) =>
-  msg ? <Text style={[fld.error, { color: colors.error }]}>{msg}</Text> : null;
-
-const fld = StyleSheet.create({
-  label: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
-  error: { fontSize: 12, marginTop: 4 },
+// ─── toFormValues: Job → FormValues ──────────────────────────────────────────
+const toFormValues = (job: Job): Partial<JobFormValues> => ({
+  title:              job.title ?? '',
+  description:        job.description ?? '',
+  shortDescription:   job.shortDescription ?? '',
+  category:           job.category ?? '',
+  type:               job.type ?? 'full-time',
+  experienceLevel:    job.experienceLevel ?? 'mid-level',
+  educationLevel:     job.educationLevel ?? '',
+  candidatesNeeded:   String(job.candidatesNeeded ?? 1) as any,
+  region:             job.location?.region ?? 'addis-ababa',
+  city:               job.location?.city ?? '',
+  applicationDeadline: job.applicationDeadline
+    ? new Date(job.applicationDeadline).toISOString().split('T')[0]
+    : tomorrowISO(),
+  salaryMode:         job.salaryMode ?? 'range',
+  salaryMin:          job.salary?.min ? String(job.salary.min) : '',
+  salaryMax:          job.salary?.max ? String(job.salary.max) : '',
+  salaryCurrency:     job.salary?.currency ?? 'ETB',
+  salaryPeriod:       job.salary?.period ?? 'monthly',
+  remote:             job.remote ?? 'on-site',
+  workArrangement:    job.workArrangement ?? 'office',
+  isApplyEnabled:     job.isApplyEnabled ?? true,
+  demographicSex:     job.demographicRequirements?.sex ?? 'any',
+  jobNumber:          job.jobNumber ?? '',
+  requirements:       job.requirements?.filter(Boolean) ?? [],
+  skills:             job.skills?.filter(Boolean) ?? [],
+  responsibilities:   job.responsibilities?.filter(Boolean) ?? [],
+  benefits:           job.benefits?.filter(Boolean) ?? [],
+  featured:           job.featured ?? false,
+  urgent:             job.urgent ?? false,
 });
 
-// ─── Picker modal ─────────────────────────────────────────────────────────────
-
-interface PickerModalProps<T extends string> {
-  visible:   boolean;
-  title:     string;
-  items:     readonly { value: T; label: string }[];
-  value?:    T;
-  onChange:  (v: T) => void;
-  onClose:   () => void;
-  colors:    any;
-  isDark:    boolean;
-}
-
-function PickerModal<T extends string>({ visible, title, items, value, onChange, onClose, colors, isDark }: PickerModalProps<T>) {
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={[pm.sheet, { backgroundColor: colors.background }]}>
-        <View style={[pm.header, { borderBottomColor: colors.border }]}>
-          <Text style={[pm.title, { color: colors.text }]}>{title}</Text>
-          <TouchableOpacity onPress={onClose} style={pm.closeBtn}>
-            <Ionicons name="close" size={22} color={colors.text} />
-          </TouchableOpacity>
-        </View>
-        <FlatList
-          data={items as { value: T; label: string }[]}
-          keyExtractor={item => item.value}
-          renderItem={({ item }) => {
-            const active = item.value === value;
-            return (
-              <TouchableOpacity
-                style={[pm.item, { borderBottomColor: colors.border, backgroundColor: active ? colors.primaryLight : colors.surface }]}>
-                <Text style={[pm.itemText, { color: active ? colors.primary : colors.text, fontWeight: active ? '700' : '400' }]}>{item.label}</Text>
-                {active && <Ionicons name="checkmark" size={18} color={colors.primary} />}
-              </TouchableOpacity>
-            );
-          }}
-        />
-      </View>
-    </Modal>
-  );
-}
-
-const pm = StyleSheet.create({
-  sheet:    { flex: 1 },
-  header:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1 },
-  title:    { fontSize: 17, fontWeight: '700' },
-  closeBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  item:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: StyleSheet.hairlineWidth },
-  itemText: { fontSize: 15 },
+// ─── toCreateData: FormValues → CreateJobData ─────────────────────────────────
+const toCreateData = (vals: JobFormValues): CreateJobData => ({
+  title:              vals.title,
+  description:        vals.description,
+  shortDescription:   vals.shortDescription,
+  category:           vals.category,
+  type:               vals.type as any,
+  experienceLevel:    vals.experienceLevel as any,
+  educationLevel:     vals.educationLevel,
+  candidatesNeeded:   typeof vals.candidatesNeeded === 'number' ? vals.candidatesNeeded : parseInt(String(vals.candidatesNeeded)) || 1,
+  location: {
+    region:  vals.region as any,
+    city:    vals.city,
+    country: 'Ethiopia',
+  },
+  applicationDeadline: vals.applicationDeadline,
+  salaryMode:         vals.salaryMode as any,
+  salary:             vals.salaryMode === 'range' ? {
+    min:          vals.salaryMin ? parseFloat(vals.salaryMin) : undefined,
+    max:          vals.salaryMax ? parseFloat(vals.salaryMax) : undefined,
+    currency:     vals.salaryCurrency,
+    period:       vals.salaryPeriod,
+    isPublic:     true,
+    isNegotiable: false,
+  } : undefined,
+  remote:             vals.remote as any,
+  workArrangement:    vals.workArrangement as any,
+  isApplyEnabled:     vals.isApplyEnabled,
+  requirements:       vals.requirements?.filter(Boolean),
+  skills:             vals.skills?.filter(Boolean),
+  responsibilities:   vals.responsibilities?.filter(Boolean),
+  benefits:           vals.benefits?.filter(Boolean),
+  featured:           vals.featured,
+  urgent:             vals.urgent,
+  jobNumber:          vals.jobNumber,
+  demographicRequirements: { sex: vals.demographicSex as any },
 });
 
-// ─── Dynamic array field ──────────────────────────────────────────────────────
+// ─── Main Component ───────────────────────────────────────────────────────────
+export const JobForm: React.FC<JobFormProps> = ({
+  initialData,
+  onSubmit,
+  onCancel,
+  isLoading = false,
+  isOrg = false,
+}) => {
+  const { theme } = useThemeStore();
+  const c = theme.colors;
+  const [step, setStep] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
 
-interface DynamicArrayProps {
-  label:    string;
-  name:     'requirements' | 'responsibilities' | 'skills' | 'benefits';
-  control:  any;
-  colors:   any;
-}
+  const isEdit = !!initialData;
 
-const DynamicArray: React.FC<DynamicArrayProps> = ({ label, name, control, colors }) => {
-  const { fields, append, remove } = useFieldArray({ control, name });
+  const {
+    control,
+    handleSubmit,
+    watch,
+    reset,
+    setValue,
+    formState: { errors },
+  } = useForm<JobFormValues>({
+    resolver: zodResolver(jobSchema) as any,
+    defaultValues: {
+      title: '',
+      description: '',
+      shortDescription: '',
+      category: '',
+      type: 'full-time',
+      experienceLevel: 'mid-level',
+      educationLevel: 'none-required',
+      candidatesNeeded: '1' as any,
+      region: 'addis-ababa',
+      city: '',
+      applicationDeadline: tomorrowISO(),
+      salaryMode: 'range',
+      salaryMin: '',
+      salaryMax: '',
+      salaryCurrency: 'ETB',
+      salaryPeriod: 'monthly',
+      remote: 'on-site',
+      workArrangement: 'office',
+      isApplyEnabled: true,
+      demographicSex: 'any',
+      jobNumber: '',
+      requirements: [],
+      skills: [],
+      responsibilities: [],
+      benefits: [],
+      featured: false,
+      urgent: false,
+    },
+  });
+
+  // Populate form when editing
+  useEffect(() => {
+    if (initialData) {
+      reset(toFormValues(initialData) as any);
+    }
+  }, [initialData]);
+
+  const salaryMode = watch('salaryMode');
+
+  const doSubmit = async (isDraft: boolean) => {
+    handleSubmit(async (vals) => {
+      try {
+        setSubmitting(true);
+        const data = toCreateData(vals);
+        await onSubmit(data, isDraft);
+      } catch (e: any) {
+        Alert.alert('Error', e?.message ?? 'Failed to save job');
+      } finally {
+        setSubmitting(false);
+      }
+    })();
+  };
+
+  const nextStep = () => {
+    if (step < STEPS.length - 1) setStep(s => s + 1);
+  };
+
+  const prevStep = () => {
+    if (step > 0) setStep(s => s - 1);
+  };
+
+  const loading = isLoading || submitting;
+
   return (
-    <View style={da.wrap}>
-      <View style={da.header}>
-        <Text style={[da.label, { color: colors.textSecondary }]}>{label}</Text>
-        <TouchableOpacity
-          style={[da.addBtn, { backgroundColor: colors.primaryLight }]}>
-          <Ionicons name="add" size={16} color={colors.primary} />
-          <Text style={[da.addText, { color: colors.primary }]}>Add</Text>
-        </TouchableOpacity>
-      </View>
-      {fields.map((field, index) => (
-        <Controller
-          key={field.id}
-          control={control}
-          name={`${name}.${index}.value`}
-          render={({ field: f }) => (
-            <View style={[da.row, { borderColor: colors.border }]}>
-              <View style={[da.bullet, { backgroundColor: colors.primary }]} />
-              <TextInput
-                style={[da.input, { color: colors.text }]}>
-                {f.value}
-              </TextInput>
-              <TouchableOpacity
-                onPress={() => remove(index)}
-                style={da.removeBtn}
-                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-              >
-                <Ionicons name="close-circle" size={18} color={colors.textMuted} />
-              </TouchableOpacity>
+    <View style={[f.root, { backgroundColor: c.background }]}>
+      {/* Step indicator */}
+      <View style={[f.stepBar, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
+        {STEPS.map((s, i) => (
+          <TouchableOpacity
+            key={s}
+            onPress={() => setStep(i)}
+            style={f.stepItem}
+          >
+            <View style={[
+              f.stepDot,
+              { backgroundColor: i <= step ? c.primary : c.border },
+            ]}>
+              {i < step
+                ? <Ionicons name="checkmark" size={12} color="#fff" />
+                : <Text style={[f.stepNum, { color: i <= step ? '#fff' : c.textMuted }]}>{i + 1}</Text>
+              }
             </View>
-          )}
+            <Text style={[f.stepLabel, { color: i === step ? c.primary : c.textMuted }]} numberOfLines={1}>
+              {s}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Form content */}
+      <KeyboardAwareScrollView
+        contentContainerStyle={[f.scroll, { backgroundColor: c.background }]}
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid
+        extraScrollHeight={80}
+      >
+        {step === 0 && <StepBasic control={control} errors={errors} watch={watch} setValue={setValue} isOrg={isOrg} />}
+        {step === 1 && <StepDetails control={control} errors={errors} watch={watch} setValue={setValue} />}
+        {step === 2 && <StepSalary control={control} errors={errors} watch={watch} setValue={setValue} salaryMode={salaryMode} />}
+        {step === 3 && <StepPreview watch={watch} />}
+      </KeyboardAwareScrollView>
+
+      {/* Navigation buttons */}
+      <View style={[f.footer, { backgroundColor: c.surface, borderTopColor: c.border }]}>
+        <TouchableOpacity
+          onPress={step === 0 ? onCancel : prevStep}
+          style={[f.footerBtn, f.outlineBtn, { borderColor: c.border }]}
+          disabled={loading}
+        >
+          <Text style={[f.footerBtnText, { color: c.text }]}>
+            {step === 0 ? 'Cancel' : 'Back'}
+          </Text>
+        </TouchableOpacity>
+
+        {step < STEPS.length - 1 ? (
+          <TouchableOpacity
+            onPress={nextStep}
+            style={[f.footerBtn, f.primaryBtn, { backgroundColor: c.primary }]}
+          >
+            <Text style={f.primaryBtnText}>Next</Text>
+            <Ionicons name="arrow-forward" size={16} color="#fff" />
+          </TouchableOpacity>
+        ) : (
+          <View style={f.lastBtns}>
+            {!isEdit && (
+              <TouchableOpacity
+                onPress={() => doSubmit(true)}
+                disabled={loading}
+                style={[f.footerBtn, f.outlineBtn, { borderColor: c.primary, marginRight: 8 }]}
+              >
+                <Text style={[f.footerBtnText, { color: c.primary }]}>
+                  {loading ? 'Saving…' : 'Save Draft'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={() => doSubmit(false)}
+              disabled={loading}
+              style={[f.footerBtn, f.primaryBtn, { backgroundColor: loading ? c.border : c.primary }]}
+            >
+              <Text style={f.primaryBtnText}>
+                {loading ? 'Saving…' : isEdit ? 'Update Job' : 'Publish Job'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+};
+
+// ─── STEP 1: Basic Info ───────────────────────────────────────────────────────
+const StepBasic = ({ control, errors, watch, setValue, isOrg }: any) => {
+  const { theme } = useThemeStore();
+  const c = theme.colors;
+  return (
+    <View>
+      <SectionHeader icon="briefcase-outline" title="Basic Information" />
+
+      <Controller name="title" control={control} render={({ field: { value, onChange } }) => (
+        <FormField
+          label="Job Title"
+          required
+          value={value}
+          onChangeText={onChange}
+          placeholder="e.g. Senior Software Engineer"
+          error={errors.title?.message}
         />
-      ))}
-      {fields.length === 0 && (
-        <Text style={[da.empty, { color: colors.textMuted }]}>No {label.toLowerCase()} added yet</Text>
+      )} />
+
+      <Controller name="category" control={control} render={({ field: { value, onChange } }) => (
+        <SelectPicker
+          label="Category"
+          required
+          value={value}
+          options={JOB_CATEGORIES}
+          onSelect={onChange}
+          placeholder="Select job category"
+          error={errors.category?.message}
+          searchable
+        />
+      )} />
+
+      <Controller name="type" control={control} render={({ field: { value, onChange } }) => (
+        <SelectPicker
+          label="Employment Type"
+          required
+          value={value}
+          options={JOB_TYPES.map(t => ({ value: t.value, label: t.label }))}
+          onSelect={onChange}
+          placeholder="Select employment type"
+          error={errors.type?.message}
+        />
+      )} />
+
+      <Controller name="shortDescription" control={control} render={({ field: { value, onChange } }) => (
+        <FormField
+          label="Short Description"
+          value={value}
+          onChangeText={onChange}
+          placeholder="Brief summary (max 200 chars)"
+          maxLength={200}
+          multiline
+          hint={`${(value ?? '').length}/200`}
+          error={errors.shortDescription?.message}
+        />
+      )} />
+
+      <Controller name="description" control={control} render={({ field: { value, onChange } }) => (
+        <FormField
+          label="Full Description"
+          required
+          value={value}
+          onChangeText={onChange}
+          placeholder="Detailed job description (min 50 characters)..."
+          multiline
+          numberOfLines={6}
+          hint={`${(value ?? '').length}/5000 — min 50`}
+          error={errors.description?.message}
+        />
+      )} />
+
+      <Controller name="jobNumber" control={control} render={({ field: { value, onChange } }) => (
+        <FormField
+          label="Job Reference Number"
+          value={value}
+          onChangeText={onChange}
+          placeholder="e.g. JOB-2024-001 (optional)"
+          error={errors.jobNumber?.message}
+        />
+      )} />
+
+      {/* Flags */}
+      <View style={[f2.flagRow, { backgroundColor: c.surface, borderColor: c.border }]}>
+        <Controller name="urgent" control={control} render={({ field: { value, onChange } }) => (
+          <View style={f2.flagItem}>
+            <Ionicons name="flash" size={18} color="#EF4444" />
+            <Text style={[f2.flagLabel, { color: c.text }]}>Mark Urgent</Text>
+            <Switch value={value} onValueChange={onChange} trackColor={{ true: '#EF4444' }} />
+          </View>
+        )} />
+        <Controller name="featured" control={control} render={({ field: { value, onChange } }) => (
+          <View style={[f2.flagItem, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border }]}>
+            <Ionicons name="star" size={18} color="#F59E0B" />
+            <Text style={[f2.flagLabel, { color: c.text }]}>Feature This Job</Text>
+            <Switch value={value} onValueChange={onChange} trackColor={{ true: '#F59E0B' }} />
+          </View>
+        )} />
+        <Controller name="isApplyEnabled" control={control} render={({ field: { value, onChange } }) => (
+          <View style={[f2.flagItem, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border }]}>
+            <Ionicons name="checkmark-circle" size={18} color="#10B981" />
+            <Text style={[f2.flagLabel, { color: c.text }]}>Accept Applications</Text>
+            <Switch value={value} onValueChange={onChange} trackColor={{ true: '#10B981' }} />
+          </View>
+        )} />
+      </View>
+    </View>
+  );
+};
+
+// ─── STEP 2: Details ─────────────────────────────────────────────────────────
+const StepDetails = ({ control, errors, watch, setValue }: any) => {
+  return (
+    <View>
+      <SectionHeader icon="list-outline" title="Job Details" />
+
+      <Controller name="experienceLevel" control={control} render={({ field: { value, onChange } }) => (
+        <SelectPicker
+          label="Experience Level"
+          required
+          value={value}
+          options={EXPERIENCE_LEVELS.map(e => ({ value: e.value, label: e.label }))}
+          onSelect={onChange}
+          placeholder="Select experience level"
+          error={errors.experienceLevel?.message}
+        />
+      )} />
+
+      <Controller name="educationLevel" control={control} render={({ field: { value, onChange } }) => (
+        <SelectPicker
+          label="Education Level"
+          value={value ?? ''}
+          options={EDUCATION_LEVELS.map(e => ({ value: e.value, label: e.label }))}
+          onSelect={onChange}
+          placeholder="Select education level"
+          error={errors.educationLevel?.message}
+        />
+      )} />
+
+      <Controller name="remote" control={control} render={({ field: { value, onChange } }) => (
+        <SelectPicker
+          label="Work Mode"
+          value={value ?? 'on-site'}
+          options={REMOTE_OPTIONS}
+          onSelect={onChange}
+          placeholder="Select work mode"
+          error={errors.remote?.message}
+        />
+      )} />
+
+      <Controller name="workArrangement" control={control} render={({ field: { value, onChange } }) => (
+        <SelectPicker
+          label="Work Arrangement"
+          value={value ?? 'office'}
+          options={WORK_ARRANGEMENTS}
+          onSelect={onChange}
+          placeholder="Select arrangement"
+          error={errors.workArrangement?.message}
+        />
+      )} />
+
+      <Controller name="region" control={control} render={({ field: { value, onChange } }) => (
+        <SelectPicker
+          label="Region"
+          required
+          value={value}
+          options={ETHIOPIAN_REGIONS.map(r => ({ value: r.value, label: r.label }))}
+          onSelect={onChange}
+          placeholder="Select region"
+          error={errors.region?.message}
+          searchable
+        />
+      )} />
+
+      <Controller name="city" control={control} render={({ field: { value, onChange } }) => (
+        <FormField
+          label="City"
+          value={value}
+          onChangeText={onChange}
+          placeholder="e.g. Addis Ababa"
+          error={errors.city?.message}
+        />
+      )} />
+
+      <Controller name="applicationDeadline" control={control} render={({ field: { value, onChange } }) => (
+        <FormField
+          label="Application Deadline"
+          required
+          value={value}
+          onChangeText={onChange}
+          placeholder="YYYY-MM-DD"
+          hint="Format: YYYY-MM-DD (e.g. 2024-12-31)"
+          error={errors.applicationDeadline?.message}
+          keyboardType="numbers-and-punctuation"
+        />
+      )} />
+
+      <Controller name="candidatesNeeded" control={control} render={({ field: { value, onChange } }) => (
+        <FormField
+          label="Number of Positions"
+          required
+          value={String(value ?? '1')}
+          onChangeText={onChange}
+          placeholder="e.g. 3"
+          keyboardType="numeric"
+          error={errors.candidatesNeeded?.message}
+          hint="How many candidates do you need to hire?"
+        />
+      )} />
+
+      <Controller name="demographicSex" control={control} render={({ field: { value, onChange } }) => (
+        <SelectPicker
+          label="Gender Requirement"
+          value={value ?? 'any'}
+          options={DEMOGRAPHIC_SEX}
+          onSelect={onChange}
+          placeholder="Select gender requirement"
+          error={errors.demographicSex?.message}
+        />
+      )} />
+
+      {/* Dynamic arrays */}
+      <Controller name="requirements" control={control} render={({ field: { value, onChange } }) => (
+        <TagInput
+          label="Requirements"
+          values={value ?? []}
+          onChange={onChange}
+          placeholder="Add a requirement and press Add"
+          error={errors.requirements?.message}
+        />
+      )} />
+
+      <Controller name="responsibilities" control={control} render={({ field: { value, onChange } }) => (
+        <TagInput
+          label="Responsibilities"
+          values={value ?? []}
+          onChange={onChange}
+          placeholder="Add a responsibility and press Add"
+        />
+      )} />
+
+      <Controller name="skills" control={control} render={({ field: { value, onChange } }) => (
+        <TagInput
+          label="Required Skills"
+          values={value ?? []}
+          onChange={onChange}
+          placeholder="Add a skill and press Add"
+        />
+      )} />
+
+      <Controller name="benefits" control={control} render={({ field: { value, onChange } }) => (
+        <TagInput
+          label="Benefits & Perks"
+          values={value ?? []}
+          onChange={onChange}
+          placeholder="Add a benefit and press Add"
+        />
+      )} />
+    </View>
+  );
+};
+
+// ─── STEP 3: Salary ───────────────────────────────────────────────────────────
+const StepSalary = ({ control, errors, watch, setValue, salaryMode }: any) => {
+  const { theme } = useThemeStore();
+  const c = theme.colors;
+  return (
+    <View>
+      <SectionHeader icon="cash-outline" title="Salary & Compensation" />
+
+      <Controller name="salaryMode" control={control} render={({ field: { value, onChange } }) => (
+        <SelectPicker
+          label="Salary Display Mode"
+          required
+          value={value}
+          options={SALARY_MODES.map(m => ({ value: m.value, label: m.label }))}
+          onSelect={onChange}
+          placeholder="Select salary mode"
+          error={errors.salaryMode?.message}
+        />
+      )} />
+
+      {salaryMode === 'range' && (
+        <>
+          <Controller name="salaryCurrency" control={control} render={({ field: { value, onChange } }) => (
+            <SelectPicker
+              label="Currency"
+              value={value ?? 'ETB'}
+              options={CURRENCIES}
+              onSelect={onChange}
+              placeholder="Select currency"
+              error={errors.salaryCurrency?.message}
+            />
+          )} />
+
+          <View style={f2.salaryRow}>
+            <View style={f2.salaryHalf}>
+              <Controller name="salaryMin" control={control} render={({ field: { value, onChange } }) => (
+                <FormField
+                  label="Min Salary"
+                  value={value}
+                  onChangeText={onChange}
+                  placeholder="e.g. 15000"
+                  keyboardType="numeric"
+                  error={errors.salaryMin?.message}
+                />
+              )} />
+            </View>
+            <View style={f2.salaryHalf}>
+              <Controller name="salaryMax" control={control} render={({ field: { value, onChange } }) => (
+                <FormField
+                  label="Max Salary"
+                  value={value}
+                  onChangeText={onChange}
+                  placeholder="e.g. 30000"
+                  keyboardType="numeric"
+                  error={errors.salaryMax?.message}
+                />
+              )} />
+            </View>
+          </View>
+
+          <Controller name="salaryPeriod" control={control} render={({ field: { value, onChange } }) => (
+            <SelectPicker
+              label="Pay Period"
+              value={value ?? 'monthly'}
+              options={SALARY_PERIODS}
+              onSelect={onChange}
+              placeholder="Select pay period"
+              error={errors.salaryPeriod?.message}
+            />
+          )} />
+        </>
+      )}
+
+      {salaryMode !== 'range' && (
+        <View style={[f2.salaryNote, { backgroundColor: `${c.info}15`, borderColor: `${c.info}30` }]}>
+          <Ionicons name="information-circle-outline" size={20} color={c.info} />
+          <Text style={[f2.salaryNoteText, { color: c.textMuted }]}>
+            {salaryMode === 'hidden' && 'Salary will be hidden from candidates.'}
+            {salaryMode === 'negotiable' && 'Salary will be shown as "Negotiable".'}
+            {salaryMode === 'company-scale' && 'Salary will be shown as "As per company scale".'}
+          </Text>
+        </View>
       )}
     </View>
   );
 };
 
-const da = StyleSheet.create({
-  wrap:      { marginBottom: 20 },
-  header:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  label:     { fontSize: 13, fontWeight: '600' },
-  addBtn:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 4 },
-  addText:   { fontSize: 13, fontWeight: '600' },
-  row:       { flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 8, gap: 8 },
-  bullet:    { width: 6, height: 6, borderRadius: 3, marginTop: 8 },
-  input:     { flex: 1, fontSize: 14, lineHeight: 20, minHeight: 36 },
-  removeBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  empty:     { fontSize: 13, fontStyle: 'italic', textAlign: 'center', paddingVertical: 8 },
-});
-
-// ─── Category picker data (abbreviated — top categories) ─────────────────────
-
-const TOP_CATEGORIES = [
-  { value: 'software-developer',         label: 'Software Developer' },
-  { value: 'frontend-developer',         label: 'Frontend Developer' },
-  { value: 'backend-developer',          label: 'Backend Developer' },
-  { value: 'fullstack-developer',        label: 'Fullstack Developer' },
-  { value: 'data-analyst',               label: 'Data Analyst' },
-  { value: 'ui-designer',                label: 'UI Designer' },
-  { value: 'product-manager',            label: 'Product Manager' },
-  { value: 'accountant',                 label: 'Accountant' },
-  { value: 'hr-officer',                 label: 'HR Officer' },
-  { value: 'project-manager',            label: 'Project Manager' },
-  { value: 'sales-representative',       label: 'Sales Representative' },
-  { value: 'marketing-officer',          label: 'Marketing Officer' },
-  { value: 'civil-engineer',             label: 'Civil Engineer' },
-  { value: 'electrical-engineer',        label: 'Electrical Engineer' },
-  { value: 'nurse',                      label: 'Nurse' },
-  { value: 'general-practitioner',       label: 'General Practitioner' },
-  { value: 'university-lecturer',        label: 'University Lecturer' },
-  { value: 'primary-teacher',            label: 'Primary Teacher' },
-  { value: 'driver',                     label: 'Driver' },
-  { value: 'security-guard',             label: 'Security Guard' },
-  { value: 'program-officer',            label: 'Program Officer' },
-  { value: 'procurement-officer',        label: 'Procurement Officer' },
-  { value: 'logistics-officer',          label: 'Logistics Officer' },
-  { value: 'intern',                     label: 'Intern' },
-  { value: 'other',                      label: 'Other' },
-] as const;
-
-// ─── Section card wrapper ─────────────────────────────────────────────────────
-
-const Section: React.FC<{ title: string; icon?: string; colors: any; children: React.ReactNode }> =
-  ({ title, icon, colors, children }) => (
-    <View style={[sec.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={sec.header}>
-        {icon && <Ionicons name={icon as any} size={18} color={colors.primary} />}
-        <Text style={[sec.title, { color: colors.text }]}>{title}</Text>
-      </View>
-      {children}
-    </View>
-  );
-
-const sec = StyleSheet.create({
-  card:   { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 16 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
-  title:  { fontSize: 16, fontWeight: '700' },
-});
-
-// ─── Main Form Component ──────────────────────────────────────────────────────
-
-export const JobForm: React.FC<JobFormProps> = ({
-  initialData, isOrg = false, onSubmit, onCancel, isLoading = false,
-}) => {
+// ─── STEP 4: Preview ──────────────────────────────────────────────────────────
+const StepPreview = ({ watch }: any) => {
   const { theme } = useThemeStore();
   const c = theme.colors;
-  const isEdit = !!initialData;
+  const vals = watch();
 
-  // Picker visibility state
-  const [picker, setPicker] = useState<null | 'type' | 'experienceLevel' | 'region' | 'salaryMode' | 'category' | 'educationLevel' | 'remote'>(null);
+  const cat = JOB_CATEGORIES.find(x => x.value === vals.category)?.label ?? vals.category;
+  const type = JOB_TYPES.find(x => x.value === vals.type)?.label ?? vals.type;
+  const exp = EXPERIENCE_LEVELS.find(x => x.value === vals.experienceLevel)?.label ?? vals.experienceLevel;
+  const region = ETHIOPIAN_REGIONS.find(x => x.value === vals.region)?.label ?? vals.region;
+  const salMode = SALARY_MODES.find(x => x.value === vals.salaryMode)?.label ?? vals.salaryMode;
 
-  const defaultValues: Partial<FormValues> = {
-    title: '', description: '', category: 'software-developer',
-    type: 'full-time', experienceLevel: 'mid-level',
-    educationLevel: 'none-required', candidatesNeeded: 1,
-    region: 'addis-ababa', city: '', country: 'Ethiopia',
-    applicationDeadline: (() => {
-      const d = new Date(); d.setDate(d.getDate() + 30);
-      return d.toISOString().split('T')[0];
-    })(),
-    salaryMode: 'negotiable', salaryCurrency: 'ETB', salaryPeriod: 'monthly',
-    isApplyEnabled: true, remote: 'on-site', featured: false, urgent: false,
-    status: 'draft', requirements: [], responsibilities: [], skills: [], benefits: [],
-  };
-
-  const { control, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>({
-    resolver: zodResolver(jobSchema),
-    defaultValues: isEdit ? { ...defaultValues, ...toFormValues(initialData) } : defaultValues,
-  });
-
-  // isEdit: pre-populate form
-  useEffect(() => {
-    if (isEdit && initialData) {
-      reset({ ...defaultValues, ...toFormValues(initialData) });
-    }
-  }, [initialData]);
-
-  const salaryMode = watch('salaryMode');
-  const showSalary = salaryMode === 'range';
-
-  // ── Typed input helper ───────────────────────────────────────────────────
-
-  const inputStyle = useCallback((hasError?: boolean) => [
-    s.input,
-    { color: c.text, backgroundColor: c.inputBg, borderColor: hasError ? c.error : c.border },
-  ], [c, theme.isDark]);
-
-  // ── Submit ───────────────────────────────────────────────────────────────
-
-  const doSubmit = useCallback((isDraft: boolean): SubmitHandler<FormValues> => async (values) => {
-    const payload = fromFormValues({ ...values, status: isDraft ? 'draft' : 'active' });
-    await onSubmit(payload, isDraft);
-  }, [onSubmit]);
-
-  const onPublish = handleSubmit(doSubmit(false), (errs) => {
-    const first = Object.values(errs)[0];
-    const msg   = (first as any)?.message ?? 'Please fix the errors and try again';
-    Alert.alert('Validation Error', msg);
-  });
-
-  const onSaveDraft = handleSubmit(doSubmit(true));
-
-  // ─────────────────────────────────────────────────────────────────────────
+  const rows: Array<{ icon: string; label: string; value: string }> = [
+    { icon: 'briefcase-outline', label: 'Category', value: cat },
+    { icon: 'time-outline', label: 'Type', value: type },
+    { icon: 'trending-up-outline', label: 'Experience', value: exp },
+    { icon: 'location-outline', label: 'Location', value: `${vals.city ? vals.city + ', ' : ''}${region}` },
+    { icon: 'calendar-outline', label: 'Deadline', value: vals.applicationDeadline },
+    { icon: 'people-outline', label: 'Positions', value: String(vals.candidatesNeeded ?? 1) },
+    { icon: 'cash-outline', label: 'Salary', value: salMode },
+  ];
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: c.background }}
-      contentContainerStyle={s.container}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
-      {/* ── Header ── */}
-      <View style={s.pageHeader}>
-        <Text style={[s.pageTitle, { color: c.text }]}>
-          {isEdit ? 'Edit Job Posting' : 'Post a New Job'}
-        </Text>
-        <Text style={[s.pageSubtitle, { color: c.textMuted }]}>
-          {isEdit ? 'Update the details below' : 'Fill in the details to attract the right candidates'}
-        </Text>
+    <View>
+      <SectionHeader icon="eye-outline" title="Preview" />
+
+      <View style={[f2.previewCard, { backgroundColor: c.surface, borderColor: c.border }]}>
+        <Text style={[f2.previewTitle, { color: c.text }]}>{vals.title || 'No title'}</Text>
+        {vals.urgent && (
+          <View style={[f2.badge, { backgroundColor: '#FEE2E2' }]}>
+            <Text style={{ color: '#DC2626', fontSize: 11, fontWeight: '700' }}>🔥 URGENT</Text>
+          </View>
+        )}
+        {vals.featured && (
+          <View style={[f2.badge, { backgroundColor: '#FEF3C7', marginLeft: 6 }]}>
+            <Text style={{ color: '#D97706', fontSize: 11, fontWeight: '700' }}>⭐ FEATURED</Text>
+          </View>
+        )}
       </View>
 
-      {/* ── Basic Info ── */}
-      <Section title="Basic Information" icon="briefcase-outline" colors={c}>
-        {/* Title */}
-        <View style={s.field}>
-          <FieldLabel label="Job Title" required colors={c} />
-          <Controller control={control} name="title" render={({ field: f }) => (
-            <TextInput style={inputStyle(!!errors.title)} value={f.value} onChangeText={f.onChange}
-              placeholder="e.g. Senior Software Engineer" placeholderTextColor={c.placeholder} maxLength={100} />
-          )} />
-          <FieldError msg={errors.title?.message} colors={c} />
+      {rows.map(r => (
+        <View key={r.label} style={[f2.previewRow, { borderBottomColor: c.border }]}>
+          <Ionicons name={r.icon as any} size={16} color={c.textMuted} />
+          <Text style={[f2.previewRowLabel, { color: c.textMuted }]}>{r.label}</Text>
+          <Text style={[f2.previewRowValue, { color: c.text }]} numberOfLines={1}>{r.value || '—'}</Text>
         </View>
+      ))}
 
-        {/* Job Number */}
-        <View style={s.field}>
-          <FieldLabel label="Job Reference Number" colors={c} />
-          <Controller control={control} name="jobNumber" render={({ field: f }) => (
-            <TextInput style={inputStyle()} value={f.value} onChangeText={f.onChange}
-              placeholder="e.g. HR-2024-001" placeholderTextColor={c.placeholder} />
-          )} />
+      {vals.shortDescription ? (
+        <View style={[f2.previewDesc, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <Text style={[f2.previewDescLabel, { color: c.textMuted }]}>Overview</Text>
+          <Text style={[f2.previewDescText, { color: c.text }]}>{vals.shortDescription}</Text>
         </View>
+      ) : null}
+    </View>
+  );
+};
 
-        {/* Category */}
-        <View style={s.field}>
-          <FieldLabel label="Category" required colors={c} />
-          <Controller control={control} name="category" render={({ field: f }) => {
-            const label = TOP_CATEGORIES.find(x => x.value === f.value)?.label ?? f.value;
-            return (
-              <TouchableOpacity style={inputStyle(!!errors.category)} onPress={() => setPicker('category')} activeOpacity={0.7}>
-                <View style={s.pickerRow}>
-                  <Text style={{ color: f.value ? c.text : c.placeholder, fontSize: 15 }}>{f.value ? label : 'Select category'}</Text>
-                  <Ionicons name="chevron-down" size={16} color={c.textMuted} />
-                </View>
-              </TouchableOpacity>
-            );
-          }} />
-          <FieldError msg={errors.category?.message} colors={c} />
-          <PickerModal visible={picker === 'category'} title="Job Category"
-            items={TOP_CATEGORIES} value={watch('category') as any}
-            onChange={v => setValue('category', v)} onClose={() => setPicker(null)} colors={c} isDark={theme.isDark} />
-        </View>
-
-        {/* Employment Type */}
-        <View style={s.field}>
-          <FieldLabel label="Employment Type" required colors={c} />
-          <Controller control={control} name="type" render={({ field: f }) => {
-            const label = JOB_TYPES.find(x => x.value === f.value)?.label ?? f.value;
-            return (
-              <TouchableOpacity style={inputStyle(!!errors.type)} onPress={() => setPicker('type')} activeOpacity={0.7}>
-                <View style={s.pickerRow}>
-                  <Text style={{ color: c.text, fontSize: 15 }}>{label}</Text>
-                  <Ionicons name="chevron-down" size={16} color={c.textMuted} />
-                </View>
-              </TouchableOpacity>
-            );
-          }} />
-          <PickerModal visible={picker === 'type'} title="Employment Type"
-            items={JOB_TYPES} value={watch('type')}
-            onChange={v => setValue('type', v)} onClose={() => setPicker(null)} colors={c} isDark={theme.isDark} />
-        </View>
-
-        {/* Short description */}
-        <View style={s.field}>
-          <FieldLabel label="Short Description" colors={c} />
-          <Controller control={control} name="shortDescription" render={({ field: f }) => (
-            <TextInput style={[inputStyle(), { height: 70 }]} value={f.value} onChangeText={f.onChange}
-              placeholder="One-line summary for search results (max 200)" placeholderTextColor={c.placeholder}
-              multiline maxLength={200} textAlignVertical="top" />
-          )} />
-        </View>
-      </Section>
-
-      {/* ── Full Description ── */}
-      <Section title="Full Job Description" icon="document-text-outline" colors={c}>
-        <Controller control={control} name="description" render={({ field: f }) => (
-          <TextInput
-            style={[inputStyle(!!errors.description), s.descInput]}
-            value={f.value} onChangeText={f.onChange}
-            placeholder="Describe the role, responsibilities, and what makes this job unique…"
-            placeholderTextColor={c.placeholder}
-            multiline textAlignVertical="top"
-          />
-        )} />
-        <View style={s.charCount}>
-          <Text style={{ color: c.textMuted, fontSize: 11 }}>{watch('description')?.length ?? 0}/5000</Text>
-        </View>
-        <FieldError msg={errors.description?.message} colors={c} />
-      </Section>
-
-      {/* ── Location ── */}
-      <Section title="Location" icon="location-outline" colors={c}>
-        <View style={s.field}>
-          <FieldLabel label="Region" required colors={c} />
-          <Controller control={control} name="region" render={({ field: f }) => {
-            const label = ETHIOPIAN_REGIONS.find(x => x.value === f.value)?.label ?? 'Select region';
-            return (
-              <TouchableOpacity style={inputStyle(!!errors.region)} onPress={() => setPicker('region')} activeOpacity={0.7}>
-                <View style={s.pickerRow}>
-                  <Text style={{ color: f.value ? c.text : c.placeholder, fontSize: 15 }}>{label}</Text>
-                  <Ionicons name="chevron-down" size={16} color={c.textMuted} />
-                </View>
-              </TouchableOpacity>
-            );
-          }} />
-          <FieldError msg={errors.region?.message} colors={c} />
-          <PickerModal visible={picker === 'region'} title="Region"
-            items={ETHIOPIAN_REGIONS} value={watch('region') as any}
-            onChange={v => setValue('region', v)} onClose={() => setPicker(null)} colors={c} isDark={theme.isDark} />
-        </View>
-
-        <View style={s.field}>
-          <FieldLabel label="City" colors={c} />
-          <Controller control={control} name="city" render={({ field: f }) => (
-            <TextInput style={inputStyle()} value={f.value} onChangeText={f.onChange}
-              placeholder="e.g. Addis Ababa" placeholderTextColor={c.placeholder} />
-          )} />
-        </View>
-
-        <View style={s.field}>
-          <FieldLabel label="Work Arrangement" required colors={c} />
-          <Controller control={control} name="remote" render={({ field: f }) => {
-            const opts = [{ value: 'on-site', label: 'On-Site' }, { value: 'hybrid', label: 'Hybrid' }, { value: 'remote', label: 'Remote' }];
-            return (
-              <View style={s.segmented}>
-                {opts.map(opt => {
-                  const active = f.value === opt.value;
-                  return (
-                    <TouchableOpacity
-                      key={opt.value}
-                      style={[s.segment, { backgroundColor: active ? c.primary : c.inputBg, borderColor: active ? c.primary : c.border }]}>
-                      <Text style={[s.segmentText, { color: active ? '#fff' : c.textSecondary }]}>{opt.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            );
-          }} />
-        </View>
-      </Section>
-
-      {/* ── Requirements ── */}
-      <Section title="Position Requirements" icon="checkmark-circle-outline" colors={c}>
-        <DynamicArray label="Requirements"    name="requirements"    control={control} colors={c} />
-        <DynamicArray label="Responsibilities" name="responsibilities" control={control} colors={c} />
-        <DynamicArray label="Skills"          name="skills"          control={control} colors={c} />
-        <DynamicArray label="Benefits"        name="benefits"        control={control} colors={c} />
-      </Section>
-
-      {/* ── Candidate Profile ── */}
-      <Section title="Candidate Profile" icon="people-outline" colors={c}>
-        <View style={s.row2}>
-          <View style={{ flex: 1 }}>
-            <FieldLabel label="Experience Level" required colors={c} />
-            <Controller control={control} name="experienceLevel" render={({ field: f }) => {
-              const label = EXPERIENCE_LEVELS.find(x => x.value === f.value)?.label ?? f.value;
-              return (
-                <TouchableOpacity style={inputStyle(!!errors.experienceLevel)} onPress={() => setPicker('experienceLevel')} activeOpacity={0.7}>
-                  <View style={s.pickerRow}>
-                    <Text style={{ color: c.text, fontSize: 14 }} numberOfLines={1}>{label}</Text>
-                    <Ionicons name="chevron-down" size={14} color={c.textMuted} />
-                  </View>
-                </TouchableOpacity>
-              );
-            }} />
-            <PickerModal visible={picker === 'experienceLevel'} title="Experience Level"
-              items={EXPERIENCE_LEVELS} value={watch('experienceLevel')}
-              onChange={v => setValue('experienceLevel', v)} onClose={() => setPicker(null)} colors={c} isDark={theme.isDark} />
-          </View>
-
-          <View style={{ flex: 1 }}>
-            <FieldLabel label="Education" colors={c} />
-            <Controller control={control} name="educationLevel" render={({ field: f }) => {
-              const label = EDUCATION_LEVELS.find(x => x.value === f.value)?.label ?? 'Any';
-              return (
-                <TouchableOpacity style={inputStyle()} onPress={() => setPicker('educationLevel')} activeOpacity={0.7}>
-                  <View style={s.pickerRow}>
-                    <Text style={{ color: c.text, fontSize: 14 }} numberOfLines={1}>{label}</Text>
-                    <Ionicons name="chevron-down" size={14} color={c.textMuted} />
-                  </View>
-                </TouchableOpacity>
-              );
-            }} />
-            <PickerModal visible={picker === 'educationLevel'} title="Education Level"
-              items={EDUCATION_LEVELS} value={watch('educationLevel') as any}
-              onChange={v => setValue('educationLevel', v)} onClose={() => setPicker(null)} colors={c} isDark={theme.isDark} />
-          </View>
-        </View>
-
-        <View style={s.field}>
-          <FieldLabel label="Candidates Needed" required colors={c} />
-          <Controller control={control} name="candidatesNeeded" render={({ field: f }) => (
-            <View style={s.counterRow}>
-              <TouchableOpacity
-                style={[s.counterBtn, { borderColor: c.border, backgroundColor: c.inputBg }]}>
-                <Ionicons name="remove" size={18} color={c.text} />
-              </TouchableOpacity>
-              <Text style={[s.counterVal, { color: c.text }]}>{f.value ?? 1}</Text>
-              <TouchableOpacity
-                style={[s.counterBtn, { borderColor: c.border, backgroundColor: c.inputBg }]}>
-                <Ionicons name="add" size={18} color={c.text} />
-              </TouchableOpacity>
-            </View>
-          )} />
-          <FieldError msg={errors.candidatesNeeded?.message} colors={c} />
-        </View>
-      </Section>
-
-      {/* ── Salary ── */}
-      <Section title="Compensation" icon="cash-outline" colors={c}>
-        <View style={s.field}>
-          <FieldLabel label="Salary Display Mode" required colors={c} />
-          <Controller control={control} name="salaryMode" render={({ field: f }) => (
-            <View style={s.salaryModeGrid}>
-              {SALARY_MODES.map(mode => {
-                const active = f.value === mode.value;
-                return (
-                  <TouchableOpacity
-                    key={mode.value}
-                    style={[s.salaryModeBtn, {
-                      backgroundColor: active ? c.primaryLight : c.inputBg,
-                      borderColor: active ? c.primary : c.border,
-                      borderWidth: active ? 2 : 1,
-                    }]}>
-                    <Text style={[s.salaryModeTxt, { color: active ? c.primary : c.textSecondary, fontWeight: active ? '700' : '500' }]}>{mode.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )} />
-        </View>
-
-        {showSalary && (
-          <>
-            <View style={s.row2}>
-              <View style={{ flex: 1 }}>
-                <FieldLabel label="Min Salary" colors={c} />
-                <Controller control={control} name="salaryMin" render={({ field: f }) => (
-                  <TextInput style={inputStyle()} value={f.value?.toString() ?? ''}
-                    onChangeText={v => f.onChange(v ? Number(v) : undefined)}
-                    placeholder="0" placeholderTextColor={c.placeholder} keyboardType="numeric" />
-                )} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <FieldLabel label="Max Salary" colors={c} />
-                <Controller control={control} name="salaryMax" render={({ field: f }) => (
-                  <TextInput style={inputStyle(!!errors.salaryMax)} value={f.value?.toString() ?? ''}
-                    onChangeText={v => f.onChange(v ? Number(v) : undefined)}
-                    placeholder="0" placeholderTextColor={c.placeholder} keyboardType="numeric" />
-                )} />
-                <FieldError msg={errors.salaryMax?.message} colors={c} />
-              </View>
-            </View>
-
-            <View style={s.row2}>
-              <View style={{ flex: 1 }}>
-                <FieldLabel label="Currency *" colors={c} />
-                <Controller control={control} name="salaryCurrency" render={({ field: f }) => (
-                  <View style={s.segmented}>
-                    {['ETB','USD','EUR'].map(cur => {
-                      const active = f.value === cur;
-                      return (
-                        <TouchableOpacity key={cur}
-                          style={[s.segment, { backgroundColor: active ? c.primary : c.inputBg, borderColor: active ? c.primary : c.border }]}>
-                          <Text style={[s.segmentText, { color: active ? '#fff' : c.textSecondary }]}>{cur}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                )} />
-                <FieldError msg={errors.salaryCurrency?.message} colors={c} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <FieldLabel label="Period" colors={c} />
-                <Controller control={control} name="salaryPeriod" render={({ field: f }) => (
-                  <View style={s.segmented}>
-                    {[{v:'monthly',l:'Monthly'},{v:'yearly',l:'Yearly'}].map(p => {
-                      const active = f.value === p.v;
-                      return (
-                        <TouchableOpacity key={p.v}
-                          style={[s.segment, { backgroundColor: active ? c.primary : c.inputBg, borderColor: active ? c.primary : c.border }]}>
-                          <Text style={[s.segmentText, { color: active ? '#fff' : c.textSecondary }]}>{p.l}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                )} />
-              </View>
-            </View>
-          </>
-        )}
-      </Section>
-
-      {/* ── Settings ── */}
-      <Section title="Posting Settings" icon="settings-outline" colors={c}>
-        <View style={s.field}>
-          <FieldLabel label="Application Deadline" required colors={c} />
-          <Controller control={control} name="applicationDeadline" render={({ field: f }) => (
-            <TextInput style={inputStyle(!!errors.applicationDeadline)} value={f.value} onChangeText={f.onChange}
-              placeholder="YYYY-MM-DD" placeholderTextColor={c.placeholder} keyboardType="numbers-and-punctuation" />
-          )} />
-          <FieldError msg={errors.applicationDeadline?.message} colors={c} />
-          <Text style={[s.hint, { color: c.textMuted }]}>Format: YYYY-MM-DD (e.g. 2025-03-15)</Text>
-        </View>
-
-        {/* Toggles */}
-        {([
-          { name: 'isApplyEnabled' as const, label: 'Accept Applications',  sub: 'Candidates can submit applications' },
-          { name: 'featured'       as const, label: 'Featured Listing',     sub: 'Highlighted in search results' },
-          { name: 'urgent'         as const, label: 'Urgent Hiring',        sub: 'Marked as urgent position' },
-        ]).map((row, i) => (
-          <Controller key={row.name} control={control} name={row.name} render={({ field: f }) => (
-            <View style={[s.toggle, { borderTopColor: c.border, borderTopWidth: i === 0 ? 0 : StyleSheet.hairlineWidth }]}>
-              <View style={{ flex: 1 }}>
-                <Text style={[s.toggleLabel, { color: c.text }]}>{row.label}</Text>
-                <Text style={[s.toggleSub, { color: c.textMuted }]}>{row.sub}</Text>
-              </View>
-              <Switch
-                value={!!f.value}
-                onValueChange={f.onChange}
-                trackColor={{ false: c.border, true: c.primary }}
-                thumbColor="#fff"
-                ios_backgroundColor={c.border}
-              />
-            </View>
-          )} />
-        ))}
-      </Section>
-
-      {/* ── Action Buttons ── */}
-      <View style={s.actions}>
-        {onCancel && (
-          <TouchableOpacity style={[s.cancelBtn, { borderColor: c.border }]} onPress={onCancel} activeOpacity={0.7}>
-            <Text style={[s.cancelText, { color: c.textSecondary }]}>Cancel</Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={[s.draftBtn, { borderColor: c.primary }]}>
-          <Ionicons name="save-outline" size={18} color={c.primary} />
-          <Text style={[s.draftText, { color: c.primary }]}>Save Draft</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[s.publishBtn, { backgroundColor: c.primary, opacity: isLoading ? 0.6 : 1 }]}>
-          <Ionicons name="send" size={18} color="#fff" />
-          <Text style={s.publishText}>{isEdit ? 'Update Job' : 'Publish Job'}</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+// ─── Section Header ───────────────────────────────────────────────────────────
+const SectionHeader = ({ icon, title }: { icon: string; title: string }) => {
+  const { theme } = useThemeStore();
+  const c = theme.colors;
+  return (
+    <View style={[f2.secHeader, { borderBottomColor: c.border }]}>
+      <Ionicons name={icon as any} size={20} color={c.primary} />
+      <Text style={[f2.secTitle, { color: c.text }]}>{title}</Text>
+    </View>
   );
 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
+const f = StyleSheet.create({
+  root:           { flex: 1 },
+  stepBar:        { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  stepItem:       { flex: 1, alignItems: 'center', gap: 4 },
+  stepDot:        { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  stepNum:        { fontSize: 11, fontWeight: '700' },
+  stepLabel:      { fontSize: 10, fontWeight: '600', textAlign: 'center' },
+  scroll:         { padding: 16, paddingBottom: 40 },
+  footer:         { flexDirection: 'row', padding: 16, borderTopWidth: 1, gap: 10 },
+  footerBtn:      { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
+  outlineBtn:     { borderWidth: 1.5 },
+  primaryBtn:     {},
+  footerBtnText:  { fontSize: 15, fontWeight: '600' },
+  primaryBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  lastBtns:       { flex: 1, flexDirection: 'row' },
+});
 
-const s = StyleSheet.create({
-  container:      { padding: 16, paddingBottom: 48 },
-  pageHeader:     { marginBottom: 20 },
-  pageTitle:      { fontSize: 24, fontWeight: '800', marginBottom: 4 },
-  pageSubtitle:   { fontSize: 14, lineHeight: 20 },
-  field:          { marginBottom: 16 },
-  input: {
-    borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
-    fontSize: 15, minHeight: 48,
-  },
-  descInput:      { minHeight: 180, textAlignVertical: 'top', paddingTop: 12 },
-  charCount:      { alignItems: 'flex-end', marginTop: 4 },
-  pickerRow:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  row2:           { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  segmented:      { flexDirection: 'row', gap: 8 },
-  segment:        { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 11, borderRadius: 10, borderWidth: 1 },
-  segmentText:    { fontSize: 13, fontWeight: '600' },
-  counterRow:     { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  counterBtn:     { width: 44, height: 44, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  counterVal:     { fontSize: 22, fontWeight: '700', minWidth: 48, textAlign: 'center' },
-  salaryModeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  salaryModeBtn:  { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, minWidth: 120 },
-  salaryModeTxt:  { fontSize: 13, textAlign: 'center' },
-  toggle:         { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
-  toggleLabel:    { fontSize: 14, fontWeight: '600' },
-  toggleSub:      { fontSize: 12, marginTop: 2 },
-  hint:           { fontSize: 11, marginTop: 4 },
-  actions:        { flexDirection: 'row', gap: 10, marginTop: 8 },
-  cancelBtn:      { paddingHorizontal: 20, paddingVertical: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  cancelText:     { fontSize: 15, fontWeight: '600' },
-  draftBtn:       { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 14, borderWidth: 2, gap: 6 },
-  draftText:      { fontSize: 15, fontWeight: '700' },
-  publishBtn:     { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 14, gap: 6 },
-  publishText:    { color: '#fff', fontSize: 15, fontWeight: '700' },
+const f2 = StyleSheet.create({
+  flagRow:        { borderRadius: 14, borderWidth: 1, overflow: 'hidden', marginBottom: 16 },
+  flagItem:       { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 14, gap: 10 },
+  flagLabel:      { flex: 1, fontSize: 14, fontWeight: '500' },
+  salaryRow:      { flexDirection: 'row', gap: 10 },
+  salaryHalf:     { flex: 1 },
+  salaryNote:     { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14, borderRadius: 12, borderWidth: 1, marginBottom: 16 },
+  salaryNoteText: { flex: 1, fontSize: 13, lineHeight: 18 },
+  secHeader:      { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 20, paddingBottom: 12, borderBottomWidth: 1 },
+  secTitle:       { fontSize: 17, fontWeight: '700' },
+  previewCard:    { padding: 16, borderRadius: 14, borderWidth: 1, marginBottom: 16, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
+  previewTitle:   { fontSize: 18, fontWeight: '700', flex: 1 },
+  badge:          { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  previewRow:     { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, gap: 10 },
+  previewRowLabel:{ fontSize: 13, width: 90 },
+  previewRowValue:{ flex: 1, fontSize: 13, fontWeight: '500', textAlign: 'right' },
+  previewDesc:    { marginTop: 12, padding: 14, borderRadius: 14, borderWidth: 1 },
+  previewDescLabel:{ fontSize: 11, fontWeight: '600', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+  previewDescText:{ fontSize: 14, lineHeight: 20 },
 });

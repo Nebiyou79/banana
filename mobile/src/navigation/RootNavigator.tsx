@@ -3,10 +3,10 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
 import { authLogoutEvent } from '../lib/api';
 import { AuthNavigator } from './AuthNavigator';
-import { CandidateNavigator } from './CandidateNavigator';
-import { FreelancerNavigator } from './FreelancerNavigator';
-import { CompanyNavigator } from './CompanyNavigator';
-import { OrganizationNavigator } from './OrganizationNavigator';
+import CandidateNavigator from './CandidateNavigator';
+import FreelancerNavigator  from './FreelancerNavigator';
+import  CompanyNavigator  from './CompanyNavigator';
+import  OrganizationNavigator from './OrganizationNavigator';
 import PlaceholderScreen from '../screens/auth/PlaceholderScreen';
 
 export type RootStackParamList = {

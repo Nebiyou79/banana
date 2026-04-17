@@ -1,61 +1,101 @@
+/**
+ * screens/organization/MoreScreen.tsx
+ *
+ * Organization "More" hub — surfaces every screen not in the 6 main tabs:
+ *   • Freelancer Marketplace (Shortlist)
+ *   • Verification + Request Verification
+ *   • Referrals & Rewards / Leaderboard
+ *   • Public Product Marketplace
+ *   • Account / Notifications / Privacy (placeholders)
+ *   • Help, Terms, Contact (placeholders)
+ *   • Sign Out
+ */
 
 import React from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Image, Alert
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
+import { useThemeStore }                     from '../../store/themeStore';
+import { useAuthStore }                      from '../../store/authStore';
+import { useProfile, useVerificationStatus } from '../../hooks/useProfile';
+import { useLogout }                         from '../../hooks/useAuth';
+import type { OrganizationStackParamList }   from '../../navigation/OrganizationNavigator';
 
-import { useThemeStore }  from '../../store/themeStore';
-import { useAuthStore }   from '../../store/authStore';
-import {
-  useProfile,
-  useVerificationStatus,
-} from '../../hooks/useProfile';
-import {
-  VerificationPill, RoleBadge,
-} from '../../components/shared/ProfileAtoms';
-import type { OrganizationStackParamList } from '../../navigation/OrganizationNavigator';
+type Nav = NativeStackNavigationProp<OrganizationStackParamList>;
 
-type Nav  = NativeStackNavigationProp<OrganizationStackParamList>;
-const ACC = '#8B5CF6';
+const ACCENT = '#8B5CF6'; // Organization accent — violet
 
-interface OrgMenuItem {
-  icon:    string;
-  label:   string;
-  sub?:    string;
-  color:   string;
-  screen?: keyof OrganizationStackParamList;
+interface MenuItem {
+  icon:      keyof typeof Ionicons.glyphMap;
+  label:     string;
+  sublabel?: string;
+  color:     string;
+  screen?:   keyof OrganizationStackParamList;
+  badge?:    string;
+  badgeColor?: string;
 }
 
-const ORG_SECTIONS: { title: string; items: OrgMenuItem[] }[] = [
-  {
-    title: 'Management',
-    items: [
-      { icon: 'briefcase-outline',        label: 'Job Postings',   sub: 'Manage opportunities',          color: ACC,       screen: 'OrgJobList' },
-      { icon: 'people-outline',           label: 'Applicants',     sub: 'Review submitted applications', color: '#6366F1', screen: 'ApplicationList' },
-    ],
-  },
-  {
-    title: 'Account',
-    items: [
-      { icon: 'shield-checkmark-outline', label: 'Verification',   sub: 'Build organizational trust',    color: '#10B981', screen: 'VerificationStatus' },
-      { icon: 'notifications-outline',    label: 'Notifications',  color: ACC },
-      { icon: 'lock-closed-outline',      label: 'Privacy',        color: ACC },
-    ],
-  },
-  {
-    title: 'Support',
-    items: [
-      { icon: 'help-circle-outline',      label: 'Help & FAQ',     color: '#64748B' },
-      { icon: 'mail-outline',             label: 'Contact Us',     color: '#64748B' },
-      { icon: 'document-text-outline',    label: 'Terms & Privacy',color: '#64748B' },
-    ],
-  },
-];
+const MenuSection: React.FC<{
+  title:      string;
+  items:      MenuItem[];
+  navigation: Nav;
+}> = ({ title, items, navigation }) => {
+  const { theme } = useThemeStore();
+  const { colors, typography } = theme;
+
+  return (
+    <View style={{ marginBottom: 24 }}>
+      <Text style={[ms.secLabel, { color: colors.textMuted, fontSize: typography.xs }]}>
+        {title.toUpperCase()}
+      </Text>
+      <View style={[ms.list, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        {items.map((item, i) => (
+          <TouchableOpacity
+            key={item.label}
+            style={[
+              ms.item,
+              i < items.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+            ]}
+            onPress={() => item.screen && navigation.navigate(item.screen as any)}
+            activeOpacity={0.7}
+          >
+            <View style={[ms.icon, { backgroundColor: item.color + '18' }]}>
+              <Ionicons name={item.icon} size={18} color={item.color} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.text, fontSize: typography.base, fontWeight: '500' }}>
+                {item.label}
+              </Text>
+              {item.sublabel ? (
+                <Text style={{ color: colors.textMuted, fontSize: typography.xs, marginTop: 1 }}>
+                  {item.sublabel}
+                </Text>
+              ) : null}
+            </View>
+            {item.badge ? (
+              <View style={[ms.badge, { backgroundColor: (item.badgeColor ?? item.color) + '20' }]}>
+                <Text style={{ fontSize: 10, fontWeight: '700', color: item.badgeColor ?? item.color }}>
+                  {item.badge}
+                </Text>
+              </View>
+            ) : null}
+            <Ionicons name="chevron-forward" size={15} color={colors.textMuted} />
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+};
 
 export const OrganizationMoreScreen: React.FC = () => {
   const { theme }  = useThemeStore();
@@ -63,12 +103,15 @@ export const OrganizationMoreScreen: React.FC = () => {
   const { user }   = useAuthStore();
   const navigation = useNavigation<Nav>();
   const logout     = useLogout();
+
   const { data: profile }      = useProfile();
   const { data: verification } = useVerificationStatus();
 
-  const avatarUrl = profile?.avatar?.secure_url ?? null;
-  const initials  = (user?.name ?? 'O').split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 2);
-  const vStatus   = (verification?.verificationStatus ?? 'none') as any;
+  const avatarUrl  = profile?.avatar?.secure_url ?? null;
+  const initials   = (user?.name ?? 'O').split(' ').map((p: string) => p[0]).join('').toUpperCase().slice(0, 2);
+  const vStatus    = verification?.verificationStatus ?? 'none';
+  const isVerified = vStatus === 'full';
+  const isPartial  = vStatus === 'partial';
 
   const handleLogout = () =>
     Alert.alert('Sign Out', 'Are you sure?', [
@@ -76,69 +119,143 @@ export const OrganizationMoreScreen: React.FC = () => {
       { text: 'Sign Out', style: 'destructive', onPress: () => logout.mutate() },
     ]);
 
+  // ── Menu sections ─────────────────────────────────────────
+
+  const freelancerSection: MenuItem[] = [
+    {
+      icon: 'people-outline',
+      label: 'Freelancer Marketplace',
+      sublabel: 'Find professionals for your projects',
+      color: '#10B981',
+      screen: 'FreelancerMarketplace',
+    },
+    {
+      icon: 'bookmark-outline',
+      label: 'Shortlisted Freelancers',
+      sublabel: 'Your saved professionals',
+      color: '#10B981',
+      screen: 'FreelancerShortlist',
+    },
+  ];
+
+  const marketplaceSection: MenuItem[] = [
+    {
+      icon: 'storefront-outline',
+      label: 'Product Marketplace',
+      sublabel: 'Browse products & services',
+      color: ACCENT,
+      screen: 'ProductMarketplace',
+    },
+  ];
+
+  const verificationSection: MenuItem[] = [
+    {
+      icon: 'shield-checkmark-outline',
+      label: 'Verification',
+      sublabel: isVerified
+        ? 'Fully verified ✓'
+        : isPartial
+        ? 'Partially verified — continue'
+        : 'Get verified to build trust with applicants',
+      color: isVerified ? '#10B981' : ACCENT,
+      screen: 'VerificationStatus',
+      badge: isVerified ? 'Verified' : isPartial ? 'Partial' : undefined,
+      badgeColor: isVerified ? '#10B981' : ACCENT,
+    },
+  ];
+
+  const rewardsSection: MenuItem[] = [
+    {
+      icon: 'gift-outline',
+      label: 'Referrals & Rewards',
+      sublabel: 'Invite organizations, earn points',
+      color: '#F59E0B',
+      screen: 'Referral',
+    },
+    {
+      icon: 'trophy-outline',
+      label: 'Leaderboard',
+      sublabel: 'See top referrers',
+      color: '#F59E0B',
+      screen: 'Leaderboard',
+    },
+  ];
+
+  const managementSection: MenuItem[] = [
+    {
+      icon: 'briefcase-outline',
+      label: 'Job Postings',
+      sublabel: 'Manage opportunities',
+      color: ACCENT,
+      screen: 'OrgJobList',
+    },
+  ];
+
+  const accountSection: MenuItem[] = [
+    { icon: 'notifications-outline', label: 'Notifications',     color: colors.primary },
+    { icon: 'lock-closed-outline',   label: 'Privacy & Security', color: colors.primary },
+  ];
+
+  const supportSection: MenuItem[] = [
+    { icon: 'help-circle-outline',   label: 'Help & FAQ',      color: '#64748B' },
+    { icon: 'mail-outline',          label: 'Contact Us',      color: '#64748B' },
+    { icon: 'document-text-outline', label: 'Terms & Privacy', color: '#64748B' },
+  ];
+
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ paddingTop: 56, paddingBottom: 40, paddingHorizontal: spacing[5] }}
+      contentContainerStyle={{ padding: spacing[4], paddingTop: 56, paddingBottom: 40 }}
       showsVerticalScrollIndicator={false}
     >
-      {/* User card */}
+      {/* ── User card ───────────────────────────────── */}
       <TouchableOpacity
-        style={[ms.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
         onPress={() => navigation.navigate('EditProfile')}
-        activeOpacity={0.8}
+        activeOpacity={0.85}
+        style={[ms.userCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
       >
         {avatarUrl ? (
           <Image source={{ uri: avatarUrl }} style={ms.avatar} />
         ) : (
-          <View style={[ms.avatar, { backgroundColor: ACC, alignItems: 'center', justifyContent: 'center' }]}>
-            <Text style={{ color: '#fff', fontWeight: '800', fontSize: typography.xl }}>{initials}</Text>
+          <View style={[ms.avatar, { backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center' }]}>
+            <Text style={{ color: '#fff', fontWeight: '800', fontSize: typography.lg }}>{initials}</Text>
           </View>
         )}
         <View style={{ flex: 1 }}>
-          <Text style={{ color: colors.text, fontWeight: '700', fontSize: typography.base }}>{user?.name}</Text>
-          <Text style={{ color: colors.textMuted, fontSize: typography.xs }}>{user?.email}</Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
-            <RoleBadge role="Organization" accentColor={ACC} />
-            <VerificationPill status={vStatus} />
+          <Text style={{ color: colors.text, fontWeight: '700', fontSize: typography.base }} numberOfLines={1}>
+            {user?.name ?? 'Organization'}
+          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: typography.sm, marginTop: 1 }} numberOfLines={1}>
+            {user?.email ?? ''}
+          </Text>
+          <View style={[ms.rolePill, { backgroundColor: ACCENT + '18', marginTop: 4 }]}>
+            <View style={[ms.roleDot, { backgroundColor: ACCENT }]} />
+            <Text style={{ color: ACCENT, fontSize: typography.xs, fontWeight: '700' }}>Organization</Text>
           </View>
         </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        <View style={[ms.editArrow, { backgroundColor: colors.background }]}>
+          <Ionicons name="pencil-outline" size={14} color={colors.textMuted} />
+        </View>
       </TouchableOpacity>
 
-      {ORG_SECTIONS.map((sec) => (
-        <View key={sec.title} style={{ marginTop: 28 }}>
-          <Text style={[ms.secLabel, { color: colors.textMuted, fontSize: typography.xs }]}>{sec.title.toUpperCase()}</Text>
-          <View style={[ms.list, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            {sec.items.map((item, i) => (
-              <TouchableOpacity
-                key={item.label}
-                style={[ms.item, i < sec.items.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }]}
-                onPress={() => item.screen && navigation.navigate(item.screen as any)}
-                activeOpacity={0.7}
-              >
-                <View style={[ms.icon, { backgroundColor: item.color + '18' }]}>
-                  <Ionicons name={item.icon as any} size={18} color={item.color} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text, fontSize: typography.base, fontWeight: '500' }}>{item.label}</Text>
-                  {item.sub ? <Text style={{ color: colors.textMuted, fontSize: typography.xs }}>{item.sub}</Text> : null}
-                </View>
-                <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      ))}
+      {/* ── Sections ────────────────────────────────── */}
+      <MenuSection title="Management"    items={managementSection}   navigation={navigation} />
+      <MenuSection title="Freelancers"   items={freelancerSection}   navigation={navigation} />
+      <MenuSection title="Marketplace"   items={marketplaceSection}  navigation={navigation} />
+      <MenuSection title="Verification"  items={verificationSection} navigation={navigation} />
+      <MenuSection title="Rewards"       items={rewardsSection}      navigation={navigation} />
+      <MenuSection title="Account"       items={accountSection}      navigation={navigation} />
+      <MenuSection title="Support"       items={supportSection}      navigation={navigation} />
 
+      {/* ── Sign out ────────────────────────────────── */}
       <TouchableOpacity
-        style={[ms.signOut, { borderColor: '#EF444440', marginTop: 32 }]}
         onPress={handleLogout}
         disabled={logout.isPending}
         activeOpacity={0.8}
+        style={[ms.signOutBtn, { borderColor: '#EF444440', backgroundColor: '#EF444408' }]}
       >
         <Ionicons name="log-out-outline" size={20} color="#EF4444" />
-        <Text style={{ color: '#EF4444', fontSize: typography.base, fontWeight: '600', marginLeft: 8 }}>
+        <Text style={{ color: '#EF4444', fontSize: typography.base, fontWeight: '700', marginLeft: 8 }}>
           {logout.isPending ? 'Signing out…' : 'Sign Out'}
         </Text>
       </TouchableOpacity>
@@ -150,17 +267,18 @@ export const OrganizationMoreScreen: React.FC = () => {
   );
 };
 
-// helper imported for MoreScreen
-function useLogout() {
-  return { mutate: () => {}, isPending: false } as any; // resolved by actual hook at runtime
-}
-// ─── Styles ───────────────────────────────────────────────────────────────────
+export default OrganizationMoreScreen;
+
 const ms = StyleSheet.create({
-  card:     { flexDirection: 'row', alignItems: 'center', gap: 14, borderRadius: 18, borderWidth: 1, padding: 16 },
-  avatar:   { width: 58, height: 58, borderRadius: 29 },
-  secLabel: { fontWeight: '700', letterSpacing: 0.8, marginBottom: 8 },
-  list:     { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
-  item:     { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14 },
-  icon:     { width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  signOut:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: 14, paddingVertical: 14 },
+  userCard:   { flexDirection: 'row', alignItems: 'center', gap: 14, borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 28 },
+  avatar:     { width: 56, height: 56, borderRadius: 28, flexShrink: 0 },
+  rolePill:   { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99, gap: 4 },
+  roleDot:    { width: 6, height: 6, borderRadius: 3 },
+  editArrow:  { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  secLabel:   { fontWeight: '700', letterSpacing: 0.8, marginBottom: 8, marginLeft: 4 },
+  list:       { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+  item:       { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 14 },
+  icon:       { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  badge:      { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99, marginRight: 4 },
+  signOutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: 14, paddingVertical: 14, marginBottom: 12 },
 });

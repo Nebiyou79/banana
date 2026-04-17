@@ -25,8 +25,8 @@ import {
   useFreelancerReviews,
   useFreelancerProfile,
 } from '../../hooks/useFreelancerMarketplace';
-import { ReviewCard } from '../../components/freelancers/ReviewCard';
-import { StarRating } from '../../components/freelancers/StarRating';
+import { ReviewCard } from '../../components/freelancer/ReviewCard';
+import { StarRating } from '../../components/freelancer/StarRating';
 import { FreelancerStackParamList } from '../../navigation/FreelancerNavigator';
 
 type Props = NativeStackScreenProps<FreelancerStackParamList, 'MyReviews'>;

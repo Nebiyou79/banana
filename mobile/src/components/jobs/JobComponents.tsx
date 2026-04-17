@@ -1,12 +1,26 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// CompanyJobCard.tsx
+// JobComponents.tsx
 // ─────────────────────────────────────────────────────────────────────────────
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/themeStore';
-import { Job } from '../../services/jobService';
-import { formatDeadline, getJobStatusColor } from '../../utils/jobHelpers';
+import { Job, jobService } from '../../services/jobService';
+import {
+  formatDeadline,
+  formatPostedDate,
+  formatSalary,
+  formatLocation, // ✅ FIX: imported — used everywhere job.location appears
+  getJobStatusColor,
+  getJobTypeColor,
+  getExperienceLevelLabel,
+  getCompanyInitials,
+  isDeadlineSoon,
+} from '../../utils/jobHelpers';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CompanyJobCard
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface CompanyJobCardProps {
   job: Job;
@@ -21,7 +35,7 @@ export const CompanyJobCard: React.FC<CompanyJobCardProps> = ({
   const { theme } = useThemeStore();
   const { colors, typography, borderRadius } = theme;
   const statusColor = getJobStatusColor(job.status);
-  const applicantCount = job.applicantCount ?? job.applicationCount ?? 0;
+  const applicantCount = job.applicationCount ?? job.applicationCount ?? 0;
 
   const confirmDelete = () =>
     Alert.alert(
@@ -66,6 +80,13 @@ export const CompanyJobCard: React.FC<CompanyJobCardProps> = ({
             {applicantCount} applicant{applicantCount !== 1 ? 's' : ''}
           </Text>
         </View>
+        {/* ✅ FIX: location uses formatLocation — was rendering raw object before */}
+        <View style={cjc.metaItem}>
+          <Ionicons name="location-outline" size={14} color={colors.textMuted} />
+          <Text style={[cjc.metaText, { color: colors.textMuted, fontSize: typography.sm }]}>
+            {formatLocation(job.location)}
+          </Text>
+        </View>
         {job.applicationDeadline && (
           <View style={cjc.metaItem}>
             <Ionicons name="calendar-outline" size={14} color={colors.textMuted} />
@@ -100,21 +121,21 @@ export const CompanyJobCard: React.FC<CompanyJobCardProps> = ({
 };
 
 const cjc = StyleSheet.create({
-  card:       { borderWidth: 1, borderLeftWidth: 4, padding: 14, marginBottom: 12 },
-  titleRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 },
-  title:      { fontWeight: '700', lineHeight: 22 },
-  statusBadge:{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99, alignSelf: 'flex-start' },
-  statusText: { fontWeight: '600' },
-  metaRow:    { flexDirection: 'row', gap: 16, marginBottom: 10 },
-  metaItem:   { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText:   {},
-  actionRow:  { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, gap: 8 },
-  actionBtn:  { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 4 },
-  actionText: { fontWeight: '600' },
+  card:        { borderWidth: 1, borderLeftWidth: 4, padding: 14, marginBottom: 12 },
+  titleRow:    { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 },
+  title:       { fontWeight: '700', lineHeight: 22 },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99, alignSelf: 'flex-start' },
+  statusText:  { fontWeight: '600' },
+  metaRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 10 },
+  metaItem:    { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText:    {},
+  actionRow:   { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, gap: 8 },
+  actionBtn:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 4 },
+  actionText:  { fontWeight: '600' },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// JobFilter.tsx
+// JobFilter
 // ─────────────────────────────────────────────────────────────────────────────
 import { Modal, ScrollView, Switch, TextInput } from 'react-native';
 import { JobFilters } from '../../services/jobService';
@@ -127,15 +148,15 @@ interface JobFilterProps {
   onClose: () => void;
 }
 
-const JOB_TYPES    = ['full-time', 'part-time', 'contract', 'internship', 'freelance'];
-const EXP_LEVELS   = ['entry', 'mid', 'senior', 'executive'];
-const EXP_LABELS   = ['Entry', 'Mid', 'Senior', 'Executive'];
+const JOB_TYPES  = ['full-time', 'part-time', 'contract', 'internship', 'freelance'];
+const EXP_LEVELS = ['entry', 'mid', 'senior', 'executive'];
+const EXP_LABELS = ['Entry', 'Mid', 'Senior', 'Executive'];
 
 export const JobFilter: React.FC<JobFilterProps> = ({
   visible, filters, onApply, onReset, onClose,
 }) => {
   const { theme } = useThemeStore();
-  const { colors, typography, spacing, borderRadius } = theme;
+  const { colors, typography } = theme;
   const [local, setLocal] = React.useState<JobFilters>(filters);
 
   React.useEffect(() => { setLocal(filters); }, [filters, visible]);
@@ -167,7 +188,6 @@ export const JobFilter: React.FC<JobFilterProps> = ({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={jf.overlay}>
         <View style={[jf.sheet, { backgroundColor: colors.surface }]}>
-          {/* Handle */}
           <View style={[jf.handle, { backgroundColor: colors.border }]} />
 
           <View style={jf.header}>
@@ -178,8 +198,6 @@ export const JobFilter: React.FC<JobFilterProps> = ({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
-
-            {/* Job Type */}
             <Text style={[jf.sectionLabel, { color: colors.text, fontSize: typography.sm }]}>Job Type</Text>
             <View style={jf.chipRow}>
               {JOB_TYPES.map((t) => (
@@ -192,7 +210,6 @@ export const JobFilter: React.FC<JobFilterProps> = ({
               ))}
             </View>
 
-            {/* Experience Level */}
             <Text style={[jf.sectionLabel, { color: colors.text, fontSize: typography.sm }]}>Experience Level</Text>
             <View style={jf.chipRow}>
               {EXP_LEVELS.map((e, i) => (
@@ -205,7 +222,6 @@ export const JobFilter: React.FC<JobFilterProps> = ({
               ))}
             </View>
 
-            {/* Location */}
             <Text style={[jf.sectionLabel, { color: colors.text, fontSize: typography.sm }]}>Region</Text>
             <TextInput
               style={[jf.textInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text, fontSize: typography.base }]}
@@ -218,13 +234,12 @@ export const JobFilter: React.FC<JobFilterProps> = ({
               <Text style={[{ color: colors.text, fontSize: typography.base }]}>Remote only</Text>
               <Switch
                 value={!!local.remote}
-                onValueChange={(v) => setLocal((f) => ({ ...f, remote: v || undefined }))}
+                onValueChange={(v) => setLocal((f) => ({ ...f, remote: v ? 'remote' : undefined }))}
                 trackColor={{ true: colors.primary }}
               />
             </View>
 
-            {/* Salary */}
-            <Text style={[jf.sectionLabel, { color: colors.text, fontSize: typography.sm }]}>Salary Range (USD)</Text>
+            <Text style={[jf.sectionLabel, { color: colors.text, fontSize: typography.sm }]}>Salary Range (ETB)</Text>
             <View style={jf.salaryRow}>
               <TextInput
                 style={[jf.salaryInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text, fontSize: typography.base }]}
@@ -246,7 +261,6 @@ export const JobFilter: React.FC<JobFilterProps> = ({
             </View>
           </ScrollView>
 
-          {/* Buttons */}
           <View style={[jf.footer, { borderTopColor: colors.border }]}>
             <TouchableOpacity
               style={[jf.resetBtn, { borderColor: colors.border }]}
@@ -268,43 +282,43 @@ export const JobFilter: React.FC<JobFilterProps> = ({
 };
 
 const jf = StyleSheet.create({
-  overlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  sheet:        { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, maxHeight: '90%' },
-  handle:       { width: 40, height: 4, borderRadius: 99, alignSelf: 'center', marginBottom: 12 },
-  header:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  headerTitle:  { fontWeight: '700' },
-  sectionLabel: { fontWeight: '700', marginBottom: 10, marginTop: 16 },
-  chipRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip:         { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 99 },
-  chipText:     { fontWeight: '600' },
-  textInput:    { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10 },
-  switchRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  salaryRow:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  salaryInput:  { flex: 1, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
-  footer:       { flexDirection: 'row', gap: 12, borderTopWidth: 1, paddingTop: 16, paddingBottom: 8 },
-  resetBtn:     { flex: 1, borderWidth: 1, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
-  applyBtn:     { flex: 2, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  overlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet:       { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, maxHeight: '90%' },
+  handle:      { width: 40, height: 4, borderRadius: 99, alignSelf: 'center', marginBottom: 12 },
+  header:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  headerTitle: { fontWeight: '700' },
+  sectionLabel:{ fontWeight: '700', marginBottom: 10, marginTop: 16 },
+  chipRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip:        { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 99 },
+  chipText:    { fontWeight: '600' },
+  textInput:   { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10 },
+  switchRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  salaryRow:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  salaryInput: { flex: 1, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
+  footer:      { flexDirection: 'row', gap: 12, borderTopWidth: 1, paddingTop: 16, paddingBottom: 8 },
+  resetBtn:    { flex: 1, borderWidth: 1, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  applyBtn:    { flex: 2, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// JobDetailsHeader.tsx
+// JobDetailsHeader
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface JobDetailsHeaderProps { job: Job }
 
 export const JobDetailsHeader: React.FC<JobDetailsHeaderProps> = ({ job }) => {
   const { theme } = useThemeStore();
-  const { colors, typography, spacing } = theme;
+  const { colors, typography } = theme;
 
-  const companyName = jobService.getCompanyName(job);
-  const logoUrl     = jobService.getCompanyLogo(job);
-  const initials    = getCompanyInitials(companyName);
-  const typeColor   = getJobTypeColor(job.jobType);
-  const salaryText  = formatSalary(job.salary);
-  const expLabel    = getExperienceLevelLabel(job.experienceLevel);
-  const postedText  = formatPostedDate(job.createdAt);
-  const deadlineText= formatDeadline(job.applicationDeadline);
-  const deadlineSoon= isDeadlineSoon(job.applicationDeadline);
+  const companyName  = jobService.getOwnerName(job);
+  const logoUrl      = jobService.getOwnerLogo(job);
+  const initials     = getCompanyInitials(companyName);
+  const typeColor    = getJobTypeColor(job.jobType);
+  const salaryText   = jobService.formatSalary(job);
+  const expLabel     = getExperienceLevelLabel(job.experienceLevel);
+  const postedText   = formatPostedDate(job.createdAt);
+  const deadlineText = formatDeadline(job.applicationDeadline);
+  const deadlineSoon = isDeadlineSoon(job.applicationDeadline);
 
   return (
     <View>
@@ -335,20 +349,20 @@ export const JobDetailsHeader: React.FC<JobDetailsHeaderProps> = ({ job }) => {
         {/* Title */}
         <Text style={[jdh.title, { color: colors.text, fontSize: typography['2xl'] }]}>{job.title}</Text>
 
-        {/* Location */}
+        {/* Location — ✅ FIX: formatLocation used, never raw object */}
         <View style={jdh.infoRow}>
           <Ionicons name="location-outline" size={15} color={colors.textMuted} />
           <Text style={[{ color: colors.textMuted, fontSize: typography.base, marginLeft: 4 }]}>
-            {job.location?.remote
+            {job.remote === 'remote'
               ? 'Remote 🌍'
-              : [job.location?.city, job.location?.region].filter(Boolean).join(', ') || 'Not specified'}
+              : formatLocation(job.location)}
           </Text>
         </View>
 
         {/* Badges row */}
         <View style={jdh.badgeRow}>
-          <View style={[jdh.badge, { backgroundColor: typeColor.bg }]}>
-            <Text style={[{ color: typeColor.text, fontSize: typography.xs, fontWeight: '700' }]}>
+          <View style={[jdh.badge, { backgroundColor: typeColor + '20' }]}>
+            <Text style={[{ color: typeColor, fontSize: typography.xs, fontWeight: '700' }]}>
               {job.jobType?.replace('-', ' ')?.replace(/\b\w/g, (l) => l.toUpperCase())}
             </Text>
           </View>
@@ -384,13 +398,13 @@ export const JobDetailsHeader: React.FC<JobDetailsHeaderProps> = ({ job }) => {
 };
 
 const jdh = StyleSheet.create({
-  cover:       { height: 120 },
-  companyRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  logo:        { width: 64, height: 64, borderRadius: 14 },
-  logoFallback:{ width: 64, height: 64, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  cover:        { height: 120 },
+  companyRow:   { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  logo:         { width: 64, height: 64, borderRadius: 14 },
+  logoFallback: { width: 64, height: 64, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   verifiedBadge:{ flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-  title:       { fontWeight: '800', marginBottom: 10, lineHeight: 32 },
-  infoRow:     { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  badgeRow:    { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  badge:       { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 99 },
+  title:        { fontWeight: '800', marginBottom: 10, lineHeight: 32 },
+  infoRow:      { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  badgeRow:     { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  badge:        { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 99 },
 });

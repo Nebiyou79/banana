@@ -24,6 +24,7 @@ import { useAuthStore }  from '../../store/authStore';
 import { useProfile }    from '../../hooks/useProfile';
 import { companyService } from '../../services/companyService';
 import { StatTile, SkeletonCard } from '../../components/shared/ProfileAtoms';
+import { formatLocation } from '../../utils/jobHelpers';
 import type { CompanyStackParamList } from '../../navigation/CompanyNavigator';
 
 type Nav = NativeStackNavigationProp<CompanyStackParamList>;
@@ -130,7 +131,7 @@ export const CompanyDashboardScreen: React.FC = () => {
   const renderJob = useCallback(({ item }: { item: typeof recentJobs[0] }) => (
     <JobRow
       title={item.title}
-      location={item.location ?? ''}
+      location={formatLocation(item.location)}
       jobType={item.jobType ?? ''}
       status={item.status}
       applicants={item.applicantCount ?? 0}

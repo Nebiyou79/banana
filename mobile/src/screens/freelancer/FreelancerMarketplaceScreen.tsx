@@ -19,7 +19,9 @@ import {
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { CompositeScreenProps } from '@react-navigation/native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { MaterialTopTabScreenProps } from '@react-navigation/material-top-tabs';
 import { useThemeStore } from '../../store/themeStore';
 import {
   useListFreelancers,
@@ -28,24 +30,18 @@ import {
 import {
   FreelancerCard,
   FreelancerCardSkeleton,
-} from '../../components/freelancers/FreelancerCard';
+} from '../../components/freelancer/FreelancerCard';
 import {
   FreelancerListItem,
   AvailabilityStatus,
   ExperienceLevel,
 } from '../../services/freelancerMarketplaceService';
+import type { CompanyProfileTabParamList, CompanyMoreStackParamList } from '../../navigation/types';
+import { CompanyStackParamList } from '../../navigation/CompanyNavigator';
 
-// ─── Navigation types ─────────────────────────────────────────────────────────
-
-export type FreelancersStackParamList = {
-  FreelancerMarketplace: undefined;
-  FreelancerDetail: { freelancerId: string };
-  FreelancerShortlist: undefined;
-};
-
-type Props = NativeStackScreenProps<
-  FreelancersStackParamList,
-  'FreelancerMarketplace'
+type Props = CompositeScreenProps<
+  MaterialTopTabScreenProps<CompanyProfileTabParamList, 'FreelanceMarketplace'>,
+  NativeStackScreenProps<CompanyStackParamList, 'FreelancerMarketplace'>
 >;
 
 // ─── Filter chips config ──────────────────────────────────────────────────────
@@ -76,10 +72,12 @@ export const FreelancerMarketplaceScreen: React.FC<Props> = ({ navigation }) => 
   const [experienceLevel, setExperienceLevel] = useState<ExperienceLevel | 'all'>('all');
   const [showFilters, setShowFilters] = useState(false);
 
-  const searchRef = React.useRef<ReturnType<typeof setTimeout>>();
+  const searchRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleSearch = (val: string) => {
     setSearch(val);
-    clearTimeout(searchRef.current);
+    if (searchRef.current !== null) {
+      clearTimeout(searchRef.current);
+    }
     searchRef.current = setTimeout(() => setDebouncedSearch(val), 400);
   };
 
@@ -303,7 +301,6 @@ export const FreelancerMarketplaceScreen: React.FC<Props> = ({ navigation }) => 
           data={freelancers}
           keyExtractor={(item) => item._id}
           renderItem={renderItem}
-          estimatedItemSize={200}
           numColumns={2}
           ListHeaderComponent={ListHeader}
           ListEmptyComponent={

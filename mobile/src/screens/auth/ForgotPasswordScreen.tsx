@@ -18,12 +18,13 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Ionicons } from '@expo/vector-icons';
 
-import { useTheme }       from '../../hooks/useThemes';
+// import { useTheme }       from '../../hooks/useThemes';
 import { Input }          from '../../components/ui/Input';
 import { Button }         from '../../components/ui/Button';
 import { AuthHeader }     from '../../components/auth/AuthHeader';
 import { FormError }      from '../../components/auth/FormError';
 import { useForgotPassword } from '../../hooks/useAuth';
+import useTheme from '../../hooks/useTheme';
 
 const schema = z.object({
   email: z.string().email('Enter a valid email address'),

@@ -1,26 +1,28 @@
 /**
- * mobile/src/components/applications/ApplicationCard.tsx
- *
- * Candidate-facing application row card used on the My Applications list.
- * Shows job title, company, status badge, timeline, and quick actions.
- * Mirrors the web CandidateApplicationDetails list item.
+ * src/components/application/ApplicationCard.tsx
+ * Candidate-facing application card with company logo, status, progress pipeline.
  */
-
-import React, { useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import React, { memo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/themeStore';
 import {
-  Application,
-  ApplicationStatus,
-  STATUS_LABELS,
-  STATUS_COLORS,
-  STATUS_COLORS_DARK,
-  applicationService,
+  Application, ApplicationStatus,
+  STATUS_LABELS, STATUS_COLORS, STATUS_COLORS_DARK,
+  STATUS_PIPELINE, applicationService,
 } from '../../services/applicationService';
-import { formatDate, getCompanyInitials } from '../../utils/jobHelpers';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+const formatDate = (d?: string): string => {
+  if (!d) return '';
+  const diff = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return '1 day ago';
+  if (diff < 7) return `${diff} days ago`;
+  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+const getInitials = (name?: string) =>
+  (name ?? '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 
 interface ApplicationCardProps {
   application: Application;
@@ -28,147 +30,148 @@ interface ApplicationCardProps {
   onWithdraw?: () => void;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+export const ApplicationCard = memo<ApplicationCardProps>(({ application, onPress, onWithdraw }) => {
+  const { theme } = useThemeStore();
+  const c = theme.colors;
+  const isDark = theme.isDark;
 
-export const ApplicationCard: React.FC<ApplicationCardProps> = ({
-  application, onPress, onWithdraw,
-}) => {
-  const { theme: { colors, isDark, shadows } } = useThemeStore();
-  const c = colors;
+  const SC = isDark ? STATUS_COLORS_DARK : STATUS_COLORS;
+  const sc = SC[application.status] ?? SC.applied;
 
-  const scale = useRef(new Animated.Value(1)).current;
-  const onIn  = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start();
-  const onOut = () => Animated.spring(scale, { toValue: 1,    useNativeDriver: true, speed: 50 }).start();
+  const owner = application.job?.company ?? application.job?.organization;
+  const logoUrl = owner?.logoUrl;
+  const ownerColor = application.job?.jobType === 'organization' ? '#7C3AED' : '#2563EB';
 
-  const SC     = isDark ? STATUS_COLORS_DARK : STATUS_COLORS;
-  const sc     = SC[application.status] ?? SC.applied;
-  const owner  = application.job?.company ?? application.job?.organization;
-  const canWd  = applicationService.canWithdraw(application.status);
+  const pipelineIdx = STATUS_PIPELINE.indexOf(application.status as ApplicationStatus);
+  const canWithdraw = applicationService.canWithdraw(application.status);
 
-  // Progress indicator — which steps are complete
-  const statusOrder: ApplicationStatus[] = [
-    'applied', 'under-review', 'shortlisted', 'interview-scheduled', 'offer-made',
-  ];
-  const stepIdx = statusOrder.indexOf(application.status as ApplicationStatus);
+  const confirmWithdraw = () => {
+    Alert.alert(
+      'Withdraw Application',
+      'Are you sure you want to withdraw this application? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Withdraw', style: 'destructive', onPress: onWithdraw },
+      ],
+    );
+  };
 
   return (
-    <TouchableOpacity onPress={onPress} onPressIn={onIn} onPressOut={onOut} activeOpacity={1}>
-      <Animated.View style={[s.card, { backgroundColor: c.card, borderColor: c.border, transform: [{ scale }] }, shadows.sm]}>
-
-        {/* ── Header row ── */}
-        <View style={s.header}>
-          {/* Company avatar */}
-          <View style={[s.avatar, { backgroundColor: c.primaryLight }]}>
-            <Text style={[s.avatarText, { color: c.primary }]}>
-              {getCompanyInitials(owner?.name)}
-            </Text>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.82} style={[s.card, { backgroundColor: c.card ?? c.surface, borderColor: c.border }]}>
+      {/* Header */}
+      <View style={s.header}>
+        {logoUrl ? (
+          <Image source={{ uri: logoUrl }} style={[s.logo, { borderColor: c.border }]} />
+        ) : (
+          <View style={[s.logoFallback, { backgroundColor: ownerColor }]}>
+            <Text style={s.logoInitials}>{getInitials(owner?.name)}</Text>
           </View>
+        )}
+        <View style={s.headerInfo}>
+          <Text style={[s.jobTitle, { color: c.text }]} numberOfLines={2}>{application.job?.title ?? 'Position'}</Text>
+          <View style={s.ownerRow}>
+            <Text style={[s.ownerName, { color: c.primary }]} numberOfLines={1}>{owner?.name ?? ''}</Text>
+            {owner?.verified && <Ionicons name="checkmark-circle" size={13} color={c.primary} style={{ marginLeft: 3 }} />}
+          </View>
+        </View>
+        <View style={[s.statusPill, { backgroundColor: sc.bg, borderColor: sc.border }]}>
+          <View style={[s.statusDot, { backgroundColor: sc.dot }]} />
+          <Text style={[s.statusText, { color: sc.text }]} numberOfLines={1}>
+            {STATUS_LABELS[application.status as ApplicationStatus] ?? application.status}
+          </Text>
+        </View>
+      </View>
 
-          {/* Job info */}
-          <View style={s.info}>
-            <Text style={[s.jobTitle, { color: c.text }]} numberOfLines={2}>
-              {application.job?.title ?? 'Job Position'}
-            </Text>
-            <View style={s.companyRow}>
-              <Text style={[s.company, { color: c.textSecondary }]} numberOfLines={1}>
-                {owner?.name ?? '—'}
-              </Text>
-              {application.job?.type && (
-                <>
-                  <Text style={[s.dot, { color: c.border }]}>·</Text>
-                  <Text style={[s.jobType, { color: c.textMuted }]}>{application.job.type}</Text>
-                </>
-              )}
+      {/* Progress pipeline */}
+      {pipelineIdx >= 0 && (
+        <View style={s.pipeline}>
+          {STATUS_PIPELINE.map((st, i) => {
+            const done   = i < pipelineIdx;
+            const active = i === pipelineIdx;
+            return (
+              <React.Fragment key={st}>
+                <View style={[
+                  s.pipeDot,
+                  done   && { backgroundColor: '#10B981', borderColor: '#10B981' },
+                  active && { backgroundColor: c.primary, borderColor: c.primary },
+                  !done && !active && { borderColor: c.border },
+                ]}>
+                  {done && <Ionicons name="checkmark" size={9} color="#fff" />}
+                  {active && <View style={[s.pipeActiveDot, { backgroundColor: '#fff' }]} />}
+                </View>
+                {i < STATUS_PIPELINE.length - 1 && (
+                  <View style={[s.pipeLine, { backgroundColor: done ? '#10B981' : c.border }]} />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </View>
+      )}
+
+      {/* Skills */}
+      {(application.skills ?? []).length > 0 && (
+        <View style={s.skillsRow}>
+          {application.skills.slice(0, 4).map((sk, i) => (
+            <View key={i} style={[s.skillTag, { backgroundColor: `${c.primary}10`, borderColor: `${c.primary}20` }]}>
+              <Text style={[s.skillTagText, { color: c.primary }]}>{sk}</Text>
             </View>
-          </View>
-
-          {/* Status badge */}
-          <View style={[s.statusBadge, { backgroundColor: sc.bg }]}>
-            <View style={[s.statusDot, { backgroundColor: sc.dot }]} />
-            <Text style={[s.statusText, { color: sc.text }]}>{STATUS_LABELS[application.status]}</Text>
-          </View>
+          ))}
+          {application.skills.length > 4 && (
+            <Text style={[s.skillMore, { color: c.textMuted }]}>+{application.skills.length - 4}</Text>
+          )}
         </View>
+      )}
 
-        {/* ── Progress track (for positive statuses) ── */}
-        {stepIdx >= 0 && !['rejected', 'withdrawn', 'on-hold', 'offer-rejected'].includes(application.status) && (
-          <View style={s.progressRow}>
-            {statusOrder.map((st, i) => {
-              const done = i <= stepIdx;
-              const col  = done ? c.primary : c.border;
-              return (
-                <React.Fragment key={st}>
-                  <View style={[s.progDot, { backgroundColor: col, borderColor: col }]}>
-                    {done && <Ionicons name="checkmark" size={8} color="#fff" />}
-                  </View>
-                  {i < statusOrder.length - 1 && (
-                    <View style={[s.progLine, { backgroundColor: i < stepIdx ? c.primary : c.border }]} />
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </View>
-        )}
-
-        {/* ── Company response message ── */}
-        {application.companyResponse?.message && (
-          <View style={[s.messageBox, { backgroundColor: isDark ? '#1F2937' : '#F8FAFC', borderColor: c.border }]}>
-            <Ionicons name="chatbubble-ellipses-outline" size={14} color={c.primary} />
-            <Text style={[s.messageText, { color: c.textSecondary }]} numberOfLines={2}>
-              {application.companyResponse.message}
-            </Text>
-          </View>
-        )}
-
-        {/* ── Footer ── */}
-        <View style={[s.footer, { borderTopColor: c.border }]}>
-          <View style={s.dateRow}>
-            <Ionicons name="calendar-outline" size={12} color={c.textMuted} />
-            <Text style={[s.date, { color: c.textMuted }]}>Applied {formatDate(application.createdAt)}</Text>
-          </View>
-          <View style={s.actions}>
-            {canWd && onWithdraw && (
-              <TouchableOpacity style={[s.wdBtn, { borderColor: c.error }]} onPress={onWithdraw}>
-                <Text style={[s.wdText, { color: c.error }]}>Withdraw</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={s.viewBtn} onPress={onPress}>
-              <Text style={[s.viewText, { color: c.primary }]}>View</Text>
-              <Ionicons name="chevron-forward" size={14} color={c.primary} />
-            </TouchableOpacity>
-          </View>
+      {/* Footer */}
+      <View style={[s.footer, { borderTopColor: c.border }]}>
+        <View style={s.footerLeft}>
+          <Ionicons name="calendar-outline" size={12} color={c.textMuted} />
+          <Text style={[s.footerDate, { color: c.textMuted }]}>{formatDate(application.createdAt)}</Text>
+          {(application.selectedCVs?.length ?? 0) > 0 && (
+            <>
+              <View style={[s.dot, { backgroundColor: c.border }]} />
+              <Ionicons name="document-outline" size={12} color={c.textMuted} />
+              <Text style={[s.footerDate, { color: c.textMuted }]}>{application.selectedCVs.length} CV</Text>
+            </>
+          )}
         </View>
-      </Animated.View>
+        {canWithdraw && onWithdraw && (
+          <TouchableOpacity onPress={confirmWithdraw} style={[s.withdrawBtn, { borderColor: c.error }]}>
+            <Text style={[s.withdrawText, { color: c.error }]}>Withdraw</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </TouchableOpacity>
   );
-};
+});
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+ApplicationCard.displayName = 'ApplicationCard';
 
 const s = StyleSheet.create({
-  card:        { borderRadius: 16, borderWidth: 1, padding: 16 },
-  header:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  avatar:      { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  avatarText:  { fontSize: 16, fontWeight: '700' },
-  info:        { flex: 1 },
-  jobTitle:    { fontSize: 15, fontWeight: '700', lineHeight: 20 },
-  companyRow:  { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
-  company:     { fontSize: 13 },
-  dot:         { fontSize: 12, marginHorizontal: 5 },
-  jobType:     { fontSize: 12 },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, gap: 4, alignSelf: 'flex-start' },
+  card:        { borderRadius: 16, borderWidth: 1, padding: 14, marginBottom: 10 },
+  header:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 12 },
+  logo:        { width: 48, height: 48, borderRadius: 12, borderWidth: 1, resizeMode: 'cover' },
+  logoFallback:{ width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  logoInitials:{ color: '#fff', fontWeight: '700', fontSize: 16 },
+  headerInfo:  { flex: 1 },
+  jobTitle:    { fontSize: 15, fontWeight: '700', lineHeight: 21, marginBottom: 3 },
+  ownerRow:    { flexDirection: 'row', alignItems: 'center' },
+  ownerName:   { fontSize: 13, fontWeight: '600' },
+  statusPill:  { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, borderWidth: 1, flexShrink: 1 },
   statusDot:   { width: 6, height: 6, borderRadius: 3 },
-  statusText:  { fontSize: 11, fontWeight: '600' },
-  progressRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
-  progDot:     { width: 16, height: 16, borderRadius: 8, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  progLine:    { flex: 1, height: 2 },
-  messageBox:  { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 10, borderRadius: 10, borderWidth: 1, marginTop: 10 },
-  messageText: { flex: 1, fontSize: 13, lineHeight: 18 },
-  footer:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 10, borderTopWidth: 1 },
-  dateRow:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  date:        { fontSize: 11 },
-  actions:     { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  wdBtn:       { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
-  wdText:      { fontSize: 12, fontWeight: '600' },
-  viewBtn:     { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  viewText:    { fontSize: 13, fontWeight: '600' },
+  statusText:  { fontSize: 10, fontWeight: '700' },
+  pipeline:    { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  pipeDot:     { width: 18, height: 18, borderRadius: 9, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  pipeActiveDot:{ width: 6, height: 6, borderRadius: 3 },
+  pipeLine:    { flex: 1, height: 2 },
+  skillsRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
+  skillTag:    { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
+  skillTagText:{ fontSize: 11, fontWeight: '600' },
+  skillMore:   { fontSize: 11, alignSelf: 'center' },
+  footer:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
+  footerLeft:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  footerDate:  { fontSize: 11 },
+  dot:         { width: 3, height: 3, borderRadius: 1.5, marginHorizontal: 2 },
+  withdrawBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1 },
+  withdrawText:{ fontSize: 11, fontWeight: '700' },
 });

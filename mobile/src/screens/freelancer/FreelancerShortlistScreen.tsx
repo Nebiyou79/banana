@@ -26,7 +26,7 @@ import {
 import {
   FreelancerCard,
   FreelancerCardSkeleton,
-} from '../../components/freelancers/FreelancerCard';
+} from '../../components/freelancer/FreelancerCard';
 import { FreelancerListItem } from '../../services/freelancerMarketplaceService';
 import { FreelancersStackParamList } from './FreelancerMarketplaceScreen';
 
@@ -72,7 +72,6 @@ export const FreelancerShortlistScreen: React.FC<Props> = ({ navigation }) => {
         <FlashList
           data={freelancers}
           keyExtractor={(item) => item._id}
-          estimatedItemSize={200}
           numColumns={2}
           refreshing={isRefetching}
           onRefresh={refetch}
