@@ -1,339 +1,415 @@
 /**
  * screens/candidate/ProfileScreen.tsx
- *
- * Candidate read-only / own-profile view.
- * Inline avatar+cover upload via ProfileImageUploader.
- * Sections: Skills, Experience, Education, Certifications, Social Links.
- * Profile completion bar.
+ * Read-only + inline image upload for the authenticated candidate.
  */
-
 import React, { useCallback } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Linking,
+  View, Text, ScrollView, TouchableOpacity,
+  RefreshControl, Linking, StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { useThemeStore } from '../../store/themeStore';
-import { useAuthStore }  from '../../store/authStore';
 import {
-  useProfile,
-  useCandidateRoleProfile,
-  useVerificationStatus,
+  useProfile, useCandidateProfile, useCandidateCVs,
 } from '../../hooks/useProfile';
-import { SectionBlock, VerificationPill, SkeletonCard } from '../../components/shared/ProfileAtoms';
+import { profileService } from '../../services/profileService';
 import { ProfileImageUploader } from '../../components/shared/ProfileImageUploader';
-import type { CandidateStackParamList } from '../../navigation/CandidateNavigator';
+import {
+  SkeletonCard, CompletionBar, InfoRow, BadgePill, VerifiedBadge,
+} from '../../components/shared/ProfileAtoms';
+import useTheme from '../../hooks/useThemes';
 
-type Nav = NativeStackNavigationProp<CandidateStackParamList>;
-const ACCENT = '#F59E0B';
+const ACCENT = '#3B82F6';
 
-// ─── Social icon map ──────────────────────────────────────────────────────────
-
-const SOCIAL_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  linkedin:  'logo-linkedin',
-  github:    'logo-github',
-  twitter:   'logo-twitter',
-  tiktok:    'musical-notes-outline',
-  telegram:  'paper-plane-outline',
-  instagram: 'logo-instagram',
-  facebook:  'logo-facebook',
-  website:   'globe-outline',
+const SOCIAL_ICONS: Record<string, { icon: string; color: string }> = {
+  linkedin: { icon: 'logo-linkedin', color: '#0A66C2' },
+  github: { icon: 'logo-github', color: '#181717' },
+  twitter: { icon: 'logo-twitter', color: '#1DA1F2' },
+  tiktok: { icon: 'logo-tiktok', color: '#010101' },
+  telegram: { icon: 'paper-plane-outline', color: '#26A5E4' },
+  youtube: { icon: 'logo-youtube', color: '#FF0000' },
+  facebook: { icon: 'logo-facebook', color: '#1877F2' },
+  instagram: { icon: 'logo-instagram', color: '#E1306C' },
+  discord: { icon: 'logo-discord', color: '#5865F2' },
 };
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-const SkillChip: React.FC<{ skill: string }> = React.memo(({ skill }) => (
-  <View style={chip.wrap}>
-    <Text style={chip.text}>{skill}</Text>
-  </View>
-));
-
-interface TimelineItemProps {
-  title: string; subtitle: string; meta: string; desc?: string; current?: boolean;
-}
-
-const TimelineItem: React.FC<TimelineItemProps> = React.memo(
-  ({ title, subtitle, meta, desc, current }) => {
-    const { theme } = useThemeStore();
-    return (
-      <View style={[tl.item, { borderLeftColor: current ? '#10B981' : ACCENT }]}>
-        <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 13 }}>{title}</Text>
-        <Text style={{ color: ACCENT, fontWeight: '600', fontSize: 12, marginTop: 1 }}>{subtitle}</Text>
-        <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 1 }}>{meta}</Text>
-        {desc ? <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 4, lineHeight: 18 }}>{desc}</Text> : null}
-        {current ? <Text style={{ color: '#10B981', fontSize: 10, fontWeight: '700', marginTop: 3 }}>● Current</Text> : null}
-      </View>
-    );
-  },
-);
-
-interface CertCardProps {
-  name: string; issuer: string; issued: string; expiry?: string; credUrl?: string;
-}
-
-const CertCard: React.FC<CertCardProps> = React.memo(({ name, issuer, issued, expiry, credUrl }) => {
-  const { theme } = useThemeStore();
-  return (
-    <View style={[cc.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-      <View style={[cc.icon, { backgroundColor: '#6366F11A' }]}>
-        <Ionicons name="ribbon-outline" size={18} color="#6366F1" />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 13 }}>{name}</Text>
-        <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{issuer} · {issued}{expiry ? ` → ${expiry}` : ''}</Text>
-        {credUrl ? (
-          <TouchableOpacity onPress={() => Linking.openURL(credUrl)}>
-            <Text style={{ color: '#6366F1', fontSize: 11, marginTop: 2 }}>View credential ↗</Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
-    </View>
-  );
-});
-
-function fmtRange(start?: string, end?: string, current?: boolean): string {
-  const fmt = (d: string) => new Date(d).toLocaleDateString('en', { month: 'short', year: 'numeric' });
-  const s = start ? fmt(start) : '?';
-  const e = current ? 'Present' : end ? fmt(end) : '?';
-  return `${s} – ${e}`;
-}
-
-// ─── Main ─────────────────────────────────────────────────────────────────────
-
 export const CandidateProfileScreen: React.FC = () => {
-  const { theme } = useThemeStore();
-  const { colors, typography, spacing } = theme;
-  const { user }     = useAuthStore();
-  const navigation   = useNavigation<Nav>();
-  const { data: profile, isLoading } = useProfile();
-  const { data: rp }                 = useCandidateRoleProfile();
-  const { data: verification }       = useVerificationStatus();
+  const navigation = useNavigation<NativeStackNavigationProp<any>>();
+  const { colors, type, spacing, isDark } = useTheme();
 
-  // Safe coercion: backend returns dynamic shape; these fields are well-known
-  const prof = profile as Record<string, unknown> | undefined;
-  const avatarUrl = (prof?.avatar as Record<string, string> | undefined)?.secure_url
-    ?? prof?.user as string | undefined
-    ?? null;
-  const coverUrl  = (prof?.cover  as Record<string, string> | undefined)?.secure_url ?? null;
-  const vStatus   = (verification?.verificationStatus ?? 'none') as 'none' | 'partial' | 'full';
+  const { data: profile, isLoading: pLoading, refetch: rP } = useProfile();
+  const { data: candidateProfile, isLoading: cLoading, refetch: rC } = useCandidateProfile();
+  const { data: cvData, isLoading: cvLoading, refetch: rCV } = useCandidateCVs();
 
-  const skills     = (rp as Record<string, unknown> | undefined)?.skills as string[] ?? [];
-  const experience = (rp as Record<string, unknown> | undefined)?.experience as Array<Record<string, unknown>> ?? [];
-  const education  = (rp as Record<string, unknown> | undefined)?.education  as Array<Record<string, unknown>> ?? [];
-  const certs      = (rp as Record<string, unknown> | undefined)?.certifications as Array<Record<string, unknown>> ?? [];
-  const social     = (prof?.socialLinks as Record<string, string> | undefined) ?? {};
-  const completion = (prof?.profileCompletion as Record<string, number> | undefined)?.percentage ?? 0;
-  const socialEntries = Object.entries(social).filter(([, v]) => Boolean(v));
+  const isLoading = pLoading || cLoading;
 
-  const renderExp  = useCallback(({ item }: { item: Record<string, unknown> }) => (
-    <TimelineItem
-      title={item.title as string ?? item.position as string ?? ''}
-      subtitle={item.company as string ?? ''}
-      meta={fmtRange(item.startDate as string, item.endDate as string, item.current as boolean)}
-      desc={item.description as string}
-      current={item.current as boolean}
-    />
-  ), []);
-
-  const renderEdu  = useCallback(({ item }: { item: Record<string, unknown> }) => (
-    <TimelineItem
-      title={`${item.degree ?? ''}${item.field ? ` · ${item.field}` : ''}`}
-      subtitle={item.institution as string ?? ''}
-      meta={fmtRange(item.startDate as string, item.endDate as string, item.current as boolean)}
-      current={item.current as boolean}
-    />
-  ), []);
-
-  const renderCert = useCallback(({ item }: { item: Record<string, unknown> }) => (
-    <CertCard
-      name={item.name as string ?? ''}
-      issuer={item.issuer as string ?? ''}
-      issued={item.issueDate ? new Date(item.issueDate as string).toLocaleDateString('en', { month: 'short', year: 'numeric' }) : ''}
-      expiry={item.expiryDate ? new Date(item.expiryDate as string).toLocaleDateString('en', { month: 'short', year: 'numeric' }) : undefined}
-      credUrl={item.credentialUrl as string | undefined}
-    />
-  ), []);
+  const onRefresh = useCallback(async () => {
+    await Promise.all([rP(), rC(), rCV()]);
+  }, [rP, rC, rCV]);
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: 60, paddingHorizontal: spacing[5], gap: 16 }}>
-        <SkeletonCard height={140} radius={12} />
-        <SkeletonCard height={24} radius={6} style={{ width: '60%' }} />
-        <SkeletonCard height={16} radius={6} style={{ width: '40%' }} />
-        <SkeletonCard height={88} radius={12} />
-        <SkeletonCard height={88} radius={12} />
-      </View>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.bgPrimary }}
+        contentContainerStyle={{ padding: 16 }}
+      >
+        <SkeletonCard  />
+        <SkeletonCard />
+        <SkeletonCard  />
+      </ScrollView>
     );
   }
 
+  const avatarUrl = profile?.avatar?.secure_url ?? profile?.user?.avatar ?? null;
+  const coverUrl = profile?.cover?.secure_url ?? null;
+  const name = profile?.user?.name ?? 'Your Name';
+  const skills: string[] = candidateProfile?.skills ?? [];
+  const education = candidateProfile?.education ?? [];
+  const experience = candidateProfile?.experience ?? [];
+  const certifications = candidateProfile?.certifications ?? [];
+  const socialLinks = profile?.socialLinks ?? {};
+  const completion = profile?.profileCompletion?.percentage ?? 0;
+  const cvs = cvData?.cvs ?? [];
+  const activeSocialLinks = Object.entries(socialLinks).filter(([, v]) => !!v);
+
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
+      style={{ flex: 1, backgroundColor: colors.bgPrimary }}
+      refreshControl={
+        <RefreshControl refreshing={false} onRefresh={onRefresh} tintColor={ACCENT} />
+      }
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={{ paddingBottom: 48 }}
     >
-      {/* Cover + Avatar */}
+      {/* ── Header image area ─────────────────────────────────────────── */}
       <ProfileImageUploader
         currentAvatarUrl={avatarUrl}
         currentCoverUrl={coverUrl}
         accentColor={ACCENT}
         type="both"
         avatarShape="circle"
-        verifiedFull={vStatus === 'full'}
-        showDeleteButtons
+        verifiedFull={profile?.verificationStatus === 'verified'}
       />
 
-      {/* Name / headline */}
-      <View style={{ paddingHorizontal: spacing[5], marginTop: 10 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.text, fontWeight: '800', fontSize: typography['2xl'], letterSpacing: -0.4 }}>
-              {user?.name}
-            </Text>
-            {profile?.headline ? (
-              <Text style={{ color: colors.textMuted, fontSize: typography.sm, marginTop: 2 }}>{profile.headline}</Text>
-            ) : null}
-          </View>
-          <VerificationPill status={vStatus} />
+      {/* ── Identity ─────────────────────────────────────────────────── */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+          <Text style={{ color: colors.textPrimary, fontSize: 22, fontWeight: '800' }}>{name}</Text>
+          {profile?.verificationStatus === 'verified' && <VerifiedBadge size={18} />}
         </View>
-
-        {/* Info chips */}
-        <View style={s.infoRow}>
-          {profile?.location ? (
-            <View style={s.chip}>
-              <Ionicons name="location-outline" size={12} color={colors.textMuted} />
-              <Text style={[s.chipTxt, { color: colors.textMuted }]}>{profile.location}</Text>
-            </View>
-          ) : null}
-          {profile?.website ? (
-            <TouchableOpacity style={s.chip} onPress={() => Linking.openURL(profile.website!)}>
-              <Ionicons name="globe-outline" size={12} color={ACCENT} />
-              <Text style={[s.chipTxt, { color: ACCENT }]}>Website</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-
-        {/* Completion bar */}
-        {completion > 0 && (
-          <View style={{ marginTop: 12 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-              <Text style={s.sectionLabel}>Profile strength</Text>
-              <Text style={{ color: ACCENT, fontSize: 10, fontWeight: '700' }}>{completion}%</Text>
-            </View>
-            <View style={[s.barBg, { backgroundColor: colors.border }]}>
-              <View style={[s.barFill, { width: `${completion}%` as `${number}%`, backgroundColor: ACCENT }]} />
-            </View>
-          </View>
+        {profile?.headline && (
+          <Text style={{ color: ACCENT, fontSize: 14, fontWeight: '600', marginBottom: 4 }}>
+            {profile.headline}
+          </Text>
+        )}
+        {profile?.location && (
+          <InfoRow icon="location-outline" text={profile.location} style={{ marginBottom: 4 }} />
         )}
 
-        {/* Edit button */}
+        {/* Badges */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          <BadgePill
+            label={
+              profile?.verificationStatus === 'verified' ? '✓ Verified' :
+              profile?.verificationStatus === 'pending' ? 'Pending Verification' : 'Unverified'
+            }
+            color={
+              profile?.verificationStatus === 'verified' ? '#22C55E' :
+              profile?.verificationStatus === 'pending' ? '#F59E0B' : colors.bgSurface
+            }
+            textColor={
+              profile?.verificationStatus === 'none' ? colors.textMuted : '#fff'
+            }
+          />
+            <BadgePill
+              label={`${candidateProfile?.experience?.length ?? 0} role${(candidateProfile?.experience?.length ?? 0) > 1 ? 's' : ''}`}
+              color={colors.bgSurface}
+              textColor={colors.textSecondary}
+            />
+        </View>
+      </View>
+
+      <View style={{ padding: 16, gap: 14 }}>
+        {/* ── Edit button ───────────────────────────────────────────── */}
         <TouchableOpacity
           style={[s.editBtn, { backgroundColor: ACCENT }]}
           onPress={() => navigation.navigate('EditProfile')}
         >
-          <Ionicons name="pencil" size={14} color="#fff" />
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Edit Profile</Text>
+          <Ionicons name="pencil-outline" size={16} color="#fff" />
+          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>Edit Profile</Text>
         </TouchableOpacity>
-      </View>
 
-      {/* Bio */}
-      {profile?.bio ? (
-        <SectionBlock title="About" style={{ marginHorizontal: spacing[5] }}>
-          <Text style={{ color: colors.textMuted, fontSize: typography.sm, lineHeight: 20 }}>{profile.bio}</Text>
-        </SectionBlock>
-      ) : null}
-
-      {/* Skills */}
-      {skills.length > 0 ? (
-        <SectionBlock title={`Skills (${skills.length})`} style={{ marginHorizontal: spacing[5] }}>
-          <View style={s.chipWrap}>{skills.map((sk) => <SkillChip key={sk} skill={sk} />)}</View>
-        </SectionBlock>
-      ) : null}
-
-      {/* Experience */}
-      {experience.length > 0 ? (
-        <SectionBlock title="Experience" style={{ marginHorizontal: spacing[5] }}>
-          <View style={{ height: experience.length * 104 }}>
-            <FlashList data={experience} renderItem={renderExp} keyExtractor={(_, i) => `exp-${i}`} scrollEnabled={false} />
+        {/* ── Completion bar ────────────────────────────────────────── */}
+        {completion < 100 && (
+          <View style={[s.card, { backgroundColor: colors.bgCard }]}>
+            <CompletionBar
+              percentage={completion}
+              label="Profile Completion"
+              accentColor={ACCENT}
+            />
+            <TouchableOpacity
+              style={{ marginTop: 10 }}
+              onPress={() => navigation.navigate('EditProfile')}
+            >
+              <Text style={{ color: ACCENT, fontSize: 13, fontWeight: '600' }}>
+                Complete your profile →
+              </Text>
+            </TouchableOpacity>
           </View>
-        </SectionBlock>
-      ) : null}
+        )}
 
-      {/* Education */}
-      {education.length > 0 ? (
-        <SectionBlock title="Education" style={{ marginHorizontal: spacing[5] }}>
-          <View style={{ height: education.length * 92 }}>
-            <FlashList data={education} renderItem={renderEdu} keyExtractor={(_, i) => `edu-${i}`} scrollEnabled={false} />
+        {/* ── Bio ──────────────────────────────────────────────────── */}
+        {profile?.bio && (
+          <View style={[s.card, { backgroundColor: colors.bgCard }]}>
+            <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>About</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 22, marginTop: 6 }}>
+              {profile.bio}
+            </Text>
           </View>
-        </SectionBlock>
-      ) : null}
+        )}
 
-      {/* Certifications */}
-      {certs.length > 0 ? (
-        <SectionBlock title="Certifications" style={{ marginHorizontal: spacing[5] }}>
-          <View style={{ height: certs.length * 80 }}>
-            <FlashList data={certs} renderItem={renderCert}  keyExtractor={(_, i) => `cert-${i}`} scrollEnabled={false} />
+        {/* ── Skills ───────────────────────────────────────────────── */}
+        {skills.length > 0 && (
+          <View style={[s.card, { backgroundColor: colors.bgCard }]}>
+            <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>Skills</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+              {skills.map((sk, i) => (
+                <View key={i} style={[s.chip, { backgroundColor: ACCENT + '18' }]}>
+                  <Text style={{ color: ACCENT, fontSize: 12, fontWeight: '600' }}>{sk}</Text>
+                </View>
+              ))}
+            </View>
           </View>
-        </SectionBlock>
-      ) : null}
+        )}
 
-      {/* Social */}
-      {socialEntries.length > 0 ? (
-        <SectionBlock title="Social Profiles" style={{ marginHorizontal: spacing[5] }}>
-          <View style={s.socialRow}>
-            {socialEntries.map(([platform, url]) => (
-              <TouchableOpacity
-                key={platform}
-                style={[s.socialBtn, { backgroundColor: `${ACCENT}18`, borderColor: `${ACCENT}30` }]}
-                onPress={() => Linking.openURL(url.startsWith('http') ? url : `https://${url}`)}
-                activeOpacity={0.75}
-              >
-                <Ionicons name={SOCIAL_ICONS[platform] ?? 'link-outline'} size={16} color={ACCENT} />
-                <Text style={{ color: ACCENT, fontSize: 11, fontWeight: '600' }}>
-                  {platform.charAt(0).toUpperCase() + platform.slice(1)}
+        {/* ── Experience ───────────────────────────────────────────── */}
+        {experience.length > 0 && (
+          <View style={[s.card, { backgroundColor: colors.bgCard }]}>
+            <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>Experience</Text>
+            {experience.map((exp, i) => (
+              <View key={exp._id ?? i} style={[s.timelineItem, { borderLeftColor: ACCENT + '40' }]}>
+                <View style={[s.timelineDot, { backgroundColor: ACCENT }]} />
+                <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '700' }}>
+                  {exp.position}
                 </Text>
-              </TouchableOpacity>
+                <Text style={{ color: ACCENT, fontSize: 13, fontWeight: '600' }}>{exp.company}</Text>
+                <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
+                  {new Date(exp.startDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                  {' — '}
+                  {exp.current ? 'Present' : exp.endDate
+                    ? new Date(exp.endDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                    : ''}
+                </Text>
+                {exp.description && (
+                  <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19, marginTop: 6 }}>
+                    {exp.description}
+                  </Text>
+                )}
+              </View>
             ))}
           </View>
-        </SectionBlock>
-      ) : null}
+        )}
+
+        {/* ── Education ────────────────────────────────────────────── */}
+        {education.length > 0 && (
+          <View style={[s.card, { backgroundColor: colors.bgCard }]}>
+            <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>Education</Text>
+            {education.map((edu, i) => (
+              <View key={edu._id ?? i} style={[s.timelineItem, { borderLeftColor: ACCENT + '40' }]}>
+                <View style={[s.timelineDot, { backgroundColor: ACCENT }]} />
+                <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '700' }}>
+                  {edu.degree}{edu.field ? `, ${edu.field}` : ''}
+                </Text>
+                <Text style={{ color: ACCENT, fontSize: 13, fontWeight: '600' }}>{edu.institution}</Text>
+                <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
+                  {new Date(edu.startDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                  {' — '}
+                  {edu.current ? 'Present' : edu.endDate
+                    ? new Date(edu.endDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                    : ''}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* ── Certifications ───────────────────────────────────────── */}
+        {certifications.length > 0 && (
+          <View style={[s.card, { backgroundColor: colors.bgCard }]}>
+            <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>Certifications</Text>
+            {certifications.map((cert, i) => (
+              <View
+                key={cert._id ?? i}
+                style={[s.certRow, { borderColor: colors.borderPrimary }]}
+              >
+                <View style={[s.certIcon, { backgroundColor: ACCENT + '18' }]}>
+                  <Ionicons name="ribbon-outline" size={16} color={ACCENT} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '700' }}>
+                    {cert.name}
+                  </Text>
+                  <Text style={{ color: ACCENT, fontSize: 12, fontWeight: '600' }}>{cert.issuer}</Text>
+                  <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>
+                    Issued {new Date(cert.issueDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                    {cert.expiryDate
+                      ? ` · Expires ${new Date(cert.expiryDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
+                      : ''}
+                  </Text>
+                  {cert.credentialUrl && (
+                    <TouchableOpacity onPress={() => Linking.openURL(cert.credentialUrl!)}>
+                      <Text style={{ color: ACCENT, fontSize: 12, fontWeight: '600', marginTop: 4 }}>
+                        View credential →
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* ── CVs ─────────────────────────────────────────────────── */}
+        {cvs.length > 0 && (
+          <View style={[s.card, { backgroundColor: colors.bgCard }]}>
+            <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
+              CVs ({cvs.length})
+            </Text>
+            {cvs.map((cv, i) => (
+              <View
+                key={cv._id ?? i}
+                style={[s.cvRow, { borderColor: colors.borderPrimary }]}
+              >
+                <Ionicons name="document-text-outline" size={20} color={ACCENT} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: '600' }}>
+                    {cv.originalName}
+                  </Text>
+                  <Text style={{ color: colors.textMuted, fontSize: 11 }}>
+                    {cv.isPrimary ? 'Primary · ' : ''}
+                    {(cv.size / 1024).toFixed(0)} KB
+                  </Text>
+                </View>
+                {cv.isPrimary && (
+                  <BadgePill label="Primary" color={ACCENT} textColor="#fff" />
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* ── Social links ─────────────────────────────────────────── */}
+        {activeSocialLinks.length > 0 && (
+          <View style={[s.card, { backgroundColor: colors.bgCard }]}>
+            <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>Social Links</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 10 }}>
+              {activeSocialLinks.map(([platform, url]) => {
+                const cfg = SOCIAL_ICONS[platform];
+                if (!cfg) return null;
+                return (
+                  <TouchableOpacity
+                    key={platform}
+                    onPress={() => Linking.openURL(url as string)}
+                    style={[s.socialBtn, { backgroundColor: cfg.color + '15' }]}
+                  >
+                    <Ionicons name={cfg.icon as any} size={20} color={cfg.color} />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* ── Contact ──────────────────────────────────────────────── */}
+        <View style={[s.card, { backgroundColor: colors.bgCard }]}>
+          <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>Contact</Text>
+          {profile?.phone && (
+            <TouchableOpacity onPress={() => Linking.openURL(`tel:${profile.phone}`)}>
+              <InfoRow icon="call-outline" text={profile.phone} style={{ marginBottom: 6 }} />
+            </TouchableOpacity>
+          )}
+          {profile?.website && (
+            <TouchableOpacity onPress={() => Linking.openURL(profile.website!)}>
+              <InfoRow icon="globe-outline" text={profile.website} style={{ marginBottom: 6 }} />
+            </TouchableOpacity>
+          )}
+          {profile?.user?.email && (
+            <InfoRow icon="mail-outline" text={profile.user.email} />
+          )}
+        </View>
+
+        <View style={{ height: 40 }} />
+      </View>
     </ScrollView>
   );
 };
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const s = StyleSheet.create({
-  infoRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
-  chip:         { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#94A3B812', borderRadius: 99, paddingHorizontal: 10, paddingVertical: 4 },
-  chipTxt:      { fontSize: 12, fontWeight: '500' },
-  sectionLabel: { fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  barBg:        { height: 6, borderRadius: 99, overflow: 'hidden' },
-  barFill:      { height: 6, borderRadius: 99 },
-  editBtn:      { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 99, marginTop: 12 },
-  chipWrap:     { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  socialRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  socialBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 99, paddingHorizontal: 12, paddingVertical: 7 },
-});
-
-const chip = StyleSheet.create({
-  wrap: { backgroundColor: `${ACCENT}18`, borderColor: `${ACCENT}40`, borderWidth: 1, borderRadius: 99, paddingHorizontal: 12, paddingVertical: 5 },
-  text: { color: ACCENT, fontSize: 12, fontWeight: '600' },
-});
-
-const tl = StyleSheet.create({
-  item: { borderLeftWidth: 2.5, paddingLeft: 12, marginBottom: 18 },
-});
-
-const cc = StyleSheet.create({
-  card: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 8 },
-  icon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  editBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  card: {
+    borderRadius: 14,
+    padding: 16,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 99,
+  },
+  timelineItem: {
+    borderLeftWidth: 2,
+    paddingLeft: 14,
+    marginTop: 14,
+    position: 'relative',
+  },
+  timelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    position: 'absolute',
+    left: -5,
+    top: 4,
+  },
+  certRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  certIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cvRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  socialBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

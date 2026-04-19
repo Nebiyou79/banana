@@ -23,9 +23,10 @@ import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore }  from '../../store/authStore';
 import { useProfile }    from '../../hooks/useProfile';
 import { companyService } from '../../services/companyService';
-import { StatTile, SkeletonCard } from '../../components/shared/ProfileAtoms';
+import {  SkeletonCard } from '../../components/shared/ProfileAtoms';
 import { formatLocation } from '../../utils/jobHelpers';
 import type { CompanyStackParamList } from '../../navigation/CompanyNavigator';
+import { StatCard } from '../../components/shared/StatCard';
 
 type Nav = NativeStackNavigationProp<CompanyStackParamList>;
 const C_ACCENT = '#3B82F6';
@@ -134,7 +135,7 @@ export const CompanyDashboardScreen: React.FC = () => {
       location={formatLocation(item.location)}
       jobType={item.jobType ?? ''}
       status={item.status}
-      applicants={item.applicantCount ?? 0}
+      applicants={item.applicationCount ?? 0}
       onPress={() => navigation.navigate('ApplicationList', { jobId: item._id, jobTitle: item.title })}
     />
   ), [navigation]);
@@ -192,10 +193,10 @@ export const CompanyDashboardScreen: React.FC = () => {
         </View>
       ) : (
         <View style={[s.statsGrid, { paddingHorizontal: spacing[5] }]}>
-          <StatTile label="Jobs"         value={stats?.totalJobs ?? 0}         icon="briefcase-outline"     color={C_ACCENT}  />
-          <StatTile label="Active"       value={stats?.activeJobs ?? 0}        icon="radio-button-on"       color="#10B981"   />
-          <StatTile label="Applications" value={stats?.totalApplications ?? 0} icon="document-text-outline" color="#F59E0B"   />
-          <StatTile label="New Today"    value={stats?.newApplications ?? 0}   icon="notifications-outline" color="#EF4444"   />
+          <StatCard label="Jobs"         value={stats?.totalJobs ?? 0}         icon="briefcase-outline"     color={C_ACCENT}  />
+          <StatCard label="Active"       value={stats?.activeJobs ?? 0}        icon="radio-button-on"       color="#10B981"   />
+          <StatCard label="Applications" value={stats?.totalApplications ?? 0} icon="document-text-outline" color="#F59E0B"   />
+          <StatCard label="New Today"    value={stats?.newApplications ?? 0}   icon="notifications-outline" color="#EF4444"   />
         </View>
       )}
 

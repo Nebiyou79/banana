@@ -24,8 +24,9 @@ import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore }  from '../../store/authStore';
 import { useProfile, useCandidateRoleProfile } from '../../hooks/useProfile';
 import { candidateService } from '../../services/candidateService';
-import { StatTile, SkeletonCard } from '../../components/shared/ProfileAtoms';
+import {  SkeletonCard } from '../../components/shared/ProfileAtoms';
 import type { CandidateStackParamList } from '../../navigation/CandidateNavigator';
+import { StatCard } from '../../components/shared/StatCard';
 
 type Nav = NativeStackNavigationProp<CandidateStackParamList>;
 
@@ -190,10 +191,10 @@ export const CandidateDashboardScreen: React.FC = () => {
         </View>
       ) : (
         <View style={[s.statsGrid, { paddingHorizontal: spacing[5] }]}>
-          <StatTile label="Total"       value={stats?.total ?? 0}       icon="document-text-outline"  color={ACCENT}     />
-          <StatTile label="Pending"     value={stats?.pending ?? 0}     icon="time-outline"            color="#6366F1"    />
-          <StatTile label="Shortlisted" value={stats?.shortlisted ?? 0} icon="star-outline"            color="#10B981"    />
-          <StatTile label="Rejected"    value={stats?.rejected ?? 0}    icon="close-circle-outline"    color="#EF4444"    />
+          <StatCard label="Total"       value={stats?.total ?? 0}       icon="document-text-outline"  color={ACCENT}     />
+          <StatCard label="Pending"     value={stats?.pending ?? 0}     icon="time-outline"            color="#6366F1"    />
+          <StatCard label="Shortlisted" value={stats?.shortlisted ?? 0} icon="star-outline"            color="#10B981"    />
+          <StatCard label="Rejected"    value={stats?.rejected ?? 0}    icon="close-circle-outline"    color="#EF4444"    />
         </View>
       )}
 

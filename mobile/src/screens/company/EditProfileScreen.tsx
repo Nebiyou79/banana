@@ -1,291 +1,285 @@
 /**
  * screens/company/EditProfileScreen.tsx
- *
- * Company profile editor.
- * - ProfileImageUploader replaces old LogoUpload (square avatar, type="avatar")
- * - useEffect reset() fix
- * - Specialties tag chip editor
- * - TIN: number-pad, maxLength 10
- * - Sticky header
  */
-
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  KeyboardAvoidingView, Platform, ActivityIndicator, TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useForm, Controller } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { useQueryClient } from '@tanstack/react-query';
 
-import { useThemeStore }    from '../../store/themeStore';
-import { useProfile, useUpdateProfile } from '../../hooks/useProfile';
-import { Input }            from '../../components/ui/Input';
-import { SkeletonCard }     from '../../components/shared/ProfileAtoms';
+import {
+  useProfile, useCompanyProfile, useUpdateCompanyProfile,
+} from '../../hooks/useProfile';
 import { ProfileImageUploader } from '../../components/shared/ProfileImageUploader';
-import { toast }            from '../../lib/toast';
-import type { CompanyStackParamList } from '../../navigation/CompanyNavigator';
+import { SkeletonCard } from '../../components/shared/ProfileAtoms';
+import { toast } from '../../lib/toast';
+import useTheme from '../../hooks/useTheme';
 
-type Nav  = NativeStackNavigationProp<CompanyStackParamList>;
-const ACC = '#3B82F6';
+const ACCENT = '#3B82F6';
 
-// ─── Schema ───────────────────────────────────────────────────────────────────
-
-const schema = z.object({
-  headline:  z.string().max(200).optional(),
-  bio:       z.string().max(1000).optional(),
-  location:  z.string().max(100).optional(),
-  phone:     z.string().max(20).optional(),
-  website:   z.string().url('Enter a valid URL').optional().or(z.literal('')),
-  industry:  z.string().max(100).optional(),
-  tin:       z.string().regex(/^[0-9]{10}$/, 'TIN must be exactly 10 digits').optional().or(z.literal('')),
-  mission:   z.string().max(500).optional(),
+const inputStyles = StyleSheet.create({
+  label: {
+    fontSize: 10, fontWeight: '700', letterSpacing: 0.8,
+    textTransform: 'uppercase', marginBottom: 6,
+  },
+  input: {
+    borderWidth: 1, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14,
+  },
 });
 
-type FormValues = z.infer<typeof schema>;
+const LabeledInput: React.FC<{
+  label: string; value: string; onChangeText: (t: string) => void;
+  placeholder?: string; multiline?: boolean; numberOfLines?: number;
+  keyboardType?: any; maxLength?: number; colors: any;
+}> = ({ label, value, onChangeText, placeholder, multiline, numberOfLines, keyboardType, maxLength, colors }) => (
+  <View style={{ marginBottom: 12 }}>
+    <Text style={[inputStyles.label, { color: colors.textMuted }]}>{label}</Text>
+    <TextInput
+      style={[
+        inputStyles.input,
+        {
+          backgroundColor: colors.inputBg, borderColor: colors.inputBorder,
+          color: colors.textPrimary,
+          height: multiline ? (numberOfLines ?? 4) * 22 : 44,
+          textAlignVertical: multiline ? 'top' : 'center',
+        },
+      ]}
+      value={value} onChangeText={onChangeText} placeholder={placeholder}
+      placeholderTextColor={colors.inputPlaceholder}
+      multiline={multiline} numberOfLines={numberOfLines}
+      keyboardType={keyboardType} maxLength={maxLength}
+    />
+  </View>
+);
 
-// ─── Reusable sub-components ──────────────────────────────────────────────────
-
-const SecLabel: React.FC<{ children: string }> = ({ children }) => {
-  const { theme } = useThemeStore();
-  return (
-    <Text style={{ color: theme.colors.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 24, marginBottom: 10 }}>
-      {children}
-    </Text>
-  );
-};
-
-const Field: React.FC<{ label: string; error?: string; children: React.ReactNode; half?: boolean }> = ({
-  label, error, children, half,
-}) => {
-  const { theme } = useThemeStore();
-  return (
-    <View style={[{ marginBottom: 12 }, half && { flex: 1 }]}>
-      <Text style={{ color: theme.colors.textMuted, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>{label}</Text>
-      {children}
-      {error ? <Text style={{ color: '#EF4444', fontSize: 11, marginTop: 2 }}>{error}</Text> : null}
-    </View>
-  );
-};
-
-// ─── Specialties tag editor ───────────────────────────────────────────────────
-
-const SpecialtiesEditor: React.FC<{
-  tags: string[];
-  onAdd: (s: string) => void;
-  onRemove: (i: number) => void;
-}> = ({ tags, onAdd, onRemove }) => {
-  const { theme } = useThemeStore();
-  const [draft, setDraft] = useState('');
-  const submit = () => {
-    const s = draft.trim();
-    if (s && !tags.includes(s) && tags.length < 20) { onAdd(s); setDraft(''); }
-  };
+// Specialties tag editor (local to this file)
+const TagEditor: React.FC<{
+  tags: string[]; onAdd: (t: string) => void; onRemove: (i: number) => void;
+  placeholder?: string; accentColor: string; colors: any;
+}> = ({ tags, onAdd, onRemove, placeholder = 'Add...', accentColor, colors }) => {
+  const [input, setInput] = useState('');
   return (
     <View>
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-        <Input placeholder="Add specialty…" value={draft} onChangeText={setDraft} style={{ flex: 1 }} returnKeyType="done" onSubmitEditing={submit} />
-        <TouchableOpacity style={[te.addBtn, { backgroundColor: ACC }]} onPress={submit}>
-          <Ionicons name="add" size={20} color="#fff" />
+        <TextInput
+          style={[inputStyles.input, { flex: 1, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.textPrimary, height: 44 }]}
+          value={input} onChangeText={setInput} placeholder={placeholder}
+          placeholderTextColor={colors.inputPlaceholder} returnKeyType="done"
+          onSubmitEditing={() => { if (input.trim()) { onAdd(input.trim()); setInput(''); } }}
+        />
+        <TouchableOpacity
+          style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: accentColor, alignItems: 'center', justifyContent: 'center' }}
+          onPress={() => { if (input.trim()) { onAdd(input.trim()); setInput(''); } }}
+        >
+          <Ionicons name="add" size={22} color="#fff" />
         </TouchableOpacity>
       </View>
-      <View style={te.chips}>
-        {tags.map((t, i) => (
-          <TouchableOpacity key={i} style={[te.chip, { backgroundColor: `${ACC}18`, borderColor: `${ACC}30` }]} onPress={() => onRemove(i)}>
-            <Text style={{ color: ACC, fontSize: 12, fontWeight: '600' }}>{t}</Text>
-            <Ionicons name="close" size={11} color={ACC} />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        {tags.map((tag, i) => (
+          <TouchableOpacity
+            key={i} onPress={() => onRemove(i)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: accentColor + '18', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 99 }}
+          >
+            <Text style={{ color: accentColor, fontSize: 12, fontWeight: '600' }}>{tag}</Text>
+            <Ionicons name="close" size={12} color={accentColor} />
           </TouchableOpacity>
         ))}
       </View>
-      <Text style={{ color: theme.colors.textMuted, fontSize: 10, marginTop: 4 }}>{tags.length}/20 · Tap to remove</Text>
     </View>
   );
 };
 
-// ─── Main screen ──────────────────────────────────────────────────────────────
+interface FormValues {
+  name: string; tin: string; industry: string; description: string;
+  address: string; phone: string; website: string;
+  specialties: string[];
+}
 
 export const CompanyEditProfileScreen: React.FC = () => {
-  const { theme }  = useThemeStore();
-  const { colors, typography, spacing } = theme;
-  const navigation = useNavigation<Nav>();
-  const qc         = useQueryClient();
+  const navigation = useNavigation<any>();
+  const { colors, type, spacing, isDark } = useTheme();
 
-  const { data: profile, isLoading } = useProfile();
-  const updateProfile = useUpdateProfile();
-  const [specialties, setSpecialties] = useState<string[]>([]);
+  const { data: profile, isLoading: pLoading } = useProfile();
+  const { data: company, isLoading: cLoading } = useCompanyProfile();
+  const updateCompany = useUpdateCompanyProfile();
 
-  const { control, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: { headline: '', bio: '', location: '', phone: '', website: '', industry: '', tin: '', mission: '' },
+  const { control, handleSubmit, reset, watch, setValue } = useForm<FormValues>({
+    defaultValues: {
+      name: '', tin: '', industry: '', description: '',
+      address: '', phone: '', website: '', specialties: [],
+    },
   });
 
+  // Fix: reset after data loads
   useEffect(() => {
-    if (!profile) return;
-    const prof = profile as unknown as Record<string, unknown>;
-    const rp   = (prof.roleSpecific ?? {}) as Record<string, unknown>;
-    const ci   = (rp.companyInfo   ?? rp) as Record<string, unknown>;
-
-    setSpecialties((ci.specialties as string[]) ?? []);
-
+    if (!company) return;
     reset({
-      headline: profile.headline  ?? '',
-      bio:      profile.bio       ?? '',
-      location: profile.location  ?? '',
-      phone:    profile.phone     ?? '',
-      website:  profile.website   ?? '',
-      industry: (ci.industry as string) ?? '',
-      tin:      (ci.tin       as string) ?? '',
-      mission:  (ci.mission   as string) ?? (rp.mission as string) ?? '',
+      name: company.name ?? '',
+      tin: company.tin ?? '',
+      industry: company.industry ?? '',
+      description: company.description ?? '',
+      address: company.address ?? '',
+      phone: company.phone ?? '',
+      website: company.website ?? '',
+      specialties: [],
     });
-  }, [profile, reset]);
+  }, [company, reset]);
 
-  const onSave = handleSubmit((data) => {
-    const payload = { ...data, specialties };
-    updateProfile.mutate(payload as unknown as Parameters<typeof updateProfile.mutate>[0], {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: ['profile'] });
+  const isSaving = updateCompany.isPending;
+  const isLoading = pLoading || cLoading;
+  const specialties = watch('specialties');
+
+  const onSave = useCallback(
+    handleSubmit(async (values) => {
+      try {
+        await updateCompany.mutateAsync({
+          name: values.name || undefined,
+          tin: values.tin || undefined,
+          industry: values.industry || undefined,
+          description: values.description || undefined,
+          address: values.address || undefined,
+          phone: values.phone || undefined,
+          website: values.website || undefined,
+        });
         navigation.goBack();
-      },
-      onError: (err: unknown) => {
-        const msg = (err as Record<string, Record<string, string>>)?.response?.data ?? 'Save failed.';
-        toast.error(msg);
-      },
-    });
-  });
-
-  const inp = { backgroundColor: colors.inputBg, borderColor: colors.border };
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : 'Failed to save');
+      }
+    }),
+    [handleSubmit, updateCompany, navigation]
+  );
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: 80, paddingHorizontal: spacing[5], gap: 16 }}>
-        <SkeletonCard height={88} radius={16} style={{ width: 88 }} />
-        <SkeletonCard height={44} radius={10} />
-        <SkeletonCard height={44} radius={10} />
-      </View>
+      <ScrollView style={{ flex: 1, backgroundColor: colors.bgPrimary }} contentContainerStyle={{ padding: 16 }}>
+        <SkeletonCard />
+        <SkeletonCard />
+      </ScrollView>
     );
   }
 
+  const avatarUrl = profile?.avatar?.secure_url ?? profile?.user?.avatar ?? null;
+
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       {/* Sticky header */}
-      <View style={[hdr.bar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={hdr.iconBtn}>
-          <Ionicons name="close" size={24} color={colors.text} />
+      <View style={[styles.header, { backgroundColor: colors.bgCard, borderBottomColor: colors.borderPrimary }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }}>
+          <Ionicons name="close-outline" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={{ color: colors.text, fontWeight: '700', fontSize: typography.lg }}>Edit Company Profile</Text>
-        <TouchableOpacity onPress={onSave} disabled={isSubmitting} style={hdr.saveBtn}>
-          {isSubmitting ? <ActivityIndicator color={ACC} /> : <Text style={{ color: ACC, fontWeight: '700', fontSize: typography.base }}>Save</Text>}
+        <Text style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 16 }}>Edit Company</Text>
+        <TouchableOpacity
+          style={[styles.saveBtn, { backgroundColor: ACCENT, opacity: isSaving ? 0.65 : 1 }]}
+          onPress={onSave}
+          disabled={isSaving}
+        >
+          {isSaving
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>Save</Text>}
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: spacing[5], paddingTop: 64 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-
-        {/* Square logo uploader */}
-        <ProfileImageUploader
-          currentAvatarUrl={(profile as Record<string, Record<string, string>> | undefined)?.avatar?.secure_url}
-          accentColor={ACC}
-          type="avatar"
-          avatarShape="square"
-          showDeleteButtons
-        />
-
-        {/* Company info */}
-        <SecLabel>Company Info</SecLabel>
-        <Controller control={control} name="headline"
-          render={({ field }) => (
-            <Field label="Tagline" error={errors.headline?.message}>
-              <Input value={field.value} onChangeText={field.onChange} placeholder="e.g. Building the future of work" inputStyle={inp} />
-            </Field>
-          )}
-        />
-        <Controller control={control} name="bio"
-          render={({ field }) => (
-            <Field label="Description" error={errors.bio?.message}>
-              <Input value={field.value} onChangeText={field.onChange} placeholder="About your company…" multiline numberOfLines={4} inputStyle={inp} />
-            </Field>
-          )}
-        />
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <Controller control={control} name="location"
-            render={({ field }) => (
-              <Field label="Headquarters" half>
-                <Input value={field.value} onChangeText={field.onChange} placeholder="City, Country" inputStyle={inp} leftIcon={<Ionicons name="location-outline" size={15} color={colors.textMuted} />} />
-              </Field>
-            )}
-          />
-          <Controller control={control} name="industry"
-            render={({ field }) => (
-              <Field label="Industry" half>
-                <Input value={field.value} onChangeText={field.onChange} placeholder="Technology" inputStyle={inp} leftIcon={<Ionicons name="business-outline" size={15} color={colors.textMuted} />} />
-              </Field>
-            )}
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.bgPrimary }}
+        contentContainerStyle={{ paddingTop: 64 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Square logo — no cover */}
+        <View style={{ padding: 16, paddingBottom: 0 }}>
+          <ProfileImageUploader
+            currentAvatarUrl={avatarUrl}
+            currentCoverUrl={null}
+            accentColor={ACCENT}
+            type="avatar"
+            avatarShape="square"
           />
         </View>
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <Controller control={control} name="phone"
-            render={({ field }) => (
-              <Field label="Phone" half>
-                <Input value={field.value} onChangeText={field.onChange} placeholder="+1 555 000" keyboardType="phone-pad" inputStyle={inp} leftIcon={<Ionicons name="call-outline" size={15} color={colors.textMuted} />} />
-              </Field>
-            )}
-          />
-          <Controller control={control} name="tin"
-            render={({ field }) => (
-              <Field label="TIN (10 digits)" half error={errors.tin?.message}>
-                <Input value={field.value} onChangeText={field.onChange} placeholder="0000000000" keyboardType="number-pad" maxLength={10} inputStyle={inp} />
-              </Field>
-            )}
-          />
+
+        <View style={{ padding: 16, gap: 14 }}>
+          {/* Company info */}
+          <View style={[styles.section, { backgroundColor: colors.bgCard }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>COMPANY INFO</Text>
+            <Controller control={control} name="name"
+              render={({ field }) => (
+                <LabeledInput label="Company Name *" value={field.value} onChangeText={field.onChange}
+                  placeholder="Your company name" colors={colors} />
+              )} />
+            <Controller control={control} name="tin"
+              render={({ field }) => (
+                <LabeledInput label="TIN Number" value={field.value} onChangeText={field.onChange}
+                  placeholder="10-digit TIN" keyboardType="number-pad" maxLength={10} colors={colors} />
+              )} />
+            <Controller control={control} name="industry"
+              render={({ field }) => (
+                <LabeledInput label="Industry" value={field.value} onChangeText={field.onChange}
+                  placeholder="e.g. Technology, Finance" colors={colors} />
+              )} />
+            <Controller control={control} name="description"
+              render={({ field }) => (
+                <LabeledInput label="Description" value={field.value} onChangeText={field.onChange}
+                  placeholder="Describe your company..." multiline numberOfLines={5}
+                  maxLength={1000} colors={colors} />
+              )} />
+          </View>
+
+          {/* Contact */}
+          <View style={[styles.section, { backgroundColor: colors.bgCard }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>CONTACT</Text>
+            <Controller control={control} name="phone"
+              render={({ field }) => (
+                <LabeledInput label="Phone" value={field.value} onChangeText={field.onChange}
+                  placeholder="+1 555 000 0000" keyboardType="phone-pad" colors={colors} />
+              )} />
+            <Controller control={control} name="website"
+              render={({ field }) => (
+                <LabeledInput label="Website" value={field.value} onChangeText={field.onChange}
+                  placeholder="https://yourcompany.com" keyboardType="url" colors={colors} />
+              )} />
+            <Controller control={control} name="address"
+              render={({ field }) => (
+                <LabeledInput label="Address" value={field.value} onChangeText={field.onChange}
+                  placeholder="Company address" colors={colors} />
+              )} />
+          </View>
+
+          {/* Specialties */}
+          <View style={[styles.section, { backgroundColor: colors.bgCard }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>SPECIALTIES</Text>
+            <TagEditor
+              tags={specialties}
+              onAdd={t => setValue('specialties', [...specialties, t])}
+              onRemove={i => setValue('specialties', specialties.filter((_, idx) => idx !== i))}
+              placeholder="e.g. Cloud Computing, AI, SaaS..."
+              accentColor={ACCENT}
+              colors={colors}
+            />
+          </View>
+
+          <View style={{ height: 60 }} />
         </View>
-        <Controller control={control} name="website"
-          render={({ field }) => (
-            <Field label="Website" error={errors.website?.message}>
-              <Input value={field.value} onChangeText={field.onChange} placeholder="https://company.com" keyboardType="url" autoCapitalize="none" inputStyle={inp} leftIcon={<Ionicons name="globe-outline" size={15} color={colors.textMuted} />} />
-            </Field>
-          )}
-        />
-        <Controller control={control} name="mission"
-          render={({ field }) => (
-            <Field label="Mission Statement">
-              <Input value={field.value} onChangeText={field.onChange} placeholder="Our mission is to…" multiline numberOfLines={3} inputStyle={inp} />
-            </Field>
-          )}
-        />
-
-        {/* Specialties */}
-        <SecLabel>Specialties</SecLabel>
-        <SpecialtiesEditor
-          tags={specialties}
-          onAdd={(s) => setSpecialties((prev) => [...prev, s])}
-          onRemove={(i) => setSpecialties((prev) => prev.filter((_, j) => j !== i))}
-        />
-
-        <View style={{ height: 40 }} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
 };
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const hdr = StyleSheet.create({
-  bar:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, padding: 16, paddingTop: Platform.OS === 'ios' ? 52 : 20, borderBottomWidth: StyleSheet.hairlineWidth },
-  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  saveBtn: { minWidth: 60, alignItems: 'flex-end', justifyContent: 'center', height: 44 },
-});
-
-const te = StyleSheet.create({
-  addBtn: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  chips:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
-  chip:   { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 99, paddingHorizontal: 10, paddingVertical: 5 },
+const styles = StyleSheet.create({
+  header: {
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  saveBtn: {
+    paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20,
+    minWidth: 68, alignItems: 'center',
+  },
+  section: { borderRadius: 14, padding: 16 },
+  sectionTitle: {
+    fontSize: 10, fontWeight: '700', letterSpacing: 0.8,
+    textTransform: 'uppercase', marginBottom: 14,
+  },
 });

@@ -742,16 +742,16 @@
     "size": 526844
   },
   "bananalink/products/Lucid_Origin_Create_a_sleek_modern_and_futuristic_logo_design__3 (1)": {
-    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana\\server\\backups\\cloudinary\\images\\Lucid_Origin_Create_a_sleek_modern_and_futuristic_logo_design__3 (1)_f85a1cdb_2026-03-03T15-54-02-141Z.jpg",
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\Lucid_Origin_Create_a_sleek_modern_and_futuristic_logo_design__3 (1)_f85a1cdb_2026-04-18T16-07-20-536Z.jpg",
     "originalName": "Lucid_Origin_Create_a_sleek_modern_and_futuristic_logo_design__3 (1).jpg",
-    "uploadedAt": "2026-03-03T15:54:02.144Z",
+    "uploadedAt": "2026-04-18T16:07:20.539Z",
     "fileType": "image",
     "size": 141194
   },
   "bananalink/products/Lucid_Origin_Create_a_sleek_modern_and_futuristic_logo_design__1": {
-    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana\\server\\backups\\cloudinary\\images\\Lucid_Origin_Create_a_sleek_modern_and_futuristic_logo_design__1_b1cf1263_2026-03-03T15-54-02-351Z.jpg",
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\Lucid_Origin_Create_a_sleek_modern_and_futuristic_logo_design__1_b1cf1263_2026-04-18T16-07-20-749Z.jpg",
     "originalName": "Lucid_Origin_Create_a_sleek_modern_and_futuristic_logo_design__1.jpg",
-    "uploadedAt": "2026-03-03T15:54:02.352Z",
+    "uploadedAt": "2026-04-18T16:07:20.751Z",
     "fileType": "image",
     "size": 307518
   },
@@ -1111,5 +1111,47 @@
     "uploadedAt": "2026-04-17T13:31:30.923Z",
     "fileType": "image",
     "size": 181801
+  },
+  "bananalink/products/IMG_4144": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\IMG_4144_d255ea35_2026-04-18T15-44-59-986Z.jpg",
+    "originalName": "IMG_4144.jpg",
+    "uploadedAt": "2026-04-18T15:44:59.989Z",
+    "fileType": "image",
+    "size": 247940
+  },
+  "bananalink/products/IMG_4143": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\IMG_4143_f8d9b0a5_2026-04-18T15-44-59-991Z.jpg",
+    "originalName": "IMG_4143.jpg",
+    "uploadedAt": "2026-04-18T15:44:59.992Z",
+    "fileType": "image",
+    "size": 230886
+  },
+  "bananalink/products/IMG_4142": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\IMG_4142_2d3ae345_2026-04-18T15-45-00-259Z.jpg",
+    "originalName": "IMG_4142.jpg",
+    "uploadedAt": "2026-04-18T15:45:00.262Z",
+    "fileType": "image",
+    "size": 240883
+  },
+  "bananalink/products/AtlÃ©tico_Nacional": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\AtlÃ©tico_Nacional_8e95a547_2026-04-18T16-07-20-455Z.png",
+    "originalName": "AtlÃ©tico_Nacional.png",
+    "uploadedAt": "2026-04-18T16:07:20.460Z",
+    "fileType": "image",
+    "size": 24788
+  },
+  "bananalink/products/Lucid_Origin_Create_a_sleek_modern_and_futuristic_logo_design__1 (1)": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\Lucid_Origin_Create_a_sleek_modern_and_futuristic_logo_design__1 (1)_6bd0822c_2026-04-18T16-07-21-013Z.jpg",
+    "originalName": "Lucid_Origin_Create_a_sleek_modern_and_futuristic_logo_design__1 (1).jpg",
+    "uploadedAt": "2026-04-18T16:07:21.014Z",
+    "fileType": "image",
+    "size": 307518
+  },
+  "bananalink/products/logo-light.svg": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\logo-light.svg_def16284_2026-04-18T16-07-21-235Z.jpg",
+    "originalName": "logo-light.svg.jpg",
+    "uploadedAt": "2026-04-18T16:07:21.237Z",
+    "fileType": "image",
+    "size": 887528
   }
 }

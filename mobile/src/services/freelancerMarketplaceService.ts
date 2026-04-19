@@ -50,6 +50,7 @@ export interface WorkingHours {
 }
 
 export interface FreelancerService {
+  category: any;
   _id: string;
   title: string;
   description?: string;
@@ -288,7 +289,7 @@ const freelancerMarketplaceService = {
     freelancerId: string,
     data: ReviewSubmission,
   ): Promise<FreelancerReview> {
-    const res = await apiPost<any>(FREELANCERS.SUBMIT_REVIEW(freelancerId), data);
+    const res = await apiPost<any>(FREELANCERS.SUBMIT_REVIEW(freelancerId), { data });
     const inner = res.data?.data ?? res.data;
     return inner?.review ?? inner;
   },

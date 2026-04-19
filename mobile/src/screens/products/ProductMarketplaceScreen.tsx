@@ -1,257 +1,287 @@
-import React, { useState, useMemo } from 'react';
+/**
+ * mobile/src/screens/products/ProductMarketplaceScreen.tsx  (UPDATED)
+ * - Uses useTheme() hook
+ * - Integrates ProductFilterSheet for full filter/sort panel
+ * - Category tabs, subcategory pills, featured rail, save from list
+ */
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  RefreshControl,
-  SafeAreaView,
-  StatusBar,
-  ActivityIndicator,
+  View, Text, TextInput, FlatList, TouchableOpacity,
+  StyleSheet, RefreshControl, SafeAreaView, StatusBar,
+  ActivityIndicator, ScrollView,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
+import { useAuthStore } from '../../store/authStore';
 import {
-  useProducts,
-  useFeaturedProducts,
-  useProductCategories,
+  useProducts, useFeaturedProducts, useProductCategories,
+  useSaveProduct, useUnsaveProduct,
 } from '../../hooks/useProducts';
 import { ProductCard } from '../../components/products/ProductCard';
+import { ProductFilterSheet, FilterState } from '../../components/products/ProductFilterSheet';
 import { Product } from '../../services/productService';
-
-// ── Navigator type (shared across roles) ─────────────────────────────────────
 
 export type ProductsStackParamList = {
   ProductMarketplace: undefined;
-  ProductDetails: { productId: string };
+  ProductDetails: { productId: string; fromOwner?: boolean };
+  SavedProducts: undefined;
 };
 
 type Props = NativeStackScreenProps<ProductsStackParamList, 'ProductMarketplace'>;
 
-// ── Screen ─────────────────────────────────────────────────────────────────────
-
 export const ProductMarketplaceScreen: React.FC<Props> = ({ navigation }) => {
-  const { theme } = useThemeStore();
-  const { colors, spacing, borderRadius } = theme;
+  const { colors, spacing } = useTheme();
+  const { user } = useAuthStore();
 
-  const [search, setSearch] = useState('');
+  const [search, setSearch]             = useState('');
+  const [debouncedSearch, setDebounced] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [activeSubcat, setActiveSubcat]   = useState<string | null>(null);
+  const [filterState, setFilterState]     = useState<FilterState>({});
+  const [showFilter, setShowFilter]       = useState(false);
 
-  // Debounce search
-  const searchTimeout = React.useRef<ReturnType<typeof setTimeout>>();
-  const handleSearch = (text: string) => {
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const handleSearchChange = useCallback((text: string) => {
     setSearch(text);
-    clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => setDebouncedSearch(text), 400);
-  };
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => setDebounced(text), 400);
+  }, []);
 
-  const filters = useMemo(
-    () => ({
-      search: debouncedSearch || undefined,
-      category: activeCategory || undefined,
-      status: 'active',
-    }),
-    [debouncedSearch, activeCategory]
-  );
+  const handleCategoryPress = useCallback((catId: string | null) => {
+    setActiveCategory(catId);
+    setActiveSubcat(null);
+  }, []);
+
+  const { data: categories = [] } = useProductCategories();
+  const selectedCat = useMemo(() => categories.find(c => c.id === activeCategory), [categories, activeCategory]);
+
+  const filters = useMemo(() => ({
+    search:      debouncedSearch || undefined,
+    category:    activeCategory  || filterState.category  || undefined,
+    subcategory: activeSubcat    || filterState.subcategory || undefined,
+    minPrice:    filterState.minPrice,
+    maxPrice:    filterState.maxPrice,
+    featured:    filterState.featured,
+    sortBy:      filterState.sortBy,
+    sortOrder:   filterState.sortOrder,
+    status:      'active',
+  }), [debouncedSearch, activeCategory, activeSubcat, filterState]);
 
   const {
-    data: productsData,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading,
-    refetch,
-    isRefetching,
+    data: productsData, fetchNextPage, hasNextPage, isFetchingNextPage,
+    isLoading, refetch, isRefetching,
   } = useProducts(filters);
 
-  const { data: featuredProducts } = useFeaturedProducts();
-  const { data: categories } = useProductCategories();
+  const { data: featured = [] } = useFeaturedProducts();
 
   const allProducts: Product[] = useMemo(
-    () => productsData?.pages.flatMap((p) => p.products) ?? [],
+    () => productsData?.pages.flatMap(p => p.products) ?? [],
     [productsData]
   );
 
-  const navigateToDetail = (productId: string) => {
-    navigation.navigate('ProductDetails', { productId });
-  };
+  const saveProduct   = useSaveProduct();
+  const unsaveProduct = useUnsaveProduct();
 
-  // ── Header ────────────────────────────────────────────────────────────────────
+  const handleSave = useCallback((productId: string, isSaved: boolean) => {
+    if (!user) return;
+    isSaved ? unsaveProduct.mutate(productId) : saveProduct.mutate(productId);
+  }, [user, saveProduct, unsaveProduct]);
 
-  const ListHeader = () => (
-    <View>
-      {/* Search */}
-      <View style={[styles.searchRow, { borderColor: colors.border, backgroundColor: colors.inputBg, borderRadius: borderRadius.xl }]}>
-        <Ionicons name="search-outline" size={18} color={colors.textMuted} />
-        <TextInput
-          value={search}
-          onChangeText={handleSearch}
-          style={[styles.searchInput, { color: colors.text }]}
-          placeholder="Search products…"
-          placeholderTextColor={colors.placeholder}
-          returnKeyType="search"
-        />
-        {search.length > 0 && (
-          <TouchableOpacity onPress={() => { setSearch(''); setDebouncedSearch(''); }}>
-            <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+  const activeFilterCount = Object.values(filterState).filter(v => v !== undefined && v !== false).length;
+
+  // ── Category tabs ─────────────────────────────────────────────────────────
+
+  const CategoryTabs = useMemo(() => (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[s.catScroll, { paddingHorizontal: spacing.xs }]}>
+      <TouchableOpacity
+        onPress={() => handleCategoryPress(null)}
+        style={[s.catTab, { backgroundColor: !activeCategory ? colors.accent : colors.inputBg, borderColor: !activeCategory ? colors.accent : colors.borderPrimary }]}
+      >
+        <Text style={[s.catTabTxt, { color: !activeCategory ? '#fff' : colors.textSecondary }]}>All</Text>
+      </TouchableOpacity>
+      {categories.map(cat => {
+        const isActive = activeCategory === cat.id;
+        return (
+          <TouchableOpacity
+            key={cat.id}
+            onPress={() => handleCategoryPress(cat.id)}
+            style={[s.catTab, { backgroundColor: isActive ? colors.accent : colors.inputBg, borderColor: isActive ? colors.accent : colors.borderPrimary }]}
+          >
+            <Text style={[s.catTabTxt, { color: isActive ? '#fff' : colors.textSecondary }]}>{cat.label}</Text>
           </TouchableOpacity>
-        )}
+        );
+      })}
+    </ScrollView>
+  ), [categories, activeCategory, colors, spacing, handleCategoryPress]);
+
+  const SubcatPills = useMemo(() => {
+    if (!selectedCat?.subcategories?.length) return null;
+    return (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[s.subcatScroll, { paddingHorizontal: spacing.xs }]}>
+        {selectedCat.subcategories.map(sub => {
+          const isActive = activeSubcat === sub.id;
+          return (
+            <TouchableOpacity
+              key={sub.id}
+              onPress={() => setActiveSubcat(isActive ? null : sub.id)}
+              style={[s.subcatPill, { backgroundColor: isActive ? `${colors.accent}18` : 'transparent', borderColor: isActive ? colors.accent : colors.borderPrimary }]}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '600', color: isActive ? colors.accent : colors.textSecondary }}>{sub.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    );
+  }, [selectedCat, activeSubcat, colors, spacing]);
+
+  const ListHeader = useCallback(() => (
+    <View>
+      {/* Search + Filter row */}
+      <View style={[s.searchRow, { paddingHorizontal: spacing.xs, paddingBottom: 10, paddingTop: 12, gap: 10 }]}>
+        <View style={[s.searchBar, { backgroundColor: colors.inputBg, borderColor: colors.borderPrimary, flex: 1 }]}>
+          <Ionicons name="search-outline" size={17} color={colors.textMuted} />
+          <TextInput
+            value={search} onChangeText={handleSearchChange}
+            style={[s.searchInput, { color: colors.textPrimary }]}
+            placeholder="Search products…" placeholderTextColor={colors.inputPlaceholder}
+          />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => { setSearch(''); setDebounced(''); }}>
+              <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity
+          onPress={() => setShowFilter(true)}
+          style={[s.filterBtn, { backgroundColor: activeFilterCount > 0 ? colors.accent : colors.inputBg, borderColor: activeFilterCount > 0 ? colors.accent : colors.borderPrimary }]}
+        >
+          <Ionicons name="options-outline" size={20} color={activeFilterCount > 0 ? '#fff' : colors.textPrimary} />
+          {activeFilterCount > 0 && (
+            <View style={[s.filterBadge, { backgroundColor: '#fff' }]}>
+              <Text style={{ fontSize: 9, fontWeight: '800', color: colors.accent }}>{activeFilterCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
-      {/* Featured */}
-      {featuredProducts && featuredProducts.length > 0 && !debouncedSearch && !activeCategory && (
-        <View style={{ marginTop: spacing[4] }}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>⭐ Featured</Text>
+      {CategoryTabs}
+      {SubcatPills}
+
+      {/* Featured rail */}
+      {featured.length > 0 && !debouncedSearch && !activeCategory && (
+        <View style={{ marginTop: 4, paddingBottom: 8 }}>
+          <View style={[s.sectionHeader, { paddingHorizontal: spacing.xs }]}>
+            <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>⭐ Featured</Text>
+          </View>
           <FlatList
-            horizontal
-            data={featuredProducts}
-            keyExtractor={(item) => item._id}
+            horizontal data={featured.slice(0, 6)} keyExtractor={i => i._id}
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 2, gap: 10 }}
+            contentContainerStyle={{ paddingHorizontal: spacing.xs, gap: 10 }}
             renderItem={({ item }) => (
               <ProductCard
-                product={item}
-                onPress={() => navigateToDetail(item._id)}
-                size="md"
-                style={{ width: 160 }}
+                variant="public" product={item}
+                onPress={() => navigation.navigate('ProductDetails', { productId: item._id })}
+                onSave={handleSave} size="sm" style={{ width: 148 }}
               />
             )}
           />
         </View>
       )}
 
-      {/* Category chips */}
-      <View style={{ marginTop: spacing[4] }}>
-        <FlatList
-          horizontal
-          data={['All', ...(categories ?? [])]}
-          keyExtractor={(item) => item}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
-          renderItem={({ item }) => {
-            const isAll = item === 'All';
-            const isActive = isAll ? !activeCategory : activeCategory === item;
-            return (
-              <TouchableOpacity
-                onPress={() => setActiveCategory(isAll ? null : item)}
-                style={[
-                  styles.chip,
-                  {
-                    backgroundColor: isActive ? colors.primary : colors.inputBg,
-                    borderColor: isActive ? colors.primary : colors.border,
-                  },
-                ]}
-              >
-                <Text style={{ fontSize: 12, fontWeight: '600', color: isActive ? '#fff' : colors.textSecondary }}>
-                  {item}
-                </Text>
-              </TouchableOpacity>
-            );
-          }}
-        />
+      <View style={[s.resultsRow, { paddingHorizontal: spacing.xs }]}>
+        <Text style={[s.resultsTxt, { color: colors.textMuted }]}>
+          {isLoading ? 'Loading…' : `${allProducts.length.toLocaleString()} products`}
+        </Text>
+        {(activeCategory || debouncedSearch || activeFilterCount > 0) && (
+          <TouchableOpacity onPress={() => { handleCategoryPress(null); setSearch(''); setDebounced(''); setFilterState({}); }}>
+            <Text style={{ fontSize: 12, color: colors.accent, fontWeight: '600' }}>Clear all</Text>
+          </TouchableOpacity>
+        )}
       </View>
-
-      <Text style={[styles.resultsCount, { color: colors.textMuted }]}>
-        {isLoading ? 'Loading…' : `${allProducts.length} products`}
-      </Text>
     </View>
-  );
-
-  // ── Empty state ───────────────────────────────────────────────────────────────
+  ), [
+    search, handleSearchChange, CategoryTabs, SubcatPills, featured,
+    debouncedSearch, activeCategory, allProducts.length, isLoading,
+    colors, spacing, activeFilterCount, navigation, handleSave, handleCategoryPress,
+  ]);
 
   const EmptyState = () => (
-    <View style={styles.empty}>
+    <View style={s.empty}>
       <Ionicons name="bag-outline" size={56} color={colors.textMuted} />
-      <Text style={[styles.emptyTitle, { color: colors.text }]}>No Products Found</Text>
-      <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
-        {debouncedSearch || activeCategory
-          ? 'Try adjusting your search or category.'
-          : 'No products available right now.'}
-      </Text>
+      <Text style={[s.emptyTitle, { color: colors.textPrimary }]}>No Products Found</Text>
+      <Text style={[s.emptyBody, { color: colors.textMuted }]}>Try adjusting your filters.</Text>
     </View>
   );
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={theme.isDark ? 'light-content' : 'dark-content'} />
+    <SafeAreaView style={[s.safe, { backgroundColor: colors.bgPrimary }]}>
+      <StatusBar barStyle="dark-content" />
 
-      {/* Page header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Marketplace</Text>
-        <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="options-outline" size={22} color={colors.text} />
-        </TouchableOpacity>
+      <View style={[s.navbar, { borderBottomColor: colors.borderPrimary, backgroundColor: colors.bgPrimary }]}>
+        <Text style={[s.navTitle, { color: colors.textPrimary }]}>Marketplace</Text>
+        {user && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('SavedProducts')}
+            style={[s.navBtn, { backgroundColor: colors.bgSurface, borderColor: colors.borderPrimary }]}
+          >
+            <Ionicons name="bookmark-outline" size={18} color={colors.textPrimary} />
+          </TouchableOpacity>
+        )}
       </View>
 
       <FlatList
         data={allProducts}
-        keyExtractor={(item) => item._id}
+        keyExtractor={item => item._id}
         numColumns={2}
         columnWrapperStyle={{ gap: 10 }}
-        contentContainerStyle={{ padding: spacing[4], gap: 10 }}
+        contentContainerStyle={{ paddingHorizontal: spacing.xs, paddingBottom: 24, gap: 10 }}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={ListHeader}
-        ListEmptyComponent={isLoading ? null : <EmptyState />}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={refetch}
-            tintColor={colors.primary}
-          />
-        }
+        ListEmptyComponent={isLoading ? null : EmptyState}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.accent} />}
         onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage(); }}
         onEndReachedThreshold={0.4}
-        ListFooterComponent={
-          isFetchingNextPage ? (
-            <ActivityIndicator color={colors.primary} style={{ paddingVertical: 20 }} />
-          ) : null
-        }
+        ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={colors.accent} style={{ paddingVertical: 20 }} /> : null}
         renderItem={({ item }) => (
           <ProductCard
-            product={item}
-            onPress={() => navigateToDetail(item._id)}
-            size="md"
-            style={{ flex: 1 }}
+            variant="public" product={item}
+            onPress={() => navigation.navigate('ProductDetails', { productId: item._id })}
+            onSave={handleSave} size="md" style={{ flex: 1 }}
           />
         )}
+      />
+
+      <ProductFilterSheet
+        visible={showFilter}
+        onClose={() => setShowFilter(false)}
+        current={filterState}
+        onApply={f => { setFilterState(f); setShowFilter(false); }}
       />
     </SafeAreaView>
   );
 };
 
-const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-  },
-  headerTitle: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    height: 46,
-    borderWidth: 1,
-  },
+const s = StyleSheet.create({
+  safe:        { flex: 1 },
+  navbar:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1 },
+  navTitle:    { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  navBtn:      { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  searchRow:   { flexDirection: 'row', alignItems: 'center' },
+  searchBar:   { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, height: 44, borderWidth: 1, borderRadius: 12 },
   searchInput: { flex: 1, fontSize: 14 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 10 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  resultsCount: { fontSize: 12, marginTop: 14, marginBottom: 4 },
-  empty: { alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 10 },
-  emptyTitle: { fontSize: 17, fontWeight: '700' },
-  emptyBody: { fontSize: 13, textAlign: 'center', maxWidth: 240 },
+  filterBtn:   { width: 44, height: 44, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  filterBadge: { position: 'absolute', top: 6, right: 6, width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  catScroll:   { gap: 8, paddingVertical: 8 },
+  catTab:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1 },
+  catTabTxt:   { fontSize: 12, fontWeight: '600' },
+  subcatScroll:{ gap: 7, paddingBottom: 8 },
+  subcatPill:  { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1 },
+  sectionHeader:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  sectionTitle:{ fontSize: 16, fontWeight: '700' },
+  resultsRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 6 },
+  resultsTxt:  { fontSize: 12 },
+  empty:       { alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 10 },
+  emptyTitle:  { fontSize: 17, fontWeight: '700' },
+  emptyBody:   { fontSize: 13, textAlign: 'center', maxWidth: 240 },
 });

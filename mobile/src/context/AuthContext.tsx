@@ -7,7 +7,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import * as SecureStore from 'expo-secure-store';
 import { apiPost, apiGet } from '../lib/api';
 
-export type UserRole = 'candidate' | 'company' | 'organization' | 'admin';
+export type UserRole = 'candidate' | 'company' | 'organization' | 'admin'|'freelancer';
 
 export interface AuthUser {
   _id:       string;

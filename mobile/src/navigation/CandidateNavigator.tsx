@@ -26,7 +26,7 @@ import {
 } from './types';
 
 // ─── Shared ───────────────────────────────────────────────────
-import SocialNavigator  from './SocialNavigator';
+import SocialNavigator  from '../social/navigation/SocialNavigator';
 import PlaceholderScreen from '../screens/auth/PlaceholderScreen';
 
 // ─── Candidate screens ────────────────────────────────────────
@@ -118,7 +118,7 @@ function CandidateJobsNavigator() {
 
 // ─── Social wrapper ───────────────────────────────────────────
 function CandidateSocialNavigator() {
-  return <SocialNavigator parentNavigationKey="Home" />;
+  return <SocialNavigator />;
 }
 
 // ─── Main tab bar ─────────────────────────────────────────────

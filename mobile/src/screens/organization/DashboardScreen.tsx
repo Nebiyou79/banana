@@ -29,7 +29,7 @@ import {
 import { organizationService } from '../../services/organizationService';
 import {
  SkeletonCard,
-  StatTile,
+  StatCard,
 } from '../../components/shared/ProfileAtoms';
 import type { OrganizationStackParamList } from '../../navigation/OrganizationNavigator';
  
@@ -179,10 +179,10 @@ export const OrganizationDashboardScreen: React.FC = () => {
         </View>
       ) : (
         <View style={[dsh.grid, { paddingHorizontal: spacing[5] }]}>
-          <StatTile label="Jobs"         value={stats?.totalJobs ?? 0}         icon="briefcase-outline"     color={ACC}      />
-          <StatTile label="Active"       value={stats?.activeJobs ?? 0}        icon="radio-button-on"       color="#10B981"  />
-          <StatTile label="Applications" value={stats?.totalApplications ?? 0} icon="document-text-outline" color="#F59E0B"  />
-          <StatTile label="New Today"    value={stats?.newApplications ?? 0}   icon="notifications-outline" color="#EF4444"  />
+          <StatCard label="Jobs"         value={stats?.totalJobs ?? 0}         icon="briefcase-outline"     color={ACC}      />
+          <StatCard label="Active"       value={stats?.activeJobs ?? 0}        icon="radio-button-on"       color="#10B981"  />
+          <StatCard label="Applications" value={stats?.totalApplications ?? 0} icon="document-text-outline" color="#F59E0B"  />
+          <StatCard label="New Today"    value={stats?.newApplications ?? 0}   icon="notifications-outline" color="#EF4444"  />
         </View>
       )}
 
