@@ -1,7 +1,11 @@
 /**
- * mobile/src/screens/products/SavedProductsScreen.tsx  (NEW)
+ * mobile/src/screens/products/SavedProductsScreen.tsx
  *
  * Shows products the authenticated user has saved / bookmarked.
+ *
+ * FIX: picks the correct detail route at runtime depending on whether this
+ * screen is mounted in the public ProductsNavigator or in a role stack that
+ * registers 'PublicProductDetails' (Company stack).
  */
 import React, { useMemo } from 'react';
 import {
@@ -85,15 +89,13 @@ export const SavedProductsScreen: React.FC<Props> = ({ navigation }) => {
               : null
           }
           renderItem={({ item }) => (
-            <ProductCard
-              variant="public"
-              product={item}
-              onPress={() => navigation.navigate('ProductDetails', { productId: item._id })}
-              onSave={(id) => unsave.mutate(id)}
-              isSaved
-              size="md"
-              style={{ flex: 1 }}
-            />
+                        <ProductCard
+                variant="public"
+                product={item}
+onPress={() => navigation.navigate('ProductDetails', { productId: item._id })}              onSave={(id) => unsave.mutate(id)}
+              isSaved                        size="md"
+                        style={{ flex: 1 }}
+              />
           )}
         />
       )}

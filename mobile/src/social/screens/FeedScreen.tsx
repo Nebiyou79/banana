@@ -83,13 +83,11 @@ const FeedScreen: React.FC = () => {
     setSheetVisible(true);
   }, []);
 
-  const handleCreatePress = useCallback(() => {
-    try {
-      navigation.navigate('CreatePost');
-    } catch {
-      /* hook up once CreatePostScreen is added */
-    }
-  }, [navigation]);
+const handleCreatePress = useCallback(() => {
+  navigation.navigate('SocialEntry' as any, {
+    screen: 'CreatePost',
+  });
+}, [navigation]);
 
   return (
     <SafeAreaView

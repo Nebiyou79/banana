@@ -1,3 +1,4 @@
+// src/social/components/post/PostActions.tsx
 import { Ionicons } from '@expo/vector-icons';
 import React, { memo, useCallback, useState } from 'react';
 import {
@@ -17,26 +18,22 @@ interface Props {
   post: Post;
   onReact: (postId: string, reaction: ReactionType) => void;
   onRemoveReact: (postId: string) => void;
+  onDislike: (postId: string) => void;
   onComment: () => void;
   onShare: () => void;
   onSave: () => void;
 }
 
-/**
- * The row of Like / Comment / Share / Save buttons under the post body.
- * Long-press on "Like" opens the reaction picker.
- */
 const PostActions: React.FC<Props> = memo(
-  ({ post, onReact, onRemoveReact, onComment, onShare, onSave }) => {
+  ({ post, onReact, onRemoveReact, onDislike, onComment, onShare, onSave }) => {
     const theme = useSocialTheme();
     const [showReactions, setShowReactions] = useState(false);
     const { scale: likeScale, trigger: triggerLike } = useLikeBurst();
 
-    const userReaction = post.userInteraction?.value as ReactionType | undefined;
-    const activeEmoji =
-      userReaction && userReaction !== 'dislike'
-        ? theme.reactions[userReaction]
-        : '';
+    const rawValue = post.userInteraction?.value;
+    const userReaction: ReactionType | undefined =
+      rawValue && rawValue !== 'dislike' ? (rawValue as ReactionType) : undefined;
+    const activeEmoji = userReaction ? theme.reactions[userReaction] ?? '' : '';
 
     const handleLikePress = useCallback(() => {
       if (post.hasLiked) {
@@ -47,6 +44,19 @@ const PostActions: React.FC<Props> = memo(
       }
       setShowReactions(false);
     }, [post.hasLiked, post._id, onReact, onRemoveReact, triggerLike]);
+
+    const handleDislikePress = useCallback(() => {
+      if (post.hasDisliked) {
+        onRemoveReact(post._id);
+        return;
+      }
+      if (post.hasLiked) {
+        // Clear existing reaction first, then add dislike
+        onRemoveReact(post._id);
+      }
+      onDislike(post._id);
+      setShowReactions(false);
+    }, [post.hasDisliked, post.hasLiked, post._id, onDislike, onRemoveReact]);
 
     const handleReactionSelect = useCallback(
       (reaction: ReactionType) => {
@@ -102,6 +112,33 @@ const PostActions: React.FC<Props> = memo(
           </Animated.View>
         </View>
 
+        {/* Dislike */}
+        <TouchableOpacity
+          style={styles.btn}
+          onPress={handleDislikePress}
+          activeOpacity={0.7}
+          accessibilityLabel={post.hasDisliked ? 'Remove dislike' : 'Dislike'}
+        >
+          <Ionicons
+            name={post.hasDisliked ? 'thumbs-down' : 'thumbs-down-outline'}
+            size={19}
+            color={post.hasDisliked ? theme.primary : theme.subtext}
+          />
+          <Text
+            style={[
+              styles.btnText,
+              {
+                color: post.hasDisliked ? theme.primary : theme.subtext,
+                fontWeight: post.hasDisliked ? '700' : '500',
+              },
+            ]}
+          >
+            {post.stats.dislikes > 0
+              ? formatCount(post.stats.dislikes)
+              : 'Dislike'}
+          </Text>
+        </TouchableOpacity>
+
         {/* Comment */}
         <TouchableOpacity
           style={styles.btn}
@@ -132,15 +169,12 @@ const PostActions: React.FC<Props> = memo(
               size={19}
               color={theme.subtext}
             />
-            <Text style={[styles.btnText, { color: theme.subtext }]}>
-              {post.stats.shares > 0 ? formatCount(post.stats.shares) : 'Share'}
-            </Text>
           </TouchableOpacity>
         ) : null}
 
         <View style={{ flex: 1 }} />
 
-        {/* Save / bookmark */}
+        {/* Save */}
         <TouchableOpacity
           style={styles.btn}
           onPress={onSave}
@@ -171,7 +205,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 10,
     minHeight: 44,
     minWidth: 44,

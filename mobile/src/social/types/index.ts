@@ -1,12 +1,7 @@
-/**
- * Banana Social — Type Definitions Barrel
- *
- * Source of truth for every type consumed by services, hooks, and components.
- * Import like: `import type { Post, Profile, UserRole } from '../types';`
- */
+// src/social/types/index.ts
 
 // ── 1. Primitives ────────────────────────────────────────────────────
-export type ReactionType = 'like' | 'love' | 'haha' | 'wow' | 'sad' | 'angry';
+export type ReactionType = 'like' | 'heart' | 'celebrate' | 'percent_100' | 'clap';
 export type InteractionType = 'reaction' | 'dislike';
 export type PostVisibility = 'public' | 'connections' | 'private';
 export type PostType =

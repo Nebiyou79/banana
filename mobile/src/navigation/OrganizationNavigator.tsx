@@ -43,7 +43,6 @@ import { OrgJobsScreen }                    from '../screens/organization/OrgJob
 import { OrgJobCreateScreen }               from '../screens/organization/OrgJobCreateScreen';
 import { OrgJobEditScreen }                 from '../screens/organization/OrgJobEditScreen';
 import { OrgJobDetail }                     from '../screens/organization/OrgJobDetail';
-import { EmployerApplicationListScreen }    from '../screens/company/EmployerApplicationListScreen';
 import { EmployerApplicationDetailScreen }  from '../screens/company/EmployerApplicationDetailScreen';
 
 // Freelancer Marketplace
@@ -59,6 +58,7 @@ import { ReferralScreen }                   from '../screens/shared/ReferralScre
 // Products
 import { ProductMarketplaceScreen }         from '../screens/products/ProductMarketplaceScreen';
 import { ProductDetailsScreen as PublicProductDetailsScreen } from '../screens/products/ProductDetailsScreen';
+import { EmployerApplicationsScreen } from '../screens/company/EmployerApplicationListScreen';
 
 // ─── Param list ───────────────────────────────────────────────
 export type OrganizationStackParamList = {
@@ -248,8 +248,8 @@ export default function OrganizationNavigator() {
       <Stack.Screen name="OrgJobCreate"  component={OrgJobCreateScreen}             />
       <Stack.Screen name="OrgJobEdit"    component={OrgJobEditScreen}               />
       <Stack.Screen name="OrgJobDetail"  component={OrgJobDetail}                   />
-      <Stack.Screen name="OrgApplicants" component={EmployerApplicationListScreen}  />
-      <Stack.Screen name="ApplicationList"   component={EmployerApplicationListScreen}   />
+      <Stack.Screen name="OrgApplicants" component={EmployerApplicationsScreen}  />
+      <Stack.Screen name="ApplicationList"   component={EmployerApplicationsScreen}   />
       <Stack.Screen name="ApplicationDetail" component={EmployerApplicationDetailScreen} />
 
       {/* Freelancer Marketplace */}

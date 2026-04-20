@@ -1,5 +1,5 @@
 /**
- * mobile/src/hooks/useProducts.ts  (UPDATED)
+ * mobile/src/hooks/useProducts.ts
  *
  * New hooks:
  *  - useProductCategories       → full category hierarchy from server
@@ -9,6 +9,12 @@
  * Updated hooks:
  *  - useCompanyProducts         → accepts isOwner flag for status filtering
  *  - useUpdateProductStatus     → extended status enum
+ *
+ * FIX (owner id resolution): mirrors frontend `user?.company ?? user?._id`.
+ *   - user.company may be an object { _id, name }, a string id, or null
+ *   - backend /products/company/:id accepts either Company._id or User._id
+ *   - so user._id is a safe last-resort fallback (was `''` before → enabled:false
+ *     → "No Products" empty state even though the company existed).
  */
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'react-native';
@@ -25,17 +31,32 @@ import {
 import { useAuthStore } from '../store/authStore';
 import { useToast } from './useToast';
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolve the id the backend's /products/company/:companyId endpoint expects.
+ * Mirrors the frontend rule (user.company ?? user._id).
+ */
+const resolveCurrentCompanyId = (
+  user: { _id?: string; company?: { _id?: string } | string | null } | null | undefined,
+): string => {
+  if (!user) return '';
+  if (typeof user.company === 'string' && user.company) return user.company;
+  if (user.company && typeof user.company === 'object' && user.company._id) return user.company._id;
+  return user._id ?? '';
+};
+
 // ── Query keys ─────────────────────────────────────────────────────────────────
 
 export const productKeys = {
-  all:        ['products']                              as const,
-  list:       (f?: ProductFilters) => [...productKeys.all, 'list', f]    as const,
-  featured:   ()                   => [...productKeys.all, 'featured']   as const,
-  categories: ()                   => [...productKeys.all, 'categories'] as const,
-  detail:     (id: string)         => [...productKeys.all, 'detail', id] as const,
+  all:        ['products']                                      as const,
+  list:       (f?: ProductFilters)     => [...productKeys.all, 'list', f]       as const,
+  featured:   ()                       => [...productKeys.all, 'featured']      as const,
+  categories: ()                       => [...productKeys.all, 'categories']    as const,
+  detail:     (id: string)             => [...productKeys.all, 'detail', id]    as const,
   company:    (id: string, f?: object) => [...productKeys.all, 'company', id, f] as const,
-  related:    (id: string)         => [...productKeys.all, 'related', id] as const,
-  saved:      ()                   => [...productKeys.all, 'saved']      as const,
+  related:    (id: string)             => [...productKeys.all, 'related', id]   as const,
+  saved:      ()                       => [...productKeys.all, 'saved']         as const,
 };
 
 // ── Public marketplace ─────────────────────────────────────────────────────────
@@ -73,7 +94,7 @@ export const useProductCategories = () =>
   useQuery<CategoryItem[]>({
     queryKey: productKeys.categories(),
     queryFn:  productService.getCategories,
-    staleTime: 60 * 60 * 1000, // categories don't change often
+    staleTime: 60 * 60 * 1000,
   });
 
 export const useRelatedProducts = (id: string) =>
@@ -91,7 +112,7 @@ export const useCompanyProducts = (
   filters?: Omit<ProductFilters, 'page'> & { sort?: string; status?: string }
 ) => {
   const { user } = useAuthStore();
-  const resolvedId = companyId ?? (user?.company as Record<string, string>)?._id ?? '';
+  const resolvedId = companyId ?? resolveCurrentCompanyId(user);
 
   return useInfiniteQuery({
     queryKey: productKeys.company(resolvedId, filters),
@@ -122,7 +143,7 @@ export const useSavedProducts = (filters?: { page?: number; limit?: number }) =>
     staleTime: 2 * 60 * 1000,
   });
 
-// ── Mutations ──────────────────────────────────────────────────────────────────
+// ── Save / Unsave ──────────────────────────────────────────────────────────────
 
 export const useSaveProduct = () => {
   const qc = useQueryClient();
@@ -164,7 +185,7 @@ export const useCreateProduct = () => {
     mutationFn: ({ data, imageAssets }: CreateVars) =>
       productService.createProduct(data, imageAssets),
     onSuccess: () => {
-      const companyId = (user?.company as Record<string, string>)?._id ?? '';
+      const companyId = resolveCurrentCompanyId(user);
       qc.invalidateQueries({ queryKey: productKeys.company(companyId) });
       qc.invalidateQueries({ queryKey: productKeys.all });
       showSuccess('Product created successfully!');
@@ -190,7 +211,7 @@ export const useUpdateProduct = () => {
     mutationFn: ({ id, data, imageAssets, existingImages, imagesToDelete, primaryImageIndex }: UpdateVars) =>
       productService.updateProduct(id, data, imageAssets, { existingImages, imagesToDelete, primaryImageIndex }),
     onSuccess: (_, vars) => {
-      const companyId = (user?.company as Record<string, string>)?._id ?? '';
+      const companyId = resolveCurrentCompanyId(user);
       qc.invalidateQueries({ queryKey: productKeys.detail(vars.id) });
       qc.invalidateQueries({ queryKey: productKeys.company(companyId) });
       showSuccess('Product updated successfully!');
@@ -209,7 +230,7 @@ export const useUpdateProductStatus = () => {
     mutationFn: ({ id, status }: UpdateStatusVars) =>
       productService.updateProductStatus(id, status),
     onSuccess: (_, vars) => {
-      const companyId = (user?.company as Record<string, string>)?._id ?? '';
+      const companyId = resolveCurrentCompanyId(user);
       qc.invalidateQueries({ queryKey: productKeys.detail(vars.id) });
       qc.invalidateQueries({ queryKey: productKeys.company(companyId) });
       showSuccess(`Status updated to ${vars.status}`);
@@ -235,7 +256,7 @@ export const useDeleteProduct = () => {
         );
       }),
     onSuccess: () => {
-      const companyId = (user?.company as Record<string, string>)?._id ?? '';
+      const companyId = resolveCurrentCompanyId(user);
       qc.invalidateQueries({ queryKey: productKeys.company(companyId) });
       qc.invalidateQueries({ queryKey: productKeys.all });
       showSuccess('Product deleted.');

@@ -12,6 +12,7 @@ interface EmptyStateProps {
   icon?:        string;
   title:        string;
   subtitle?:    string;
+  description?: string;
   actionLabel?: string;
   onAction?:    () => void;
 }

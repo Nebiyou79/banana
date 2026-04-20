@@ -1,11 +1,11 @@
 /**
  * src/components/application/ApplicationForm.tsx
  * ─────────────────────────────────────────────────────────────────────────────
- * 4-step application form. Mirrors frontend web ApplicationForm exactly.
+ * 4-step application form — mirrors the web frontend exactly.
  *
- * Step 1 – Profile & CVs     (user info verification + multi-CV selection)
- * Step 2 – Cover Letter      (cover letter + skills)
- * Step 3 – Docs              (work experience + references with optional file uploads)
+ * Step 1 – Profile & CVs      (contact info pre-filled, multi-CV select)
+ * Step 2 – Cover Letter       (cover letter + skills)
+ * Step 3 – Docs               (work experience + references, form OR file upload)
  * Step 4 – Review & Submit
  * ─────────────────────────────────────────────────────────────────────────────
  */
@@ -26,6 +26,7 @@ import {
 } from '../../services/applicationService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
 interface ApplicationFormProps {
   jobId: string;
   jobTitle: string;
@@ -34,335 +35,107 @@ interface ApplicationFormProps {
   onClose: () => void;
 }
 
-interface DocFile { uri: string; name: string; type: string; _tempId: string }
+interface DocFile {
+  uri: string;
+  name: string;
+  type: string;
+  _tempId: string;
+}
 
 const STEPS = [
-  { num: 1, label: 'Profile',     icon: 'person-outline' },
-  { num: 2, label: 'Application', icon: 'document-text-outline' },
-  { num: 3, label: 'Documents',   icon: 'briefcase-outline' },
-  { num: 4, label: 'Review',      icon: 'checkmark-circle-outline' },
+  { num: 1, label: 'Profile',      icon: 'person-outline' },
+  { num: 2, label: 'Application',  icon: 'document-text-outline' },
+  { num: 3, label: 'Documents',    icon: 'briefcase-outline' },
+  { num: 4, label: 'Review',       icon: 'checkmark-circle-outline' },
 ];
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-export const ApplicationForm: React.FC<ApplicationFormProps> = ({
-  jobId, jobTitle, companyName, onSuccess, onClose,
-}) => {
-  const { theme } = useThemeStore();
-  const c = theme.colors;
-  const { user } = useAuthStore();
-  const { data: cvsData, isLoading: cvsLoading } = useMyCVs();
-  // Guard: useMyCVs may return { data: CV[] } or CV[] directly — normalise to array
-  const myCVs: CV[] = Array.isArray(cvsData)
-    ? cvsData
-    : Array.isArray((cvsData as any)?.data)
-    ? (cvsData as any).data
-    : [];
-  const applyMut = useApplyForJob();
+const genTmpId = () => `tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-  const [step, setStep] = useState(1);
+// ─── Step Header ──────────────────────────────────────────────────────────────
 
-  // Step 1 — Contact info
-  // user may have phone/location on the profile object even if AuthUser type doesn't declare them
-  const userAny = user as any;
-  const [contactEmail, setContactEmail]       = useState<string>(user?.email ?? '');
-  const [contactPhone, setContactPhone]       = useState<string>(userAny?.phone ?? userAny?.roleSpecific?.phone ?? '');
-  const [contactLocation, setContactLocation] = useState<string>(userAny?.location ?? userAny?.roleSpecific?.location ?? '');
-  const [contactTelegram, setContactTelegram] = useState<string>('');
-  const [selectedCVIds, setSelectedCVIds]   = useState<string[]>([]);
-
-  // Step 2 — Cover letter + skills
-  const [coverLetter, setCoverLetter] = useState('');
-  const [skillInput, setSkillInput]   = useState('');
-  const [skills, setSkills]           = useState<string[]>([]);
-
-  // Step 3 — References
-  const [references, setReferences] = useState<Reference[]>([{
-    name: '', position: '', organization: '', email: '', phone: '',
-    relationship: '', providedAsDocument: false,
-  }]);
-  const [referenceFiles, setReferenceFiles] = useState<Map<number, DocFile>>(new Map());
-
-  // Step 3 — Work experience
-  const [workExps, setWorkExps] = useState<WorkExperience[]>([{
-    company: '', position: '', startDate: '', endDate: '',
-    current: false, description: '', skills: [], providedAsDocument: false,
-  }]);
-  const [expFiles, setExpFiles] = useState<Map<number, DocFile>>(new Map());
-
-  // ── Skill helpers ─────────────────────────────────────────────────────────
-  const addSkill = () => {
-    const t = skillInput.trim();
-    if (t && !skills.includes(t)) { setSkills(s => [...s, t]); setSkillInput(''); }
-  };
-
-  // ── CV helpers ────────────────────────────────────────────────────────────
-  const toggleCV = (cvId: string) => {
-    setSelectedCVIds(prev =>
-      prev.includes(cvId) ? prev.filter(id => id !== cvId) : [...prev, cvId]
-    );
-  };
-
-  // ── Reference helpers ─────────────────────────────────────────────────────
-  const updateRef = (i: number, field: string, val: any) => {
-    setReferences(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r));
-  };
-  const addRef = () => setReferences(prev => [...prev, {
-    name: '', position: '', organization: '', email: '', phone: '',
-    relationship: '', providedAsDocument: false,
-  }]);
-  const removeRef = (i: number) => setReferences(prev => prev.filter((_, idx) => idx !== i));
-
-  const pickRefFile = async (i: number) => {
-    const res = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/*'] });
-    if (res.canceled || !res.assets?.length) return;
-    const asset = res.assets[0];
-    const tempId = applicationService.generateTempId();
-    setReferenceFiles(prev => new Map(prev).set(i, { uri: asset.uri, name: asset.name, type: asset.mimeType ?? 'application/pdf', _tempId: tempId }));
-    updateRef(i, '_tempId', tempId);
-  };
-
-  // ── Work experience helpers ───────────────────────────────────────────────
-  const updateExp = (i: number, field: string, val: any) => {
-    setWorkExps(prev => prev.map((e, idx) => idx === i ? { ...e, [field]: val } : e));
-  };
-  const addExp = () => setWorkExps(prev => [...prev, {
-    company: '', position: '', startDate: '', endDate: '',
-    current: false, description: '', skills: [], providedAsDocument: false,
-  }]);
-  const removeExp = (i: number) => setWorkExps(prev => prev.filter((_, idx) => idx !== i));
-
-  const pickExpFile = async (i: number) => {
-    const res = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/*'] });
-    if (res.canceled || !res.assets?.length) return;
-    const asset = res.assets[0];
-    const tempId = applicationService.generateTempId();
-    setExpFiles(prev => new Map(prev).set(i, { uri: asset.uri, name: asset.name, type: asset.mimeType ?? 'application/pdf', _tempId: tempId }));
-    updateExp(i, '_tempId', tempId);
-  };
-
-  // ── Validation ────────────────────────────────────────────────────────────
-  const validateStep = (): string | null => {
-    if (step === 1) {
-      if (!contactEmail.trim()) return 'Email is required';
-      if (!contactPhone.trim()) return 'Phone number is required';
-      if (selectedCVIds.length === 0) return 'Please select at least one CV';
-    }
-    if (step === 2) {
-      if (coverLetter.trim().length < 50) return 'Cover letter must be at least 50 characters';
-      if (skills.length === 0) return 'Please add at least one skill';
-    }
-    return null;
-  };
-
-  const goNext = () => {
-    const err = validateStep();
-    if (err) { Alert.alert('Required', err); return; }
-    setStep(s => Math.min(s + 1, 4));
-  };
-
-  // ── Submit ────────────────────────────────────────────────────────────────
-  const handleSubmit = async () => {
-    const err = validateStep();
-    if (err) { Alert.alert('Required', err); return; }
-
-    const selectedCVData = myCVs
-      .filter(cv => selectedCVIds.includes(cv._id))
-      .map(cv => ({
-        cvId: cv._id,
-        filename:     applicationService.getCVDisplayName(cv),
-        originalName: applicationService.getCVDisplayName(cv),
-        url:          cv.fileUrl ?? cv.downloadUrl ?? cv.url ?? '',
-        downloadUrl:  cv.downloadUrl ?? cv.fileUrl ?? cv.url ?? '',
-        size:         cv.fileSize ?? cv.size ?? 0,
-        mimetype:     cv.mimetype ?? 'application/pdf',
-      }));
-
-    const refFiles = Array.from(referenceFiles.entries()).map(([_, f]) => f);
-    const expFilesList = Array.from(expFiles.entries()).map(([_, f]) => f);
-
-    try {
-      const result = await applyMut.mutateAsync({
-        jobId,
-        data: {
-          coverLetter: coverLetter.trim(),
-          skills,
-          selectedCVs: selectedCVData,
-          contactInfo: {
-            email:    contactEmail.trim(),
-            phone:    contactPhone.trim(),
-            location: contactLocation.trim(),
-            telegram: contactTelegram.trim(),
-          },
-          userInfo: {
-            name:  user?.name ?? '',
-            email: contactEmail.trim(),
-            phone: contactPhone.trim(),
-            location: contactLocation.trim(),
-          },
-          references: references.filter(r => (r.name?.trim() ?? '') !== '' || r.providedAsDocument),
-          workExperience: workExps.filter(e => (e.company?.trim() ?? '') !== '' || e.providedAsDocument),
-          referenceFiles: refFiles.length ? refFiles : undefined,
-          experienceFiles: expFilesList.length ? expFilesList : undefined,
-        },
-      });
-      onSuccess(result.data.application);
-    } catch (e: any) {
-      Alert.alert('Submission Failed', e?.message ?? 'Failed to submit application');
-    }
-  };
-
-  const loading = applyMut.isPending;
-
-  return (
-    <View style={[f.root, { backgroundColor: c.background }]}>
-      {/* Header */}
-      <View style={[f.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-        <TouchableOpacity onPress={onClose} style={f.closeBtn}>
-          <Ionicons name="close" size={24} color={c.text} />
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={[f.headerTitle, { color: c.text }]} numberOfLines={1}>{jobTitle}</Text>
-          <Text style={[f.headerSub, { color: c.textMuted }]} numberOfLines={1}>{companyName}</Text>
-        </View>
-      </View>
-
-      {/* Step bar */}
-      <View style={[f.stepBar, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-        {STEPS.map(s => (
-          <View key={s.num} style={f.stepItem}>
-            <View style={[f.stepDot, {
-              backgroundColor: step >= s.num ? c.primary : c.border,
-            }]}>
-              {step > s.num
-                ? <Ionicons name="checkmark" size={11} color="#fff" />
-                : <Text style={[f.stepNum, { color: step >= s.num ? '#fff' : c.textMuted }]}>{s.num}</Text>
-              }
-            </View>
-            <Text style={[f.stepLabel, { color: step === s.num ? c.primary : c.textMuted }]}>{s.label}</Text>
-          </View>
-        ))}
-      </View>
-
-      {/* Body */}
-      <KeyboardAwareScrollView
-        contentContainerStyle={[f.scroll, { backgroundColor: c.background }]}
-        keyboardShouldPersistTaps="handled"
-        enableOnAndroid
-        extraScrollHeight={60}
-      >
-        {step === 1 && (
-          <Step1
-            c={c} cvsLoading={cvsLoading} myCVs={myCVs}
-            selectedCVIds={selectedCVIds} toggleCV={toggleCV}
-            contactEmail={contactEmail} setContactEmail={setContactEmail}
-            contactPhone={contactPhone} setContactPhone={setContactPhone}
-            contactLocation={contactLocation} setContactLocation={setContactLocation}
-            contactTelegram={contactTelegram} setContactTelegram={setContactTelegram}
-            user={user}
-          />
-        )}
-        {step === 2 && (
-          <Step2
-            c={c} coverLetter={coverLetter} setCoverLetter={setCoverLetter}
-            skillInput={skillInput} setSkillInput={setSkillInput}
-            skills={skills} setSkills={setSkills} addSkill={addSkill}
-          />
-        )}
-        {step === 3 && (
-          <Step3
-            c={c}
-            references={references} updateRef={updateRef} addRef={addRef} removeRef={removeRef}
-            referenceFiles={referenceFiles} pickRefFile={pickRefFile}
-            workExps={workExps} updateExp={updateExp} addExp={addExp} removeExp={removeExp}
-            expFiles={expFiles} pickExpFile={pickExpFile}
-          />
-        )}
-        {step === 4 && (
-          <Step4
-            c={c} jobTitle={jobTitle} companyName={companyName}
-            coverLetter={coverLetter} skills={skills}
-            selectedCVCount={selectedCVIds.length}
-            refCount={references.filter(r => (r.name?.trim() ?? '') !== '' || r.providedAsDocument).length}
-            expCount={workExps.filter(e => (e.company?.trim() ?? '') !== '' || e.providedAsDocument).length}
-            contactEmail={contactEmail} contactPhone={contactPhone}
-          />
-        )}
-      </KeyboardAwareScrollView>
-
-      {/* Footer */}
-      <View style={[f.footer, { backgroundColor: c.surface, borderTopColor: c.border }]}>
-        {step > 1 && (
-          <TouchableOpacity onPress={() => setStep(s => s - 1)} style={[f.btn, f.outline, { borderColor: c.border, flex: 0.45 }]} disabled={loading}>
-            <Text style={[f.btnText, { color: c.text }]}>Back</Text>
-          </TouchableOpacity>
-        )}
-        {step < 4 ? (
-          <TouchableOpacity onPress={goNext} style={[f.btn, f.filled, { backgroundColor: c.primary, flex: step > 1 ? 0.52 : 1 }]}>
-            <Text style={f.filledText}>Continue</Text>
-            <Ionicons name="arrow-forward" size={16} color="#fff" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            onPress={handleSubmit}
-            disabled={loading}
-            style={[f.btn, f.filled, { backgroundColor: loading ? c.border : '#10B981', flex: 0.52 }]}
-          >
-            {loading
-              ? <ActivityIndicator color="#fff" size="small" />
-              : <>
-                  <Ionicons name="send" size={16} color="#fff" />
-                  <Text style={f.filledText}>Submit Application</Text>
-                </>
-            }
-          </TouchableOpacity>
-        )}
-      </View>
+const SH = ({ icon, title, c }: { icon: string; title: string; c: any }) => (
+  <View style={fi.sectionHeader}>
+    <View style={[fi.sectionIconBox, { backgroundColor: `${c.primary}20` }]}>
+      <Ionicons name={icon as any} size={18} color={c.primary} />
     </View>
-  );
-};
+    <Text style={[fi.sectionTitle, { color: c.text }]}>{title}</Text>
+  </View>
+);
 
-// ─── STEP 1 ───────────────────────────────────────────────────────────────────
-const Step1 = ({ c, cvsLoading, myCVs, selectedCVIds, toggleCV, contactEmail, setContactEmail, contactPhone, setContactPhone, contactLocation, setContactLocation, contactTelegram, setContactTelegram, user }: any) => (
+// ─── STEP 1 — Profile & CVs ───────────────────────────────────────────────────
+
+const Step1 = ({
+  c, contactEmail, setContactEmail, contactPhone, setContactPhone,
+  contactLocation, setContactLocation, myCVs, cvsLoading,
+  selectedCVIds, toggleCV,
+}: any) => (
   <View>
     <SH icon="person-outline" title="Contact Information" c={c} />
+    <Text style={[fi.hint, { color: c.textMuted }]}>This information will be shared with the employer.</Text>
 
-    <FLabel text="Full Name" c={c} />
-    <View style={[fi.input, { backgroundColor: c.inputBg ?? c.surface, borderColor: c.border, opacity: 0.7 }]}>
-      <Text style={[fi.inputText, { color: c.textMuted }]}>{user?.name ?? 'From your profile'}</Text>
-    </View>
+    {/* Email */}
+    <Text style={[fi.label, { color: c.text }]}>Email *</Text>
+    <TextInput
+      style={[fi.input, { backgroundColor: c.inputBg ?? c.surface, borderColor: c.border, color: c.text }]}
+      value={contactEmail}
+      onChangeText={setContactEmail}
+      keyboardType="email-address"
+      autoCapitalize="none"
+      placeholder="your@email.com"
+      placeholderTextColor={c.textMuted}
+    />
 
-    <FLabel text="Email Address" required c={c} />
-    <TI value={contactEmail} onChange={setContactEmail} placeholder="your@email.com" keyboard="email-address" c={c} />
+    {/* Phone */}
+    <Text style={[fi.label, { color: c.text }]}>Phone *</Text>
+    <TextInput
+      style={[fi.input, { backgroundColor: c.inputBg ?? c.surface, borderColor: c.border, color: c.text }]}
+      value={contactPhone}
+      onChangeText={setContactPhone}
+      keyboardType="phone-pad"
+      placeholder="+1 555 000 0000"
+      placeholderTextColor={c.textMuted}
+    />
 
-    <FLabel text="Phone Number" required c={c} />
-    <TI value={contactPhone} onChange={setContactPhone} placeholder="+251 9XX XXX XXX" keyboard="phone-pad" c={c} />
+    {/* Location */}
+    <Text style={[fi.label, { color: c.text }]}>Location *</Text>
+    <TextInput
+      style={[fi.input, { backgroundColor: c.inputBg ?? c.surface, borderColor: c.border, color: c.text }]}
+      value={contactLocation}
+      onChangeText={setContactLocation}
+      placeholder="City, Country"
+      placeholderTextColor={c.textMuted}
+    />
 
-    <FLabel text="Location" c={c} />
-    <TI value={contactLocation} onChange={setContactLocation} placeholder="City, Country" c={c} />
-
-    <FLabel text="Telegram (optional)" c={c} />
-    <TI value={contactTelegram} onChange={setContactTelegram} placeholder="@username" c={c} />
-
-    <SH icon="document-outline" title="Select CVs to Attach" c={c} />
-    <Text style={[fi.hint, { color: c.textMuted }]}>Select one or more CVs from your profile to attach to this application.</Text>
+    {/* CV Selection */}
+    <View style={[fi.divider, { backgroundColor: c.border }]} />
+    <SH icon="document-outline" title="Select CV(s) *" c={c} />
+    <Text style={[fi.hint, { color: c.textMuted }]}>Select at least one CV to submit with your application.</Text>
 
     {cvsLoading ? (
-      <View style={fi.loadingRow}><ActivityIndicator color={c.primary} /></View>
+      <ActivityIndicator style={{ marginVertical: 16 }} color={c.primary} />
     ) : myCVs.length === 0 ? (
       <View style={[fi.emptyBox, { backgroundColor: c.surface, borderColor: c.border }]}>
         <Ionicons name="document-outline" size={32} color={c.textMuted} />
-        <Text style={[fi.emptyText, { color: c.textMuted }]}>No CVs found. Upload a CV to your profile first.</Text>
+        <Text style={[fi.emptyText, { color: c.textMuted }]}>
+          No CVs found. Upload a CV to your profile first.
+        </Text>
       </View>
     ) : (
       myCVs.map((cv: CV) => {
         const selected = selectedCVIds.includes(cv._id);
-        const name = applicationService.getCVDisplayName(cv);
-        const size = applicationService.formatFileSize(cv.fileSize ?? cv.size);
+        const name     = applicationService.getCVDisplayName(cv);
+        const size     = applicationService.formatFileSize(cv.fileSize ?? cv.size);
         return (
           <TouchableOpacity
             key={cv._id}
             onPress={() => toggleCV(cv._id)}
-            style={[fi.cvCard, { backgroundColor: selected ? `${c.primary}10` : c.surface, borderColor: selected ? c.primary : c.border }]}
+            style={[
+              fi.cvCard,
+              {
+                backgroundColor: selected ? `${c.primary}10` : c.surface,
+                borderColor:     selected ? c.primary : c.border,
+              },
+            ]}
           >
             <View style={[fi.cvIcon, { backgroundColor: selected ? `${c.primary}20` : `${c.border}50` }]}>
               <Ionicons name="document-text" size={20} color={selected ? c.primary : c.textMuted} />
@@ -370,318 +143,811 @@ const Step1 = ({ c, cvsLoading, myCVs, selectedCVIds, toggleCV, contactEmail, se
             <View style={{ flex: 1 }}>
               <Text style={[fi.cvName, { color: c.text }]} numberOfLines={1}>{name}</Text>
               {size ? <Text style={[fi.cvSize, { color: c.textMuted }]}>{size}</Text> : null}
-              {cv.isPrimary && <Text style={[fi.cvPrimary, { color: c.primary }]}>Primary CV</Text>}
+              {(cv.isPrimary || cv.isDefault) && (
+                <Text style={[fi.cvPrimary, { color: c.primary }]}>Primary CV</Text>
+              )}
             </View>
-            <View style={[fi.checkbox, { backgroundColor: selected ? c.primary : 'transparent', borderColor: selected ? c.primary : c.border }]}>
+            <View style={[fi.checkbox, {
+              backgroundColor: selected ? c.primary : 'transparent',
+              borderColor:     selected ? c.primary : c.border,
+            }]}>
               {selected && <Ionicons name="checkmark" size={14} color="#fff" />}
             </View>
           </TouchableOpacity>
         );
       })
     )}
+    {selectedCVIds.length > 0 && (
+      <View style={[fi.selectionInfo, { backgroundColor: `${c.primary}10`, borderColor: `${c.primary}40` }]}>
+        <Ionicons name="checkmark-circle" size={16} color={c.primary} />
+        <Text style={[fi.selectionText, { color: c.primary }]}>
+          {selectedCVIds.length} CV{selectedCVIds.length > 1 ? 's' : ''} selected
+        </Text>
+      </View>
+    )}
   </View>
 );
 
-// ─── STEP 2 ───────────────────────────────────────────────────────────────────
-const Step2 = ({ c, coverLetter, setCoverLetter, skillInput, setSkillInput, skills, setSkills, addSkill }: any) => (
-  <View>
-    <SH icon="document-text-outline" title="Cover Letter" c={c} />
-    <Text style={[fi.hint, { color: c.textMuted }]}>Introduce yourself and explain why you're a great fit. Min 50 characters.</Text>
-    <View style={[fi.textAreaWrapper, { backgroundColor: c.inputBg ?? c.surface, borderColor: c.border }]}>
-      <TextInput
-        style={[fi.textArea, { color: c.text }]}
-        value={coverLetter}
-        onChangeText={setCoverLetter}
-        placeholder="Dear Hiring Manager, I am excited to apply for this position because..."
-        placeholderTextColor={c.placeholder ?? c.textMuted}
-        multiline
-        numberOfLines={8}
-        textAlignVertical="top"
-      />
-    </View>
-    <Text style={[fi.charCount, { color: coverLetter.length < 50 ? c.error : c.textMuted }]}>
-      {coverLetter.length}/5000 chars {coverLetter.length < 50 ? `(${50 - coverLetter.length} more needed)` : '✓'}
-    </Text>
+// ─── STEP 2 — Cover Letter & Skills ──────────────────────────────────────────
 
-    <SH icon="sparkles-outline" title="Your Skills" c={c} />
-    <Text style={[fi.hint, { color: c.textMuted }]}>Add skills relevant to this position.</Text>
+const Step2 = ({
+  c, coverLetter, setCoverLetter, skillInput, setSkillInput, skills, setSkills,
+}: any) => {
 
-    <View style={fi.skillInputRow}>
-      <View style={[fi.skillInput, { backgroundColor: c.inputBg ?? c.surface, borderColor: c.border, flex: 1 }]}>
+  const addSkill = () => {
+    const s = skillInput.trim();
+    if (s && !skills.includes(s)) {
+      setSkills([...skills, s]);
+      setSkillInput('');
+    }
+  };
+
+  return (
+    <View>
+      <SH icon="document-text-outline" title="Cover Letter *" c={c} />
+      <Text style={[fi.hint, { color: c.textMuted }]}>
+        Introduce yourself. Minimum 50 characters.
+      </Text>
+      <View style={[fi.textAreaWrapper, { backgroundColor: c.inputBg ?? c.surface, borderColor: c.border }]}>
         <TextInput
-          style={[fi.input2, { color: c.text }]}
-          value={skillInput}
-          onChangeText={setSkillInput}
-          placeholder="e.g. React Native, TypeScript..."
-          placeholderTextColor={c.placeholder ?? c.textMuted}
-          onSubmitEditing={addSkill}
-          returnKeyType="done"
-          blurOnSubmit={false}
+          style={[fi.textArea, { color: c.text }]}
+          value={coverLetter}
+          onChangeText={setCoverLetter}
+          placeholder="Dear Hiring Manager, I am excited to apply for this position because..."
+          placeholderTextColor={c.textMuted}
+          multiline
+          numberOfLines={8}
+          textAlignVertical="top"
         />
       </View>
-      <TouchableOpacity onPress={addSkill} disabled={!skillInput.trim()} style={[fi.addBtn, { backgroundColor: skillInput.trim() ? c.primary : c.border }]}>
-        <Ionicons name="add" size={22} color="#fff" />
-      </TouchableOpacity>
-    </View>
-
-    <View style={fi.tagsRow}>
-      {skills.map((sk: string) => (
-        <TouchableOpacity key={sk} onPress={() => setSkills((p: string[]) => p.filter(s => s !== sk))}
-          style={[fi.tag, { backgroundColor: `${c.primary}15`, borderColor: `${c.primary}30` }]}>
-          <Text style={[fi.tagText, { color: c.primary }]}>{sk}</Text>
-          <Ionicons name="close" size={12} color={c.primary} />
-        </TouchableOpacity>
-      ))}
-      {skills.length === 0 && <Text style={[fi.hint, { color: c.textMuted }]}>No skills added yet.</Text>}
-    </View>
-  </View>
-);
-
-// ─── STEP 3 ───────────────────────────────────────────────────────────────────
-const Step3 = ({ c, references, updateRef, addRef, removeRef, referenceFiles, pickRefFile, workExps, updateExp, addExp, removeExp, expFiles, pickExpFile }: any) => (
-  <View>
-    {/* Work Experience */}
-    <SH icon="briefcase-outline" title="Work Experience" c={c} />
-    <Text style={[fi.hint, { color: c.textMuted }]}>Add your relevant work experience, or upload a document.</Text>
-    {workExps.map((exp: WorkExperience, i: number) => (
-      <View key={i} style={[fi.docCard, { backgroundColor: c.surface, borderColor: c.border }]}>
-        <View style={fi.docCardHeader}>
-          <Text style={[fi.docCardTitle, { color: c.text }]}>Experience {i + 1}</Text>
-          {workExps.length > 1 && (
-            <TouchableOpacity onPress={() => removeExp(i)}>
-              <Ionicons name="trash-outline" size={18} color={c.error} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Toggle: form vs document */}
-        <View style={[fi.toggleRow, { backgroundColor: c.background, borderColor: c.border }]}>
-          <Text style={[fi.toggleLabel, { color: c.text }]}>Upload document instead</Text>
-          <Switch
-            value={exp.providedAsDocument}
-            onValueChange={v => updateExp(i, 'providedAsDocument', v)}
-            trackColor={{ true: c.primary }}
-          />
-        </View>
-
-        {exp.providedAsDocument ? (
-          <TouchableOpacity onPress={() => pickExpFile(i)} style={[fi.fileBtn, { backgroundColor: `${c.primary}10`, borderColor: c.primary }]}>
-            <Ionicons name="cloud-upload-outline" size={20} color={c.primary} />
-            <Text style={[fi.fileBtnText, { color: c.primary }]}>
-              {expFiles.get(i) ? expFiles.get(i)!.name : 'Choose PDF / Image'}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <>
-            <TI value={exp.company ?? ''} onChange={(v: any) => updateExp(i, 'company', v)} placeholder="Company name" c={c} />
-            <TI value={exp.position ?? ''} onChange={(v: any) => updateExp(i, 'position', v)} placeholder="Job title / position" c={c} />
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <View style={{ flex: 1 }}><TI value={exp.startDate ?? ''} onChange={(v: any) => updateExp(i, 'startDate', v)} placeholder="Start (YYYY-MM)" c={c} /></View>
-              <View style={{ flex: 1 }}><TI value={exp.endDate ?? ''} onChange={(v: any) => updateExp(i, 'endDate', v)} placeholder="End (YYYY-MM)" c={c} /></View>
-            </View>
-            <View style={[fi.toggleRow, { backgroundColor: c.background, borderColor: c.border }]}>
-              <Text style={[fi.toggleLabel, { color: c.text }]}>Currently working here</Text>
-              <Switch value={!!exp.current} onValueChange={v => updateExp(i, 'current', v)} trackColor={{ true: c.primary }} />
-            </View>
-            <TextInput
-              style={[fi.textArea, fi.shortArea, { color: c.text, backgroundColor: c.inputBg ?? c.surface, borderColor: c.border, borderRadius: 12, borderWidth: 1.5, padding: 12 }]}
-              value={exp.description ?? ''}
-              onChangeText={v => updateExp(i, 'description', v)}
-              placeholder="Brief description of your role and achievements..."
-              placeholderTextColor={c.placeholder ?? c.textMuted}
-              multiline numberOfLines={3} textAlignVertical="top"
-            />
-          </>
-        )}
-      </View>
-    ))}
-    <TouchableOpacity onPress={addExp} style={[fi.addMoreBtn, { borderColor: c.primary }]}>
-      <Ionicons name="add-circle-outline" size={18} color={c.primary} />
-      <Text style={[fi.addMoreText, { color: c.primary }]}>Add Work Experience</Text>
-    </TouchableOpacity>
-
-    {/* References */}
-    <SH icon="people-outline" title="References" c={c} />
-    <Text style={[fi.hint, { color: c.textMuted }]}>Provide professional references, or upload a reference letter.</Text>
-    {references.map((ref: Reference, i: number) => (
-      <View key={i} style={[fi.docCard, { backgroundColor: c.surface, borderColor: c.border }]}>
-        <View style={fi.docCardHeader}>
-          <Text style={[fi.docCardTitle, { color: c.text }]}>Reference {i + 1}</Text>
-          {references.length > 1 && (
-            <TouchableOpacity onPress={() => removeRef(i)}>
-              <Ionicons name="trash-outline" size={18} color={c.error} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <View style={[fi.toggleRow, { backgroundColor: c.background, borderColor: c.border }]}>
-          <Text style={[fi.toggleLabel, { color: c.text }]}>Upload reference letter</Text>
-          <Switch
-            value={ref.providedAsDocument}
-            onValueChange={v => updateRef(i, 'providedAsDocument', v)}
-            trackColor={{ true: c.primary }}
-          />
-        </View>
-
-        {ref.providedAsDocument ? (
-          <TouchableOpacity onPress={() => pickRefFile(i)} style={[fi.fileBtn, { backgroundColor: `${c.primary}10`, borderColor: c.primary }]}>
-            <Ionicons name="cloud-upload-outline" size={20} color={c.primary} />
-            <Text style={[fi.fileBtnText, { color: c.primary }]}>
-              {referenceFiles.get(i) ? referenceFiles.get(i)!.name : 'Choose PDF / Image'}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <>
-            <TI value={ref.name ?? ''} onChange={(v: any) => updateRef(i, 'name', v)} placeholder="Full name *" c={c} />
-            <TI value={ref.position ?? ''} onChange={(v: any) => updateRef(i, 'position', v)} placeholder="Job title" c={c} />
-            <TI value={ref.organization ?? ''} onChange={(v: any) => updateRef(i, 'organization', v)} placeholder="Company / Organization" c={c} />
-            <TI value={ref.email ?? ''} onChange={(v: any) => updateRef(i, 'email', v)} placeholder="Email address" c={c} keyboard="email-address" />
-            <TI value={ref.phone ?? ''} onChange={(v: any) => updateRef(i, 'phone', v)} placeholder="Phone number" c={c} keyboard="phone-pad" />
-            <TI value={ref.relationship ?? ''} onChange={(v: any) => updateRef(i, 'relationship', v)} placeholder="Relationship (e.g. Former manager)" c={c} />
-          </>
-        )}
-      </View>
-    ))}
-    <TouchableOpacity onPress={addRef} style={[fi.addMoreBtn, { borderColor: c.primary }]}>
-      <Ionicons name="add-circle-outline" size={18} color={c.primary} />
-      <Text style={[fi.addMoreText, { color: c.primary }]}>Add Reference</Text>
-    </TouchableOpacity>
-  </View>
-);
-
-// ─── STEP 4 ───────────────────────────────────────────────────────────────────
-const Step4 = ({ c, jobTitle, companyName, coverLetter, skills, selectedCVCount, refCount, expCount, contactEmail, contactPhone }: any) => (
-  <View>
-    <SH icon="checkmark-circle-outline" title="Review Your Application" c={c} />
-
-    <View style={[fi.reviewCard, { backgroundColor: c.surface, borderColor: c.border }]}>
-      <Text style={[fi.reviewJob, { color: c.text }]}>{jobTitle}</Text>
-      <Text style={[fi.reviewCompany, { color: c.primary }]}>{companyName}</Text>
-    </View>
-
-    {[
-      { icon: 'mail-outline',     label: 'Email',       value: contactEmail },
-      { icon: 'call-outline',     label: 'Phone',       value: contactPhone },
-      { icon: 'document-outline', label: 'CVs attached', value: `${selectedCVCount} CV${selectedCVCount !== 1 ? 's' : ''}` },
-      { icon: 'sparkles-outline', label: 'Skills',      value: `${skills.length} skill${skills.length !== 1 ? 's' : ''}` },
-      { icon: 'briefcase-outline',label: 'Experience',  value: `${expCount} entr${expCount !== 1 ? 'ies' : 'y'}` },
-      { icon: 'people-outline',   label: 'References',  value: `${refCount} reference${refCount !== 1 ? 's' : ''}` },
-    ].map(row => (
-      <View key={row.label} style={[fi.reviewRow, { borderBottomColor: c.border }]}>
-        <Ionicons name={row.icon as any} size={16} color={c.primary} />
-        <Text style={[fi.reviewLabel, { color: c.textMuted }]}>{row.label}</Text>
-        <Text style={[fi.reviewValue, { color: c.text }]}>{row.value}</Text>
-      </View>
-    ))}
-
-    {coverLetter ? (
-      <View style={[fi.coverPreview, { backgroundColor: c.background, borderColor: c.border }]}>
-        <Text style={[fi.coverPreviewLabel, { color: c.textMuted }]}>Cover Letter Preview</Text>
-        <Text style={[fi.coverPreviewText, { color: c.text }]} numberOfLines={4}>{coverLetter}</Text>
-      </View>
-    ) : null}
-
-    <View style={[fi.warningBox, { backgroundColor: `${c.warning}15`, borderColor: `${c.warning}30` }]}>
-      <Ionicons name="information-circle-outline" size={18} color={c.warning} />
-      <Text style={[fi.warningText, { color: c.textMuted }]}>
-        Once submitted, you cannot edit this application. You may withdraw it from your applications list.
+      <Text style={[fi.charCount, { color: coverLetter.length < 50 ? '#EF4444' : c.textMuted }]}>
+        {coverLetter.length}/5000 {coverLetter.length < 50 ? `(need ${50 - coverLetter.length} more)` : ''}
       </Text>
-    </View>
-  </View>
-);
 
-// ─── Shared atoms ─────────────────────────────────────────────────────────────
-const SH = ({ icon, title, c }: any) => (
-  <View style={[fi.sh, { borderBottomColor: c.border }]}>
-    <Ionicons name={icon} size={18} color={c.primary} />
-    <Text style={[fi.shTitle, { color: c.text }]}>{title}</Text>
-  </View>
-);
-const FLabel = ({ text, required, c }: any) => (
-  <Text style={[fi.label, { color: c.text }]}>
-    {text}{required && <Text style={{ color: c.error }}> *</Text>}
-  </Text>
-);
-const TI = ({ value, onChange, placeholder, c, keyboard, multiline }: any) => (
-  <View style={[fi.input, { backgroundColor: c.inputBg ?? c.surface, borderColor: c.border }]}>
-    <TextInput
-      style={[fi.inputText, { color: c.text }, multiline && { minHeight: 80, textAlignVertical: 'top' }]}
-      value={value}
-      onChangeText={onChange}
-      placeholder={placeholder}
-      placeholderTextColor={c.placeholder ?? c.textMuted}
-      keyboardType={keyboard ?? 'default'}
-      multiline={multiline}
-    />
-  </View>
-);
+      <View style={[fi.divider, { backgroundColor: c.border }]} />
+      <SH icon="flash-outline" title="Skills" c={c} />
+      <View style={fi.skillInputRow}>
+        <TextInput
+          style={[fi.input, { flex: 1, backgroundColor: c.inputBg ?? c.surface, borderColor: c.border, color: c.text }]}
+          value={skillInput}
+          onChangeText={setSkillInput}
+          placeholder="Add a skill"
+          placeholderTextColor={c.textMuted}
+          onSubmitEditing={addSkill}
+          returnKeyType="done"
+        />
+        <TouchableOpacity
+          style={[fi.addBtn, { backgroundColor: c.primary }]}
+          onPress={addSkill}
+        >
+          <Ionicons name="add" size={20} color="#fff" />
+        </TouchableOpacity>
+      </View>
+      <View style={fi.skillCloud}>
+        {skills.map((sk: string) => (
+          <TouchableOpacity
+            key={sk}
+            onPress={() => setSkills(skills.filter((s: string) => s !== sk))}
+            style={[fi.skillChip, { backgroundColor: `${c.primary}15`, borderColor: `${c.primary}40` }]}
+          >
+            <Text style={[fi.skillText, { color: c.primary }]}>{sk}</Text>
+            <Ionicons name="close" size={13} color={c.primary} />
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+};
+
+// ─── STEP 3 — Work Experience & References ────────────────────────────────────
+
+const Step3 = ({
+  c,
+  experiences, setExperiences,
+  expFiles, setExpFiles,
+  references, setReferences,
+  refFiles, setRefFiles,
+}: any) => {
+
+  const pickFile = async (type: 'exp' | 'ref', index: number) => {
+    const res = await DocumentPicker.getDocumentAsync({
+      type: ['application/pdf', 'application/msword',
+             'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+      copyToCacheDirectory: true,
+    });
+    if (res.canceled) return;
+    const asset = res.assets?.[0];
+    if (!asset) return;
+
+    const tmpId = genTmpId();
+    const docFile: DocFile = { uri: asset.uri, name: asset.name, type: asset.mimeType ?? 'application/pdf', _tempId: tmpId };
+
+    if (type === 'exp') {
+      const updated = [...experiences];
+      updated[index] = { ...updated[index], _tempId: tmpId };
+      setExperiences(updated);
+      setExpFiles([...expFiles.filter((f: DocFile) => f._tempId !== updated[index]._tempId), docFile]);
+    } else {
+      const updated = [...references];
+      updated[index] = { ...updated[index], _tempId: tmpId };
+      setReferences(updated);
+      setRefFiles([...refFiles.filter((f: DocFile) => f._tempId !== updated[index]._tempId), docFile]);
+    }
+  };
+
+  const addExperience = (asDoc: boolean) => {
+    setExperiences([
+      ...experiences,
+      { company: '', position: '', startDate: '', endDate: '', current: false,
+        description: '', skills: [], providedAsDocument: asDoc, _tempId: asDoc ? genTmpId() : undefined },
+    ]);
+  };
+
+  const addReference = (asDoc: boolean) => {
+    setReferences([
+      ...references,
+      { name: '', position: '', company: '', email: '', phone: '',
+        relationship: '', allowsContact: false, notes: '',
+        providedAsDocument: asDoc, _tempId: asDoc ? genTmpId() : undefined },
+    ]);
+  };
+
+  const updateExp = (i: number, field: string, value: any) => {
+    const updated = [...experiences];
+    updated[i] = { ...updated[i], [field]: value };
+    setExperiences(updated);
+  };
+
+  const updateRef = (i: number, field: string, value: any) => {
+    const updated = [...references];
+    updated[i] = { ...updated[i], [field]: value };
+    setReferences(updated);
+  };
+
+  const getExpFile = (tmpId?: string) => expFiles.find((f: DocFile) => f._tempId === tmpId);
+  const getRefFile = (tmpId?: string) => refFiles.find((f: DocFile) => f._tempId === tmpId);
+
+  return (
+    <View>
+      {/* ── Work Experience ── */}
+      <SH icon="briefcase-outline" title="Work Experience" c={c} />
+      <Text style={[fi.hint, { color: c.textMuted }]}>
+        Add your work history by filling a form OR uploading a document.
+      </Text>
+
+      {experiences.map((exp: WorkExperience & { _tempId?: string }, i: number) => (
+        <View key={i} style={[fi.docCard, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <View style={fi.docCardHeader}>
+            <Text style={[fi.docCardTitle, { color: c.text }]}>
+              {exp.providedAsDocument ? '📄 Document Upload' : '📝 Form Entry'}
+            </Text>
+            <TouchableOpacity onPress={() => {
+              setExperiences(experiences.filter((_: any, j: number) => j !== i));
+              if (exp._tempId) setExpFiles(expFiles.filter((f: DocFile) => f._tempId !== exp._tempId));
+            }}>
+              <Ionicons name="trash-outline" size={18} color="#EF4444" />
+            </TouchableOpacity>
+          </View>
+
+          {exp.providedAsDocument ? (
+            /* Document upload path */
+            <TouchableOpacity
+              style={[fi.uploadBtn, { borderColor: c.border, backgroundColor: c.background }]}
+              onPress={() => pickFile('exp', i)}
+            >
+              {getExpFile(exp._tempId) ? (
+                <View style={fi.fileRow}>
+                  <Ionicons name="document-text" size={20} color={c.primary} />
+                  <Text style={[fi.fileName, { color: c.text }]} numberOfLines={1}>
+                    {getExpFile(exp._tempId)?.name}
+                  </Text>
+                  <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                </View>
+              ) : (
+                <View style={fi.uploadPlaceholder}>
+                  <Ionicons name="cloud-upload-outline" size={24} color={c.textMuted} />
+                  <Text style={[fi.uploadHint, { color: c.textMuted }]}>Tap to upload experience document</Text>
+                  <Text style={[fi.uploadFormats, { color: c.textMuted }]}>PDF, DOC, DOCX</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ) : (
+            /* Form fill path */
+            <View style={{ gap: 8 }}>
+              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Company" placeholderTextColor={c.textMuted} value={exp.company}
+                onChangeText={(v) => updateExp(i, 'company', v)} />
+              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Position/Role" placeholderTextColor={c.textMuted} value={exp.position}
+                onChangeText={(v) => updateExp(i, 'position', v)} />
+              <View style={fi.row}>
+                <TextInput style={[fi.input, { flex: 1, backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                  placeholder="Start (YYYY-MM-DD)" placeholderTextColor={c.textMuted} value={exp.startDate}
+                  onChangeText={(v) => updateExp(i, 'startDate', v)} />
+                <TextInput style={[fi.input, { flex: 1, backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                  placeholder="End (or leave blank)" placeholderTextColor={c.textMuted} value={exp.endDate}
+                  onChangeText={(v) => updateExp(i, 'endDate', v)}
+                  editable={!exp.current} />
+              </View>
+              <View style={fi.switchRow}>
+                <Switch value={exp.current} onValueChange={(v) => updateExp(i, 'current', v)}
+                  trackColor={{ true: c.primary }} />
+                <Text style={[fi.switchLabel, { color: c.text }]}>Currently working here</Text>
+              </View>
+              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Description (optional)" placeholderTextColor={c.textMuted} value={exp.description}
+                onChangeText={(v) => updateExp(i, 'description', v)} multiline numberOfLines={3}
+                textAlignVertical="top" />
+            </View>
+          )}
+        </View>
+      ))}
+
+      {/* Add experience buttons */}
+      <View style={fi.addBtnRow}>
+        <TouchableOpacity
+          style={[fi.addDocBtn, { borderColor: c.primary, backgroundColor: `${c.primary}10` }]}
+          onPress={() => addExperience(false)}
+        >
+          <Ionicons name="create-outline" size={16} color={c.primary} />
+          <Text style={[fi.addDocBtnText, { color: c.primary }]}>Fill Form</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[fi.addDocBtn, { borderColor: '#8B5CF6', backgroundColor: '#8B5CF610' }]}
+          onPress={() => addExperience(true)}
+        >
+          <Ionicons name="document-attach-outline" size={16} color="#8B5CF6" />
+          <Text style={[fi.addDocBtnText, { color: '#8B5CF6' }]}>Upload Document</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={[fi.divider, { backgroundColor: c.border }]} />
+
+      {/* ── References ── */}
+      <SH icon="people-outline" title="References" c={c} />
+      <Text style={[fi.hint, { color: c.textMuted }]}>
+        Add references by filling a form OR uploading a document.
+      </Text>
+
+      {references.map((ref: Reference & { _tempId?: string }, i: number) => (
+        <View key={i} style={[fi.docCard, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <View style={fi.docCardHeader}>
+            <Text style={[fi.docCardTitle, { color: c.text }]}>
+              {ref.providedAsDocument ? '📄 Document Upload' : '📝 Form Entry'}
+            </Text>
+            <TouchableOpacity onPress={() => {
+              setReferences(references.filter((_: any, j: number) => j !== i));
+              if (ref._tempId) setRefFiles(refFiles.filter((f: DocFile) => f._tempId !== ref._tempId));
+            }}>
+              <Ionicons name="trash-outline" size={18} color="#EF4444" />
+            </TouchableOpacity>
+          </View>
+
+          {ref.providedAsDocument ? (
+            <TouchableOpacity
+              style={[fi.uploadBtn, { borderColor: c.border, backgroundColor: c.background }]}
+              onPress={() => pickFile('ref', i)}
+            >
+              {getRefFile(ref._tempId) ? (
+                <View style={fi.fileRow}>
+                  <Ionicons name="document-text" size={20} color="#8B5CF6" />
+                  <Text style={[fi.fileName, { color: c.text }]} numberOfLines={1}>
+                    {getRefFile(ref._tempId)?.name}
+                  </Text>
+                  <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                </View>
+              ) : (
+                <View style={fi.uploadPlaceholder}>
+                  <Ionicons name="cloud-upload-outline" size={24} color={c.textMuted} />
+                  <Text style={[fi.uploadHint, { color: c.textMuted }]}>Tap to upload reference document</Text>
+                  <Text style={[fi.uploadFormats, { color: c.textMuted }]}>PDF, DOC, DOCX</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <View style={{ gap: 8 }}>
+              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Full name" placeholderTextColor={c.textMuted} value={ref.name}
+                onChangeText={(v) => updateRef(i, 'name', v)} />
+              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Position" placeholderTextColor={c.textMuted} value={ref.position}
+                onChangeText={(v) => updateRef(i, 'position', v)} />
+              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Company" placeholderTextColor={c.textMuted} value={ref.company}
+                onChangeText={(v) => updateRef(i, 'company', v)} />
+              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Email" placeholderTextColor={c.textMuted} value={ref.email}
+                keyboardType="email-address" onChangeText={(v) => updateRef(i, 'email', v)} />
+              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Phone" placeholderTextColor={c.textMuted} value={ref.phone}
+                keyboardType="phone-pad" onChangeText={(v) => updateRef(i, 'phone', v)} />
+              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Relationship (e.g. Manager)" placeholderTextColor={c.textMuted} value={ref.relationship}
+                onChangeText={(v) => updateRef(i, 'relationship', v)} />
+              <View style={fi.switchRow}>
+                <Switch value={ref.allowsContact} onValueChange={(v) => updateRef(i, 'allowsContact', v)}
+                  trackColor={{ true: c.primary }} />
+                <Text style={[fi.switchLabel, { color: c.text }]}>Allows contact</Text>
+              </View>
+            </View>
+          )}
+        </View>
+      ))}
+
+      <View style={fi.addBtnRow}>
+        <TouchableOpacity
+          style={[fi.addDocBtn, { borderColor: '#10B981', backgroundColor: '#10B98110' }]}
+          onPress={() => addReference(false)}
+        >
+          <Ionicons name="create-outline" size={16} color="#10B981" />
+          <Text style={[fi.addDocBtnText, { color: '#10B981' }]}>Fill Form</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[fi.addDocBtn, { borderColor: '#F59E0B', backgroundColor: '#F59E0B10' }]}
+          onPress={() => addReference(true)}
+        >
+          <Ionicons name="document-attach-outline" size={16} color="#F59E0B" />
+          <Text style={[fi.addDocBtnText, { color: '#F59E0B' }]}>Upload Document</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+// ─── STEP 4 — Review & Submit ─────────────────────────────────────────────────
+
+const Step4 = ({
+  c, contactEmail, contactPhone, contactLocation,
+  selectedCVIds, myCVs, coverLetter, skills,
+  experiences, references, jobTitle, companyName,
+}: any) => {
+
+  const ReviewSection = ({ title, icon, children }: any) => (
+    <View style={[fi.reviewSection, { backgroundColor: c.surface, borderColor: c.border }]}>
+      <View style={fi.reviewSectionHeader}>
+        <Ionicons name={icon} size={16} color={c.primary} />
+        <Text style={[fi.reviewSectionTitle, { color: c.text }]}>{title}</Text>
+      </View>
+      {children}
+    </View>
+  );
+
+  const ReviewRow = ({ label, value }: { label: string; value: string }) => (
+    <View style={fi.reviewRow}>
+      <Text style={[fi.reviewLabel, { color: c.textMuted }]}>{label}</Text>
+      <Text style={[fi.reviewValue, { color: c.text }]}>{value || '—'}</Text>
+    </View>
+  );
+
+  const selectedCVs = myCVs.filter((cv: CV) => selectedCVIds.includes(cv._id));
+
+  return (
+    <View style={{ gap: 12 }}>
+      {/* Job summary */}
+      <View style={[fi.jobSummary, { backgroundColor: `${c.primary}10`, borderColor: `${c.primary}40` }]}>
+        <Text style={[fi.jobSummaryTitle, { color: c.primary }]}>Applying for</Text>
+        <Text style={[fi.jobSummaryJob, { color: c.text }]}>{jobTitle}</Text>
+        <Text style={[fi.jobSummaryCompany, { color: c.textMuted }]}>{companyName}</Text>
+      </View>
+
+      <ReviewSection title="Contact" icon="person-outline">
+        <ReviewRow label="Email"    value={contactEmail} />
+        <ReviewRow label="Phone"    value={contactPhone} />
+        <ReviewRow label="Location" value={contactLocation} />
+      </ReviewSection>
+
+      <ReviewSection title={`CV (${selectedCVs.length})`} icon="document-outline">
+        {selectedCVs.map((cv: CV) => (
+          <Text key={cv._id} style={[fi.reviewValue, { color: c.text }]}>
+            • {applicationService.getCVDisplayName(cv)}
+          </Text>
+        ))}
+      </ReviewSection>
+
+      <ReviewSection title="Cover Letter" icon="document-text-outline">
+        <Text style={[fi.reviewCoverLetter, { color: c.textMuted }]} numberOfLines={5}>
+          {coverLetter}
+        </Text>
+      </ReviewSection>
+
+      {skills.length > 0 && (
+        <ReviewSection title="Skills" icon="flash-outline">
+          <View style={fi.skillCloud}>
+            {skills.map((s: string) => (
+              <View key={s} style={[fi.skillChip, { backgroundColor: `${c.primary}15`, borderColor: `${c.primary}40` }]}>
+                <Text style={[fi.skillText, { color: c.primary }]}>{s}</Text>
+              </View>
+            ))}
+          </View>
+        </ReviewSection>
+      )}
+
+      {experiences.length > 0 && (
+        <ReviewSection title={`Experience (${experiences.length})`} icon="briefcase-outline">
+          {experiences.map((exp: any, i: number) => (
+            <Text key={i} style={[fi.reviewValue, { color: c.text }]}>
+              {exp.providedAsDocument ? '📄 Document uploaded' : `• ${exp.position} at ${exp.company}`}
+            </Text>
+          ))}
+        </ReviewSection>
+      )}
+
+      {references.length > 0 && (
+        <ReviewSection title={`References (${references.length})`} icon="people-outline">
+          {references.map((ref: any, i: number) => (
+            <Text key={i} style={[fi.reviewValue, { color: c.text }]}>
+              {ref.providedAsDocument ? '📄 Document uploaded' : `• ${ref.name} (${ref.company})`}
+            </Text>
+          ))}
+        </ReviewSection>
+      )}
+    </View>
+  );
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export const ApplicationForm: React.FC<ApplicationFormProps> = ({
+  jobId, jobTitle, companyName, onSuccess, onClose,
+}) => {
+  const { theme } = useThemeStore();
+  const c = theme.colors;
+  const { user } = useAuthStore();
+
+  const { data: cvsData, isLoading: cvsLoading } = useMyCVs();
+  const myCVs: CV[] = Array.isArray(cvsData)
+    ? cvsData
+    : Array.isArray((cvsData as any)?.data)
+    ? (cvsData as any).data
+    : [];
+
+  const applyMut = useApplyForJob();
+
+  const [step, setStep] = useState(1);
+
+  // Step 1 state
+  const userAny = user as any;
+  const [contactEmail,    setContactEmail]    = useState(user?.email ?? '');
+  const [contactPhone,    setContactPhone]    = useState(userAny?.phone ?? '');
+  const [contactLocation, setContactLocation] = useState(userAny?.location ?? '');
+  const [selectedCVIds,   setSelectedCVIds]   = useState<string[]>([]);
+
+  // Step 2 state
+  const [coverLetter, setCoverLetter] = useState('');
+  const [skillInput,  setSkillInput]  = useState('');
+  const [skills,      setSkills]      = useState<string[]>([]);
+
+  // Step 3 state
+  const [experiences, setExperiences] = useState<any[]>([]);
+  const [expFiles,    setExpFiles]    = useState<DocFile[]>([]);
+  const [references,  setReferences]  = useState<any[]>([]);
+  const [refFiles,    setRefFiles]    = useState<DocFile[]>([]);
+
+  // Auto-select primary CV on load
+  useEffect(() => {
+    if (myCVs.length > 0 && selectedCVIds.length === 0) {
+      const primary = myCVs.find((cv) => cv.isPrimary || cv.isDefault) ?? myCVs[0];
+      setSelectedCVIds([primary._id]);
+    }
+  }, [myCVs]);
+
+  const toggleCV = useCallback((id: string) => {
+    setSelectedCVIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }, []);
+
+  // ── Validation per step ───────────────────────────────────────────────────
+
+  const validateStep = (): boolean => {
+    if (step === 1) {
+      if (!contactEmail.trim() || !contactPhone.trim() || !contactLocation.trim()) {
+        Alert.alert('Missing Info', 'Please fill in all contact fields.');
+        return false;
+      }
+      if (selectedCVIds.length === 0) {
+        Alert.alert('CV Required', 'Please select at least one CV.');
+        return false;
+      }
+    }
+    if (step === 2) {
+      if (coverLetter.trim().length < 50) {
+        Alert.alert('Cover Letter', `Please write at least 50 characters (${coverLetter.length} / 50).`);
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const nextStep = () => {
+    if (!validateStep()) return;
+    setStep((s) => Math.min(s + 1, 4));
+  };
+
+  // ── Submit ────────────────────────────────────────────────────────────────
+
+  const handleSubmit = useCallback(async () => {
+    if (!validateStep()) return;
+
+    const selectedCVObjects = myCVs
+      .filter((cv) => selectedCVIds.includes(cv._id))
+      .map((cv) => ({
+        cvId:         cv._id,
+        filename:     cv.filename,
+        originalName: cv.originalName,
+        url:          cv.url ?? '',
+        downloadUrl:  cv.downloadUrl ?? cv.url ?? '',
+        size:         cv.fileSize ?? cv.size ?? 0,
+        mimetype:     cv.mimetype ?? 'application/pdf',
+      }));
+
+    try {
+      const res = await applyMut.mutateAsync({
+        jobId,
+        data: {
+          coverLetter:    coverLetter.trim(),
+          skills,
+          selectedCVs:   selectedCVObjects,
+          contactInfo:   { email: contactEmail, phone: contactPhone, location: contactLocation },
+          userInfo: {
+            name:  (user as any)?.name ?? '',
+            email: contactEmail,
+            phone: contactPhone,
+            location: contactLocation,
+          },
+          references:    references,
+          workExperience: experiences,
+          referenceFiles: refFiles,
+          experienceFiles: expFiles,
+        },
+      });
+      onSuccess(res.data.application);
+    } catch (err: any) {
+      Alert.alert('Submission Failed', err?.message ?? 'Please try again.');
+    }
+  }, [applyMut, jobId, coverLetter, skills, selectedCVIds, myCVs,
+      contactEmail, contactPhone, contactLocation, references, experiences,
+      refFiles, expFiles, user]);
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  return (
+    <View style={[fi.root, { backgroundColor: c.background }]}>
+      {/* Header */}
+      <View style={[fi.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
+        <TouchableOpacity onPress={onClose} style={fi.closeBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="close" size={22} color={c.text} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={[fi.headerTitle, { color: c.text }]} numberOfLines={1}>Apply: {jobTitle}</Text>
+          <Text style={[fi.headerSub, { color: c.textMuted }]} numberOfLines={1}>{companyName}</Text>
+        </View>
+      </View>
+
+      {/* Step indicator */}
+      <View style={[fi.stepBar, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
+        {STEPS.map((s) => {
+          const done   = step > s.num;
+          const active = step === s.num;
+          return (
+            <View key={s.num} style={fi.stepItem}>
+              <View style={[
+                fi.stepCircle,
+                done   && { backgroundColor: '#10B981', borderColor: '#10B981' },
+                active && { backgroundColor: c.primary, borderColor: c.primary },
+                !done && !active && { borderColor: c.border },
+              ]}>
+                {done ? (
+                  <Ionicons name="checkmark" size={13} color="#fff" />
+                ) : (
+                  <Text style={[fi.stepNum, { color: active ? '#fff' : c.textMuted }]}>
+                    {s.num}
+                  </Text>
+                )}
+              </View>
+              <Text style={[fi.stepLabel, { color: active ? c.primary : c.textMuted }]}>
+                {s.label}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+
+      {/* Body */}
+      <KeyboardAwareScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={fi.body}
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid
+      >
+        {step === 1 && (
+          <Step1
+            c={c}
+            contactEmail={contactEmail} setContactEmail={setContactEmail}
+            contactPhone={contactPhone} setContactPhone={setContactPhone}
+            contactLocation={contactLocation} setContactLocation={setContactLocation}
+            myCVs={myCVs} cvsLoading={cvsLoading}
+            selectedCVIds={selectedCVIds} toggleCV={toggleCV}
+          />
+        )}
+        {step === 2 && (
+          <Step2
+            c={c}
+            coverLetter={coverLetter} setCoverLetter={setCoverLetter}
+            skillInput={skillInput} setSkillInput={setSkillInput}
+            skills={skills} setSkills={setSkills}
+          />
+        )}
+        {step === 3 && (
+          <Step3
+            c={c}
+            experiences={experiences} setExperiences={setExperiences}
+            expFiles={expFiles} setExpFiles={setExpFiles}
+            references={references} setReferences={setReferences}
+            refFiles={refFiles} setRefFiles={setRefFiles}
+          />
+        )}
+        {step === 4 && (
+          <Step4
+            c={c}
+            contactEmail={contactEmail} contactPhone={contactPhone} contactLocation={contactLocation}
+            selectedCVIds={selectedCVIds} myCVs={myCVs}
+            coverLetter={coverLetter} skills={skills}
+            experiences={experiences} references={references}
+            jobTitle={jobTitle} companyName={companyName}
+          />
+        )}
+      </KeyboardAwareScrollView>
+
+      {/* Footer navigation */}
+      <View style={[fi.footer, { backgroundColor: c.surface, borderTopColor: c.border }]}>
+        {step > 1 && (
+          <TouchableOpacity
+            style={[fi.backBtn, { borderColor: c.border }]}
+            onPress={() => setStep((s) => s - 1)}
+          >
+            <Ionicons name="arrow-back" size={16} color={c.text} />
+            <Text style={[fi.backBtnText, { color: c.text }]}>Back</Text>
+          </TouchableOpacity>
+        )}
+        <View style={{ flex: 1 }} />
+        {step < 4 ? (
+          <TouchableOpacity
+            style={[fi.nextBtn, { backgroundColor: c.primary }]}
+            onPress={nextStep}
+          >
+            <Text style={fi.nextBtnText}>Next</Text>
+            <Ionicons name="arrow-forward" size={16} color="#fff" />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[fi.submitBtn, { backgroundColor: c.primary }, applyMut.isPending && { opacity: 0.7 }]}
+            onPress={handleSubmit}
+            disabled={applyMut.isPending}
+          >
+            {applyMut.isPending ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="send" size={16} color="#fff" />
+                <Text style={fi.submitBtnText}>Submit Application</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+};
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-const f = StyleSheet.create({
-  root:       { flex: 1 },
-  header:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, gap: 12 },
-  closeBtn:   { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle:{ fontSize: 16, fontWeight: '700' },
-  headerSub:  { fontSize: 12, marginTop: 1 },
-  stepBar:    { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1 },
-  stepItem:   { flex: 1, alignItems: 'center', gap: 3 },
-  stepDot:    { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  stepNum:    { fontSize: 11, fontWeight: '700' },
-  stepLabel:  { fontSize: 9, fontWeight: '600', textAlign: 'center' },
-  scroll:     { padding: 16, paddingBottom: 40 },
-  footer:     { flexDirection: 'row', padding: 16, borderTopWidth: 1, gap: 10 },
-  btn:        { paddingVertical: 14, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
-  outline:    { borderWidth: 1.5 },
-  filled:     {},
-  btnText:    { fontSize: 15, fontWeight: '600' },
-  filledText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-});
 
 const fi = StyleSheet.create({
-  sh:           { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth },
-  shTitle:      { fontSize: 16, fontWeight: '700' },
-  label:        { fontSize: 13, fontWeight: '600', marginBottom: 5, marginTop: 8 },
-  input:        { borderRadius: 12, borderWidth: 1.5, marginBottom: 10, paddingHorizontal: 14, paddingVertical: 0 },
-  inputText:    { fontSize: 15, paddingVertical: 12 },
-  input2:       { fontSize: 15, paddingVertical: 12, paddingHorizontal: 14 },
-  hint:         { fontSize: 12, marginBottom: 10, lineHeight: 17 },
-  charCount:    { fontSize: 11, textAlign: 'right', marginTop: -6, marginBottom: 12 },
-  loadingRow:   { padding: 24, alignItems: 'center' },
-  emptyBox:     { borderRadius: 14, borderWidth: 1, padding: 24, alignItems: 'center', gap: 8, marginBottom: 12 },
-  emptyText:    { fontSize: 13, textAlign: 'center' },
-  cvCard:       { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1.5, padding: 12, marginBottom: 8, gap: 12 },
-  cvIcon:       { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  cvName:       { fontSize: 14, fontWeight: '600' },
-  cvSize:       { fontSize: 11, marginTop: 2 },
-  cvPrimary:    { fontSize: 10, fontWeight: '700', marginTop: 2 },
-  checkbox:     { width: 24, height: 24, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  textAreaWrapper:{ borderRadius: 12, borderWidth: 1.5, overflow: 'hidden', marginBottom: 6 },
-  textArea:     { fontSize: 14, padding: 14, minHeight: 160 },
-  shortArea:    { minHeight: 80 },
-  skillInputRow:{ flexDirection: 'row', gap: 8, marginBottom: 10 },
-  skillInput:   { borderRadius: 12, borderWidth: 1.5, overflow: 'hidden' },
-  addBtn:       { width: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  tagsRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
-  tag:          { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, gap: 5 },
-  tagText:      { fontSize: 13, fontWeight: '600' },
-  docCard:      { borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 10 },
-  docCardHeader:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  docCardTitle: { fontSize: 14, fontWeight: '700' },
-  toggleRow:    { flexDirection: 'row', alignItems: 'center', borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 10 },
-  toggleLabel:  { flex: 1, fontSize: 13, fontWeight: '500' },
-  fileBtn:      { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed' },
-  fileBtnText:  { fontSize: 14, fontWeight: '600', flex: 1 },
-  addMoreBtn:   { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', justifyContent: 'center', marginBottom: 16 },
-  addMoreText:  { fontSize: 14, fontWeight: '600' },
-  reviewCard:   { borderRadius: 14, borderWidth: 1, padding: 16, marginBottom: 12 },
-  reviewJob:    { fontSize: 18, fontWeight: '800', marginBottom: 4 },
-  reviewCompany:{ fontSize: 14, fontWeight: '600' },
-  reviewRow:    { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, gap: 10 },
-  reviewLabel:  { fontSize: 13, flex: 1, marginLeft: 4 },
-  reviewValue:  { fontSize: 13, fontWeight: '600', textAlign: 'right' },
-  coverPreview: { borderRadius: 12, borderWidth: 1, padding: 14, marginTop: 8, marginBottom: 12 },
-  coverPreviewLabel:{ fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
-  coverPreviewText: { fontSize: 13, lineHeight: 19 },
-  warningBox:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14, borderRadius: 12, borderWidth: 1, marginTop: 8 },
-  warningText:  { flex: 1, fontSize: 12, lineHeight: 17 },
+  root:              { flex: 1 },
+  header:            {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  closeBtn:          { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  headerTitle:       { fontSize: 16, fontWeight: '700' },
+  headerSub:         { fontSize: 12, marginTop: 1 },
+  stepBar:           {
+    flexDirection: 'row', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1,
+  },
+  stepItem:          { alignItems: 'center', flex: 1 },
+  stepCircle:        {
+    width: 28, height: 28, borderRadius: 14, borderWidth: 2,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 4,
+  },
+  stepNum:           { fontSize: 12, fontWeight: '700' },
+  stepLabel:         { fontSize: 10, fontWeight: '600', textAlign: 'center' },
+  body:              { padding: 16, paddingBottom: 40 },
+  footer:            {
+    flexDirection: 'row', alignItems: 'center',
+    padding: 16, borderTopWidth: 1,
+  },
+  backBtn:           {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 16, paddingVertical: 10,
+    borderRadius: 10, borderWidth: 1,
+  },
+  backBtnText:       { fontSize: 14, fontWeight: '600' },
+  nextBtn:           {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10,
+  },
+  nextBtnText:       { color: '#fff', fontWeight: '700', fontSize: 15 },
+  submitBtn:         {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10,
+  },
+  submitBtnText:     { color: '#fff', fontWeight: '700', fontSize: 15 },
+  sectionHeader:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, marginTop: 4 },
+  sectionIconBox:    { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  sectionTitle:      { fontSize: 15, fontWeight: '700' },
+  hint:              { fontSize: 13, lineHeight: 18, marginBottom: 12 },
+  label:             { fontSize: 13, fontWeight: '600', marginBottom: 4, marginTop: 8 },
+  input:             { padding: 12, borderRadius: 10, borderWidth: 1, fontSize: 14, marginBottom: 4 },
+  divider:           { height: 1, marginVertical: 16 },
+  emptyBox:          {
+    padding: 24, borderRadius: 12, borderWidth: 1,
+    alignItems: 'center', gap: 8,
+  },
+  emptyText:         { fontSize: 13, textAlign: 'center' },
+  cvCard:            {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: 12, borderRadius: 12, borderWidth: 2, marginBottom: 8,
+  },
+  cvIcon:            { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  cvName:            { fontSize: 14, fontWeight: '600' },
+  cvSize:            { fontSize: 11, marginTop: 2 },
+  cvPrimary:         { fontSize: 10, fontWeight: '700', marginTop: 1 },
+  checkbox:          { width: 22, height: 22, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  selectionInfo:     {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    padding: 10, borderRadius: 8, borderWidth: 1, marginTop: 4,
+  },
+  selectionText:     { fontSize: 13, fontWeight: '600' },
+  textAreaWrapper:   { borderWidth: 1, borderRadius: 10, marginBottom: 4 },
+  textArea:          { padding: 12, fontSize: 14, minHeight: 140, textAlignVertical: 'top' },
+  charCount:         { fontSize: 11, textAlign: 'right', marginBottom: 4 },
+  skillInputRow:     { flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 8 },
+  addBtn:            { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  skillCloud:        { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  skillChip:         {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1,
+  },
+  skillText:         { fontSize: 13, fontWeight: '600' },
+  docCard:           { padding: 14, borderRadius: 12, borderWidth: 1, marginBottom: 10 },
+  docCardHeader:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  docCardTitle:      { fontSize: 13, fontWeight: '600' },
+  uploadBtn:         { padding: 16, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed' },
+  uploadPlaceholder: { alignItems: 'center', gap: 6 },
+  uploadHint:        { fontSize: 13 },
+  uploadFormats:     { fontSize: 11 },
+  fileRow:           { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  fileName:          { flex: 1, fontSize: 13, fontWeight: '600' },
+  addBtnRow:         { flexDirection: 'row', gap: 10, marginTop: 6 },
+  addDocBtn:         {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, padding: 12, borderRadius: 10, borderWidth: 1,
+  },
+  addDocBtnText:     { fontSize: 13, fontWeight: '600' },
+  row:               { flexDirection: 'row', gap: 8 },
+  switchRow:         { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 4 },
+  switchLabel:       { fontSize: 13 },
+  reviewSection:     { padding: 14, borderRadius: 12, borderWidth: 1, gap: 6 },
+  reviewSectionHeader:{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  reviewSectionTitle:{ fontSize: 14, fontWeight: '700' },
+  reviewRow:         { flexDirection: 'row', justifyContent: 'space-between' },
+  reviewLabel:       { fontSize: 13 },
+  reviewValue:       { fontSize: 13, fontWeight: '600', flex: 1, textAlign: 'right' },
+  reviewCoverLetter: { fontSize: 13, lineHeight: 18 },
+  jobSummary:        { padding: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center' },
+  jobSummaryTitle:   { fontSize: 11, fontWeight: '600' },
+  jobSummaryJob:     { fontSize: 17, fontWeight: '800', marginTop: 2 },
+  jobSummaryCompany: { fontSize: 13, marginTop: 2 },
 });

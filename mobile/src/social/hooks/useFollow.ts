@@ -1,12 +1,10 @@
+// src/social/hooks/useFollow.ts
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
-import { followService } from '../services/followService';
+import { followService, type ValidFollowSource } from '../services/followService';
 import { SOCIAL_KEYS } from './queryKeys';
 import type { BulkFollowStatus, FollowStatus, FollowTargetType } from '../types';
 
-/**
- * Is the current user following `targetId`?
- */
 export const useFollowStatus = (
   targetId: string,
   targetType: FollowTargetType = 'User'
@@ -21,10 +19,6 @@ export const useFollowStatus = (
     staleTime: 1000 * 60,
   });
 
-/**
- * Check follow status for many users at once. Useful for list screens
- * (Network, Search results) to avoid N+1 calls.
- */
 export const useBulkFollowStatus = (
   userIds: string[],
   targetType: FollowTargetType = 'User',
@@ -40,10 +34,6 @@ export const useBulkFollowStatus = (
     staleTime: 1000 * 30,
   });
 
-/**
- * Toggle follow/unfollow. Optimistically flips `following` on the status
- * cache, bumps stats cache, and adjusts isFollowing on public profile.
- */
 export const useToggleFollow = () => {
   const qc = useQueryClient();
 
@@ -55,14 +45,13 @@ export const useToggleFollow = () => {
     }: {
       targetId: string;
       targetType?: FollowTargetType;
-      source?: string;
+      source?: ValidFollowSource;
     }) => followService.toggleFollow(targetId, targetType, source),
 
     onMutate: async ({ targetId }) => {
       await qc.cancelQueries({ queryKey: SOCIAL_KEYS.followStatus(targetId) });
       await qc.cancelQueries({ queryKey: SOCIAL_KEYS.followStats });
 
-      // Snapshots for rollback
       const prevStatus = qc.getQueryData<FollowStatus>(
         SOCIAL_KEYS.followStatus(targetId)
       );
@@ -73,13 +62,11 @@ export const useToggleFollow = () => {
 
       const wasFollowing = !!prevStatus?.following;
 
-      // Flip status
       qc.setQueryData<FollowStatus>(
         SOCIAL_KEYS.followStatus(targetId),
         (old) => ({ ...(old ?? {}), following: !wasFollowing })
       );
 
-      // Adjust my stats (I gain/lose one followed account)
       if (prevStats) {
         qc.setQueryData(SOCIAL_KEYS.followStats, {
           ...prevStats,
@@ -90,7 +77,6 @@ export const useToggleFollow = () => {
         });
       }
 
-      // Reflect on public profile
       if (prevPublic) {
         qc.setQueryData(SOCIAL_KEYS.publicProfile(targetId), {
           ...prevPublic,
@@ -137,9 +123,6 @@ export const useToggleFollow = () => {
   });
 };
 
-/**
- * Pending follow requests (for approval flows, e.g. private profiles).
- */
 export const usePendingRequests = () =>
   useQuery({
     queryKey: SOCIAL_KEYS.pending,

@@ -756,30 +756,30 @@
     "size": 307518
   },
   "bananalink/products/ear2": {
-    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana\\server\\backups\\cloudinary\\images\\ear2_102af5c6_2026-03-05T11-25-49-913Z.jpeg",
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\ear2_102af5c6_2026-04-20T12-12-55-910Z.jpeg",
     "originalName": "ear2.jpeg",
-    "uploadedAt": "2026-03-05T11:25:49.916Z",
+    "uploadedAt": "2026-04-20T12:12:55.912Z",
     "fileType": "image",
     "size": 11650
   },
   "bananalink/products/EAR3": {
-    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana\\server\\backups\\cloudinary\\images\\EAR3_94941ebe_2026-03-05T11-25-50-232Z.jpg",
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\EAR3_94941ebe_2026-04-20T12-12-56-110Z.jpg",
     "originalName": "EAR3.jpg",
-    "uploadedAt": "2026-03-05T11:25:50.234Z",
+    "uploadedAt": "2026-04-20T12:12:56.112Z",
     "fileType": "image",
     "size": 68873
   },
   "bananalink/products/ear4": {
-    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana\\server\\backups\\cloudinary\\images\\ear4_3fc8867c_2026-03-05T11-25-50-910Z.jpg",
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\ear4_3fc8867c_2026-04-20T12-12-56-053Z.jpg",
     "originalName": "ear4.jpg",
-    "uploadedAt": "2026-03-05T11:25:50.911Z",
+    "uploadedAt": "2026-04-20T12:12:56.055Z",
     "fileType": "image",
     "size": 51601
   },
   "bananalink/products/GM3_Plus_Wireless_Earbuds_Product_Pictures_red_5": {
-    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana\\server\\backups\\cloudinary\\images\\GM3_Plus_Wireless_Earbuds_Product_Pictures_red_5_09c54861_2026-03-05T11-25-51-358Z.webp",
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\GM3_Plus_Wireless_Earbuds_Product_Pictures_red_5_09c54861_2026-04-20T12-12-56-157Z.webp",
     "originalName": "GM3_Plus_Wireless_Earbuds_Product_Pictures_red_5.webp",
-    "uploadedAt": "2026-03-05T11:25:51.359Z",
+    "uploadedAt": "2026-04-20T12:12:56.158Z",
     "fileType": "image",
     "size": 76366
   },
@@ -1153,5 +1153,33 @@
     "uploadedAt": "2026-04-18T16:07:21.237Z",
     "fileType": "image",
     "size": 887528
+  },
+  "bananalink/products/IMG_5223": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\IMG_5223_45a11c83_2026-04-20T11-55-31-341Z.jpg",
+    "originalName": "IMG_5223.jpg",
+    "uploadedAt": "2026-04-20T11:55:31.343Z",
+    "fileType": "image",
+    "size": 96517
+  },
+  "bananalink/products/IMG_5221": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\IMG_5221_49a78249_2026-04-20T11-55-31-353Z.jpg",
+    "originalName": "IMG_5221.jpg",
+    "uploadedAt": "2026-04-20T11:55:31.355Z",
+    "fileType": "image",
+    "size": 87806
+  },
+  "bananalink/products/IMG_5222": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\IMG_5222_20a5f83c_2026-04-20T11-55-31-476Z.jpg",
+    "originalName": "IMG_5222.jpg",
+    "uploadedAt": "2026-04-20T11:55:31.476Z",
+    "fileType": "image",
+    "size": 88404
+  },
+  "bananalink/products/ear1": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\ear1_91ace122_2026-04-20T12-12-56-165Z.jpeg",
+    "originalName": "ear1.jpeg",
+    "uploadedAt": "2026-04-20T12:12:56.167Z",
+    "fileType": "image",
+    "size": 8334
   }
 }

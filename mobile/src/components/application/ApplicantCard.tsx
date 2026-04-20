@@ -36,7 +36,7 @@ export const ApplicantCard = memo<ApplicantCardProps>(({
   const isDark = theme.isDark;
 
   const SC = isDark ? STATUS_COLORS_DARK : STATUS_COLORS;
-  const sc = SC[application.status] ?? SC.applied;
+  const sc = SC[application.status as ApplicationStatus] ?? SC.applied;
 
   const candidate = application.candidate;
   const userInfo  = application.userInfo;

@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, GestureResponderEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/themeStore';
 import { Job } from '../../services/jobService';
@@ -15,6 +15,7 @@ interface Props {
   onEdit:             () => void;
   onDelete:           () => void;
   onViewApplicants:   () => void;
+  onPress?:           () => void;                                    // ← add this
   onToggleStatus?:    (newStatus: 'active' | 'paused' | 'closed') => void;
 }
 
@@ -35,6 +36,10 @@ export const CompanyJobCard = React.memo<Props>(({ job, onEdit, onDelete, onView
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: onDelete },
     ]);
+
+  function onPress(event: GestureResponderEvent): void {
+    throw new Error('Function not implemented.');
+  }
 
   return (
     <View style={[s.card, { backgroundColor: c.card, borderColor: c.border, borderLeftColor: sc.border, borderLeftWidth: 4 }, shadow]}>
@@ -86,7 +91,9 @@ export const CompanyJobCard = React.memo<Props>(({ job, onEdit, onDelete, onView
       </View>
 
       {/* Actions */}
-      <View style={[s.actions, { borderTopColor: c.border }]}>
+      <TouchableOpacity  onPress={onPress}
+  style={[s.card, { backgroundColor: c.card, borderColor: c.border, borderLeftColor: sc.border, borderLeftWidth: 4 }, shadow]}
+>
         <TouchableOpacity style={[s.actionBtn, { backgroundColor: c.primaryLight }]} onPress={onViewApplicants} activeOpacity={0.75}>
           <Ionicons name="people-outline" size={15} color={c.primary} />
           <Text style={[s.actionText, { color: c.primary }]}>Applicants ({appCount})</Text>
@@ -97,7 +104,7 @@ export const CompanyJobCard = React.memo<Props>(({ job, onEdit, onDelete, onView
         <TouchableOpacity style={[s.iconBtn, { borderColor: c.errorLight }]} onPress={confirmDelete} activeOpacity={0.75} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
           <Ionicons name="trash-outline" size={18} color={c.error} />
         </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
     </View>
   );
 });

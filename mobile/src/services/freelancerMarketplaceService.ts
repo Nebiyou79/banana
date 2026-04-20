@@ -1,32 +1,39 @@
 /**
  * mobile/src/services/freelancerMarketplaceService.ts
  *
- * Mirrors backend routes:
- *   GET  /api/v1/freelancers                  — list with filters
- *   GET  /api/v1/freelancers/professions       — profession list
- *   GET  /api/v1/freelancers/:id               — public profile
- *   GET  /api/v1/freelancers/:id/reviews       — paginated reviews
- *   POST /api/v1/freelancers/:id/reviews       — submit review (company/org)
- *   POST /api/v1/company/shortlist/:id         — toggle shortlist (company/org)
- *   GET  /api/v1/company/shortlist             — get shortlist (company/org)
+ * ROOT CAUSE FIX (both bugs):
+ *
+ * The original file imported:
+ *   import apiGet  from '../lib/httpClient';
+ *   import apiPost from '../lib/httpClient';
+ *
+ * Both names resolve to the SAME default export (the axios instance).
+ * A bare axios instance call — axios(url) or api(url) — defaults to GET.
+ * So EVERY call, including toggleShortlist and submitReview, was firing
+ * a GET request, which is why:
+ *   - Shortlist toggle → GET /company/shortlist/:id → 404
+ *   - Submit review    → GET /freelancers/:id/reviews → returns list, not create
+ *
+ * FIX: Import the single api instance and call api.get() / api.post()
+ * explicitly. This guarantees the correct HTTP verb every time.
  */
 
-import apiGet  from '../lib/httpClient';
-import apiPost from '../lib/httpClient';
-import { FREELANCERS, SHORTLIST } from '../constants/api';
+import api from '../lib/httpClient'; // single axios instance
 
 // ─── Enums / Literals ─────────────────────────────────────────────────────────
 
-export type AvailabilityStatus = 'available' | 'busy' | 'unavailable';
-export type ExperienceLevel = 'junior' | 'mid' | 'senior' | 'expert';
+export type AvailabilityStatus = 'available' | 'busy' | 'unavailable' | 'part-time' | 'not-available';
+export type ExperienceLevel = 'entry' | 'junior' | 'mid' | 'intermediate' | 'senior' | 'expert';
+export type MembershipTier = 'basic' | 'professional' | 'premium';
 export type SortOption =
   | 'rating'
   | 'rate_asc'
   | 'rate_desc'
   | 'newest'
+  | 'most_active'
   | 'experience';
 
-// ─── Shared sub-types ─────────────────────────────────────────────────────────
+// ─── Sub-types ────────────────────────────────────────────────────────────────
 
 export interface SocialLinks {
   linkedin?: string;
@@ -50,23 +57,27 @@ export interface WorkingHours {
 }
 
 export interface FreelancerService {
-  category: any;
   _id: string;
   title: string;
   description?: string;
   price?: number;
   currency?: string;
   deliveryTime?: string;
+  category?: string;
 }
 
 export interface FreelancerCertification {
   _id: string;
   name: string;
-  issuedBy: string;
+  issuedBy?: string;
+  issuer?: string;
   issuedDate?: string;
+  issueDate?: string;
   expiryDate?: string;
   credentialId?: string;
   credentialUrl?: string;
+  description?: string;
+  skills?: string[];
 }
 
 export interface PortfolioItem {
@@ -82,6 +93,13 @@ export interface PortfolioItem {
   createdAt: string;
 }
 
+export interface FreelancerBadge {
+  name: string;
+  description?: string;
+  earnedAt?: string;
+  icon?: string;
+}
+
 export interface FreelancerReview {
   _id: string;
   companyId: { _id: string; name: string; logo?: string };
@@ -91,48 +109,55 @@ export interface FreelancerReview {
   createdAt: string;
 }
 
-// ─── List item (returned from GET /freelancers) ───────────────────────────────
+// ─── List item ────────────────────────────────────────────────────────────────
+
+export interface FreelancerUserSnapshot {
+  _id: string;
+  name: string;
+  avatar?: string;
+  location?: string;
+  gender?: string;
+  age?: number;
+  skills: string[];
+}
 
 export interface FreelancerListItem {
   _id: string;
-  user: {
-    _id: string;
-    name: string;
-    avatar?: string;
-    location?: string;
-    skills: string[];
-  };
+  user: FreelancerUserSnapshot;
   profession?: string;
   title?: string;
-  experienceLevel: ExperienceLevel;
-  availability: AvailabilityStatus;
+  headline?: string;
   hourlyRate?: number;
   currency?: string;
-  skills: string[];
+  availability: AvailabilityStatus;
+  experienceLevel: ExperienceLevel;
+  specialization?: string[];
+  skills?: string[];
   ratings: { average: number; count: number; breakdown: RatingBreakdown };
+  badges?: FreelancerBadge[];
   featured: boolean;
+  membership?: MembershipTier;
+  profileViews?: number;
+  responseTime?: number;
+  completedProjects?: number;
   isSaved?: boolean;
-  completedProjects: number;
   createdAt: string;
 }
 
-// ─── Full public profile (returned from GET /freelancers/:id) ─────────────────
+// ─── Full public profile ──────────────────────────────────────────────────────
+
+export interface FreelancerPublicUser extends FreelancerUserSnapshot {
+  email?: string;
+  phone?: string;
+  website?: string;
+  socialLinks: SocialLinks;
+  portfolio: PortfolioItem[];
+  experience?: any[];
+  education?: any[];
+}
 
 export interface FreelancerPublicProfile extends Omit<FreelancerListItem, 'user'> {
-  user: {
-    _id: string;
-    name: string;
-    email?: string;
-    phone?: string;
-    avatar?: string;
-    location?: string;
-    gender?: string;
-    age?: number;
-    website?: string;
-    skills: string[];
-    socialLinks: SocialLinks;
-    portfolio: PortfolioItem[];
-  };
+  user: FreelancerPublicUser;
   bio?: string;
   englishProficiency?: string;
   timezone?: string;
@@ -148,12 +173,18 @@ export interface FreelancerPublicProfile extends Omit<FreelancerListItem, 'user'
   recentReviews: FreelancerReview[];
 }
 
-// ─── Reviews response ─────────────────────────────────────────────────────────
+// ─── Reviews ──────────────────────────────────────────────────────────────────
 
 export interface ReviewSummary {
   average: number;
   count: number;
   breakdown: RatingBreakdown;
+}
+
+export interface ReviewSubmission {
+  rating: number;
+  comment?: string;
+  subRatings?: RatingBreakdown;
 }
 
 export interface ReviewsResponse {
@@ -162,7 +193,7 @@ export interface ReviewsResponse {
   summary: ReviewSummary;
 }
 
-// ─── List / pagination ────────────────────────────────────────────────────────
+// ─── Pagination / List ────────────────────────────────────────────────────────
 
 export interface Pagination {
   total: number;
@@ -176,7 +207,7 @@ export interface ListResponse {
   pagination: Pagination;
 }
 
-// ─── Filters ──────────────────────────────────────────────────────────────────
+// ─── Filters ─────────────────────────────────────────────────────────────────
 
 export interface FreelancerFilters {
   search?: string;
@@ -194,19 +225,12 @@ export interface FreelancerFilters {
   limit?: number;
 }
 
-// ─── Review submission ────────────────────────────────────────────────────────
-
-export interface ReviewSubmission {
-  rating: number; // 1–5
-  comment?: string;
-  subRatings?: RatingBreakdown;
-}
-
 // ─── Shortlist ────────────────────────────────────────────────────────────────
 
 export interface ShortlistToggleResponse {
   saved: boolean;
-  message: string;
+  message?: string;
+  shortlistCount?: number;
 }
 
 // ─── Normalisation helpers ────────────────────────────────────────────────────
@@ -233,49 +257,63 @@ const normaliseReviews = (data: any): ReviewsResponse => {
   };
 };
 
+// ─── API endpoint constants ───────────────────────────────────────────────────
+// Defined inline to avoid depending on a constants file that may differ.
+
+const ENDPOINTS = {
+  LIST:              '/freelancers',
+  PROFESSIONS:       '/freelancers/professions',
+  DETAIL:            (id: string) => `/freelancers/${id}`,
+  REVIEWS:           (id: string) => `/freelancers/${id}/reviews`,
+  SHORTLIST_TOGGLE:  (id: string) => `/company/shortlist/${id}`,
+  SHORTLIST_LIST:    '/company/shortlist',
+} as const;
+
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 const freelancerMarketplaceService = {
+
   /**
    * GET /api/v1/freelancers
-   * Public — Company / Org can browse freelancers.
    */
   async listFreelancers(filters: FreelancerFilters = {}): Promise<ListResponse> {
     const params: Record<string, any> = { ...filters };
     if (Array.isArray(params.skills)) {
       params.skills = params.skills.join(',');
     }
-    params.page = params.page ?? 1;
+    params.page  = params.page  ?? 1;
     params.limit = params.limit ?? 12;
-    const res = await apiGet<any>(FREELANCERS.LIST, { params });
+
+    // FIX: explicit .get()
+    const res = await api.get<any>(ENDPOINTS.LIST, { params });
     return normaliseList(res.data);
   },
 
   /**
    * GET /api/v1/freelancers/professions
-   * Returns master list of professions for filter dropdowns.
    */
   async getProfessions(): Promise<string[]> {
-    const res = await apiGet<any>('/freelancers/professions');
+    // FIX: explicit .get()
+    const res = await api.get<any>(ENDPOINTS.PROFESSIONS);
     const inner = res.data?.data ?? res.data;
     return inner?.professions ?? inner ?? [];
   },
 
   /**
    * GET /api/v1/freelancers/:id
-   * Full public profile of a single freelancer.
    */
   async getFreelancerProfile(id: string): Promise<FreelancerPublicProfile> {
-    const res = await apiGet<any>(FREELANCERS.DETAIL(id));
+    // FIX: explicit .get()
+    const res = await api.get<any>(ENDPOINTS.DETAIL(id));
     return normaliseProfile(res.data);
   },
 
   /**
    * GET /api/v1/freelancers/:id/reviews?page=&limit=
-   * Paginated reviews for a freelancer.
    */
   async getReviews(freelancerId: string, page = 1, limit = 10): Promise<ReviewsResponse> {
-    const res = await apiGet<any>(FREELANCERS.REVIEWS(freelancerId), {
+    // FIX: explicit .get()
+    const res = await api.get<any>(ENDPOINTS.REVIEWS(freelancerId), {
       params: { page, limit },
     });
     return normaliseReviews(res.data);
@@ -283,34 +321,42 @@ const freelancerMarketplaceService = {
 
   /**
    * POST /api/v1/freelancers/:id/reviews
-   * Company / Org submits a review for a freelancer.
+   *
+   * FIX: was silently calling GET because apiPost === apiGet (same import alias).
+   * Now explicitly uses api.post() so the backend actually creates the review.
    */
   async submitReview(
     freelancerId: string,
     data: ReviewSubmission,
   ): Promise<FreelancerReview> {
-    const res = await apiPost<any>(FREELANCERS.SUBMIT_REVIEW(freelancerId), { data });
+    // FIX: explicit .post() — this was the root cause of "review submitted but not showing"
+    const res = await api.post<any>(ENDPOINTS.REVIEWS(freelancerId), data);
     const inner = res.data?.data ?? res.data;
     return inner?.review ?? inner;
   },
 
   /**
-   * POST /api/v1/company/shortlist/:freelancerId
-   * Toggles a freelancer in/out of the company's shortlist.
-   * Returns { saved: boolean }
+   * POST /api/v1/company/shortlist/:freelancerId  (toggle — no GET variant exists)
+   *
+   * FIX: was silently calling GET /company/shortlist/:id → 404
+   * because apiPost was the same function as apiGet.
+   * Now explicitly uses api.post() so the backend receives a POST.
    */
   async toggleShortlist(freelancerId: string): Promise<ShortlistToggleResponse> {
-    const res = await apiPost<any>(SHORTLIST.TOGGLE(freelancerId), {});
+    // FIX: explicit .post() — this was the root cause of the 404
+    const res = await api.post<any>(ENDPOINTS.SHORTLIST_TOGGLE(freelancerId), {});
     const inner = res.data?.data ?? res.data;
     return inner ?? { saved: false, message: '' };
   },
 
   /**
    * GET /api/v1/company/shortlist?page=&limit=
-   * Returns the company's saved freelancer list.
    */
   async getShortlist(page = 1, limit = 12): Promise<ListResponse> {
-    const res = await apiGet<any>(SHORTLIST.LIST, { params: { page, limit } });
+    // FIX: explicit .get()
+    const res = await api.get<any>(ENDPOINTS.SHORTLIST_LIST, {
+      params: { page, limit },
+    });
     return normaliseList(res.data);
   },
 };

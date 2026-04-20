@@ -1,7 +1,5 @@
-/**
- * Social module navigation param lists. Matches the blueprint and
- * banana-social-navigation skill exactly.
- */
+// src/social/navigation/types.ts
+import type { Post } from '../types';
 
 export type SocialStackParamList = {
   SocialSplash: undefined;
@@ -9,6 +7,8 @@ export type SocialStackParamList = {
   PublicProfile: { userId: string; userName?: string };
   PostDetail: { postId: string };
   EditProfile: undefined;
+  CreatePost: undefined;
+  EditPost: { post: Post };
   Followers: { userId?: string; title?: string };
   Following: { userId?: string; title?: string };
 };

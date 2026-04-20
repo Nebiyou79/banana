@@ -1,3 +1,4 @@
+// src/social/theme/socialTheme.ts
 import { useColorScheme } from 'react-native';
 import { useAuthStore } from '../../store/authStore';
 import type { UserRole } from '../types';
@@ -114,11 +115,10 @@ export const ROLE_SPLASH_LABELS: Record<
 
 export const REACTION_EMOJI: Record<string, string> = {
   like: '👍',
-  love: '❤️',
-  haha: '😄',
-  wow: '😮',
-  sad: '😢',
-  angry: '😡',
+  heart: '❤️',
+  celebrate: '🎉',
+  percent_100: '💯',
+  clap: '👏',
 };
 
 export const useSocialTheme = () => {
@@ -129,7 +129,6 @@ export const useSocialTheme = () => {
   const roleC = ROLE_COLORS[role];
 
   return {
-    // Role identity
     role,
     primary: roleC.primary,
     primaryLight: roleC.light,
@@ -140,7 +139,6 @@ export const useSocialTheme = () => {
     adBg: roleC.adBg,
     tabActive: roleC.tabActive,
     splashGradient: roleC.splashGradient,
-    // Mode-based
     bg: mode.bg,
     card: mode.card,
     cardAlt: mode.cardAlt,
@@ -153,7 +151,6 @@ export const useSocialTheme = () => {
     skeleton: mode.skeleton,
     overlay: mode.overlay,
     dark,
-    // Reaction emoji map
     reactions: REACTION_EMOJI,
   };
 };

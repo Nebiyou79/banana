@@ -1,13 +1,16 @@
 /**
- * mobile/src/services/productService.ts  (UPDATED)
+ * mobile/src/services/productService.ts
  *
- * Changes:
- *  - OwnerSnapshot type (embedded company info for fast list rendering)
- *  - Product.savedBy / savedCount
- *  - saveProduct / unsaveProduct / getSavedProducts
- *  - Category hierarchy support (CategoryItem from shared taxonomy)
- *  - status enum extended: 'out_of_stock' | 'discontinued'
- *  - price.unit no longer restricted enum
+ * FIXES IN THIS VERSION
+ * ─────────────────────────────────────────────────────────────────────────────
+ * 1. PRODUCTS.SAVE / PRODUCTS.SAVED now exist in constants/api.ts (already fixed
+ *    in the api.ts file you uploaded) — service now calls them without error.
+ * 2. normaliseProduct / normaliseProductList are robust to both flat and nested
+ *    server response shapes.
+ * 3. getFeaturedProducts bound correctly (no unbound `this` issue).
+ * 4. getCategories bound correctly.
+ * 5. All method signatures kept stable so existing hooks compile without changes.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 import { apiGet, apiPost, apiPut, apiPatch, apiDelete } from '../lib/api';
 import { PRODUCTS } from '../constants/api';
@@ -25,18 +28,18 @@ export interface ProductImage {
   height?: number;
 }
 
-/** Embedded company snapshot — present on every product without extra population */
+/** Embedded company snapshot — present on every product for fast list rendering */
 export interface OwnerSnapshot {
   name: string;
   logoUrl?: string;
-  avatarUrl?: string;      // from Profile.avatar (Cloudinary)
+  avatarUrl?: string;       // from Profile.avatar (Cloudinary)
   avatarPublicId?: string;
   verified: boolean;
   industry?: string;
   website?: string;
 }
 
-/** Populated companyId field (returned on single-product fetch) */
+/** Populated companyId field (returned on single-product GET) */
 export interface ProductCompany {
   _id: string;
   name: string;
@@ -64,11 +67,16 @@ export interface ProductSpecification {
 export interface ProductPrice {
   amount: number;
   currency: string;
-  unit: string;
+  unit: string;             // free-form string, e.g. "per kg", "each"
   displayPrice?: string;
 }
 
-export type ProductStatus = 'active' | 'draft' | 'inactive' | 'out_of_stock' | 'discontinued';
+export type ProductStatus =
+  | 'active'
+  | 'draft'
+  | 'inactive'
+  | 'out_of_stock'
+  | 'discontinued';
 
 export interface Product {
   _id: string;
@@ -76,14 +84,14 @@ export interface Product {
   description: string;
   shortDescription?: string;
   price: ProductPrice;
-  currency?: string;   // legacy flat field
+  currency?: string;          // legacy flat field
   category: string;
   subcategory?: string;
   tags: string[];
   images: ProductImage[];
   thumbnail?: { public_id: string; secure_url: string };
   companyId: ProductCompany | string;
-  ownerSnapshot?: OwnerSnapshot;  // fast-access company info
+  ownerSnapshot?: OwnerSnapshot;
   featured: boolean;
   status: ProductStatus;
   inventory: ProductInventory;
@@ -95,7 +103,7 @@ export interface Product {
   savedCount?: number;
   createdAt: string;
   updatedAt: string;
-  // processed fields added by normaliseProduct
+  // fields added by normaliseProduct
   formattedPrice?: string;
   isSaved?: boolean;
 }
@@ -157,7 +165,7 @@ export interface ProductListResponse {
   };
 }
 
-/** Category item from server (includes live count) */
+/** Category item returned from /products/categories */
 export interface CategoryItem {
   id: string;
   label: string;
@@ -175,7 +183,7 @@ const buildProductFormData = (
     existingImages?: string[];
     imagesToDelete?: string[];
     primaryImageIndex?: number;
-  }
+  },
 ): FormData => {
   const form = new FormData();
 
@@ -188,24 +196,28 @@ const buildProductFormData = (
       currency: data.currency ?? 'USD',
       unit:     data.unit     ?? 'unit',
     }));
-  if (data.category)   form.append('category',   data.category);
+  if (data.category)    form.append('category',    data.category);
   if (data.subcategory) form.append('subcategory', data.subcategory);
-  if (data.tags?.length)           form.append('tags',           JSON.stringify(data.tags));
-  if (data.specifications?.length) form.append('specifications', JSON.stringify(data.specifications));
+  if (data.tags?.length)
+    form.append('tags',           JSON.stringify(data.tags));
+  if (data.specifications?.length)
+    form.append('specifications', JSON.stringify(data.specifications));
   form.append('featured', String(data.featured ?? false));
-  if (data.inventory)  form.append('inventory', JSON.stringify(data.inventory));
-  if (data.sku)        form.append('sku', data.sku);
+  if (data.inventory) form.append('inventory', JSON.stringify(data.inventory));
+  if (data.sku)       form.append('sku', data.sku);
   if ('status' in data && data.status) form.append('status', data.status);
 
   if (options?.existingImages?.length)
-    form.append('existingImages', JSON.stringify(options.existingImages));
+    form.append('existingImages',  JSON.stringify(options.existingImages));
   if (options?.imagesToDelete?.length)
-    form.append('imagesToDelete', JSON.stringify(options.imagesToDelete));
+    form.append('imagesToDelete',  JSON.stringify(options.imagesToDelete));
   if (options?.primaryImageIndex !== undefined)
     form.append('primaryImageIndex', String(options.primaryImageIndex));
 
   imageAssets?.forEach(asset => {
-    form.append('productImages', { uri: asset.uri, name: asset.name, type: asset.type } as unknown as Blob);
+    form.append('productImages', {
+      uri: asset.uri, name: asset.name, type: asset.type,
+    } as unknown as Blob);
   });
 
   return form;
@@ -213,28 +225,50 @@ const buildProductFormData = (
 
 // ── Response normalisers ───────────────────────────────────────────────────────
 
-const normaliseProductList = (data: unknown): ProductListResponse => {
-  const inner = (data as Record<string, unknown>)?.data ?? data ?? {};
+/**
+ * Handles the two server response shapes:
+ *   { success, data: { products, pagination } }   ← standard
+ *   { success, data: { data: { products, ... } } } ← nested (some endpoints)
+ */
+const normaliseProductList = (raw: unknown): ProductListResponse => {
+  const outer = (raw as Record<string, unknown>)?.data ?? raw ?? {};
+  // unwrap double-nesting if present
+  const inner = (outer as Record<string, unknown>)?.data ?? outer;
   return {
-    products:   (inner as Record<string, unknown>)?.products   as Product[] ?? [],
-    pagination: (inner as Record<string, unknown>)?.pagination as ProductListResponse['pagination'] ??
-                { current: 1, pages: 1, total: 0, limit: 12 },
+    products:   ((inner as Record<string, unknown>)?.products   as Product[]) ?? [],
+    pagination: ((inner as Record<string, unknown>)?.pagination as ProductListResponse['pagination'])
+                ?? { current: 1, pages: 1, total: 0, limit: 12 },
   };
 };
 
-const normaliseProduct = (data: unknown): Product => {
-  const inner = (data as Record<string, unknown>)?.data ?? data;
-  return ((inner as Record<string, unknown>)?.product ?? inner) as Product;
+const normaliseProduct = (raw: unknown): Product => {
+  const outer = (raw as Record<string, unknown>)?.data ?? raw;
+  // may be { product: {...} } or the product object directly
+  return (
+    ((outer as Record<string, unknown>)?.product ?? outer) as Product
+  );
 };
 
-const normaliseCategories = (data: unknown): CategoryItem[] => {
-  const inner = (data as Record<string, unknown>)?.data ?? data;
-  return ((inner as Record<string, unknown>)?.categories ?? inner ?? []) as CategoryItem[];
+const normaliseCategories = (raw: unknown): CategoryItem[] => {
+  const outer = (raw as Record<string, unknown>)?.data ?? raw;
+  return (
+    ((outer as Record<string, unknown>)?.categories ?? outer ?? []) as CategoryItem[]
+  );
+};
+
+const normaliseFeatured = (raw: unknown): Product[] => {
+  const outer = (raw as Record<string, unknown>)?.data ?? raw;
+  return (
+    ((outer as Record<string, unknown>)?.products ?? outer ?? []) as Product[]
+  );
 };
 
 // ── Service ────────────────────────────────────────────────────────────────────
 
 export const productService = {
+
+  // ── Read ─────────────────────────────────────────────────────────────────────
+
   async getProducts(filters?: ProductFilters): Promise<ProductListResponse> {
     const res = await apiGet<unknown>(PRODUCTS.LIST, { params: filters });
     return normaliseProductList(res.data);
@@ -245,32 +279,38 @@ export const productService = {
     return normaliseProduct(res.data);
   },
 
-  async getCategories(): Promise<CategoryItem[]> {
+  // Bound arrow so it can be passed directly as queryFn without losing context
+  getCategories: async (): Promise<CategoryItem[]> => {
     const res = await apiGet<unknown>(PRODUCTS.CATEGORIES);
     return normaliseCategories(res.data);
   },
 
-  async getFeaturedProducts(): Promise<Product[]> {
+  // Bound arrow so it can be passed directly as queryFn
+  getFeaturedProducts: async (): Promise<Product[]> => {
     const res = await apiGet<unknown>(PRODUCTS.FEATURED);
-    const inner = (res.data as Record<string, unknown>)?.data ?? res.data;
-    return ((inner as Record<string, unknown>)?.products ?? inner ?? []) as Product[];
+    return normaliseFeatured(res.data);
   },
 
   async getCompanyProducts(
     companyId: string,
-    filters?: ProductFilters & { sort?: string; status?: string }
+    filters?: ProductFilters & { sort?: string; status?: string },
   ): Promise<ProductListResponse & { isOwnerView?: boolean }> {
     const res = await apiGet<unknown>(PRODUCTS.COMPANY(companyId), { params: filters });
     const list = normaliseProductList(res.data);
-    const isOwnerView = ((res.data as Record<string, unknown>)?.data as Record<string, unknown>)?.isOwnerView as boolean;
+    const outerData = ((res.data as Record<string, unknown>)?.data as Record<string, unknown>);
+    const isOwnerView = outerData?.isOwnerView as boolean | undefined;
     return { ...list, isOwnerView };
   },
 
   async getRelatedProducts(id: string): Promise<Product[]> {
     const res = await apiGet<unknown>(PRODUCTS.RELATED(id));
-    const inner = (res.data as Record<string, unknown>)?.data ?? res.data;
-    return ((inner as Record<string, unknown>)?.products ?? inner ?? []) as Product[];
+    const outer = (res.data as Record<string, unknown>)?.data ?? res.data;
+    return (
+      ((outer as Record<string, unknown>)?.products ?? outer ?? []) as Product[]
+    );
   },
+
+  // ── Write ─────────────────────────────────────────────────────────────────────
 
   async createProduct(data: CreateProductData, imageAssets: ImageAsset[]): Promise<Product> {
     const form = buildProductFormData(data, imageAssets);
@@ -285,7 +325,11 @@ export const productService = {
     id: string,
     data: UpdateProductData,
     imageAssets?: ImageAsset[],
-    options?: { existingImages?: string[]; imagesToDelete?: string[]; primaryImageIndex?: number }
+    options?: {
+      existingImages?: string[];
+      imagesToDelete?: string[];
+      primaryImageIndex?: number;
+    },
   ): Promise<Product> {
     const form = buildProductFormData(data, imageAssets, options);
     const res = await apiPut<unknown>(PRODUCTS.UPDATE(id), form, {
@@ -304,23 +348,25 @@ export const productService = {
     await apiDelete(PRODUCTS.DELETE(id));
   },
 
-  // ── Save / Unsave ────────────────────────────────────────────────────────────
+  // ── Save / Unsave ─────────────────────────────────────────────────────────────
 
   async saveProduct(id: string): Promise<{ savedCount: number }> {
     const res = await apiPost<{ success: boolean; data: { savedCount: number } }>(
-      PRODUCTS.SAVE(id)
+      PRODUCTS.SAVE(id),
     );
     return res.data.data;
   },
 
   async unsaveProduct(id: string): Promise<{ savedCount: number }> {
     const res = await apiDelete<{ success: boolean; data: { savedCount: number } }>(
-      PRODUCTS.SAVE(id)
+      PRODUCTS.SAVE(id),
     );
     return res.data.data;
   },
 
-  async getSavedProducts(filters?: Pick<ProductFilters, 'page' | 'limit'>): Promise<ProductListResponse> {
+  async getSavedProducts(
+    filters?: Pick<ProductFilters, 'page' | 'limit'>,
+  ): Promise<ProductListResponse> {
     const res = await apiGet<unknown>(PRODUCTS.SAVED, { params: filters });
     return normaliseProductList(res.data);
   },
@@ -333,18 +379,22 @@ export const productService = {
    */
   getOwnerAvatarUrl(product: Product): string | null {
     const snap = product.ownerSnapshot;
-    if (snap?.avatarUrl)  return snap.avatarUrl;
-    if (snap?.logoUrl)    return snap.logoUrl;
-    const company = typeof product.companyId === 'object' ? product.companyId as ProductCompany : null;
+    if (snap?.avatarUrl) return snap.avatarUrl;
+    if (snap?.logoUrl)   return snap.logoUrl;
+    const company =
+      typeof product.companyId === 'object' && product.companyId !== null
+        ? (product.companyId as ProductCompany)
+        : null;
     return company?.logoUrl ?? null;
   },
 
-  /**
-   * Resolve owner name from ownerSnapshot or populated companyId.
-   */
+  /** Resolve owner name from ownerSnapshot or populated companyId. */
   getOwnerName(product: Product): string {
     if (product.ownerSnapshot?.name) return product.ownerSnapshot.name;
-    const company = typeof product.companyId === 'object' ? product.companyId as ProductCompany : null;
+    const company =
+      typeof product.companyId === 'object' && product.companyId !== null
+        ? (product.companyId as ProductCompany)
+        : null;
     return company?.name ?? 'Unknown Company';
   },
 
@@ -357,7 +407,7 @@ export const productService = {
         minimumFractionDigits: 2, maximumFractionDigits: 2,
       }).format(amount);
     } catch {
-      return `${curr} ${amount.toFixed(2)}`;
+      return `${curr} ${Number(amount).toFixed(2)}`;
     }
   },
 };

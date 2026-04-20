@@ -1,7 +1,7 @@
+// src/social/components/post/ReactionPicker.tsx
 import React, { memo, useEffect, useRef } from 'react';
 import {
   Animated,
-  Easing,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,11 +12,10 @@ import type { ReactionType } from '../../types';
 
 const REACTIONS: Array<{ type: ReactionType; emoji: string; label: string }> = [
   { type: 'like', emoji: '👍', label: 'Like' },
-  { type: 'love', emoji: '❤️', label: 'Love' },
-  { type: 'haha', emoji: '😄', label: 'Haha' },
-  { type: 'wow', emoji: '😮', label: 'Wow' },
-  { type: 'sad', emoji: '😢', label: 'Sad' },
-  { type: 'angry', emoji: '😡', label: 'Angry' },
+  { type: 'heart', emoji: '❤️', label: 'Heart' },
+  { type: 'celebrate', emoji: '🎉', label: 'Celebrate' },
+  { type: 'percent_100', emoji: '💯', label: '100%' },
+  { type: 'clap', emoji: '👏', label: 'Clap' },
 ];
 
 interface Props {
@@ -24,10 +23,6 @@ interface Props {
   onDismiss?: () => void;
 }
 
-/**
- * Popover of reaction emojis that scales in one-by-one when mounted.
- * Positioned above the like button by the parent.
- */
 const ReactionPicker: React.FC<Props> = memo(({ onSelect }) => {
   const theme = useSocialTheme();
   const scales = useRef(
@@ -90,9 +85,6 @@ const ReactionPicker: React.FC<Props> = memo(({ onSelect }) => {
 });
 
 ReactionPicker.displayName = 'ReactionPicker';
-
-// Ensure Easing import isn't flagged as unused by some TS configs
-void Easing;
 
 const styles = StyleSheet.create({
   picker: {

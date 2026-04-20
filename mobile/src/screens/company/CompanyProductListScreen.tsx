@@ -1,6 +1,11 @@
 /**
- * mobile/src/screens/company/CompanyProductListScreen.tsx  (UPDATED)
+ * mobile/src/screens/company/CompanyProductListScreen.tsx
  * Uses useTheme()
+ *
+ * FIX:
+ *  - explicitly resolve companyId from auth store and pass into
+ *    useCompanyProducts (belt-and-suspenders with the hook fix)
+ *  - navigate to the new CompanyProductDetails route name
  */
 import React, { useState } from 'react';
 import {
@@ -10,37 +15,46 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
+import { useAuthStore } from '../../store/authStore';
 import { useCompanyProducts, useDeleteProduct, useUpdateProductStatus } from '../../hooks/useProducts';
 import { CompanyProductCard } from '../../components/products/CompanyProductCard';
 import { Product, ProductStatus } from '../../services/productService';
 import { CompanyStackParamList } from '../../navigation/CompanyNavigator';
+import { ProductCard } from '../../components/products/ProductCard';
 
 type Props = NativeStackScreenProps<CompanyStackParamList, 'CompanyProductList'>;
 
 type StatusFilter = 'all' | ProductStatus;
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
-  { key: 'all',         label: 'All'          },
-  { key: 'active',      label: 'Active'       },
-  { key: 'draft',       label: 'Draft'        },
-  { key: 'out_of_stock',label: 'Out of Stock' },
-  { key: 'inactive',    label: 'Inactive'     },
+  { key: 'all',          label: 'All'          },
+  { key: 'active',       label: 'Active'       },
+  { key: 'draft',        label: 'Draft'        },
+  { key: 'out_of_stock', label: 'Out of Stock' },
+  { key: 'inactive',     label: 'Inactive'     },
 ];
 
 export const CompanyProductListScreen: React.FC<Props> = ({ navigation }) => {
   const { colors, spacing } = useTheme();
+  const { user } = useAuthStore();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+
+  // Resolve id the same way the frontend does: user.company ?? user._id.
+  // Backend accepts either Company._id or User._id (falls back via
+  // Company.findOne({ user: <id> })), so user._id is a safe default.
+  const companyId =
+    (typeof user?.company === 'string' ? user.company : user?.company?._id) ?? user?._id;
 
   const {
     data: companyProductsData, isLoading, refetch, isRefetching,
     fetchNextPage, hasNextPage, isFetchingNextPage,
-  } = useCompanyProducts(undefined, {
+  } = useCompanyProducts(companyId, {
     status: statusFilter === 'all' ? undefined : statusFilter,
     limit: 20,
   });
 
-  const deleteProduct  = useDeleteProduct();
-  const updateStatus   = useUpdateProductStatus();
+  const deleteProduct = useDeleteProduct();
+  const updateStatus  = useUpdateProductStatus();
 
   const allProducts: Product[] = React.useMemo(
     () => companyProductsData?.pages.flatMap(p => p.products) ?? [],
@@ -123,9 +137,9 @@ export const CompanyProductListScreen: React.FC<Props> = ({ navigation }) => {
           ListEmptyComponent={<EmptyState />}
           ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={colors.accent} style={{ paddingVertical: 20 }} /> : null}
           renderItem={({ item }) => (
-            <CompanyProductCard
+            <ProductCard
               product={item}
-              onPress={() => navigation.navigate('ProductDetails', { productId: item._id, fromOwner: true })}
+              onPress={() => navigation.navigate('CompanyProductDetails', { productId: item._id, fromOwner: true })}
               onEdit={() => navigation.navigate('EditProduct', { productId: item._id })}
               onDelete={() => deleteProduct.mutate(item._id)}
               onToggleStatus={() => handleToggleStatus(item)}
@@ -146,16 +160,16 @@ export const CompanyProductListScreen: React.FC<Props> = ({ navigation }) => {
 };
 
 const s = StyleSheet.create({
-  safe:       { flex: 1 },
-  header:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
-  headerTitle:{ fontSize: 20, fontWeight: '800', letterSpacing: -0.4 },
-  headerSub:  { fontSize: 11, marginTop: 1 },
-  addBtn:     { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  tabsScroll: { gap: 8, paddingVertical: 12 },
-  tab:        { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1 },
-  fab:        { position: 'absolute', bottom: 30, right: 20, width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
-  empty:      { alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
-  emptyTitle: { fontSize: 18, fontWeight: '700' },
-  emptyBody:  { fontSize: 13, textAlign: 'center', maxWidth: 240 },
-  emptyBtn:   { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, marginTop: 4 },
+  safe:        { flex: 1 },
+  header:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
+  headerTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.4 },
+  headerSub:   { fontSize: 11, marginTop: 1 },
+  addBtn:      { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  tabsScroll:  { gap: 8, paddingVertical: 12 },
+  tab:         { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1 },
+  fab:         { position: 'absolute', bottom: 30, right: 20, width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  empty:       { alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
+  emptyTitle:  { fontSize: 18, fontWeight: '700' },
+  emptyBody:   { fontSize: 13, textAlign: 'center', maxWidth: 240 },
+  emptyBtn:    { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, marginTop: 4 },
 });

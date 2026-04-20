@@ -41,7 +41,6 @@ export const JobManagementScreen: React.FC<Props> = ({ navigation }) => {
 
   const deleteMut = useDeleteJob();
   const updateMut = useUpdateJob();
-
   const allJobs: Job[] = useMemo(
     () => (data?.pages ?? []).flatMap(p => p.jobs),
     [data],
@@ -69,9 +68,10 @@ export const JobManagementScreen: React.FC<Props> = ({ navigation }) => {
     );
   }, [deleteMut]);
 
-  const handleStatusToggle = useCallback((job: Job, newStatus: 'active' | 'paused') => {
-    updateMut.mutate({ id: job._id, data: { status: newStatus } });
-  }, [updateMut]);
+// JobManagementScreen.tsx  AND  OrgJobsScreen.tsx
+const handleStatusToggle = useCallback((job: Job, newStatus: 'active' | 'paused' | 'closed') => {
+  updateMut.mutate({ id: job._id, data: { status: newStatus } });
+}, [updateMut]);
 
   const renderItem = useCallback(({ item }: { item: Job }) => (
     <CompanyJobCard

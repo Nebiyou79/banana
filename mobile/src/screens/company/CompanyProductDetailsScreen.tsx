@@ -1,17 +1,26 @@
 /**
- * mobile/src/screens/company/ProductDetailsScreen.tsx  (UPDATED)
+ * mobile/src/screens/company/ComapnyProductDetailsScreen.tsx
  * Owner product detail — full management actions.
  * Uses useTheme() hook.
+ *
+ * FIXES:
+ *  - route param type now 'CompanyProductDetails'
+ *  - isOwner guard on every owner-only action (bottom bar, action sheet)
+ *  - Related list uses a plain horizontal ScrollView instead of a FlatList
+ *    inside a ScrollView (removes the "VirtualizedLists should never be
+ *    nested … keyExtractor" warning)
+ *  - Related cards navigate owner-vs-public based on actual ownership
  */
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  SafeAreaView, FlatList, ActivityIndicator, StatusBar,
+  SafeAreaView, ActivityIndicator, StatusBar,
   Alert, ActionSheetIOS, Platform,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
+import { useAuthStore } from '../../store/authStore';
 import { useProduct, useRelatedProducts, useDeleteProduct, useUpdateProductStatus } from '../../hooks/useProducts';
 import { ProductImageGallery } from '../../components/products/ProductImageGallery';
 import { ProductCard } from '../../components/products/ProductCard';
@@ -19,11 +28,12 @@ import { formatPrice, getStockStatus, getStockBadgeConfig, getProductStatusConfi
 import { ProductStatus } from '../../services/productService';
 import { CompanyStackParamList } from '../../navigation/CompanyNavigator';
 
-type Props = NativeStackScreenProps<CompanyStackParamList, 'ProductDetails'>;
+type Props = NativeStackScreenProps<CompanyStackParamList, 'CompanyProductDetails'>;
 
 export const CompanyProductDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   const { productId } = route.params;
-  const { colors, spacing, isDark } = useTheme();
+  const { colors, isDark } = useTheme();
+  const { user } = useAuthStore();
 
   const [descExpanded, setDescExpanded] = useState(false);
 
@@ -32,8 +42,23 @@ export const CompanyProductDetailsScreen: React.FC<Props> = ({ navigation, route
   const { mutate: deleteProduct, isPending: deleteLoading } = useDeleteProduct();
   const { mutate: updateStatus, isPending: statusLoading }  = useUpdateProductStatus();
 
+  // ── Ownership check ────────────────────────────────────────────────────────
+  const currentCompanyId =
+    (typeof user?.company === 'string' ? user.company : user?.company?._id) ?? user?._id;
+
+  const productOwnerId =
+    product && (typeof product.companyId === 'object' ? product.companyId?._id : product.companyId);
+
+  const isOwner =
+    !!user &&
+    (user.role === 'admin' ||
+      (user.role === 'company' &&
+        !!productOwnerId &&
+        !!currentCompanyId &&
+        productOwnerId === currentCompanyId));
+
   const handleOwnerActions = useCallback(() => {
-    if (!product) return;
+    if (!product || !isOwner) return;
     const isActive = product.status === 'active';
     const isOOS    = product.status === 'out_of_stock';
 
@@ -64,7 +89,7 @@ export const CompanyProductDetailsScreen: React.FC<Props> = ({ navigation, route
         { text: 'Cancel', style: 'cancel' },
       ]);
     }
-  }, [product, productId, navigation, updateStatus, deleteProduct]);
+  }, [product, isOwner, productId, navigation, updateStatus, deleteProduct]);
 
   if (isLoading) {
     return (
@@ -104,9 +129,13 @@ export const CompanyProductDetailsScreen: React.FC<Props> = ({ navigation, route
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[s.navTitle, { color: colors.textPrimary }]} numberOfLines={1}>{product.name}</Text>
-        <TouchableOpacity onPress={handleOwnerActions} style={s.navBtn}>
-          <Ionicons name="ellipsis-vertical" size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
+        {isOwner ? (
+          <TouchableOpacity onPress={handleOwnerActions} style={s.navBtn}>
+            <Ionicons name="ellipsis-vertical" size={22} color={colors.textPrimary} />
+          </TouchableOpacity>
+        ) : (
+          <View style={s.navBtn} />
+        )}
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
@@ -219,77 +248,104 @@ export const CompanyProductDetailsScreen: React.FC<Props> = ({ navigation, route
             </View>
           )}
 
-          {/* Related */}
+          {/* Related — plain horizontal ScrollView avoids nested-VirtualizedList warning */}
           {related.length > 0 && (
             <View>
               <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>Related Products</Text>
-              <FlatList
-                horizontal data={related} keyExtractor={i => i._id}
+              <ScrollView
+                horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: 10 }}
-                renderItem={({ item }) => (
-                  <ProductCard
-                    variant="owner"
-                    product={item}
-                    onPress={() => navigation.replace('ProductDetails', { productId: item._id })}
-                    onEdit={() => navigation.navigate('EditProduct', { productId: item._id })}
-                    onDelete={() => deleteProduct(item._id)}
-                    onToggleStatus={() => updateStatus({ id: item._id, status: item.status === 'active' ? 'draft' : 'active' })}
-                    size="sm" style={{ width: 160 }}
-                  />
-                )}
-              />
+              >
+                {related.map(item => {
+                  const relatedOwnerId =
+                    typeof item.companyId === 'object' ? item.companyId?._id : item.companyId;
+                  const relatedIsOwn =
+                    !!currentCompanyId && !!relatedOwnerId && relatedOwnerId === currentCompanyId;
+
+                  if (relatedIsOwn) {
+                    return (
+                      <ProductCard
+                        key={item._id}
+                        variant="owner"
+                        product={item}
+                        onPress={() => navigation.replace('CompanyProductDetails', { productId: item._id })}
+                        onEdit={() => navigation.navigate('EditProduct', { productId: item._id })}
+                        onDelete={() => deleteProduct(item._id)}
+                        onToggleStatus={() =>
+                          updateStatus({ id: item._id, status: item.status === 'active' ? 'draft' : 'active' })
+                        }
+                        size="sm"
+                        style={{ width: 160 }}
+                      />
+                    );
+                  }
+
+                  return (
+                    <ProductCard
+                      key={item._id}
+                      variant="public"
+                      product={item}
+                      onPress={() => navigation.navigate('CompanyProductDetails', { productId: item._id })}
+                      size="sm"
+                      style={{ width: 160 }}
+                    />
+                  );
+                })}
+              </ScrollView>
             </View>
           )}
         </View>
       </ScrollView>
 
-      {/* Bottom action bar */}
-      <View style={[s.bottomBar, { backgroundColor: colors.bgSurface, borderTopColor: colors.borderPrimary }]}>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('EditProduct', { productId })}
-          style={[s.actionBtn, { borderColor: colors.accent }]}
-        >
-          <Ionicons name="create-outline" size={18} color={colors.accent} />
-          <Text style={{ fontSize: 13, fontWeight: '700', color: colors.accent }}>Edit</Text>
-        </TouchableOpacity>
+      {/* Bottom action bar — owner only */}
+      {isOwner && (
+        <View style={[s.bottomBar, { backgroundColor: colors.bgSurface, borderTopColor: colors.borderPrimary }]}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('EditProduct', { productId })}
+            style={[s.actionBtn, { borderColor: colors.accent }]}
+          >
+            <Ionicons name="create-outline" size={18} color={colors.accent} />
+            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.accent }}>Edit</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={() => updateStatus({ id: productId, status: product.status === 'active' ? 'draft' : 'active' })}
-          disabled={statusLoading}
-          style={[s.actionBtn, { borderColor: product.status === 'active' ? colors.error : '#22C55E' }]}
-        >
-          {statusLoading ? (
-            <ActivityIndicator size="small" color={colors.accent} />
-          ) : (
-            <>
-              <Ionicons
-                name={product.status === 'active' ? 'eye-off-outline' : 'eye-outline'}
-                size={18}
-                color={product.status === 'active' ? colors.error : '#22C55E'}
-              />
-              <Text style={{ fontSize: 13, fontWeight: '700', color: product.status === 'active' ? colors.error : '#22C55E' }}>
-                {product.status === 'active' ? 'Unpublish' : 'Publish'}
-              </Text>
-            </>
-          )}
-        </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => updateStatus({ id: productId, status: product.status === 'active' ? 'draft' : 'active' })}
+            disabled={statusLoading}
+            style={[s.actionBtn, { borderColor: product.status === 'active' ? colors.error : '#22C55E' }]}
+          >
+            {statusLoading ? (
+              <ActivityIndicator size="small" color={colors.accent} />
+            ) : (
+              <>
+                <Ionicons
+                  name={product.status === 'active' ? 'eye-off-outline' : 'eye-outline'}
+                  size={18}
+                  color={product.status === 'active' ? colors.error : '#22C55E'}
+                />
+                <Text style={{ fontSize: 13, fontWeight: '700', color: product.status === 'active' ? colors.error : '#22C55E' }}>
+                  {product.status === 'active' ? 'Unpublish' : 'Publish'}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={() => deleteProduct(productId, { onSuccess: () => navigation.goBack() })}
-          disabled={deleteLoading}
-          style={[s.deleteBtn, { backgroundColor: colors.error }]}
-        >
-          {deleteLoading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="trash-outline" size={18} color="#fff" />
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>Delete</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            onPress={() => deleteProduct(productId, { onSuccess: () => navigation.goBack() })}
+            disabled={deleteLoading}
+            style={[s.deleteBtn, { backgroundColor: colors.error }]}
+          >
+            {deleteLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="trash-outline" size={18} color="#fff" />
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>Delete</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 };

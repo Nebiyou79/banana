@@ -1,5 +1,8 @@
+// src/social/services/followService.ts
 import api from '../../lib/api';
 import type { FollowTargetType } from '../types';
+
+export type ValidFollowSource = 'profile' | 'search' | 'suggestion' | 'feed';
 
 export interface FollowListParams {
   page?: number;
@@ -11,7 +14,7 @@ export const followService = {
   toggleFollow: (
     targetId: string,
     targetType: FollowTargetType = 'User',
-    followSource = 'profile'
+    followSource: ValidFollowSource = 'profile'
   ) => api.post(`/follow/${targetId}`, { targetType, followSource }),
 
   // GET /follow/:targetId/status
@@ -50,7 +53,7 @@ export const followService = {
   rejectFollowRequest: (followId: string) =>
     api.put(`/follow/${followId}/reject`),
 
-  // GET /follow/public/followers/:targetId — for viewing other profiles
+  // GET /follow/public/followers/:targetId
   getPublicFollowers: (targetId: string, params: FollowListParams = {}) =>
     api.get(`/follow/public/followers/${targetId}`, {
       params: { page: 1, limit: 20, ...params },

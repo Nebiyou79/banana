@@ -1,15 +1,23 @@
 /**
  * src/screens/candidate/ApplicationDetailsScreen.tsx
- * Candidate application detail with ApplicationHeader + CandidateApplicationDetails.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Candidate application detail.
+ * Fetches its own application data, displays ApplicationHeader + 3-tab
+ * CandidateApplicationDetails component.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
-import React from 'react';
-import { View, ScrollView, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View, StyleSheet, ActivityIndicator, Text, TouchableOpacity,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/themeStore';
-import { useMyApplications } from '../../hooks/useApplications';
+import { useMyApplicationsPaginated } from '../../hooks/useApplications';
 import { ApplicationHeader } from '../../components/application/ApplicationHeader';
 import { CandidateApplicationDetails } from '../../components/application/CandidateApplicationDetails';
+import { Application } from '../../services/applicationService';
+import { ListSkeleton } from '../../components/skeletons';
 
 interface Props {
   navigation: any;
@@ -20,37 +28,35 @@ export const ApplicationDetailScreen: React.FC<Props> = ({ navigation, route }) 
   const { applicationId } = route.params;
   const { theme } = useThemeStore();
   const c = theme.colors;
+  const isDark = theme.isDark ?? false;
 
-  // Fetch from candidate's own list; filter to find the one we want
-  const appsQ = useMyApplications();
-  const apps = appsQ.data?.data ?? [];
-  const application = apps.find(a => a._id === applicationId);
+  // Load from candidate list; filter by id
+  const { data, isLoading, isError, refetch } = useMyApplicationsPaginated({ limit: 50 });
 
-  if (appsQ.isLoading) {
+  const [localApp, setLocalApp] = useState<Application | null>(null);
+
+  const pagesApps = data?.pages?.flatMap((p) => p.data) ?? [];
+  const application: Application | undefined = localApp ?? pagesApps.find((a) => a._id === applicationId);
+
+  if (isLoading) {
     return (
-      <SafeAreaView style={[{ flex: 1, backgroundColor: c.background }]} edges={[]}>
-        <View style={{ height: 160, backgroundColor: '#1D4ED8', paddingTop: 50, paddingLeft: 16 }}>
-          <TouchableOpacity onPress={() => navigation.goBack()}
-            style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name="arrow-back" size={22} color="#fff" />
-          </TouchableOpacity>
-        </View>
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={c.primary} size="large" />
-        </View>
+      <SafeAreaView style={[s.root, { backgroundColor: c.background }]} edges={['top']}>
+        <ListSkeleton count={6} />
       </SafeAreaView>
     );
   }
 
-  if (!application) {
+  if (isError || !application) {
     return (
-      <SafeAreaView style={[{ flex: 1, backgroundColor: c.background }]} edges={['top']}>
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-          <Ionicons name="alert-circle-outline" size={52} color={c.textMuted} />
-          <Text style={{ fontSize: 18, fontWeight: '700', color: c.text }}>Application not found</Text>
-          <TouchableOpacity onPress={() => navigation.goBack()}
-            style={{ paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, backgroundColor: c.primary }}>
-            <Text style={{ color: '#fff', fontWeight: '600' }}>Go Back</Text>
+      <SafeAreaView style={[s.root, { backgroundColor: c.background }]} edges={['top']}>
+        <View style={s.center}>
+          <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={[s.errorTitle, { color: c.text }]}>Application not found</Text>
+          <TouchableOpacity
+            style={[s.retryBtn, { backgroundColor: c.primary }]}
+            onPress={() => refetch()}
+          >
+            <Text style={s.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -58,21 +64,29 @@ export const ApplicationDetailScreen: React.FC<Props> = ({ navigation, route }) 
   }
 
   return (
-    <SafeAreaView style={[{ flex: 1, backgroundColor: c.background }]} edges={[]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-        <ApplicationHeader
-          application={application}
-          role="candidate"
-          onBack={() => navigation.goBack()}
-          isDark={theme.isDark}
-        />
-        <View style={{ padding: 16 }}>
-          <CandidateApplicationDetails
-            application={application}
-            onWithdraw={() => navigation.goBack()}
-          />
-        </View>
-      </ScrollView>
+    <SafeAreaView style={[s.root, { backgroundColor: c.background }]} edges={['top']}>
+      {/* Gradient header */}
+      <ApplicationHeader
+        application={application}
+        role="candidate"
+        onBack={() => navigation.goBack()}
+        isDark={isDark}
+      />
+
+      {/* 3-tab detail */}
+      <CandidateApplicationDetails
+        application={application}
+        colors={c}
+        onUpdated={(updated) => setLocalApp(updated)}
+      />
     </SafeAreaView>
   );
 };
+
+const s = StyleSheet.create({
+  root:       { flex: 1 },
+  center:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
+  errorTitle: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  retryBtn:   { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10 },
+  retryText:  { color: '#fff', fontWeight: '700' },
+});

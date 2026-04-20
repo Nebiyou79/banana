@@ -1,3 +1,4 @@
+// src/social/components/post/PostCard.tsx
 import React, { memo, useCallback, useState } from 'react';
 import {
   Animated,
@@ -20,6 +21,7 @@ interface Props {
   post: Post;
   onReact: (postId: string, reaction: ReactionType) => void;
   onRemoveReact: (postId: string) => void;
+  onDislike: (postId: string) => void;
   onComment: (post: Post) => void;
   onShare: (post: Post) => void;
   onSave: (postId: string, isSaved: boolean) => void;
@@ -33,15 +35,12 @@ interface Props {
 
 const CONTENT_EXPAND_THRESHOLD = 180;
 
-/**
- * The Instagram-style post card, composed of Header → Content → Media →
- * Stats → Actions. Memoised because it's rendered inside FlashList.
- */
 const PostCard: React.FC<Props> = memo(
   ({
     post,
     onReact,
     onRemoveReact,
+    onDislike,
     onComment,
     onShare,
     onSave,
@@ -108,7 +107,6 @@ const PostCard: React.FC<Props> = memo(
           showMenu={showMenu}
         />
 
-        {/* Content */}
         {post.content ? (
           <View style={styles.content}>
             <HashtagText
@@ -132,12 +130,10 @@ const PostCard: React.FC<Props> = memo(
           </View>
         ) : null}
 
-        {/* Media */}
         {post.media?.length > 0 ? (
           <PostMedia media={post.media} onMediaPress={handleMediaPress} />
         ) : null}
 
-        {/* Stats row */}
         {hasStats ? (
           <View style={styles.statsRow}>
             {post.stats.likes > 0 ? (
@@ -179,12 +175,12 @@ const PostCard: React.FC<Props> = memo(
           post={post}
           onReact={onReact}
           onRemoveReact={onRemoveReact}
+          onDislike={onDislike}
           onComment={handleComment}
           onShare={handleShare}
           onSave={handleSave}
         />
 
-        {/* "View all N comments" preview */}
         {post.stats.comments > 2 ? (
           <TouchableOpacity
             onPress={handleCommentsPreview}

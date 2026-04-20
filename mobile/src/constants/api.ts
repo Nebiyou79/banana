@@ -109,17 +109,21 @@ export const SHORTLIST = {
 } as const;
 
 // ─── PRODUCTS ─────────────────────────────────────────────────────────────────
+// In your PRODUCTS object, add these two entries:
 export const PRODUCTS = {
-  LIST: '/products',
-  CATEGORIES: '/products/categories',
-  FEATURED: '/products/featured',
-  COMPANY: (companyId: string) => `/products/company/${companyId}`,
-  DETAIL: (id: string) => `/products/${id}`,
-  RELATED: (id: string) => `/products/${id}/related`,
-  CREATE: '/products',
-  UPDATE: (id: string) => `/products/${id}`,
+  LIST:          '/products',
+  DETAIL:        (id: string) => `/products/${id}`,
+  FEATURED:      '/products/featured',
+  CATEGORIES:    '/products/categories',
+  COMPANY:       (id: string) => `/products/company/${id}`,
+  RELATED:       (id: string) => `/products/${id}/related`,
+  CREATE:        '/products',
+  UPDATE:        (id: string) => `/products/${id}`,
   UPDATE_STATUS: (id: string) => `/products/${id}/status`,
-  DELETE: (id: string) => `/products/${id}`,
+  DELETE:        (id: string) => `/products/${id}`,
+  // ── NEW ──
+  SAVE:          (id: string) => `/products/${id}/save`,
+  SAVED:         '/products/saved',
 } as const;
 
 // ─── CV GENERATOR ─────────────────────────────────────────────────────────────

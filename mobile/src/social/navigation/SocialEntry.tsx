@@ -1,5 +1,8 @@
+// src/social/navigation/SocialEntry.tsx
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
+import CreatePostScreen from '../screens/CreatePostScreen';
+import EditPostScreen from '../screens/EditPostScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 // import FollowListScreen from '../screens/FollowListScreen';
 // import PostDetailScreen from '../screens/PostDetailScreen';
@@ -11,14 +14,6 @@ import PlaceholderScreen from '../../screens/auth/PlaceholderScreen';
 
 const Stack = createNativeStackNavigator<SocialStackParamList>();
 
-/**
- * The ONE component each role navigator imports.
- *
- *   <Tab.Screen name="Social" component={SocialEntry} />
- *
- * Internally it runs a native-stack containing the splash, tab bar, and
- * pushable screens (profile, post detail, edit, follow lists).
- */
 const SocialEntry: React.FC = () => (
   <Stack.Navigator
     initialRouteName="SocialSplash"
@@ -39,6 +34,22 @@ const SocialEntry: React.FC = () => (
     <Stack.Screen
       name="EditProfile"
       component={EditProfileScreen}
+      options={{
+        animation: 'slide_from_bottom',
+        presentation: 'modal',
+      }}
+    />
+    <Stack.Screen
+      name="CreatePost"
+      component={CreatePostScreen}
+      options={{
+        animation: 'slide_from_bottom',
+        presentation: 'modal',
+      }}
+    />
+    <Stack.Screen
+      name="EditPost"
+      component={EditPostScreen}
       options={{
         animation: 'slide_from_bottom',
         presentation: 'modal',

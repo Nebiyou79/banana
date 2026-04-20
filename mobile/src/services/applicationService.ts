@@ -1,105 +1,104 @@
 /**
  * src/services/applicationService.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Clean, production-grade application service for React Native.
- * Mirrors backend Application model and frontend web service exactly.
- * Handles multipart/form-data for file uploads.
+ * Full application service — mirrors backend routes exactly.
+ * Uses the NEW expo-file-system (File / Directory classes) for downloads.
  * ─────────────────────────────────────────────────────────────────────────────
  */
-import { APPLICATIONS } from '../constants/api';
 import  httpClient  from '../lib/httpClient';
+import * as FileSystem from 'expo-file-system/legacy'; // legacy kept for Sharing compat
+import * as Sharing from 'expo-sharing';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+export const APPLICATIONS = {
+  MY_CVS: '/applications/my-cvs',
+  MY_APPLICATIONS: '/applications/my-applications',
+  APPLY: (jobId: string) => `/applications/apply/${jobId}`,
+  WITHDRAW: (id: string) => `/applications/${id}/withdraw`,
+  STATISTICS: '/applications/statistics/overview',
+  COMPANY_LIST: '/applications/company/applications',
+  COMPANY_DETAIL: (id: string) => `/applications/company/${id}`,
+  ORG_LIST: '/applications/organization/applications',
+  ORG_DETAIL: (id: string) => `/applications/organization/${id}`,
+  JOB_LIST: (jobId: string) => `/applications/job/${jobId}`,
+  UPDATE_STATUS: (id: string) => `/applications/${id}/status`,
+  COMPANY_RESPONSE: (id: string) => `/applications/${id}/company-response`,
+  ATTACHMENTS: (id: string) => `/applications/${id}/attachments`,
+  FILE_DOWNLOAD: (appId: string, fileId: string) =>
+    `/applications/${appId}/files/${fileId}/download`,
+  FILE_VIEW: (appId: string, fileId: string) =>
+    `/applications/${appId}/files/${fileId}/view`,
+} as const;
+
+// ─── Enums / Union Types ──────────────────────────────────────────────────────
 
 export type ApplicationStatus =
-  | 'applied'
-  | 'under-review'
-  | 'shortlisted'
-  | 'interview-scheduled'
-  | 'interviewed'
-  | 'offer-pending'
-  | 'offer-made'
-  | 'offer-accepted'
-  | 'offer-rejected'
-  | 'on-hold'
-  | 'rejected'
-  | 'withdrawn';
+  | 'applied' | 'under-review' | 'shortlisted' | 'interview-scheduled'
+  | 'interviewed' | 'offer-pending' | 'offer-made' | 'offer-accepted'
+  | 'offer-rejected' | 'on-hold' | 'rejected' | 'withdrawn';
 
 export const STATUS_LABELS: Record<ApplicationStatus, string> = {
-  'applied':              'Applied',
-  'under-review':         'Under Review',
-  'shortlisted':          'Shortlisted',
-  'interview-scheduled':  'Interview Scheduled',
-  'interviewed':          'Interviewed',
-  'offer-pending':        'Offer Pending',
-  'offer-made':           'Offer Made',
-  'offer-accepted':       'Offer Accepted',
-  'offer-rejected':       'Offer Rejected',
-  'on-hold':              'On Hold',
-  'rejected':             'Rejected',
-  'withdrawn':            'Withdrawn',
+  'applied': 'Applied',
+  'under-review': 'Under Review',
+  'shortlisted': 'Shortlisted',
+  'interview-scheduled': 'Interview Scheduled',
+  'interviewed': 'Interviewed',
+  'offer-pending': 'Offer Pending',
+  'offer-made': 'Offer Made',
+  'offer-accepted': 'Offer Accepted',
+  'offer-rejected': 'Offer Rejected',
+  'on-hold': 'On Hold',
+  'rejected': 'Not Selected',
+  'withdrawn': 'Withdrawn',
 };
 
-// Light-mode status colours { bg, text, dot, border }
-export const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string; border: string }> = {
-  'applied':             { bg: '#EFF6FF', text: '#1D4ED8', dot: '#3B82F6', border: '#BFDBFE' },
-  'under-review':        { bg: '#FFFBEB', text: '#B45309', dot: '#F59E0B', border: '#FDE68A' },
-  'shortlisted':         { bg: '#F0FDF4', text: '#15803D', dot: '#22C55E', border: '#BBF7D0' },
-  'interview-scheduled': { bg: '#F5F3FF', text: '#6D28D9', dot: '#8B5CF6', border: '#DDD6FE' },
-  'interviewed':         { bg: '#EEF2FF', text: '#4338CA', dot: '#6366F1', border: '#C7D2FE' },
-  'offer-pending':       { bg: '#FFF7ED', text: '#C2410C', dot: '#F97316', border: '#FED7AA' },
-  'offer-made':          { bg: '#ECFDF5', text: '#065F46', dot: '#10B981', border: '#A7F3D0' },
-  'offer-accepted':      { bg: '#F0FDF4', text: '#166534', dot: '#16A34A', border: '#86EFAC' },
-  'offer-rejected':      { bg: '#FEF2F2', text: '#991B1B', dot: '#EF4444', border: '#FECACA' },
-  'on-hold':             { bg: '#F9FAFB', text: '#374151', dot: '#9CA3AF', border: '#E5E7EB' },
-  'rejected':            { bg: '#FEF2F2', text: '#B91C1C', dot: '#DC2626', border: '#FECACA' },
-  'withdrawn':           { bg: '#F3F4F6', text: '#4B5563', dot: '#6B7280', border: '#D1D5DB' },
+export const STATUS_COLORS: Record<ApplicationStatus, { bg: string; text: string; dot: string; border: string }> = {
+  'applied':              { bg: '#DBEAFE', text: '#1D4ED8', dot: '#3B82F6', border: '#BFDBFE' },
+  'under-review':         { bg: '#FEF3C7', text: '#D97706', dot: '#F59E0B', border: '#FDE68A' },
+  'shortlisted':          { bg: '#D1FAE5', text: '#059669', dot: '#10B981', border: '#A7F3D0' },
+  'interview-scheduled':  { bg: '#EDE9FE', text: '#7C3AED', dot: '#8B5CF6', border: '#DDD6FE' },
+  'interviewed':          { bg: '#E0E7FF', text: '#4338CA', dot: '#6366F1', border: '#C7D2FE' },
+  'offer-pending':        { bg: '#FFF7ED', text: '#C2410C', dot: '#F97316', border: '#FED7AA' },
+  'offer-made':           { bg: '#ECFDF5', text: '#065F46', dot: '#10B981', border: '#A7F3D0' },
+  'offer-accepted':       { bg: '#D1FAE5', text: '#065F46', dot: '#059669', border: '#A7F3D0' },
+  'offer-rejected':       { bg: '#FEE2E2', text: '#DC2626', dot: '#EF4444', border: '#FECACA' },
+  'on-hold':              { bg: '#F1F5F9', text: '#64748B', dot: '#94A3B8', border: '#E2E8F0' },
+  'rejected':             { bg: '#FEE2E2', text: '#DC2626', dot: '#EF4444', border: '#FECACA' },
+  'withdrawn':            { bg: '#F1F5F9', text: '#475569', dot: '#94A3B8', border: '#E2E8F0' },
 };
 
-// Dark-mode status colours
-export const STATUS_COLORS_DARK: Record<string, { bg: string; text: string; dot: string; border: string }> = {
-  'applied':             { bg: 'rgba(59,130,246,0.15)',  text: '#93C5FD', dot: '#3B82F6', border: 'rgba(59,130,246,0.3)' },
-  'under-review':        { bg: 'rgba(245,158,11,0.15)',  text: '#FCD34D', dot: '#F59E0B', border: 'rgba(245,158,11,0.3)' },
-  'shortlisted':         { bg: 'rgba(34,197,94,0.15)',   text: '#86EFAC', dot: '#22C55E', border: 'rgba(34,197,94,0.3)' },
-  'interview-scheduled': { bg: 'rgba(139,92,246,0.15)',  text: '#C4B5FD', dot: '#8B5CF6', border: 'rgba(139,92,246,0.3)' },
-  'interviewed':         { bg: 'rgba(99,102,241,0.15)',  text: '#A5B4FC', dot: '#6366F1', border: 'rgba(99,102,241,0.3)' },
-  'offer-pending':       { bg: 'rgba(249,115,22,0.15)',  text: '#FDBA74', dot: '#F97316', border: 'rgba(249,115,22,0.3)' },
-  'offer-made':          { bg: 'rgba(16,185,129,0.15)',  text: '#6EE7B7', dot: '#10B981', border: 'rgba(16,185,129,0.3)' },
-  'offer-accepted':      { bg: 'rgba(22,163,74,0.15)',   text: '#86EFAC', dot: '#16A34A', border: 'rgba(22,163,74,0.3)' },
-  'offer-rejected':      { bg: 'rgba(239,68,68,0.15)',   text: '#FCA5A5', dot: '#EF4444', border: 'rgba(239,68,68,0.3)' },
-  'on-hold':             { bg: 'rgba(107,114,128,0.15)', text: '#D1D5DB', dot: '#9CA3AF', border: 'rgba(107,114,128,0.3)' },
-  'rejected':            { bg: 'rgba(220,38,38,0.15)',   text: '#FCA5A5', dot: '#DC2626', border: 'rgba(220,38,38,0.3)' },
-  'withdrawn':           { bg: 'rgba(75,85,99,0.15)',    text: '#9CA3AF', dot: '#6B7280', border: 'rgba(75,85,99,0.3)' },
+export const STATUS_COLORS_DARK: typeof STATUS_COLORS = {
+  'applied':              { bg: '#1E3A5F', text: '#93C5FD', dot: '#3B82F6', border: '#1E40AF' },
+  'under-review':         { bg: '#451A03', text: '#FCD34D', dot: '#F59E0B', border: '#78350F' },
+  'shortlisted':          { bg: '#064E3B', text: '#6EE7B7', dot: '#10B981', border: '#065F46' },
+  'interview-scheduled':  { bg: '#2E1065', text: '#C4B5FD', dot: '#8B5CF6', border: '#4C1D95' },
+  'interviewed':          { bg: '#1E1B4B', text: '#A5B4FC', dot: '#6366F1', border: '#312E81' },
+  'offer-pending':        { bg: '#431407', text: '#FDBA74', dot: '#F97316', border: '#7C2D12' },
+  'offer-made':           { bg: '#022C22', text: '#6EE7B7', dot: '#10B981', border: '#064E3B' },
+  'offer-accepted':       { bg: '#022C22', text: '#6EE7B7', dot: '#059669', border: '#064E3B' },
+  'offer-rejected':       { bg: '#450A0A', text: '#FCA5A5', dot: '#EF4444', border: '#7F1D1D' },
+  'on-hold':              { bg: '#0F172A', text: '#94A3B8', dot: '#64748B', border: '#1E293B' },
+  'rejected':             { bg: '#450A0A', text: '#FCA5A5', dot: '#EF4444', border: '#7F1D1D' },
+  'withdrawn':            { bg: '#0F172A', text: '#94A3B8', dot: '#64748B', border: '#1E293B' },
 };
 
-// Status progression for pipeline display
-export const STATUS_PIPELINE: ApplicationStatus[] = [
-  'applied', 'under-review', 'shortlisted', 'interview-scheduled', 'offer-made',
-];
-
-export const COMPANY_STATUSES: ApplicationStatus[] = [
-  'under-review', 'shortlisted', 'interview-scheduled', 'interviewed',
-  'offer-pending', 'offer-made', 'offer-accepted', 'offer-rejected',
-  'on-hold', 'rejected',
-];
-
-// ─── Interfaces ───────────────────────────────────────────────────────────────
+// ─── Data Interfaces ──────────────────────────────────────────────────────────
 
 export interface CV {
   _id: string;
-  cvId?: string;
-  filename?: string;
-  fileName?: string;
-  originalName?: string;
-  fileUrl?: string;
-  downloadUrl?: string;
-  url?: string;
-  fileSize?: number;
+  filename: string;
+  originalName: string;
+  path?: string;
   size?: number;
-  isPrimary?: boolean;
-  uploadedAt?: string;
+  fileSize?: number;
   mimetype?: string;
-  fileExtension?: string;
+  url?: string;
+  downloadUrl?: string;
+  viewUrl?: string;
+  uploadedAt?: string;
+  isDefault?: boolean;
+  isPrimary?: boolean;
   description?: string;
 }
 
@@ -108,7 +107,6 @@ export interface Reference {
   _tempId?: string;
   name?: string;
   position?: string;
-  organization?: string;
   company?: string;
   email?: string;
   phone?: string;
@@ -117,6 +115,7 @@ export interface Reference {
   notes?: string;
   providedAsDocument: boolean;
   document?: {
+    _id?: string;
     filename?: string;
     originalName?: string;
     url?: string;
@@ -139,6 +138,7 @@ export interface WorkExperience {
   supervisor?: { name: string; position: string; contact: string };
   providedAsDocument: boolean;
   document?: {
+    _id?: string;
     filename?: string;
     originalName?: string;
     url?: string;
@@ -173,9 +173,9 @@ export interface StatusHistory {
   changedAt: string;
   message?: string;
   interviewDetails?: {
-    date: string; time: string; location: string;
+    date: string; time?: string; location: string;
     type: 'phone' | 'video' | 'in-person' | 'technical';
-    interviewer: string; notes: string; duration?: number;
+    interviewer: string; notes?: string; duration?: number;
   };
 }
 
@@ -187,7 +187,7 @@ export interface CompanyResponse {
   interviewTime?: string;
   respondedAt?: string;
   respondedBy?: { _id: string; name: string; email: string };
-  interviewDetails?: { date: string; location: string; type: string };
+  interviewDetails?: { date: string; location: string; type: string; time?: string };
 }
 
 export interface Application {
@@ -199,13 +199,14 @@ export interface Application {
     location?: any;
     jobType: 'company' | 'organization';
     company?: { _id: string; name: string; logoUrl?: string; verified: boolean; industry?: string };
-    organization?: { _id: string; name: string; logoUrl?: string; verified: boolean; industry?: string; organizationType?: string };
+    organization?: { _id: string; name: string; logoUrl?: string; verified: boolean; organizationType?: string };
   };
   candidate: { _id: string; name: string; email: string; avatar?: string; phone?: string; location?: string };
   userInfo: UserInfo;
   selectedCVs: Array<{
     cvId: string; _id?: string; filename: string; originalName: string;
-    url: string; downloadUrl?: string; viewUrl?: string; size?: number; mimetype?: string;
+    url: string; downloadUrl?: string; viewUrl?: string;
+    size?: number; mimetype?: string; filePath?: string; path?: string;
   }>;
   coverLetter: string;
   skills: string[];
@@ -213,8 +214,10 @@ export interface Application {
   workExperience: WorkExperience[];
   contactInfo: ContactInfo;
   attachments: {
-    referenceDocuments: any[]; experienceDocuments: any[];
-    portfolioFiles: any[]; otherDocuments: any[];
+    referenceDocuments: any[];
+    experienceDocuments: any[];
+    portfolioFiles: any[];
+    otherDocuments: any[];
   };
   status: ApplicationStatus | string;
   statusHistory: StatusHistory[];
@@ -223,31 +226,30 @@ export interface Application {
   updatedAt: string;
 }
 
-// ─── Request types ────────────────────────────────────────────────────────────
+// ─── Request / Response types ─────────────────────────────────────────────────
 
 export interface ApplyJobData {
   coverLetter: string;
   skills: string[];
-  selectedCVs: Array<{ cvId: string; filename?: string; originalName?: string; url?: string; downloadUrl?: string; size?: number; mimetype?: string }>;
+  selectedCVs: Array<{
+    cvId: string; filename?: string; originalName?: string;
+    url?: string; downloadUrl?: string; size?: number; mimetype?: string;
+  }>;
   contactInfo: ContactInfo;
   userInfo?: UserInfo;
   references?: Reference[];
   workExperience?: WorkExperience[];
-  // Mobile file objects (React Native DocumentPicker result)
   referenceFiles?: Array<{ uri: string; name: string; type: string; _tempId: string }>;
   experienceFiles?: Array<{ uri: string; name: string; type: string; _tempId: string }>;
 }
 
 export interface UpdateStatusData {
-  status: ApplicationStatus;
+  status: string;
   message?: string;
-  interviewDate?: string;
-  interviewTime?: string;
-  interviewLocation?: string;
-  interviewType?: 'phone' | 'video' | 'in-person' | 'technical';
-  interviewerName?: string;
-  interviewNotes?: string;
-  interviewDuration?: number;
+  interviewDetails?: {
+    date: string; location: string; type: string;
+    interviewer?: string; notes?: string; duration?: number;
+  };
 }
 
 export interface CompanyResponseData {
@@ -298,18 +300,156 @@ export interface ApplicationStats {
   successRate?: number;
 }
 
+// Normalised attachment shape used by the shared AttachmentsTab
+export interface NormalizedAttachment {
+  id: string;
+  name: string;
+  originalName: string;
+  category: 'CV' | 'Reference' | 'Experience' | 'Other';
+  description: string;
+  sizeLabel: string;
+  fileType: string;
+  uploadedAt: string;
+  applicationId: string;
+  /** The real MongoDB _id of the file object (for the download endpoint) */
+  fileId: string;
+  /** cvId field for selected CVs */
+  cvId?: string;
+  mimetype?: string;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const generateTempId = () =>
+  `tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 const parseError = (e: any): string => {
   const d = e?.response?.data;
   if (!d) return e?.message ?? 'Request failed';
-  if (Array.isArray(d.errors)) return d.errors.map((x: any) => x.msg ?? x.message ?? x).join('; ');
+  if (Array.isArray(d.errors))
+    return d.errors.map((x: any) => x.msg ?? x.message ?? x).join('; ');
   return d.message ?? e.message ?? 'Request failed';
 };
 
-const generateTempId = () => `tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+export const formatFileSize = (bytes?: number): string => {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
 
-// ─── Service ──────────────────────────────────────────────────────────────────
+export const getCVDisplayName = (cv: CV): string =>
+  cv.originalName ?? cv.filename ?? 'CV Document';
+
+// ─── Build normalised attachment list from an Application ────────────────────
+
+export const buildAttachments = (application: Application): NormalizedAttachment[] => {
+  const list: NormalizedAttachment[] = [];
+  const appId = application._id;
+
+  // Selected CVs
+  (application.selectedCVs ?? []).forEach((cv, i) => {
+    const realId = cv._id ?? cv.cvId;
+    if (!realId) return;
+    list.push({
+      id: `cv-${i}`,
+      name: cv.originalName ?? cv.filename ?? 'CV',
+      originalName: cv.originalName ?? cv.filename ?? 'CV',
+      category: 'CV',
+      description: 'Curriculum Vitae',
+      sizeLabel: formatFileSize(cv.size),
+      fileType: cv.mimetype?.includes('pdf') ? 'PDF' : 'Document',
+      uploadedAt: application.createdAt,
+      applicationId: appId,
+      fileId: realId,
+      cvId: cv.cvId,
+      mimetype: cv.mimetype,
+    });
+  });
+
+  // References with documents
+  (application.references ?? []).forEach((ref, i) => {
+    if (!ref.document?._id) return;
+    list.push({
+      id: `ref-${i}`,
+      name: ref.document.originalName ?? ref.document.filename ?? 'Reference Document',
+      originalName: ref.document.originalName ?? ref.document.filename ?? 'Reference',
+      category: 'Reference',
+      description: ref.name ? `Reference from ${ref.name}` : 'Reference Document',
+      sizeLabel: formatFileSize(ref.document.size),
+      fileType: ref.document.mimetype?.includes('pdf') ? 'PDF' : 'Document',
+      uploadedAt: application.createdAt,
+      applicationId: appId,
+      fileId: ref.document._id,
+      mimetype: ref.document.mimetype,
+    });
+  });
+
+  // Work experience with documents
+  (application.workExperience ?? []).forEach((exp, i) => {
+    if (!exp.document?._id) return;
+    list.push({
+      id: `exp-${i}`,
+      name: exp.document.originalName ?? exp.document.filename ?? 'Experience Document',
+      originalName: exp.document.originalName ?? exp.document.filename ?? 'Experience',
+      category: 'Experience',
+      description: exp.company ? `Experience at ${exp.company}` : 'Work Experience Document',
+      sizeLabel: formatFileSize(exp.document.size),
+      fileType: exp.document.mimetype?.includes('pdf') ? 'PDF' : 'Document',
+      uploadedAt: application.createdAt,
+      applicationId: appId,
+      fileId: exp.document._id,
+      mimetype: exp.document.mimetype,
+    });
+  });
+
+  return list;
+};
+
+// ─── File download (new expo-file-system API) ─────────────────────────────────
+
+/**
+ * Downloads a file to the device's cache directory and then opens the share
+ * sheet so the user can save or open it. Uses the *legacy* FileSystem API
+ * because expo-sharing still needs a file URI.
+ */
+export const downloadAndShare = async (
+  applicationId: string,
+  fileId: string,
+  fileName: string,
+  getAuthToken: () => string | null,
+): Promise<void> => {
+  const token = getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  // Build the authenticated download URL
+  const baseUrl = (httpClient.defaults.baseURL ?? '').replace(/\/$/, '');
+  const url = `${baseUrl}${APPLICATIONS.FILE_DOWNLOAD(applicationId, fileId)}`;
+
+  const dest = FileSystem.cacheDirectory + encodeURIComponent(fileName);
+
+  const downloadResumable = FileSystem.createDownloadResumable(
+    url,
+    dest,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+
+  const result = await downloadResumable.downloadAsync();
+  if (!result?.uri) throw new Error('Download failed — no URI returned');
+
+  const canShare = await Sharing.isAvailableAsync();
+  if (canShare) {
+    await Sharing.shareAsync(result.uri, {
+      mimeType: 'application/octet-stream',
+      dialogTitle: `Save ${fileName}`,
+      UTI: 'public.data',
+    });
+  } else {
+    throw new Error('Sharing is not available on this device');
+  }
+};
+
+// ─── Service object ───────────────────────────────────────────────────────────
 
 export const applicationService = {
 
@@ -317,26 +457,31 @@ export const applicationService = {
 
   getMyCVs: async (): Promise<CV[]> => {
     try {
-      const res = await httpClient.get<{ success: boolean; data: CV[] }>(APPLICATIONS.MY_CVS);
-      return res.data.data ?? [];
-    } catch { return []; }
+      const res = await httpClient.get<{ success: boolean; data: { cvs: CV[] } | CV[] }>(
+        APPLICATIONS.MY_CVS
+      );
+      const payload = res.data.data;
+      if (Array.isArray(payload)) return payload;
+      return (payload as any)?.cvs ?? [];
+    } catch {
+      return [];
+    }
   },
 
   getMyApplications: async (params?: ApplicationFilters): Promise<ApplicationsListResponse> => {
-    const res = await httpClient.get<ApplicationsListResponse>(
-      APPLICATIONS.MY_APPLICATIONS, { params }
-    ).catch(e => { throw new Error(parseError(e)); });
+    const res = await httpClient
+      .get<ApplicationsListResponse>(APPLICATIONS.MY_APPLICATIONS, { params })
+      .catch((e) => { throw new Error(parseError(e)); });
     return res.data;
   },
 
   applyForJob: async (jobId: string, data: ApplyJobData): Promise<ApplicationResponse> => {
     const formData = new FormData();
 
-    // JSON fields
     formData.append('coverLetter', data.coverLetter);
     formData.append('skills', JSON.stringify(data.skills ?? []));
     formData.append('selectedCVs', JSON.stringify(
-      data.selectedCVs.map(cv => ({
+      data.selectedCVs.map((cv) => ({
         cvId: cv.cvId,
         filename: cv.filename ?? cv.originalName ?? 'cv',
         originalName: cv.originalName ?? cv.filename ?? 'cv',
@@ -349,128 +494,131 @@ export const applicationService = {
     formData.append('contactInfo', JSON.stringify(data.contactInfo));
     if (data.userInfo) formData.append('userInfo', JSON.stringify(data.userInfo));
 
-    // References (prepare with _tempId for docs)
-    const refs = (data.references ?? []).map(r => ({
+    // References — assign _tempId for document-based ones
+    const refs = (data.references ?? []).map((r) => ({
       ...r,
       _tempId: r.providedAsDocument ? (r._tempId ?? generateTempId()) : undefined,
     }));
     formData.append('references', JSON.stringify(refs));
 
-    // Work experience
-    const exps = (data.workExperience ?? []).map(e => ({
+    // Work experience — assign _tempId for document-based ones
+    const exps = (data.workExperience ?? []).map((e) => ({
       ...e,
       _tempId: e.providedAsDocument ? (e._tempId ?? generateTempId()) : undefined,
     }));
     formData.append('workExperience', JSON.stringify(exps));
 
-    // Reference document files
-    if (data.referenceFiles?.length) {
-      data.referenceFiles.forEach((f, i) => {
-        formData.append('referencePdfs', { uri: f.uri, name: f.name, type: f.type } as any);
-        formData.append(`referencePdfs_${i}_tempId`, f._tempId);
-        formData.append(`referencePdfs_metadata_${i}`, JSON.stringify({ _tempId: f._tempId, fileName: f.name }));
-      });
-    }
+    // Attach reference files
+    (data.referenceFiles ?? []).forEach((f, i) => {
+      formData.append('referencePdfs', { uri: f.uri, name: f.name, type: f.type } as any);
+      formData.append(`referencePdfs_${i}_tempId`, f._tempId);
+      formData.append(
+        `referencePdfs_metadata_${i}`,
+        JSON.stringify({ _tempId: f._tempId, fileName: f.name })
+      );
+    });
 
-    // Experience document files
-    if (data.experienceFiles?.length) {
-      data.experienceFiles.forEach((f, i) => {
-        formData.append('experiencePdfs', { uri: f.uri, name: f.name, type: f.type } as any);
-        formData.append(`experiencePdfs_${i}_tempId`, f._tempId);
-        formData.append(`experiencePdfs_metadata_${i}`, JSON.stringify({ _tempId: f._tempId, fileName: f.name }));
-      });
-    }
+    // Attach experience files
+    (data.experienceFiles ?? []).forEach((f, i) => {
+      formData.append('experiencePdfs', { uri: f.uri, name: f.name, type: f.type } as any);
+      formData.append(`experiencePdfs_${i}_tempId`, f._tempId);
+      formData.append(
+        `experiencePdfs_metadata_${i}`,
+        JSON.stringify({ _tempId: f._tempId, fileName: f.name })
+      );
+    });
 
-    const res = await httpClient.post<ApplicationResponse>(
-      APPLICATIONS.APPLY(jobId),
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }
-    ).catch(e => { throw new Error(parseError(e)); });
+    const res = await httpClient
+      .post<ApplicationResponse>(APPLICATIONS.APPLY(jobId), formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 90_000,
+      })
+      .catch((e) => { throw new Error(parseError(e)); });
 
     return res.data;
   },
 
   withdrawApplication: async (applicationId: string): Promise<void> => {
-    await httpClient.put(APPLICATIONS.WITHDRAW(applicationId))
-      .catch(e => { throw new Error(parseError(e)); });
+    await httpClient
+      .put(APPLICATIONS.WITHDRAW(applicationId))
+      .catch((e) => { throw new Error(parseError(e)); });
   },
 
   getApplicationStats: async (): Promise<ApplicationStats> => {
     try {
-      const res = await httpClient.get<{ success: boolean; data: ApplicationStats }>(APPLICATIONS.STATISTICS);
+      const res = await httpClient.get<{ success: boolean; data: ApplicationStats }>(
+        APPLICATIONS.STATISTICS
+      );
       return res.data.data ?? {};
-    } catch { return {}; }
+    } catch {
+      return {};
+    }
   },
 
   // ── Company / Org ──────────────────────────────────────────────────────────
 
   getCompanyApplications: async (params?: ApplicationFilters): Promise<ApplicationsListResponse> => {
-    const res = await httpClient.get<ApplicationsListResponse>(
-      APPLICATIONS.COMPANY_LIST, { params }
-    ).catch(e => { throw new Error(parseError(e)); });
+    const res = await httpClient
+      .get<ApplicationsListResponse>(APPLICATIONS.COMPANY_LIST, { params })
+      .catch((e) => { throw new Error(parseError(e)); });
     return res.data;
   },
 
   getCompanyApplicationDetails: async (id: string): Promise<ApplicationResponse> => {
-    const res = await httpClient.get<ApplicationResponse>(APPLICATIONS.COMPANY_DETAIL(id))
-      .catch(e => { throw new Error(parseError(e)); });
+    const res = await httpClient
+      .get<ApplicationResponse>(APPLICATIONS.COMPANY_DETAIL(id))
+      .catch((e) => { throw new Error(parseError(e)); });
     return res.data;
   },
 
   getOrganizationApplications: async (params?: ApplicationFilters): Promise<ApplicationsListResponse> => {
-    const res = await httpClient.get<ApplicationsListResponse>(
-      APPLICATIONS.ORG_LIST, { params }
-    ).catch(e => { throw new Error(parseError(e)); });
+    const res = await httpClient
+      .get<ApplicationsListResponse>(APPLICATIONS.ORG_LIST, { params })
+      .catch((e) => { throw new Error(parseError(e)); });
     return res.data;
   },
 
   getOrganizationApplicationDetails: async (id: string): Promise<ApplicationResponse> => {
-    const res = await httpClient.get<ApplicationResponse>(APPLICATIONS.ORG_DETAIL(id))
-      .catch(e => { throw new Error(parseError(e)); });
+    const res = await httpClient
+      .get<ApplicationResponse>(APPLICATIONS.ORG_DETAIL(id))
+      .catch((e) => { throw new Error(parseError(e)); });
     return res.data;
   },
 
-  getJobApplications: async (jobId: string, params?: ApplicationFilters): Promise<ApplicationsListResponse> => {
-    const res = await httpClient.get<ApplicationsListResponse>(
-      APPLICATIONS.JOB_APPLICATIONS(jobId), { params }
-    ).catch(e => { throw new Error(parseError(e)); });
+  getJobApplications: async (
+    jobId: string,
+    params?: ApplicationFilters
+  ): Promise<ApplicationsListResponse> => {
+    const res = await httpClient
+      .get<ApplicationsListResponse>(APPLICATIONS.JOB_LIST(jobId), { params })
+      .catch((e) => { throw new Error(parseError(e)); });
     return res.data;
   },
 
-  updateApplicationStatus: async (id: string, data: UpdateStatusData): Promise<ApplicationResponse> => {
-    const res = await httpClient.put<ApplicationResponse>(
-      APPLICATIONS.UPDATE_STATUS(id), data
-    ).catch(e => { throw new Error(parseError(e)); });
+  updateApplicationStatus: async (
+    applicationId: string,
+    data: UpdateStatusData
+  ): Promise<ApplicationResponse> => {
+    const res = await httpClient
+      .put<ApplicationResponse>(APPLICATIONS.UPDATE_STATUS(applicationId), data)
+      .catch((e) => { throw new Error(parseError(e)); });
     return res.data;
   },
 
-  sendCompanyResponse: async (id: string, data: CompanyResponseData): Promise<ApplicationResponse> => {
-    const res = await httpClient.put<ApplicationResponse>(
-      APPLICATIONS.COMPANY_RESPONSE(id), data
-    ).catch(e => { throw new Error(parseError(e)); });
+  addCompanyResponse: async (
+    applicationId: string,
+    data: CompanyResponseData
+  ): Promise<ApplicationResponse> => {
+    const res = await httpClient
+      .put<ApplicationResponse>(APPLICATIONS.COMPANY_RESPONSE(applicationId), data)
+      .catch((e) => { throw new Error(parseError(e)); });
     return res.data;
   },
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── File helpers ───────────────────────────────────────────────────────────
 
-  canWithdraw: (status: string): boolean => {
-    return !['offer-accepted', 'rejected', 'withdrawn'].includes(status);
-  },
-
-  getStatusLabel: (status: string): string =>
-    STATUS_LABELS[status as ApplicationStatus] ?? status,
-
-  getCVDisplayName: (cv: CV): string =>
-    cv.originalName ?? cv.fileName ?? cv.filename ?? 'CV Document',
-
-  formatFileSize: (bytes?: number): string => {
-    if (!bytes) return '';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  },
-
-  generateTempId,
+  buildAttachments,
+  formatFileSize,
+  getCVDisplayName,
+  downloadAndShare,
 };
-
-export default applicationService;

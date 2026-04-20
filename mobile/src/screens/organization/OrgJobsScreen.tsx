@@ -64,9 +64,10 @@ export const OrgJobsScreen: React.FC<Props> = ({ navigation }) => {
     );
   }, [deleteMut]);
 
-  const handleStatusToggle = useCallback((job: Job, newStatus: 'active' | 'paused') => {
-    updateMut.mutate({ id: job._id, data: { status: newStatus } });
-  }, [updateMut]);
+// JobManagementScreen.tsx  AND  OrgJobsScreen.tsx
+const handleStatusToggle = useCallback((job: Job, newStatus: 'active' | 'paused' | 'closed') => {
+  updateMut.mutate({ id: job._id, data: { status: newStatus } });
+}, [updateMut]);
 
   const renderItem = useCallback(({ item }: { item: Job }) => (
     <CompanyJobCard

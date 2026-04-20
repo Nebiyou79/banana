@@ -45,12 +45,11 @@ import { JobManagementScreen }                from '../screens/company/JobManage
 import { JobCreateScreen }                    from '../screens/company/JobCreateScreen';
 import { JobEditScreen }                      from '../screens/company/JobEditScreen';
 import { CompanyJobDetailScreen }                   from '../screens/company/CompanyJobDetailsScreen';
-import { EmployerApplicationListScreen }      from '../screens/company/EmployerApplicationListScreen';
 import { EmployerApplicationDetailScreen }    from '../screens/company/EmployerApplicationDetailScreen';
 
 // Products
 import { CompanyProductListScreen }    from '../screens/company/CompanyProductListScreen';
-import { CompanyProductDetailsScreen } from '../screens/company/ComapnyProductDetailsScreen';
+import { CompanyProductDetailsScreen } from '../screens/company/CompanyProductDetailsScreen';
 import { CreateProductScreen }         from '../screens/company/CreateProductScreen';
 import { EditProductScreen }           from '../screens/company/EditProductScreen';
 // Freelancer Marketplace
@@ -67,6 +66,7 @@ import { ReferralScreen }                     from '../screens/shared/ReferralSc
 import { ProductMarketplaceScreen }           from '../screens/products/ProductMarketplaceScreen';
 import { ProductDetailsScreen } from '../screens/products/ProductDetailsScreen';
 import { SavedProductsScreen } from '../screens/products/SavedProductsScreen';
+import { EmployerApplicationsScreen } from '../screens/company/EmployerApplicationListScreen';
 
 // ─── Param list ───────────────────────────────────────────────
 export type CompanyStackParamList = {
@@ -88,10 +88,10 @@ export type CompanyStackParamList = {
   ApplicationDetail: { applicationId: string };
 
   // Products (own)
-  CompanyProductList: undefined;
-  ProductDetails:     { productId: string };
-  CreateProduct:      undefined;
-  EditProduct:        { productId: string };
+  CompanyProductList:    undefined;
+  CompanyProductDetails: { productId: string };   // ← was 'ProductDetails'
+  CreateProduct:         undefined;
+  EditProduct:           { productId: string };
 
   // Freelancer Marketplace
   FreelancerMarketplace: undefined;
@@ -107,8 +107,9 @@ export type CompanyStackParamList = {
   Leaderboard: undefined;
 
   // Public Product Marketplace
-  ProductMarketplace: undefined;
-  SavedProducts: undefined;
+  ProductMarketplace:         undefined;
+  ProductDetails:       { productId: string };   // ← public view
+  SavedProducts:              undefined;
 };
 
 // ─── Navigators ───────────────────────────────────────────────
@@ -239,8 +240,7 @@ function CompanyProfileNavigator() {
       }}
     >
       <ProfileTopTab.Screen name="CompanyProfile"      component={CompanyProfileScreen}       options={{ title: 'Profile' }} />
-      <ProfileTopTab.Screen name="Products"            component={(props : any) => <CompanyProductListScreen {...props} />} />
-      <ProfileTopTab.Screen name="FreelanceMarketplace" component={FreelancerMarketplaceScreen} options={{ title: 'Marketplace' }} />
+<ProfileTopTab.Screen name="Products"             component={(props: any) => <CompanyProductListScreen {...props} />} />      <ProfileTopTab.Screen name="FreelanceMarketplace" component={FreelancerMarketplaceScreen} options={{ title: 'Marketplace' }} />
       <ProfileTopTab.Screen
         name="BackToHome"
         component={CompanyDashboardScreen}
@@ -305,14 +305,15 @@ export default function CompanyNavigator() {
       <Stack.Screen name="CreateJob"       component={JobCreateScreen}              />
       <Stack.Screen name="JobEdit"         component={JobEditScreen}                />
       <Stack.Screen name="JobDetail"       component={CompanyJobDetailScreen}             />
-      <Stack.Screen name="ApplicationList"  component={EmployerApplicationListScreen} />
+      <Stack.Screen name="ApplicationList"  component={EmployerApplicationsScreen} />
       <Stack.Screen name="ApplicationDetail" component={EmployerApplicationDetailScreen} />
 
-      {/* Products (own) */}
-    <Stack.Screen name="CompanyProductList" component={CompanyProductListScreen} />
-    <Stack.Screen name="ProductDetails"     component={CompanyProductDetailsScreen} />
-    <Stack.Screen name="CreateProduct"      component={CreateProductScreen} />
-    <Stack.Screen name="EditProduct"        component={EditProductScreen} />
+  {/* Products (own) — owner screens */}
+      <Stack.Screen name="CompanyProductList"    component={CompanyProductListScreen}    />
+      <Stack.Screen name="CompanyProductDetails" component={CompanyProductDetailsScreen} />
+      <Stack.Screen name="CreateProduct"         component={CreateProductScreen}         />
+      <Stack.Screen name="EditProduct"           component={EditProductScreen}           />
+
 
       {/* Freelancer Marketplace */}
       <Stack.Screen
@@ -330,8 +331,10 @@ export default function CompanyNavigator() {
       <Stack.Screen name="Referral"    component={ReferralScreen}    />
       <Stack.Screen name="Leaderboard" component={PlaceholderScreen} />
 
-      {/* Public Product Marketplace */}
-      <Stack.Screen name="ProductMarketplace" component={ProductMarketplaceScreen} />
+      {/* Public Product Marketplace (read-only) */}
+      <Stack.Screen name="ProductMarketplace"   component={ProductMarketplaceScreen} />
+      <Stack.Screen name="ProductDetails" component={ProductDetailsScreen}     />
+      <Stack.Screen name="SavedProducts"        component={SavedProductsScreen} />
     </Stack.Navigator>
   );
 }

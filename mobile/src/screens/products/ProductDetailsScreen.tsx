@@ -1,50 +1,72 @@
 /**
- * mobile/src/screens/products/ProductDetailsScreen.tsx  (UPDATED)
+ * mobile/src/screens/products/ProductDetailsScreen.tsx
  *
- * Public product detail screen.
- * - Company avatar resolved from ownerSnapshot or populated companyId
- * - Save / unsave button
- * - Contact seller CTA
- * - Category / subcategory badges
- * - Related products rail
+ * Public product detail screen — read-only for all visitors.
+ *
+ * Fixes:
+ *  - No owner-only actions (edit / unpublish / delete) shown
+ *  - Related products FlatList uses variant="public" and nestedScrollEnabled
+ *  - Key warnings fixed with compound keyExtractors
+ *  - Ownership resolved but used only to show "Manage" shortcut if the viewer
+ *    happens to be the owning company (navigates to CompanyProductDetails)
  */
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  SafeAreaView, FlatList, Linking, ActivityIndicator, StatusBar, Share,
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  SafeAreaView,
+  FlatList,
+  Linking,
+  ActivityIndicator,
+  StatusBar,
+  Share,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
-import { useProduct, useRelatedProducts, useSaveProduct, useUnsaveProduct } from '../../hooks/useProducts';
+import {
+  useProduct,
+  useRelatedProducts,
+  useSaveProduct,
+  useUnsaveProduct,
+  resolveIsOwner,
+} from '../../hooks/useProducts';
 import { ProductImageGallery } from '../../components/products/ProductImageGallery';
 import { ProductCard } from '../../components/products/ProductCard';
 import { OwnerAvatar } from '../../components/products/OwnerAvatar';
-import { formatPrice, getStockStatus, getStockBadgeConfig } from '../../utils/productHelpers';
+import {
+  formatPrice,
+  getStockStatus,
+  getStockBadgeConfig,
+} from '../../utils/productHelpers';
+import { productService, ProductCompany } from '../../services/productService';
 import type { ProductsStackParamList } from './ProductMarketplaceScreen';
-import { ProductCompany } from '../../services/productService';
 
 type Props = NativeStackScreenProps<ProductsStackParamList, 'ProductDetails'>;
 
 const SHOW_MORE_LINES = 4;
 
 export const ProductDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { productId } = route.params;
-  const { theme }     = useThemeStore();
-  const { colors, spacing, borderRadius, shadows } = theme;
-  const { user }      = useAuthStore();
+  const { productId }  = route.params;
+  const { theme }      = useThemeStore();
+  const { colors, spacing, borderRadius } = theme;
+  const { user }       = useAuthStore();
 
   const [descExpanded, setDescExpanded] = useState(false);
+  const [localSaved, setLocalSaved]     = useState(false);
 
   const { data: product, isLoading } = useProduct(productId);
   const { data: related = [] }       = useRelatedProducts(productId);
   const saveProduct                  = useSaveProduct();
   const unsaveProduct                = useUnsaveProduct();
 
-  // Is this product saved by the current user?
-  // (The backend returns savedBy array stripped for public — rely on local state only)
-  const [localSaved, setLocalSaved]    = useState(false);
+  // Ownership check — used ONLY to optionally surface a "Manage" link,
+  // NOT to show edit/delete/unpublish UI that belongs in the Company screen.
+  const isOwner = resolveIsOwner(user, product ?? null);
 
   const handleToggleSave = useCallback(() => {
     if (!user) return;
@@ -61,328 +83,496 @@ export const ProductDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
       await Share.share({
         message: `Check out ${product?.name} on Banana\nhttps://getbananalink.com/products/${productId}`,
       });
-    } catch {}
+    } catch { /* user cancelled */ }
   }, [product, productId]);
 
   const handleContact = useCallback(() => {
-    const company = product?.companyId && typeof product.companyId === 'object'
-      ? product.companyId as ProductCompany
-      : null;
-    const email = (company as unknown as Record<string, string>)?.email;
-    const phone = (company as unknown as Record<string, string>)?.phone;
+    const company =
+      product?.companyId && typeof product.companyId === 'object'
+        ? (product.companyId as ProductCompany)
+        : null;
+    const phone   = company?.phone;
+    const website = company?.website;
     if (phone) {
-      Linking.openURL(`tel:${phone}`);
-    } else if (email) {
-      Linking.openURL(`mailto:${email}?subject=Inquiry about ${product?.name}`);
-    } else {
-      Linking.openURL(`mailto:?subject=Inquiry about ${product?.name}`);
+      Linking.openURL(`tel:${phone}`).catch(() => {});
+    } else if (website) {
+      Linking.openURL(
+        website.startsWith('http') ? website : `https://${website}`,
+      ).catch(() => {});
     }
   }, [product]);
 
-  // ── Loading ────────────────────────────────────────────────────────────────
+  // ── Loading / not-found states ─────────────────────────────────────────────
 
   if (isLoading) {
     return (
-      <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 80 }} size="large" />
+      <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]}>
+        <ActivityIndicator
+          size="large"
+          color={colors.primary}
+          style={{ marginTop: 80 }}
+        />
       </SafeAreaView>
     );
   }
 
   if (!product) {
     return (
-      <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-        <View style={styles.notFound}>
+      <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]}>
+        <View style={s.center}>
           <Ionicons name="alert-circle-outline" size={56} color={colors.textMuted} />
-          <Text style={[styles.notFoundText, { color: colors.text }]}>Product not found</Text>
+          <Text style={[s.notFoundTxt, { color: colors.text }]}>
+            Product not found
+          </Text>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={{ color: colors.primary, fontWeight: '600' }}>Go back</Text>
+            <Text style={{ color: colors.primary, fontWeight: '600' }}>
+              Go back
+            </Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
 
-  const company      = typeof product.companyId === 'object' ? product.companyId as ProductCompany : null;
-  const ownerSnap    = product.ownerSnapshot;
-  const companyName  = ownerSnap?.name    || company?.name    || 'Company';
-  const companyVerif = ownerSnap?.verified || company?.verified || false;
-  const avatarUrl    = ownerSnap?.avatarUrl || ownerSnap?.logoUrl || company?.logoUrl;
-  const avatarPubId  = ownerSnap?.avatarPublicId;
-  const industry     = ownerSnap?.industry || company?.industry;
-  const website      = ownerSnap?.website  || company?.website;
+  const priceNum  = product.price?.amount ?? (product.price as unknown as number);
+  const currency  = product.price?.currency ?? 'USD';
+  const stockStat = getStockStatus(product.inventory);
+  const stockCfg  = getStockBadgeConfig(stockStat);
 
-  const priceNum   = product.price?.amount ?? (product.price as unknown as number);
-  const currency   = product.price?.currency ?? 'USD';
-  const stockStat  = getStockStatus(product.inventory);
-  const stockConf  = getStockBadgeConfig(stockStat);
-  const hasSpecs   = !!product.specifications?.length;
+  const ownerName   = productService.getOwnerName(product);
+  const ownerAvatar = productService.getOwnerAvatarUrl(product);
+  const company     =
+    typeof product.companyId === 'object'
+      ? (product.companyId as ProductCompany)
+      : null;
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={theme.isDark ? 'light-content' : 'dark-content'} />
 
-      {/* ── Navbar ── */}
-      <View style={[styles.navbar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.navBtn}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
+      {/* Header */}
+      <View
+        style={[
+          s.topBar,
+          { borderBottomColor: colors.border },
+        ]}
+      >
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="arrow-back" size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.navTitle, { color: colors.text }]} numberOfLines={1}>
+
+        <Text
+          style={[s.topBarTitle, { color: colors.text }]}
+          numberOfLines={1}
+        >
           {product.name}
         </Text>
-        <View style={{ flexDirection: 'row', gap: 4 }}>
-          <TouchableOpacity onPress={handleShare} style={styles.navBtn}>
-            <Ionicons name="share-outline" size={22} color={colors.text} />
-          </TouchableOpacity>
-          {user && (
-            <TouchableOpacity onPress={handleToggleSave} style={styles.navBtn}>
+
+        <View style={{ flexDirection: 'row', gap: 14 }}>
+          {/* Save toggle — only for authenticated non-owner users */}
+          {user && !isOwner && (
+            <TouchableOpacity
+              onPress={handleToggleSave}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <Ionicons
                 name={localSaved ? 'bookmark' : 'bookmark-outline'}
                 size={22}
-                color={localSaved ? colors.primary : colors.text}
+                color={localSaved ? '#FBBF24' : colors.text}
               />
             </TouchableOpacity>
           )}
+          <TouchableOpacity
+            onPress={handleShare}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="share-outline" size={22} color={colors.text} />
+          </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
-        {/* Gallery */}
-        <ProductImageGallery images={product.images ?? []} height={320} />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
+      >
+        {/* Image gallery */}
+        <ProductImageGallery images={product.images} />
 
-        <View style={{ padding: 16, gap: 16 }}>
+        <View style={{ padding: 16, gap: 14 }}>
 
-          {/* Price + stock */}
-          <View style={styles.priceRow}>
-            <Text style={[styles.price, { color: colors.primary }]}>
-              {formatPrice(priceNum, currency)}
-            </Text>
-            {product.price?.unit && product.price.unit !== 'unit' && (
-              <Text style={{ fontSize: 13, color: colors.textMuted, marginLeft: 2 }}>
-                / {product.price.unit}
+          {/* Stock badge */}
+          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            <View
+              style={[s.badge, { backgroundColor: stockCfg.background }]}
+            >
+              <View style={[s.dot, { backgroundColor: stockCfg.color }]} />
+              <Text style={[s.badgeTxt, { color: stockCfg.color }]}>
+                {stockCfg.label}
               </Text>
-            )}
-            <View style={[styles.stockBadge, { backgroundColor: stockConf.background }]}>
-              <View style={[styles.stockDot, { backgroundColor: stockConf.color }]} />
-              <Text style={[styles.stockText, { color: stockConf.color }]}>{stockConf.label}</Text>
             </View>
-          </View>
-
-          {/* Name + featured */}
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-            <Text style={[styles.name, { color: colors.text, flex: 1 }]}>{product.name}</Text>
             {product.featured && (
-              <View style={[styles.featuredBadge, { backgroundColor: '#FBBF2420' }]}>
-                <Ionicons name="star" size={12} color="#FBBF24" />
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#FBBF24' }}>Featured</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Category pills */}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-            {product.category && (
-              <View style={[styles.catPill, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-                <Ionicons name="folder-outline" size={11} color={colors.textMuted} />
-                <Text style={{ fontSize: 12, color: colors.textSecondary, fontWeight: '500' }}>
-                  {product.category}
-                </Text>
-              </View>
-            )}
-            {product.subcategory && (
-              <View style={[styles.catPill, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-                <Ionicons name="pricetag-outline" size={11} color={colors.textMuted} />
-                <Text style={{ fontSize: 12, color: colors.textSecondary, fontWeight: '500' }}>
-                  {product.subcategory}
+              <View style={[s.badge, { backgroundColor: '#FBBF2420' }]}>
+                <Ionicons name="star" size={10} color="#FBBF24" />
+                <Text style={[s.badgeTxt, { color: '#FBBF24' }]}>
+                  Featured
                 </Text>
               </View>
             )}
           </View>
 
-          {/* Company card */}
-          <View style={[
-            styles.companyCard,
-            { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: borderRadius.lg },
-          ]}>
+          {/* Name + price */}
+          <Text style={[s.name, { color: colors.text }]}>
+            {product.name}
+          </Text>
+          <Text style={[s.price, { color: colors.primary }]}>
+            {formatPrice(priceNum, currency)}
+            {product.price?.unit ? (
+              <Text style={[s.unit, { color: colors.textMuted }]}>
+                {' '}/ {product.price.unit}
+              </Text>
+            ) : null}
+          </Text>
+
+          {/* Category */}
+          {product.category ? (
+            <View
+              style={[
+                s.catChip,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                {product.category}
+                {product.subcategory ? ` › ${product.subcategory}` : ''}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Owner card — read-only, no actions */}
+          <TouchableOpacity
+            activeOpacity={0.75}
+            style={[
+              s.ownerCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
+            onPress={handleContact}
+          >
             <OwnerAvatar
-              name={companyName}
-              avatarUrl={avatarUrl}
-              avatarPublicId={avatarPubId}
-              verified={companyVerif}
-              size={44}
+              name={ownerName}
+              avatarUrl={ownerAvatar}
+              verified={product.ownerSnapshot?.verified}
+              size={40}
             />
             <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <Text style={[styles.companyName, { color: colors.text }]}>{companyName}</Text>
-                {companyVerif && (
-                  <Ionicons name="checkmark-circle" size={15} color="#22C55E" />
-                )}
-              </View>
-              {industry && (
-                <Text style={[styles.companyIndustry, { color: colors.textMuted }]}>{industry}</Text>
-              )}
-              {website && (
-                <TouchableOpacity onPress={() => Linking.openURL(website.startsWith('http') ? website : `https://${website}`)}>
-                  <Text style={{ fontSize: 12, color: colors.primary, marginTop: 2 }} numberOfLines={1}>
-                    {website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-                  </Text>
-                </TouchableOpacity>
-              )}
+              <Text
+                style={[s.ownerName, { color: colors.text }]}
+                numberOfLines={1}
+              >
+                {ownerName}
+              </Text>
+              {product.ownerSnapshot?.industry ? (
+                <Text
+                  style={{ fontSize: 12, color: colors.textMuted }}
+                  numberOfLines={1}
+                >
+                  {product.ownerSnapshot.industry}
+                </Text>
+              ) : null}
             </View>
-          </View>
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color={colors.textMuted}
+            />
+          </TouchableOpacity>
+
+          {/* Owner shortcut — only visible if viewer IS the owner,
+              navigates to the management screen (no edit UI here) */}
+          {isOwner && (
+            <TouchableOpacity
+              style={[
+                s.manageHint,
+                { backgroundColor: colors.primary + '15', borderColor: colors.primary + '40' },
+              ]}
+              onPress={() =>
+                // Navigate UP to CompanyNavigator's details screen
+                // Using (navigation as any) because ProductsStack doesn't define this route.
+                // The company user will only see this button when inside the Company navigator
+                // via ProductMarketplace → ProductDetails → this hint.
+                (navigation as any).navigate('CompanyProductDetails', { productId })
+              }
+            >
+              <Ionicons name="settings-outline" size={16} color={colors.primary} />
+              <Text style={{ fontSize: 13, fontWeight: '600', color: colors.primary }}>
+                Manage this product
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* Description */}
-          {product.description && (
+          {product.description ? (
             <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Description</Text>
+              <Text style={[s.sectionTitle, { color: colors.text }]}>
+                Description
+              </Text>
               <Text
-                style={[styles.bodyText, { color: colors.textSecondary }]}
+                style={[s.desc, { color: colors.textMuted }]}
                 numberOfLines={descExpanded ? undefined : SHOW_MORE_LINES}
               >
                 {product.description}
               </Text>
-              {product.description.length > 180 && (
-                <TouchableOpacity onPress={() => setDescExpanded(v => !v)}>
-                  <Text style={[styles.showMore, { color: colors.primary }]}>
-                    {descExpanded ? 'Show less' : 'Show more'}
-                  </Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                onPress={() => setDescExpanded(v => !v)}
+              >
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: '600',
+                    color: colors.primary,
+                    marginTop: 4,
+                  }}
+                >
+                  {descExpanded ? 'Show less' : 'Show more'}
+                </Text>
+              </TouchableOpacity>
             </View>
-          )}
-
-          {/* Tags */}
-          {product.tags?.length > 0 && (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {product.tags.map(tag => (
-                <View key={tag} style={[styles.tag, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-                  <Text style={{ fontSize: 11, color: colors.textMuted }}>#{tag}</Text>
-                </View>
-              ))}
-            </View>
-          )}
+          ) : null}
 
           {/* Specifications */}
-          {hasSpecs && (
+          {product.specifications && product.specifications.length > 0 ? (
             <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Specifications</Text>
-              <View style={[styles.specsTable, { borderColor: colors.border, borderRadius: borderRadius.lg, overflow: 'hidden' }]}>
-                {product.specifications!.map((spec, i) => (
+              <Text style={[s.sectionTitle, { color: colors.text }]}>
+                Specifications
+              </Text>
+              <View
+                style={[s.specTable, { borderColor: colors.border }]}
+              >
+                {product.specifications.map((spec, i) => (
                   <View
-                    key={i}
+                    key={`spec-${spec.key}-${i}`}
                     style={[
-                      styles.specRow,
+                      s.specRow,
                       {
-                        backgroundColor: i % 2 === 0 ? colors.surface : colors.background,
-                        borderTopColor: colors.border, borderTopWidth: i === 0 ? 0 : 1,
+                        backgroundColor:
+                          i % 2 === 0 ? colors.surface : colors.background,
+                        borderTopColor: colors.border,
+                        borderTopWidth:
+                          i === 0 ? 0 : StyleSheet.hairlineWidth,
                       },
                     ]}
                   >
-                    <Text style={[styles.specKey, { color: colors.textSecondary }]}>{spec.key}</Text>
-                    <Text style={[styles.specVal, { color: colors.text }]}>{spec.value}</Text>
+                    <Text style={[s.specKey, { color: colors.textMuted }]}>
+                      {spec.key}
+                    </Text>
+                    <Text style={[s.specVal, { color: colors.text }]}>
+                      {spec.value}
+                    </Text>
                   </View>
                 ))}
               </View>
             </View>
-          )}
+          ) : null}
 
-          {/* Inventory note */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Ionicons name="cube-outline" size={15} color={colors.textMuted} />
-            <Text style={[styles.bodyText, { color: colors.textSecondary }]}>
-              {product.inventory?.trackQuantity
-                ? `${product.inventory.quantity} units in stock`
-                : 'Availability: Contact seller'}
-            </Text>
-          </View>
+          {/* Tags */}
+          {product.tags && product.tags.length > 0 ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {product.tags.map((tag, i) => (
+                <View
+                  key={`tag-${tag}-${i}`}
+                  style={[
+                    s.tag,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                    #{tag}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
 
-          {/* Related */}
-          {related.length > 0 && (
+          {/* Related products — PUBLIC variant, no owner actions */}
+          {related.length > 0 ? (
             <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Related Products</Text>
+              <Text style={[s.sectionTitle, { color: colors.text }]}>
+                Related Products
+              </Text>
               <FlatList
                 horizontal
+                nestedScrollEnabled
                 data={related}
-                keyExtractor={item => item._id}
+                keyExtractor={item => `related-${item._id}`}
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: 10 }}
                 renderItem={({ item }) => (
                   <ProductCard
                     variant="public"
                     product={item}
-                    onPress={() => navigation.replace('ProductDetails', { productId: item._id })}
-                    onSave={handleSave => {}}
+                    onPress={() =>
+                      navigation.push('ProductDetails', { productId: item._id })
+                    }
                     size="sm"
                     style={{ width: 160 }}
                   />
                 )}
               />
             </View>
-          )}
+          ) : null}
         </View>
       </ScrollView>
 
-      {/* ── Sticky CTA ── */}
-      <View style={[styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.border, ...shadows.lg }]}>
+      {/* Bottom CTA — contact seller only, no owner management */}
+      <View
+        style={[
+          s.bottomBar,
+          {
+            backgroundColor: colors.background,
+            borderTopColor: colors.border,
+          },
+        ]}
+      >
+        <TouchableOpacity
+          onPress={handleToggleSave}
+          style={[
+            s.saveBtn,
+            {
+              backgroundColor: localSaved
+                ? '#FBBF2420'
+                : colors.surface,
+              borderColor: localSaved ? '#FBBF24' : colors.border,
+            },
+          ]}
+        >
+          <Ionicons
+            name={localSaved ? 'bookmark' : 'bookmark-outline'}
+            size={20}
+            color={localSaved ? '#FBBF24' : colors.textMuted}
+          />
+        </TouchableOpacity>
+
         <TouchableOpacity
           onPress={handleContact}
-          style={[styles.contactBtn, { backgroundColor: colors.primary, borderRadius: borderRadius.lg }]}
+          style={[s.contactBtn, { backgroundColor: colors.primary }]}
         >
           <Ionicons name="chatbubble-outline" size={18} color="#fff" />
-          <Text style={styles.contactBtnText}>Contact Seller</Text>
+          <Text style={s.contactBtnText}>Contact Seller</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 };
 
-const styles = StyleSheet.create({
-  safe:         { flex: 1 },
-  navbar: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 4, paddingVertical: 8, borderBottomWidth: 1,
+const s = StyleSheet.create({
+  safe:    { flex: 1 },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 12,
   },
-  navBtn:       { padding: 10, width: 44, alignItems: 'center' },
-  navTitle:     { flex: 1, fontSize: 15, fontWeight: '700', textAlign: 'center' },
-  notFound:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
-  notFoundText: { fontSize: 17, fontWeight: '600' },
-  priceRow:     { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  price:        { fontSize: 26, fontWeight: '800' },
-  stockBadge: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, gap: 4, marginLeft: 'auto',
+  topBarTitle: { flex: 1, fontSize: 16, fontWeight: '700' },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    padding: 32,
   },
-  stockDot:     { width: 6, height: 6, borderRadius: 3 },
-  stockText:    { fontSize: 12, fontWeight: '600' },
-  name:         { fontSize: 20, fontWeight: '700', lineHeight: 26 },
-  featuredBadge:{
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, gap: 4,
+  notFoundTxt: { fontSize: 16, fontWeight: '600' },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
   },
-  catPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1,
+  dot:     { width: 6, height: 6, borderRadius: 3 },
+  badgeTxt:{ fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
+  name:    { fontSize: 20, fontWeight: '800', lineHeight: 26 },
+  price:   { fontSize: 22, fontWeight: '800' },
+  unit:    { fontSize: 14, fontWeight: '400' },
+  catChip: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
   },
-  companyCard:  { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12, borderWidth: 1 },
-  companyName:  { fontSize: 15, fontWeight: '700' },
-  companyIndustry: { fontSize: 12, marginTop: 1 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
-  bodyText:     { fontSize: 14, lineHeight: 22 },
-  showMore:     { fontSize: 13, fontWeight: '600', marginTop: 4 },
-  tag: {
-    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, borderWidth: 1,
+  ownerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
   },
-  specsTable:   { borderWidth: 1 },
+  ownerName:   { fontSize: 14, fontWeight: '700' },
+  manageHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  sectionTitle: { fontSize: 15, fontWeight: '700', marginBottom: 8 },
+  desc:    { fontSize: 14, lineHeight: 22 },
+  specTable:   { borderRadius: 10, borderWidth: 1, overflow: 'hidden' },
   specRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingHorizontal: 14, paddingVertical: 10,
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  specKey:      { fontSize: 13 },
-  specVal:      { fontSize: 13, fontWeight: '600', maxWidth: '55%', textAlign: 'right' },
-  bottomBar:    { paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1 },
+  specKey: { flex: 1, fontSize: 13 },
+  specVal: { flex: 1, fontSize: 13, fontWeight: '600', textAlign: 'right' },
+  tag: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: 28,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+  },
+  saveBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   contactBtn: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'center', paddingVertical: 14, gap: 8,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 13,
+    borderRadius: 12,
   },
-  contactBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  contactBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 });
