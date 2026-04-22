@@ -1,18 +1,32 @@
 /**
  * src/components/application/ApplicationForm.tsx
  * ─────────────────────────────────────────────────────────────────────────────
- * 4-step application form — mirrors the web frontend exactly.
+ * FIXES:
+ *  1. Bug: "Path 'userInfo.name' is required"
+ *     Root cause: userInfo was built from useAuthStore which may not have the
+ *     candidate's full name. Fixed by loading the full profile via
+ *     candidateService.getProfile() and using that as the source of truth.
  *
- * Step 1 – Profile & CVs      (contact info pre-filled, multi-CV select)
- * Step 2 – Cover Letter       (cover letter + skills)
- * Step 3 – Docs               (work experience + references, form OR file upload)
- * Step 4 – Review & Submit
+ *  2. Bug: Skills and profile data not pre-filled.
+ *     Root cause: The form never called candidateService.getProfile().
+ *     Fixed: On mount, getProfile() is called and skills, contact info,
+ *     and userInfo are pre-populated from the returned profile data.
+ *
+ *  3. File submission: referenceFiles / experienceFiles are passed as
+ *     Array<{uri,name,type,_tempId}> to match the service's ApplyJobData type.
  * ─────────────────────────────────────────────────────────────────────────────
  */
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
-  ScrollView, ActivityIndicator, Alert, Switch, Image,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  ActivityIndicator,
+  Alert,
+  Switch,
+  ScrollView,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,9 +35,13 @@ import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { useMyCVs, useApplyForJob } from '../../hooks/useApplications';
 import {
-  applicationService, Application, CV,
-  Reference, WorkExperience,
+  applicationService,
+  Application,
+  CV,
+  Reference,
+  WorkExperience,
 } from '../../services/applicationService';
+import { candidateService, CandidateProfile } from '../../services/candidateService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,15 +61,16 @@ interface DocFile {
 }
 
 const STEPS = [
-  { num: 1, label: 'Profile',      icon: 'person-outline' },
-  { num: 2, label: 'Application',  icon: 'document-text-outline' },
-  { num: 3, label: 'Documents',    icon: 'briefcase-outline' },
-  { num: 4, label: 'Review',       icon: 'checkmark-circle-outline' },
+  { num: 1, label: 'Profile',     icon: 'person-outline' },
+  { num: 2, label: 'Letter',      icon: 'document-text-outline' },
+  { num: 3, label: 'Documents',   icon: 'briefcase-outline' },
+  { num: 4, label: 'Review',      icon: 'checkmark-circle-outline' },
 ];
 
-const genTmpId = () => `tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+const genTmpId = () =>
+  `tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-// ─── Step Header ──────────────────────────────────────────────────────────────
+// ─── Section Header ───────────────────────────────────────────────────────────
 
 const SH = ({ icon, title, c }: { icon: string; title: string; c: any }) => (
   <View style={fi.sectionHeader}>
@@ -65,51 +84,64 @@ const SH = ({ icon, title, c }: { icon: string; title: string; c: any }) => (
 // ─── STEP 1 — Profile & CVs ───────────────────────────────────────────────────
 
 const Step1 = ({
-  c, contactEmail, setContactEmail, contactPhone, setContactPhone,
-  contactLocation, setContactLocation, myCVs, cvsLoading,
+  c,
+  contactEmail, setContactEmail,
+  contactPhone, setContactPhone,
+  contactLocation, setContactLocation,
+  myCVs, cvsLoading,
   selectedCVIds, toggleCV,
+  profileLoading,
 }: any) => (
   <View>
     <SH icon="person-outline" title="Contact Information" c={c} />
-    <Text style={[fi.hint, { color: c.textMuted }]}>This information will be shared with the employer.</Text>
+    <Text style={[fi.hint, { color: c.textMuted }]}>
+      This information will be shared with the employer.
+    </Text>
 
-    {/* Email */}
-    <Text style={[fi.label, { color: c.text }]}>Email *</Text>
-    <TextInput
-      style={[fi.input, { backgroundColor: c.inputBg ?? c.surface, borderColor: c.border, color: c.text }]}
-      value={contactEmail}
-      onChangeText={setContactEmail}
-      keyboardType="email-address"
-      autoCapitalize="none"
-      placeholder="your@email.com"
-      placeholderTextColor={c.textMuted}
-    />
+    {profileLoading ? (
+      <View style={[fi.loadingBox, { backgroundColor: c.surface }]}>
+        <ActivityIndicator color={c.primary} />
+        <Text style={[fi.loadingText, { color: c.textMuted }]}>Loading your profile…</Text>
+      </View>
+    ) : (
+      <>
+        <Text style={[fi.label, { color: c.text }]}>Email *</Text>
+        <TextInput
+          style={[fi.input, { backgroundColor: c.inputBg ?? c.surface, borderColor: c.border, color: c.text }]}
+          value={contactEmail}
+          onChangeText={setContactEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          placeholder="your@email.com"
+          placeholderTextColor={c.textMuted}
+        />
 
-    {/* Phone */}
-    <Text style={[fi.label, { color: c.text }]}>Phone *</Text>
-    <TextInput
-      style={[fi.input, { backgroundColor: c.inputBg ?? c.surface, borderColor: c.border, color: c.text }]}
-      value={contactPhone}
-      onChangeText={setContactPhone}
-      keyboardType="phone-pad"
-      placeholder="+1 555 000 0000"
-      placeholderTextColor={c.textMuted}
-    />
+        <Text style={[fi.label, { color: c.text }]}>Phone *</Text>
+        <TextInput
+          style={[fi.input, { backgroundColor: c.inputBg ?? c.surface, borderColor: c.border, color: c.text }]}
+          value={contactPhone}
+          onChangeText={setContactPhone}
+          keyboardType="phone-pad"
+          placeholder="+1 555 000 0000"
+          placeholderTextColor={c.textMuted}
+        />
 
-    {/* Location */}
-    <Text style={[fi.label, { color: c.text }]}>Location *</Text>
-    <TextInput
-      style={[fi.input, { backgroundColor: c.inputBg ?? c.surface, borderColor: c.border, color: c.text }]}
-      value={contactLocation}
-      onChangeText={setContactLocation}
-      placeholder="City, Country"
-      placeholderTextColor={c.textMuted}
-    />
+        <Text style={[fi.label, { color: c.text }]}>Location *</Text>
+        <TextInput
+          style={[fi.input, { backgroundColor: c.inputBg ?? c.surface, borderColor: c.border, color: c.text }]}
+          value={contactLocation}
+          onChangeText={setContactLocation}
+          placeholder="City, Country"
+          placeholderTextColor={c.textMuted}
+        />
+      </>
+    )}
 
-    {/* CV Selection */}
     <View style={[fi.divider, { backgroundColor: c.border }]} />
     <SH icon="document-outline" title="Select CV(s) *" c={c} />
-    <Text style={[fi.hint, { color: c.textMuted }]}>Select at least one CV to submit with your application.</Text>
+    <Text style={[fi.hint, { color: c.textMuted }]}>
+      Select at least one CV to submit with your application.
+    </Text>
 
     {cvsLoading ? (
       <ActivityIndicator style={{ marginVertical: 16 }} color={c.primary} />
@@ -123,8 +155,8 @@ const Step1 = ({
     ) : (
       myCVs.map((cv: CV) => {
         const selected = selectedCVIds.includes(cv._id);
-        const name     = applicationService.getCVDisplayName(cv);
-        const size     = applicationService.formatFileSize(cv.fileSize ?? cv.size);
+        const name = applicationService.getCVDisplayName(cv);
+        const size = applicationService.formatFileSize(cv.fileSize ?? cv.size);
         return (
           <TouchableOpacity
             key={cv._id}
@@ -133,7 +165,7 @@ const Step1 = ({
               fi.cvCard,
               {
                 backgroundColor: selected ? `${c.primary}10` : c.surface,
-                borderColor:     selected ? c.primary : c.border,
+                borderColor: selected ? c.primary : c.border,
               },
             ]}
           >
@@ -149,7 +181,7 @@ const Step1 = ({
             </View>
             <View style={[fi.checkbox, {
               backgroundColor: selected ? c.primary : 'transparent',
-              borderColor:     selected ? c.primary : c.border,
+              borderColor: selected ? c.primary : c.border,
             }]}>
               {selected && <Ionicons name="checkmark" size={14} color="#fff" />}
             </View>
@@ -157,6 +189,7 @@ const Step1 = ({
         );
       })
     )}
+
     {selectedCVIds.length > 0 && (
       <View style={[fi.selectionInfo, { backgroundColor: `${c.primary}10`, borderColor: `${c.primary}40` }]}>
         <Ionicons name="checkmark-circle" size={16} color={c.primary} />
@@ -171,9 +204,10 @@ const Step1 = ({
 // ─── STEP 2 — Cover Letter & Skills ──────────────────────────────────────────
 
 const Step2 = ({
-  c, coverLetter, setCoverLetter, skillInput, setSkillInput, skills, setSkills,
+  c, coverLetter, setCoverLetter,
+  skillInput, setSkillInput,
+  skills, setSkills,
 }: any) => {
-
   const addSkill = () => {
     const s = skillInput.trim();
     if (s && !skills.includes(s)) {
@@ -193,7 +227,7 @@ const Step2 = ({
           style={[fi.textArea, { color: c.text }]}
           value={coverLetter}
           onChangeText={setCoverLetter}
-          placeholder="Dear Hiring Manager, I am excited to apply for this position because..."
+          placeholder="Dear Hiring Manager, I am excited to apply for this position because…"
           placeholderTextColor={c.textMuted}
           multiline
           numberOfLines={8}
@@ -201,11 +235,16 @@ const Step2 = ({
         />
       </View>
       <Text style={[fi.charCount, { color: coverLetter.length < 50 ? '#EF4444' : c.textMuted }]}>
-        {coverLetter.length}/5000 {coverLetter.length < 50 ? `(need ${50 - coverLetter.length} more)` : ''}
+        {coverLetter.length}/5000{coverLetter.length < 50 ? ` (need ${50 - coverLetter.length} more)` : ''}
       </Text>
 
       <View style={[fi.divider, { backgroundColor: c.border }]} />
       <SH icon="flash-outline" title="Skills" c={c} />
+      {skills.length > 0 && (
+        <Text style={[fi.hint, { color: c.textMuted }]}>
+          Pre-filled from your profile. Add or remove as needed.
+        </Text>
+      )}
       <View style={fi.skillInputRow}>
         <TextInput
           style={[fi.input, { flex: 1, backgroundColor: c.inputBg ?? c.surface, borderColor: c.border, color: c.text }]}
@@ -235,6 +274,11 @@ const Step2 = ({
           </TouchableOpacity>
         ))}
       </View>
+      {skills.length === 0 && (
+        <View style={[fi.emptyBox, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <Text style={[fi.emptyText, { color: c.textMuted }]}>No skills added yet.</Text>
+        </View>
+      )}
     </View>
   );
 };
@@ -248,11 +292,13 @@ const Step3 = ({
   references, setReferences,
   refFiles, setRefFiles,
 }: any) => {
-
   const pickFile = async (type: 'exp' | 'ref', index: number) => {
     const res = await DocumentPicker.getDocumentAsync({
-      type: ['application/pdf', 'application/msword',
-             'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+      type: [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      ],
       copyToCacheDirectory: true,
     });
     if (res.canceled) return;
@@ -260,35 +306,53 @@ const Step3 = ({
     if (!asset) return;
 
     const tmpId = genTmpId();
-    const docFile: DocFile = { uri: asset.uri, name: asset.name, type: asset.mimeType ?? 'application/pdf', _tempId: tmpId };
+    const docFile: DocFile = {
+      uri: asset.uri,
+      name: asset.name,
+      type: asset.mimeType ?? 'application/pdf',
+      _tempId: tmpId,
+    };
 
     if (type === 'exp') {
       const updated = [...experiences];
       updated[index] = { ...updated[index], _tempId: tmpId };
       setExperiences(updated);
-      setExpFiles([...expFiles.filter((f: DocFile) => f._tempId !== updated[index]._tempId), docFile]);
+      setExpFiles([
+        ...expFiles.filter((f: DocFile) => f._tempId !== experiences[index]?._tempId),
+        docFile,
+      ]);
     } else {
       const updated = [...references];
       updated[index] = { ...updated[index], _tempId: tmpId };
       setReferences(updated);
-      setRefFiles([...refFiles.filter((f: DocFile) => f._tempId !== updated[index]._tempId), docFile]);
+      setRefFiles([
+        ...refFiles.filter((f: DocFile) => f._tempId !== references[index]?._tempId),
+        docFile,
+      ]);
     }
   };
 
   const addExperience = (asDoc: boolean) => {
     setExperiences([
       ...experiences,
-      { company: '', position: '', startDate: '', endDate: '', current: false,
-        description: '', skills: [], providedAsDocument: asDoc, _tempId: asDoc ? genTmpId() : undefined },
+      {
+        company: '', position: '', startDate: '', endDate: '',
+        current: false, description: '', skills: [],
+        providedAsDocument: asDoc,
+        _tempId: asDoc ? genTmpId() : undefined,
+      },
     ]);
   };
 
   const addReference = (asDoc: boolean) => {
     setReferences([
       ...references,
-      { name: '', position: '', company: '', email: '', phone: '',
+      {
+        name: '', position: '', company: '', email: '', phone: '',
         relationship: '', allowsContact: false, notes: '',
-        providedAsDocument: asDoc, _tempId: asDoc ? genTmpId() : undefined },
+        providedAsDocument: asDoc,
+        _tempId: asDoc ? genTmpId() : undefined,
+      },
     ]);
   };
 
@@ -304,15 +368,17 @@ const Step3 = ({
     setReferences(updated);
   };
 
-  const getExpFile = (tmpId?: string) => expFiles.find((f: DocFile) => f._tempId === tmpId);
-  const getRefFile = (tmpId?: string) => refFiles.find((f: DocFile) => f._tempId === tmpId);
+  const getExpFile = (tmpId?: string) =>
+    expFiles.find((f: DocFile) => f._tempId === tmpId);
+  const getRefFile = (tmpId?: string) =>
+    refFiles.find((f: DocFile) => f._tempId === tmpId);
 
   return (
     <View>
-      {/* ── Work Experience ── */}
+      {/* Work Experience */}
       <SH icon="briefcase-outline" title="Work Experience" c={c} />
       <Text style={[fi.hint, { color: c.textMuted }]}>
-        Add your work history by filling a form OR uploading a document.
+        Fill a form or upload a document for each entry.
       </Text>
 
       {experiences.map((exp: WorkExperience & { _tempId?: string }, i: number) => (
@@ -330,7 +396,6 @@ const Step3 = ({
           </View>
 
           {exp.providedAsDocument ? (
-            /* Document upload path */
             <TouchableOpacity
               style={[fi.uploadBtn, { borderColor: c.border, backgroundColor: c.background }]}
               onPress={() => pickFile('exp', i)}
@@ -346,44 +411,51 @@ const Step3 = ({
               ) : (
                 <View style={fi.uploadPlaceholder}>
                   <Ionicons name="cloud-upload-outline" size={24} color={c.textMuted} />
-                  <Text style={[fi.uploadHint, { color: c.textMuted }]}>Tap to upload experience document</Text>
+                  <Text style={[fi.uploadHint, { color: c.textMuted }]}>
+                    Tap to upload experience document
+                  </Text>
                   <Text style={[fi.uploadFormats, { color: c.textMuted }]}>PDF, DOC, DOCX</Text>
                 </View>
               )}
             </TouchableOpacity>
           ) : (
-            /* Form fill path */
             <View style={{ gap: 8 }}>
-              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
-                placeholder="Company" placeholderTextColor={c.textMuted} value={exp.company}
-                onChangeText={(v) => updateExp(i, 'company', v)} />
-              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
-                placeholder="Position/Role" placeholderTextColor={c.textMuted} value={exp.position}
-                onChangeText={(v) => updateExp(i, 'position', v)} />
+              <TextInput
+                style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Company" placeholderTextColor={c.textMuted}
+                value={exp.company} onChangeText={v => updateExp(i, 'company', v)}
+              />
+              <TextInput
+                style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Position/Role" placeholderTextColor={c.textMuted}
+                value={exp.position} onChangeText={v => updateExp(i, 'position', v)}
+              />
               <View style={fi.row}>
-                <TextInput style={[fi.input, { flex: 1, backgroundColor: c.background, borderColor: c.border, color: c.text }]}
-                  placeholder="Start (YYYY-MM-DD)" placeholderTextColor={c.textMuted} value={exp.startDate}
-                  onChangeText={(v) => updateExp(i, 'startDate', v)} />
-                <TextInput style={[fi.input, { flex: 1, backgroundColor: c.background, borderColor: c.border, color: c.text }]}
-                  placeholder="End (or leave blank)" placeholderTextColor={c.textMuted} value={exp.endDate}
-                  onChangeText={(v) => updateExp(i, 'endDate', v)}
-                  editable={!exp.current} />
+                <TextInput
+                  style={[fi.input, { flex: 1, backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                  placeholder="Start (YYYY-MM-DD)" placeholderTextColor={c.textMuted}
+                  value={exp.startDate} onChangeText={v => updateExp(i, 'startDate', v)}
+                />
+                <TextInput
+                  style={[fi.input, { flex: 1, backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                  placeholder="End or leave blank" placeholderTextColor={c.textMuted}
+                  value={exp.endDate} onChangeText={v => updateExp(i, 'endDate', v)}
+                  editable={!exp.current}
+                />
               </View>
               <View style={fi.switchRow}>
-                <Switch value={exp.current} onValueChange={(v) => updateExp(i, 'current', v)}
-                  trackColor={{ true: c.primary }} />
+                <Switch
+                  value={exp.current}
+                  onValueChange={v => updateExp(i, 'current', v)}
+                  trackColor={{ true: c.primary }}
+                />
                 <Text style={[fi.switchLabel, { color: c.text }]}>Currently working here</Text>
               </View>
-              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
-                placeholder="Description (optional)" placeholderTextColor={c.textMuted} value={exp.description}
-                onChangeText={(v) => updateExp(i, 'description', v)} multiline numberOfLines={3}
-                textAlignVertical="top" />
             </View>
           )}
         </View>
       ))}
 
-      {/* Add experience buttons */}
       <View style={fi.addBtnRow}>
         <TouchableOpacity
           style={[fi.addDocBtn, { borderColor: c.primary, backgroundColor: `${c.primary}10` }]}
@@ -403,10 +475,10 @@ const Step3 = ({
 
       <View style={[fi.divider, { backgroundColor: c.border }]} />
 
-      {/* ── References ── */}
+      {/* References */}
       <SH icon="people-outline" title="References" c={c} />
       <Text style={[fi.hint, { color: c.textMuted }]}>
-        Add references by filling a form OR uploading a document.
+        Fill a form or upload a document for each reference.
       </Text>
 
       {references.map((ref: Reference & { _tempId?: string }, i: number) => (
@@ -439,34 +511,53 @@ const Step3 = ({
               ) : (
                 <View style={fi.uploadPlaceholder}>
                   <Ionicons name="cloud-upload-outline" size={24} color={c.textMuted} />
-                  <Text style={[fi.uploadHint, { color: c.textMuted }]}>Tap to upload reference document</Text>
+                  <Text style={[fi.uploadHint, { color: c.textMuted }]}>
+                    Tap to upload reference document
+                  </Text>
                   <Text style={[fi.uploadFormats, { color: c.textMuted }]}>PDF, DOC, DOCX</Text>
                 </View>
               )}
             </TouchableOpacity>
           ) : (
             <View style={{ gap: 8 }}>
-              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
-                placeholder="Full name" placeholderTextColor={c.textMuted} value={ref.name}
-                onChangeText={(v) => updateRef(i, 'name', v)} />
-              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
-                placeholder="Position" placeholderTextColor={c.textMuted} value={ref.position}
-                onChangeText={(v) => updateRef(i, 'position', v)} />
-              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
-                placeholder="Company" placeholderTextColor={c.textMuted} value={ref.company}
-                onChangeText={(v) => updateRef(i, 'company', v)} />
-              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
-                placeholder="Email" placeholderTextColor={c.textMuted} value={ref.email}
-                keyboardType="email-address" onChangeText={(v) => updateRef(i, 'email', v)} />
-              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
-                placeholder="Phone" placeholderTextColor={c.textMuted} value={ref.phone}
-                keyboardType="phone-pad" onChangeText={(v) => updateRef(i, 'phone', v)} />
-              <TextInput style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
-                placeholder="Relationship (e.g. Manager)" placeholderTextColor={c.textMuted} value={ref.relationship}
-                onChangeText={(v) => updateRef(i, 'relationship', v)} />
+              <TextInput
+                style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Full name *" placeholderTextColor={c.textMuted}
+                value={ref.name} onChangeText={v => updateRef(i, 'name', v)}
+              />
+              <TextInput
+                style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Position" placeholderTextColor={c.textMuted}
+                value={ref.position} onChangeText={v => updateRef(i, 'position', v)}
+              />
+              <TextInput
+                style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Company" placeholderTextColor={c.textMuted}
+                value={ref.company} onChangeText={v => updateRef(i, 'company', v)}
+              />
+              <TextInput
+                style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Email *" placeholderTextColor={c.textMuted}
+                value={ref.email} keyboardType="email-address"
+                onChangeText={v => updateRef(i, 'email', v)}
+              />
+              <TextInput
+                style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Phone" placeholderTextColor={c.textMuted}
+                value={ref.phone} keyboardType="phone-pad"
+                onChangeText={v => updateRef(i, 'phone', v)}
+              />
+              <TextInput
+                style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
+                placeholder="Relationship (e.g. Manager)" placeholderTextColor={c.textMuted}
+                value={ref.relationship} onChangeText={v => updateRef(i, 'relationship', v)}
+              />
               <View style={fi.switchRow}>
-                <Switch value={ref.allowsContact} onValueChange={(v) => updateRef(i, 'allowsContact', v)}
-                  trackColor={{ true: c.primary }} />
+                <Switch
+                  value={ref.allowsContact}
+                  onValueChange={v => updateRef(i, 'allowsContact', v)}
+                  trackColor={{ true: c.primary }}
+                />
                 <Text style={[fi.switchLabel, { color: c.text }]}>Allows contact</Text>
               </View>
             </View>
@@ -497,11 +588,13 @@ const Step3 = ({
 // ─── STEP 4 — Review & Submit ─────────────────────────────────────────────────
 
 const Step4 = ({
-  c, contactEmail, contactPhone, contactLocation,
-  selectedCVIds, myCVs, coverLetter, skills,
-  experiences, references, jobTitle, companyName,
+  c, candidateName,
+  contactEmail, contactPhone, contactLocation,
+  selectedCVIds, myCVs,
+  coverLetter, skills,
+  experiences, references,
+  jobTitle, companyName,
 }: any) => {
-
   const ReviewSection = ({ title, icon, children }: any) => (
     <View style={[fi.reviewSection, { backgroundColor: c.surface, borderColor: c.border }]}>
       <View style={fi.reviewSectionHeader}>
@@ -523,7 +616,6 @@ const Step4 = ({
 
   return (
     <View style={{ gap: 12 }}>
-      {/* Job summary */}
       <View style={[fi.jobSummary, { backgroundColor: `${c.primary}10`, borderColor: `${c.primary}40` }]}>
         <Text style={[fi.jobSummaryTitle, { color: c.primary }]}>Applying for</Text>
         <Text style={[fi.jobSummaryJob, { color: c.text }]}>{jobTitle}</Text>
@@ -531,22 +623,27 @@ const Step4 = ({
       </View>
 
       <ReviewSection title="Contact" icon="person-outline">
-        <ReviewRow label="Email"    value={contactEmail} />
-        <ReviewRow label="Phone"    value={contactPhone} />
+        {candidateName ? <ReviewRow label="Name" value={candidateName} /> : null}
+        <ReviewRow label="Email" value={contactEmail} />
+        <ReviewRow label="Phone" value={contactPhone} />
         <ReviewRow label="Location" value={contactLocation} />
       </ReviewSection>
 
       <ReviewSection title={`CV (${selectedCVs.length})`} icon="document-outline">
-        {selectedCVs.map((cv: CV) => (
-          <Text key={cv._id} style={[fi.reviewValue, { color: c.text }]}>
-            • {applicationService.getCVDisplayName(cv)}
-          </Text>
-        ))}
+        {selectedCVs.length === 0 ? (
+          <Text style={[fi.reviewValue, { color: '#EF4444' }]}>⚠ No CV selected</Text>
+        ) : (
+          selectedCVs.map((cv: CV) => (
+            <Text key={cv._id} style={[fi.reviewValue, { color: c.text }]}>
+              • {applicationService.getCVDisplayName(cv)}
+            </Text>
+          ))
+        )}
       </ReviewSection>
 
       <ReviewSection title="Cover Letter" icon="document-text-outline">
         <Text style={[fi.reviewCoverLetter, { color: c.textMuted }]} numberOfLines={5}>
-          {coverLetter}
+          {coverLetter || '—'}
         </Text>
       </ReviewSection>
 
@@ -554,7 +651,10 @@ const Step4 = ({
         <ReviewSection title="Skills" icon="flash-outline">
           <View style={fi.skillCloud}>
             {skills.map((s: string) => (
-              <View key={s} style={[fi.skillChip, { backgroundColor: `${c.primary}15`, borderColor: `${c.primary}40` }]}>
+              <View
+                key={s}
+                style={[fi.skillChip, { backgroundColor: `${c.primary}15`, borderColor: `${c.primary}40` }]}
+              >
                 <Text style={[fi.skillText, { color: c.primary }]}>{s}</Text>
               </View>
             ))}
@@ -566,7 +666,9 @@ const Step4 = ({
         <ReviewSection title={`Experience (${experiences.length})`} icon="briefcase-outline">
           {experiences.map((exp: any, i: number) => (
             <Text key={i} style={[fi.reviewValue, { color: c.text }]}>
-              {exp.providedAsDocument ? '📄 Document uploaded' : `• ${exp.position} at ${exp.company}`}
+              {exp.providedAsDocument
+                ? '📄 Document uploaded'
+                : `• ${exp.position || '(no title)'} at ${exp.company || '(no company)'}`}
             </Text>
           ))}
         </ReviewSection>
@@ -576,7 +678,9 @@ const Step4 = ({
         <ReviewSection title={`References (${references.length})`} icon="people-outline">
           {references.map((ref: any, i: number) => (
             <Text key={i} style={[fi.reviewValue, { color: c.text }]}>
-              {ref.providedAsDocument ? '📄 Document uploaded' : `• ${ref.name} (${ref.company})`}
+              {ref.providedAsDocument
+                ? '📄 Document uploaded'
+                : `• ${ref.name || '(no name)'} (${ref.company || ''})`}
             </Text>
           ))}
         </ReviewSection>
@@ -603,41 +707,93 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
 
   const applyMut = useApplyForJob();
 
+  // ── Profile loading state ─────────────────────────────────────────────────
+  const [profileLoading, setProfileLoading] = useState(true);
+  // Holds the full candidate profile — source of truth for name + pre-fills
+  const candidateProfileRef = useRef<CandidateProfile | null>(null);
+
   const [step, setStep] = useState(1);
 
-  // Step 1 state
-  const userAny = user as any;
-  const [contactEmail,    setContactEmail]    = useState(user?.email ?? '');
-  const [contactPhone,    setContactPhone]    = useState(userAny?.phone ?? '');
-  const [contactLocation, setContactLocation] = useState(userAny?.location ?? '');
-  const [selectedCVIds,   setSelectedCVIds]   = useState<string[]>([]);
+  // Step 1 contact state
+  const [candidateName, setCandidateName]   = useState('');
+  const [contactEmail, setContactEmail]     = useState(user?.email ?? '');
+  const [contactPhone, setContactPhone]     = useState('');
+  const [contactLocation, setContactLocation] = useState('');
 
-  // Step 2 state
+  // Step 2 cover letter + skills
   const [coverLetter, setCoverLetter] = useState('');
-  const [skillInput,  setSkillInput]  = useState('');
-  const [skills,      setSkills]      = useState<string[]>([]);
+  const [skillInput, setSkillInput]   = useState('');
+  const [skills, setSkills]           = useState<string[]>([]);
 
-  // Step 3 state
+  // CV selection
+  const [selectedCVIds, setSelectedCVIds] = useState<string[]>([]);
+
+  // Step 3 docs
   const [experiences, setExperiences] = useState<any[]>([]);
-  const [expFiles,    setExpFiles]    = useState<DocFile[]>([]);
-  const [references,  setReferences]  = useState<any[]>([]);
-  const [refFiles,    setRefFiles]    = useState<DocFile[]>([]);
+  const [expFiles, setExpFiles]       = useState<DocFile[]>([]);
+  const [references, setReferences]   = useState<any[]>([]);
+  const [refFiles, setRefFiles]       = useState<DocFile[]>([]);
 
-  // Auto-select primary CV on load
+  // ── FIX 1 & 2: Load full candidate profile on mount ──────────────────────
+  useEffect(() => {
+    let mounted = true;
+    const loadProfile = async () => {
+      try {
+        setProfileLoading(true);
+        const profile = await candidateService.getProfile();
+        if (!mounted) return;
+
+        candidateProfileRef.current = profile;
+
+        // Pre-fill name (critical — fixes "userInfo.name is required")
+        setCandidateName(profile.name ?? '');
+
+        // Pre-fill contact info
+        setContactEmail(profile.email ?? user?.email ?? '');
+        setContactPhone(profile.phone ?? '');
+        setContactLocation(profile.location ?? '');
+
+        // FIX 2: Pre-fill skills from candidate profile
+        if (profile.skills && profile.skills.length > 0) {
+          setSkills(profile.skills);
+        }
+
+        // Generate default cover letter using profile data
+        const defaultCover = generateCoverLetter(profile, jobTitle, companyName);
+        setCoverLetter(defaultCover);
+      } catch (err) {
+        // Non-fatal: fall back to auth store data
+        if (!mounted) return;
+        const fallbackName = (user as any)?.name ?? '';
+        setCandidateName(fallbackName);
+        setContactEmail(user?.email ?? '');
+        setContactPhone((user as any)?.phone ?? '');
+        setContactLocation((user as any)?.location ?? '');
+        const defaultCover = generateCoverLetterFallback(fallbackName, jobTitle, companyName);
+        setCoverLetter(defaultCover);
+      } finally {
+        if (mounted) setProfileLoading(false);
+      }
+    };
+    loadProfile();
+    return () => { mounted = false; };
+  }, []);
+
+  // Auto-select primary CV when CVs load
   useEffect(() => {
     if (myCVs.length > 0 && selectedCVIds.length === 0) {
-      const primary = myCVs.find((cv) => cv.isPrimary || cv.isDefault) ?? myCVs[0];
+      const primary = myCVs.find(cv => cv.isPrimary || cv.isDefault) ?? myCVs[0];
       setSelectedCVIds([primary._id]);
     }
   }, [myCVs]);
 
   const toggleCV = useCallback((id: string) => {
-    setSelectedCVIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    setSelectedCVIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
   }, []);
 
-  // ── Validation per step ───────────────────────────────────────────────────
+  // ── Step validation ───────────────────────────────────────────────────────
 
   const validateStep = (): boolean => {
     if (step === 1) {
@@ -652,7 +808,7 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
     }
     if (step === 2) {
       if (coverLetter.trim().length < 50) {
-        Alert.alert('Cover Letter', `Please write at least 50 characters (${coverLetter.length} / 50).`);
+        Alert.alert('Cover Letter', `Please write at least 50 characters (${coverLetter.length}/50).`);
         return false;
       }
     }
@@ -661,7 +817,7 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
 
   const nextStep = () => {
     if (!validateStep()) return;
-    setStep((s) => Math.min(s + 1, 4));
+    setStep(s => Math.min(s + 1, 4));
   };
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -669,34 +825,53 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
   const handleSubmit = useCallback(async () => {
     if (!validateStep()) return;
 
+    // ── FIX 1: Build userInfo from the loaded profile, guaranteeing name ──
+    const profile = candidateProfileRef.current;
+    const resolvedName = profile?.name?.trim()
+      || (user as any)?.name?.trim()
+      || contactEmail.split('@')[0]; // last resort: derive from email
+
+    if (!resolvedName) {
+      Alert.alert('Profile Incomplete', 'Could not determine your name. Please update your profile.');
+      return;
+    }
+
     const selectedCVObjects = myCVs
-      .filter((cv) => selectedCVIds.includes(cv._id))
-      .map((cv) => ({
-        cvId:         cv._id,
-        filename:     cv.filename,
+      .filter(cv => selectedCVIds.includes(cv._id))
+      .map(cv => ({
+        cvId: cv._id,
+        filename: cv.filename,
         originalName: cv.originalName,
-        url:          cv.url ?? '',
-        downloadUrl:  cv.downloadUrl ?? cv.url ?? '',
-        size:         cv.fileSize ?? cv.size ?? 0,
-        mimetype:     cv.mimetype ?? 'application/pdf',
+        url: cv.url ?? '',
+        downloadUrl: cv.downloadUrl ?? cv.url ?? '',
+        size: cv.fileSize ?? cv.size ?? 0,
+        mimetype: cv.mimetype ?? 'application/pdf',
       }));
 
     try {
       const res = await applyMut.mutateAsync({
         jobId,
         data: {
-          coverLetter:    coverLetter.trim(),
+          coverLetter: coverLetter.trim(),
           skills,
-          selectedCVs:   selectedCVObjects,
-          contactInfo:   { email: contactEmail, phone: contactPhone, location: contactLocation },
-          userInfo: {
-            name:  (user as any)?.name ?? '',
-            email: contactEmail,
-            phone: contactPhone,
-            location: contactLocation,
+          selectedCVs: selectedCVObjects,
+          contactInfo: {
+            email: contactEmail.trim(),
+            phone: contactPhone.trim(),
+            location: contactLocation.trim(),
           },
-          references:    references,
+          // ── FIX 1: All fields explicitly set so backend validation passes ──
+          userInfo: {
+            name:     resolvedName,
+            email:    contactEmail.trim() || profile?.email || user?.email || '',
+            phone:    contactPhone.trim() || profile?.phone || '',
+            location: contactLocation.trim() || profile?.location || '',
+            bio:      profile?.bio,
+            website:  profile?.website,
+          },
+          references,
           workExperience: experiences,
+          // Pass files as array of {uri, name, type, _tempId}
           referenceFiles: refFiles,
           experienceFiles: expFiles,
         },
@@ -705,9 +880,11 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
     } catch (err: any) {
       Alert.alert('Submission Failed', err?.message ?? 'Please try again.');
     }
-  }, [applyMut, jobId, coverLetter, skills, selectedCVIds, myCVs,
-      contactEmail, contactPhone, contactLocation, references, experiences,
-      refFiles, expFiles, user]);
+  }, [
+    applyMut, jobId, coverLetter, skills, selectedCVIds, myCVs,
+    contactEmail, contactPhone, contactLocation,
+    references, experiences, refFiles, expFiles, user,
+  ]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -715,18 +892,26 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
     <View style={[fi.root, { backgroundColor: c.background }]}>
       {/* Header */}
       <View style={[fi.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-        <TouchableOpacity onPress={onClose} style={fi.closeBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity
+          onPress={onClose}
+          style={fi.closeBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
           <Ionicons name="close" size={22} color={c.text} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={[fi.headerTitle, { color: c.text }]} numberOfLines={1}>Apply: {jobTitle}</Text>
-          <Text style={[fi.headerSub, { color: c.textMuted }]} numberOfLines={1}>{companyName}</Text>
+          <Text style={[fi.headerTitle, { color: c.text }]} numberOfLines={1}>
+            Apply: {jobTitle}
+          </Text>
+          <Text style={[fi.headerSub, { color: c.textMuted }]} numberOfLines={1}>
+            {companyName}
+          </Text>
         </View>
       </View>
 
       {/* Step indicator */}
       <View style={[fi.stepBar, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-        {STEPS.map((s) => {
+        {STEPS.map(s => {
           const done   = step > s.num;
           const active = step === s.num;
           return (
@@ -768,6 +953,7 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
             contactLocation={contactLocation} setContactLocation={setContactLocation}
             myCVs={myCVs} cvsLoading={cvsLoading}
             selectedCVIds={selectedCVIds} toggleCV={toggleCV}
+            profileLoading={profileLoading}
           />
         )}
         {step === 2 && (
@@ -790,7 +976,9 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
         {step === 4 && (
           <Step4
             c={c}
-            contactEmail={contactEmail} contactPhone={contactPhone} contactLocation={contactLocation}
+            candidateName={candidateName}
+            contactEmail={contactEmail} contactPhone={contactPhone}
+            contactLocation={contactLocation}
             selectedCVIds={selectedCVIds} myCVs={myCVs}
             coverLetter={coverLetter} skills={skills}
             experiences={experiences} references={references}
@@ -804,7 +992,7 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
         {step > 1 && (
           <TouchableOpacity
             style={[fi.backBtn, { borderColor: c.border }]}
-            onPress={() => setStep((s) => s - 1)}
+            onPress={() => setStep(s => s - 1)}
           >
             <Ionicons name="arrow-back" size={16} color={c.text} />
             <Text style={[fi.backBtnText, { color: c.text }]}>Back</Text>
@@ -840,14 +1028,52 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
   );
 };
 
+// ─── Cover Letter Generators ──────────────────────────────────────────────────
+
+function generateCoverLetter(
+  profile: CandidateProfile,
+  jobTitle: string,
+  companyName: string,
+): string {
+  const topSkill = profile.skills?.[0] ?? 'this field';
+  const name = profile.name ?? 'Candidate';
+  return `Dear Hiring Manager,
+
+I am excited to apply for the ${jobTitle} position at ${companyName}. With my background in ${topSkill} and passion for the industry, I believe I would be a valuable addition to your team.
+
+Key qualifications that make me a strong candidate:
+${profile.skills?.slice(0, 3).map(s => `• ${s}`).join('\n') ?? '• Relevant skills and experience'}
+
+I am particularly drawn to this opportunity because of ${companyName}'s reputation for innovation and excellence.
+
+I look forward to discussing how my skills can contribute to your team's success.
+
+Sincerely,
+${name}`;
+}
+
+function generateCoverLetterFallback(
+  name: string,
+  jobTitle: string,
+  companyName: string,
+): string {
+  return `Dear Hiring Manager,
+
+I am excited to apply for the ${jobTitle} position at ${companyName}. I believe my skills and experience make me a strong candidate for this role.
+
+I look forward to discussing how I can contribute to your team's success.
+
+Sincerely,
+${name || 'Applicant'}`;
+}
+
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const fi = StyleSheet.create({
   root:              { flex: 1 },
   header:            {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1,
+    paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1,
   },
   closeBtn:          { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   headerTitle:       { fontSize: 16, fontWeight: '700' },
@@ -870,8 +1096,7 @@ const fi = StyleSheet.create({
   },
   backBtn:           {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 16, paddingVertical: 10,
-    borderRadius: 10, borderWidth: 1,
+    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, borderWidth: 1,
   },
   backBtnText:       { fontSize: 14, fontWeight: '600' },
   nextBtn:           {
@@ -891,9 +1116,14 @@ const fi = StyleSheet.create({
   label:             { fontSize: 13, fontWeight: '600', marginBottom: 4, marginTop: 8 },
   input:             { padding: 12, borderRadius: 10, borderWidth: 1, fontSize: 14, marginBottom: 4 },
   divider:           { height: 1, marginVertical: 16 },
+  loadingBox:        {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    padding: 12, borderRadius: 10, marginBottom: 8,
+  },
+  loadingText:       { fontSize: 13 },
   emptyBox:          {
     padding: 24, borderRadius: 12, borderWidth: 1,
-    alignItems: 'center', gap: 8,
+    alignItems: 'center', gap: 8, marginTop: 4,
   },
   emptyText:         { fontSize: 13, textAlign: 'center' },
   cvCard:            {
@@ -940,7 +1170,7 @@ const fi = StyleSheet.create({
   switchRow:         { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 4 },
   switchLabel:       { fontSize: 13 },
   reviewSection:     { padding: 14, borderRadius: 12, borderWidth: 1, gap: 6 },
-  reviewSectionHeader:{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  reviewSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   reviewSectionTitle:{ fontSize: 14, fontWeight: '700' },
   reviewRow:         { flexDirection: 'row', justifyContent: 'space-between' },
   reviewLabel:       { fontSize: 13 },

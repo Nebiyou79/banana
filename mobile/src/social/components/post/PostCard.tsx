@@ -16,9 +16,11 @@ import HashtagText from '../shared/HashtagText';
 import PostActions from './PostActions';
 import PostHeader from './PostHeader';
 import PostMedia from './PostMedia';
+type CardMode = 'feed' | 'compact' | 'minimal';
 
 interface Props {
   post: Post;
+  cardMode?: CardMode;
   onReact: (postId: string, reaction: ReactionType) => void;
   onRemoveReact: (postId: string) => void;
   onDislike: (postId: string) => void;

@@ -27,6 +27,7 @@ import {
 } from '../../services/applicationService';
 import { ListSkeleton } from '../../components/skeletons';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ApplicantCard } from '../../components/application/ApplicantCard';
 
 interface Props { navigation: any }
 
@@ -214,11 +215,10 @@ export const EmployerApplicationsScreen: React.FC<Props> = ({ navigation }) => {
           keyExtractor={(a) => a._id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40 }}
           renderItem={({ item }) => (
-            <AppCard
+            <ApplicantCard
               application={item}
-              colors={c}
               onPress={() =>
-                navigation.navigate('EmployerApplicationDetail', { applicationId: item._id })
+                navigation.navigate('ApplicationDetail', { applicationId: item._id })
               }
             />
           )}

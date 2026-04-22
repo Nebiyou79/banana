@@ -1,3 +1,10 @@
+/**
+ * components/freelancer/PortfolioCard.tsx
+ *
+ * Grid card + list item for portfolio items.
+ * Only renders Cloudinary images. Falls back gracefully.
+ */
+
 import React, { useState } from 'react';
 import {
   View,
@@ -15,6 +22,8 @@ import type { PortfolioItem } from '../../types/freelancer';
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
 
+// ─── Grid Card ────────────────────────────────────────────────────────────────
+
 interface PortfolioCardProps {
   item: PortfolioItem;
   onPress: (item: PortfolioItem) => void;
@@ -30,15 +39,9 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
   const { colors, borderRadius, typography, shadows, spacing } = theme;
   const [imgError, setImgError] = useState(false);
 
-  const imageUrls = item.mediaUrls?.filter(u => u?.includes('cloudinary.com')) ?? [];
-  const coverUrl = imageUrls[0] ?? item.mediaUrl ?? '';
+  const imageUrls = (item.mediaUrls ?? []).filter(u => u?.includes('cloudinary.com'));
+  const coverUrl  = imageUrls[0] ?? item.mediaUrl ?? '';
   const optimized = getOptimizedUrl(coverUrl, 400, 300);
-
-  const badgeColors: Record<string, { bg: string; text: string }> = {
-    featured: { bg: '#F59E0B20', text: '#F59E0B' },
-    public:   { bg: colors.successLight,  text: colors.success },
-    private:  { bg: colors.border,         text: colors.textMuted },
-  };
 
   return (
     <TouchableOpacity
@@ -56,7 +59,10 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
       ]}
     >
       {/* Image */}
-      <View style={[styles.imageContainer, { borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl }]}>
+      <View style={[styles.imageContainer, {
+        borderTopLeftRadius: borderRadius.xl,
+        borderTopRightRadius: borderRadius.xl,
+      }]}>
         {!imgError && coverUrl ? (
           <Image
             source={{ uri: optimized }}
@@ -65,12 +71,14 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
             onError={() => setImgError(true)}
           />
         ) : (
-          <View style={[StyleSheet.absoluteFillObject, styles.imagePlaceholder, { backgroundColor: colors.primaryLight }]}>
+          <View style={[StyleSheet.absoluteFillObject, styles.imagePlaceholder, {
+            backgroundColor: colors.primaryLight,
+          }]}>
             <Ionicons name="image-outline" size={32} color={colors.primary} />
           </View>
         )}
 
-        {/* Overlay badges */}
+        {/* Badges */}
         <View style={styles.badgesRow}>
           {item.featured && (
             <View style={[styles.badge, { backgroundColor: '#F59E0B', borderRadius: 10 }]}>
@@ -85,7 +93,7 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
           )}
         </View>
 
-        {/* Owner Actions */}
+        {/* Owner actions */}
         {isOwner && (onEdit || onDelete) && (
           <View style={styles.ownerActions}>
             {onEdit && (
@@ -129,15 +137,25 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
         )}
 
         {item.category && (
-          <View style={[styles.categoryTag, { backgroundColor: colors.primaryLight, borderRadius: 8, marginTop: spacing[2] }]}>
-            <Text style={{ fontSize: 9, fontWeight: '600', color: colors.primary }}>{item.category}</Text>
+          <View style={[styles.categoryTag, {
+            backgroundColor: colors.primaryLight,
+            borderRadius: 8,
+            marginTop: spacing[2],
+          }]}>
+            <Text style={{ fontSize: 9, fontWeight: '600', color: colors.primary }}>
+              {item.category}
+            </Text>
           </View>
         )}
 
         {item.technologies && item.technologies.length > 0 && (
           <View style={[styles.techRow, { marginTop: spacing[2] }]}>
             {item.technologies.slice(0, 2).map((t, i) => (
-              <View key={i} style={[styles.techTag, { backgroundColor: colors.surface, borderRadius: 6, borderColor: colors.border }]}>
+              <View key={i} style={[styles.techTag, {
+                backgroundColor: colors.surface,
+                borderRadius: 6,
+                borderColor: colors.border,
+              }]}>
                 <Text style={{ fontSize: 9, color: colors.textSecondary, fontWeight: '600' }}>{t}</Text>
               </View>
             ))}
@@ -153,7 +171,7 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
   );
 };
 
-// ─── Portfolio List Item (wide card for list mode) ────────────────────────────
+// ─── List Item ────────────────────────────────────────────────────────────────
 
 interface PortfolioListItemProps {
   item: PortfolioItem;
@@ -170,8 +188,8 @@ export const PortfolioListItem: React.FC<PortfolioListItemProps> = ({
   const { colors, borderRadius, typography, shadows, spacing } = theme;
   const [imgError, setImgError] = useState(false);
 
-  const imageUrls = item.mediaUrls?.filter(u => u?.includes('cloudinary.com')) ?? [];
-  const coverUrl = imageUrls[0] ?? item.mediaUrl ?? '';
+  const imageUrls = (item.mediaUrls ?? []).filter(u => u?.includes('cloudinary.com'));
+  const coverUrl  = imageUrls[0] ?? item.mediaUrl ?? '';
   const optimized = getOptimizedUrl(coverUrl, 160, 120);
 
   return (
@@ -189,7 +207,10 @@ export const PortfolioListItem: React.FC<PortfolioListItemProps> = ({
       ]}
     >
       {/* Thumbnail */}
-      <View style={[styles.listThumb, { borderRadius: borderRadius.lg, backgroundColor: colors.primaryLight }]}>
+      <View style={[styles.listThumb, {
+        borderRadius: borderRadius.lg,
+        backgroundColor: colors.primaryLight,
+      }]}>
         {!imgError && coverUrl ? (
           <Image
             source={{ uri: optimized }}
@@ -219,7 +240,7 @@ export const PortfolioListItem: React.FC<PortfolioListItemProps> = ({
           {item.client && (
             <Text style={{ fontSize: 10, color: colors.textMuted }}>{item.client}</Text>
           )}
-          {item.budget && (
+          {item.budget != null && (
             <Text style={{ fontSize: 10, color: colors.primary, fontWeight: '700' }}>
               ${item.budget.toLocaleString()}
             </Text>
@@ -231,12 +252,20 @@ export const PortfolioListItem: React.FC<PortfolioListItemProps> = ({
       {isOwner && (
         <View style={styles.listActions}>
           {onEdit && (
-            <TouchableOpacity onPress={() => onEdit(item)} style={styles.listActionBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity
+              onPress={() => onEdit(item)}
+              style={styles.listActionBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <Ionicons name="pencil-outline" size={16} color={colors.primary} />
             </TouchableOpacity>
           )}
           {onDelete && (
-            <TouchableOpacity onPress={() => onDelete(item._id)} style={styles.listActionBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity
+              onPress={() => onDelete(item._id)}
+              style={styles.listActionBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <Ionicons name="trash-outline" size={16} color={colors.error} />
             </TouchableOpacity>
           )}
@@ -246,110 +275,25 @@ export const PortfolioListItem: React.FC<PortfolioListItemProps> = ({
   );
 };
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  card: {
-    borderWidth: 1,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  imageContainer: {
-    height: 130,
-    overflow: 'hidden',
-    position: 'relative',
-    backgroundColor: '#E5E7EB',
-  },
-  imagePlaceholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgesRow: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    flexDirection: 'row',
-    gap: 4,
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-  },
-  ownerActions: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    flexDirection: 'row',
-    gap: 4,
-  },
-  actionBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  categoryTag: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  techRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  techTag: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginRight: 4,
-    borderWidth: 1,
-  },
-  // List item
-  listItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderWidth: 1,
-    marginBottom: 10,
-  },
-  listThumb: {
-    width: 80,
-    height: 70,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    flexShrink: 0,
-  },
-  featuredDot: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  listMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 4,
-  },
-  listActions: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingLeft: 8,
-  },
-  listActionBtn: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  card:           { borderWidth: 1, overflow: 'hidden', marginBottom: 12 },
+  imageContainer: { height: 130, overflow: 'hidden', position: 'relative', backgroundColor: '#E5E7EB' },
+  imagePlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  badgesRow:      { position: 'absolute', top: 8, left: 8, flexDirection: 'row', gap: 4 },
+  badge:          { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 3 },
+  ownerActions:   { position: 'absolute', top: 8, right: 8, flexDirection: 'row', gap: 4 },
+  actionBtn:      { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  infoRow:        { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  categoryTag:    { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3 },
+  techRow:        { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
+  techTag:        { paddingHorizontal: 6, paddingVertical: 2, marginRight: 4, borderWidth: 1 },
+  // List
+  listItem:       { flexDirection: 'row', alignItems: 'center', padding: 12, borderWidth: 1, marginBottom: 10 },
+  listThumb:      { width: 80, height: 70, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', position: 'relative', flexShrink: 0 },
+  featuredDot:    { position: 'absolute', top: 4, right: 4, width: 8, height: 8, borderRadius: 4 },
+  listMeta:       { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  listActions:    { flexDirection: 'row', gap: 8, paddingLeft: 8 },
+  listActionBtn:  { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
 });

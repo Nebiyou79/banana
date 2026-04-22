@@ -1,18 +1,15 @@
+/**
+ * components/freelancer/ServiceFormModal.tsx
+ */
 import React, { useState, useEffect } from 'react';
 import {
-  Modal,
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
+  Modal, View, Text, ScrollView, TouchableOpacity,
+  StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/themeStore';
 import { useAddService, useUpdateService } from '../../hooks/useFreelancer';
-import { AppButton, AppInput, SelectInput } from '../shared/FormComponents';
+import { AppButton, AppInput, SelectInput } from '../freelancer/FormComponents';
 import type { FreelancerServiceItem, ServiceFormData } from '../../types/freelancer';
 
 interface Props {
@@ -39,8 +36,9 @@ const CATEGORIES = [
 ];
 
 const EMPTY: ServiceFormData = {
-  title: '', description: '', category: '', price: undefined,
-  priceType: 'fixed', deliveryTime: '', isActive: true,
+  title: '', description: '', category: '',
+  price: undefined, priceType: 'fixed',
+  deliveryTime: '', isActive: true,
 };
 
 interface FormErrors { title?: string }
@@ -49,7 +47,7 @@ const ServiceFormModal: React.FC<Props> = ({ visible, service, onClose }) => {
   const { theme } = useThemeStore();
   const { colors, borderRadius, typography, spacing } = theme;
 
-  const [form, setForm] = useState<ServiceFormData>(EMPTY);
+  const [form, setForm]   = useState<ServiceFormData>(EMPTY);
   const [errors, setErrors] = useState<FormErrors>({});
   const isEditing = Boolean(service);
 
@@ -77,7 +75,7 @@ const ServiceFormModal: React.FC<Props> = ({ visible, service, onClose }) => {
   const set = (key: keyof ServiceFormData, value: unknown) =>
     setForm(p => ({ ...p, [key]: value }));
 
-  const validate = () => {
+  const validate = (): boolean => {
     const e: FormErrors = {};
     if (!form.title.trim()) e.title = 'Service title is required';
     setErrors(e);
@@ -86,32 +84,26 @@ const ServiceFormModal: React.FC<Props> = ({ visible, service, onClose }) => {
 
   const handleSubmit = () => {
     if (!validate()) return;
-    const payload = { ...form };
     if (isEditing && service) {
-      updateMutation.mutate({ id: service._id, data: payload }, { onSuccess: onClose });
+      updateMutation.mutate({ id: service._id, data: form }, { onSuccess: onClose });
     } else {
-      addMutation.mutate(payload, { onSuccess: onClose });
+      addMutation.mutate(form, { onSuccess: onClose });
     }
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: colors.background }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Modal Header */}
-        <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        {/* Header */}
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Ionicons name="close" size={22} color={colors.text} />
           </TouchableOpacity>
           <Text style={{ fontSize: typography.lg, fontWeight: '700', color: colors.text }}>
-            {isEditing ? 'Edit Service' : 'Add New Service'}
+            {isEditing ? 'Edit Service' : 'Add Service'}
           </Text>
           <View style={{ width: 36 }} />
         </View>
@@ -121,7 +113,6 @@ const ServiceFormModal: React.FC<Props> = ({ visible, service, onClose }) => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Title */}
           <AppInput
             label="Service Title *"
             value={form.title}
@@ -131,7 +122,6 @@ const ServiceFormModal: React.FC<Props> = ({ visible, service, onClose }) => {
             leftIcon="construct-outline"
           />
 
-          {/* Category */}
           <SelectInput
             label="Category"
             value={form.category ?? ''}
@@ -140,7 +130,6 @@ const ServiceFormModal: React.FC<Props> = ({ visible, service, onClose }) => {
             placeholder="Select a category"
           />
 
-          {/* Description */}
           <AppInput
             label="Description"
             value={form.description ?? ''}
@@ -151,7 +140,6 @@ const ServiceFormModal: React.FC<Props> = ({ visible, service, onClose }) => {
             leftIcon="document-text-outline"
           />
 
-          {/* Pricing */}
           <View style={styles.priceRow}>
             <AppInput
               label="Price ($)"
@@ -170,7 +158,6 @@ const ServiceFormModal: React.FC<Props> = ({ visible, service, onClose }) => {
             />
           </View>
 
-          {/* Delivery Time */}
           <AppInput
             label="Delivery Time"
             value={form.deliveryTime ?? ''}
@@ -179,16 +166,19 @@ const ServiceFormModal: React.FC<Props> = ({ visible, service, onClose }) => {
             leftIcon="time-outline"
           />
 
-          {/* Active Toggle */}
+          {/* Active toggle */}
           <TouchableOpacity
             onPress={() => set('isActive', !form.isActive)}
-            style={[
-              styles.toggleRow,
-              { borderColor: colors.border, borderRadius: borderRadius.md, backgroundColor: colors.surface },
-            ]}
+            style={[styles.toggleRow, {
+              borderColor: colors.border,
+              borderRadius: borderRadius.md,
+              backgroundColor: colors.surface,
+            }]}
           >
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: typography.sm, fontWeight: '600', color: colors.text }}>Active Service</Text>
+              <Text style={{ fontSize: typography.sm, fontWeight: '600', color: colors.text }}>
+                Active Service
+              </Text>
               <Text style={{ fontSize: typography.xs, color: colors.textMuted, marginTop: 2 }}>
                 Visible to clients on your profile
               </Text>
@@ -201,9 +191,10 @@ const ServiceFormModal: React.FC<Props> = ({ visible, service, onClose }) => {
             </View>
           </TouchableOpacity>
 
-          {/* Submit */}
           <AppButton
-            label={isPending ? (isEditing ? 'Saving…' : 'Adding…') : (isEditing ? 'Save Changes' : 'Add Service')}
+            label={isPending
+              ? (isEditing ? 'Saving…' : 'Adding…')
+              : (isEditing ? 'Save Changes' : 'Add Service')}
             onPress={handleSubmit}
             loading={isPending}
             disabled={isPending}
@@ -217,46 +208,11 @@ const ServiceFormModal: React.FC<Props> = ({ visible, service, onClose }) => {
 };
 
 const styles = StyleSheet.create({
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-  },
-  closeBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  priceRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderWidth: 1.5,
-    marginBottom: 12,
-  },
-  toggle: {
-    width: 44,
-    height: 26,
-    padding: 3,
-    justifyContent: 'center',
-  },
-  knob: {
-    width: 20,
-    height: 20,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-  },
+  header:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
+  priceRow:   { flexDirection: 'row', alignItems: 'flex-start' },
+  toggleRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderWidth: 1.5, marginBottom: 12 },
+  toggle:     { width: 44, height: 26, padding: 3, justifyContent: 'center' },
+  knob:       { width: 20, height: 20, backgroundColor: '#fff', borderRadius: 10, elevation: 2 },
 });
 
 export default ServiceFormModal;

@@ -4,13 +4,12 @@ import React from 'react';
 import CreatePostScreen from '../screens/CreatePostScreen';
 import EditPostScreen from '../screens/EditPostScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
-// import FollowListScreen from '../screens/FollowListScreen';
-// import PostDetailScreen from '../screens/PostDetailScreen';
+import FollowListScreen from '../screens/FollowListScreen';
+import PostDetailScreen from '../screens/PostDetailScreen';
 import PublicProfileScreen from '../screens/PublicProfileScreen';
 import SocialSplashScreen from '../screens/SocialSplashScreen';
 import SocialNavigator from './SocialNavigator';
 import type { SocialStackParamList } from './types';
-import PlaceholderScreen from '../../screens/auth/PlaceholderScreen';
 
 const Stack = createNativeStackNavigator<SocialStackParamList>();
 
@@ -28,7 +27,7 @@ const SocialEntry: React.FC = () => (
     />
     <Stack.Screen
       name="PostDetail"
-      component={PlaceholderScreen}
+      component={PostDetailScreen}
       options={{ animation: 'slide_from_right' }}
     />
     <Stack.Screen
@@ -57,12 +56,12 @@ const SocialEntry: React.FC = () => (
     />
     <Stack.Screen
       name="Followers"
-      component={PlaceholderScreen}
+      component={FollowListScreen}
       options={{ animation: 'slide_from_right' }}
     />
     <Stack.Screen
       name="Following"
-      component={PlaceholderScreen}
+      component={FollowListScreen}
       options={{ animation: 'slide_from_right' }}
     />
   </Stack.Navigator>

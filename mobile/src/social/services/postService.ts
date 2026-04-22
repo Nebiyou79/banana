@@ -1,30 +1,26 @@
+// src/social/services/postService.ts
 import api from '../../lib/api';
 import type {
   CreatePostData,
-  UpdatePostData,
-  Post,
   PostMedia,
+  PostVisibility,
+  UpdatePostData,
 } from '../types';
 
 export interface FeedParams {
   page?: number;
   limit?: number;
-  type?: 'text' | 'image' | 'video' | 'link' | 'poll' | 'job' | 'achievement';
+  sortBy?: 'latest' | 'trending' | 'following' | 'popular';
+  type?: string;
   hashtag?: string;
-  sortBy?: 'latest' | 'trending' | 'following';
-  author?: string;
+  followingOnly?: boolean;
 }
 
 export interface MyPostsParams {
   page?: number;
   limit?: number;
-  status?: 'active' | 'hidden' | 'deleted';
+  visibility?: PostVisibility;
   type?: string;
-}
-
-export interface SavedPostsParams {
-  page?: number;
-  limit?: number;
 }
 
 export interface ProfilePostsParams {
@@ -32,37 +28,80 @@ export interface ProfilePostsParams {
   limit?: number;
 }
 
-type RNFile = { uri: string; type: string; name: string };
+// Build multipart FormData for create / update with media files.
+const buildPostFormData = (data: CreatePostData | UpdatePostData): FormData => {
+  const fd = new FormData();
+  if (data.content !== undefined) fd.append('content', data.content);
+  if (data.type) fd.append('type', data.type);
+  if (data.visibility) fd.append('visibility', data.visibility);
+  if (data.allowComments !== undefined)
+    fd.append('allowComments', String(data.allowComments));
+  if (data.allowSharing !== undefined)
+    fd.append('allowSharing', String(data.allowSharing));
+  if (data.pinned !== undefined) fd.append('pinned', String(data.pinned));
+  if (data.location) fd.append('location', JSON.stringify(data.location));
+  if (data.expiresAt) fd.append('expiresAt', data.expiresAt);
+  if (data.linkPreview)
+    fd.append('linkPreview', JSON.stringify(data.linkPreview));
+  if (data.poll) fd.append('poll', JSON.stringify(data.poll));
+  if ((data as any).job) fd.append('job', (data as any).job);
+  if ((data as UpdatePostData).hashtags)
+    fd.append('hashtags', JSON.stringify((data as UpdatePostData).hashtags));
+  if ((data as UpdatePostData).mediaToRemove)
+    fd.append(
+      'mediaToRemove',
+      JSON.stringify((data as UpdatePostData).mediaToRemove)
+    );
+  if ((data as UpdatePostData).media)
+    fd.append('media', JSON.stringify((data as UpdatePostData).media));
+
+  if (data.mediaFiles && data.mediaFiles.length > 0) {
+    data.mediaFiles.forEach((file) => {
+      fd.append('media', {
+        uri: file.uri,
+        type: file.type,
+        name: file.name,
+      } as any);
+    });
+  }
+
+  return fd;
+};
 
 /**
- * Normalize Cloudinary media URLs. The backend stores `secure_url` and may
- * omit `url`/`thumbnail`. We fill those for UI convenience.
+ * Ensure every PostMedia.url points at a playable asset. The backend
+ * occasionally returns the video public_id with an image extension;
+ * we normalise here.
  */
-const fixPostMediaUrls = (post: Post): Post => {
-  if (!post?.media?.length) return post;
-  return {
-    ...post,
-    media: post.media.map((m: PostMedia) => ({
-      ...m,
-      url: m.url || m.secure_url || '',
-      thumbnail:
-        m.thumbnail ||
-        (m.type === 'image'
-          ? m.secure_url
-          : m.secure_url?.replace('/upload/', '/upload/w_600,h_400,c_fill/')),
-    })),
-  };
+const fixPostMediaUrls = <T extends { media?: PostMedia[] }>(post: T): T => {
+  if (!post.media || !Array.isArray(post.media)) return post;
+  const fixed = post.media.map((m): PostMedia => {
+    const next: PostMedia = { ...m };
+    next.url = next.secure_url ?? next.url ?? '';
+    if (!next.thumbnail && m.resource_type === 'video' && next.url) {
+      // Cloudinary: first-second frame as JPG thumbnail
+      next.thumbnail = next.url.includes('cloudinary.com')
+        ? next.url
+            .replace('/upload/', '/upload/w_600,h_400,c_fill,so_0/')
+            .replace(/\.(mp4|mov|avi|webm)$/i, '.jpg')
+        : next.url;
+    }
+    return next;
+  });
+  return { ...post, media: fixed };
 };
 
 export const postService = {
-  // ---------- QUERIES ----------
+  // FEED --------------------------------------------------------------
   getFeedPosts: (params: FeedParams = {}) =>
-    api.get('/posts/feed', { params: { page: 1, limit: 10, ...params } }),
+    api.get('/posts/feed', {
+      params: { page: 1, limit: 10, sortBy: 'latest', ...params },
+    }),
 
   getMyPosts: (params: MyPostsParams = {}) =>
     api.get('/posts/my-posts', { params: { page: 1, limit: 10, ...params } }),
 
-  getSavedPosts: (params: SavedPostsParams = {}) =>
+  getSavedPosts: (params: { page?: number; limit?: number } = {}) =>
     api.get('/posts/saved', { params: { page: 1, limit: 10, ...params } }),
 
   getProfilePosts: (userId: string, params: ProfilePostsParams = {}) =>
@@ -70,103 +109,27 @@ export const postService = {
       params: { page: 1, limit: 10, ...params },
     }),
 
+  // CRUD --------------------------------------------------------------
+  createPost: (data: CreatePostData) =>
+    api.post('/posts', buildPostFormData(data), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
   getPost: (id: string) => api.get(`/posts/${id}`),
 
-  // ---------- MUTATIONS ----------
+  updatePost: (id: string, data: UpdatePostData) =>
+    api.put(`/posts/${id}`, buildPostFormData(data), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
   deletePost: (id: string) => api.delete(`/posts/${id}`),
 
+  // SAVE / SHARE ------------------------------------------------------
   savePost: (id: string) => api.post(`/posts/${id}/save`),
-
   unsavePost: (id: string) => api.delete(`/posts/${id}/save`),
-
   sharePost: (id: string) => api.post(`/posts/${id}/share`),
 
-  /**
-   * Create a post. If no `mediaFiles`, sends JSON. With media, sends
-   * multipart/form-data with the field name "media" per backend contract.
-   */
-  createPost: async (data: CreatePostData) => {
-    if (!data.mediaFiles || data.mediaFiles.length === 0) {
-      return api.post('/posts', {
-        content: data.content,
-        type: data.type ?? 'text',
-        visibility: data.visibility ?? 'public',
-        allowComments: data.allowComments ?? true,
-        allowSharing: data.allowSharing ?? true,
-        pinned: data.pinned ?? false,
-        location: data.location,
-        expiresAt: data.expiresAt,
-        linkPreview: data.linkPreview,
-        poll: data.poll,
-      });
-    }
-
-    const form = new FormData();
-    form.append('content', data.content ?? '');
-    form.append('type', data.type ?? 'text');
-    form.append('visibility', data.visibility ?? 'public');
-    form.append('allowComments', String(data.allowComments ?? true));
-    form.append('allowSharing', String(data.allowSharing ?? true));
-    form.append('pinned', String(data.pinned ?? false));
-    if (data.location) form.append('location', JSON.stringify(data.location));
-    if (data.linkPreview)
-      form.append('linkPreview', JSON.stringify(data.linkPreview));
-    if (data.poll) form.append('poll', JSON.stringify(data.poll));
-    if (data.mediaDescription)
-      form.append('mediaDescription', data.mediaDescription);
-
-    data.mediaFiles.forEach((file: RNFile) => {
-      form.append('media', {
-        uri: file.uri,
-        type: file.type,
-        name: file.name,
-      } as any);
-    });
-
-    return api.post('/posts', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-  },
-
-  /**
-   * Update a post. Uses multipart/form-data because media can change.
-   * `mediaToRemove` is an array of Cloudinary public_ids to delete.
-   * `data.media` contains existing media items (reorder/description edits).
-   * `data.mediaFiles` contains newly picked files.
-   */
-  updatePost: async (id: string, data: UpdatePostData) => {
-    const form = new FormData();
-    if (data.content !== undefined) form.append('content', data.content);
-    if (data.visibility) form.append('visibility', data.visibility);
-    if (data.allowComments !== undefined)
-      form.append('allowComments', String(data.allowComments));
-    if (data.allowSharing !== undefined)
-      form.append('allowSharing', String(data.allowSharing));
-    if (data.pinned !== undefined) form.append('pinned', String(data.pinned));
-    if (data.location) form.append('location', JSON.stringify(data.location));
-    if (data.mediaDescription)
-      form.append('mediaDescription', data.mediaDescription);
-    if (data.mediaToRemove?.length)
-      form.append('mediaToRemove', JSON.stringify(data.mediaToRemove));
-
-    const existingMedia = (data.media ?? []).filter((m) => m._id);
-    if (existingMedia.length)
-      form.append('media', JSON.stringify(existingMedia));
-
-    data.mediaFiles?.forEach((file: RNFile) => {
-      form.append('media', {
-        uri: file.uri,
-        type: file.type,
-        name: file.name,
-      } as any);
-    });
-
-    return api.put(`/posts/${id}`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-  },
-
-  // ---------- UTILS ----------
+  // Helpers -----------------------------------------------------------
   fixPostMediaUrls,
 };
 

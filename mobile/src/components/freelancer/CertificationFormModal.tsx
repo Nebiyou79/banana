@@ -1,23 +1,16 @@
 /**
- * CertificationFormModal.tsx
- * Updated: uses DatePickerField (calendar) instead of text input for dates.
+ * components/freelancer/CertificationFormModal.tsx
+ * Aligned to backend Freelancer.js certifications sub-schema.
  */
-
 import React, { useState, useEffect } from 'react';
 import {
-  Modal,
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
+  Modal, View, Text, ScrollView, TouchableOpacity,
+  StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/themeStore';
 import { useAddCertification, useUpdateCertification } from '../../hooks/useFreelancer';
-import { AppButton, AppInput } from '../shared/FormComponents';
+import { AppButton, AppInput } from '../freelancer/FormComponents';
 import { DatePickerField } from '../shared/DatePickerField';
 import type { FreelancerCertification, CertificationFormData } from '../../types/freelancer';
 
@@ -70,13 +63,13 @@ const CertificationFormModal: React.FC<Props> = ({ visible, certification, onClo
   const set = (key: keyof CertificationFormData, value: unknown) =>
     setForm(p => ({ ...p, [key]: value }));
 
-  const validate = () => {
+  const validate = (): boolean => {
     const e: FormErrors = {};
     if (!form.name.trim())   e.name      = 'Certification name is required';
     if (!form.issuer.trim()) e.issuer    = 'Issuing organization is required';
     if (!form.issueDate)     e.issueDate = 'Issue date is required';
     setErrors(e);
-    return !Object.keys(e).length;
+    return Object.keys(e).length === 0;
   };
 
   const addSkill = () => {
@@ -90,7 +83,8 @@ const CertificationFormModal: React.FC<Props> = ({ visible, certification, onClo
 
   const handleSubmit = () => {
     if (!validate()) return;
-    const payload = { ...form };
+    // Strip empty optional fields
+    const payload: CertificationFormData = { ...form };
     if (!payload.expiryDate)    delete payload.expiryDate;
     if (!payload.credentialId)  delete payload.credentialId;
     if (!payload.credentialUrl) delete payload.credentialUrl;
@@ -125,7 +119,6 @@ const CertificationFormModal: React.FC<Props> = ({ visible, certification, onClo
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Name + Issuer */}
           <AppInput
             label="Certification Name *"
             value={form.name}
@@ -143,7 +136,7 @@ const CertificationFormModal: React.FC<Props> = ({ visible, certification, onClo
             leftIcon="business-outline"
           />
 
-          {/* ── Date pickers (calendar) ─────────────────────────────── */}
+          {/* Date pickers */}
           <View style={s.dateRow}>
             <View style={{ flex: 1, marginRight: spacing[3] }}>
               <DatePickerField
@@ -167,7 +160,6 @@ const CertificationFormModal: React.FC<Props> = ({ visible, certification, onClo
             </View>
           </View>
 
-          {/* Credential ID + URL */}
           <View style={s.dateRow}>
             <AppInput
               label="Credential ID"
@@ -187,7 +179,6 @@ const CertificationFormModal: React.FC<Props> = ({ visible, certification, onClo
             />
           </View>
 
-          {/* Description */}
           <AppInput
             label="Description"
             value={form.description ?? ''}
@@ -202,7 +193,11 @@ const CertificationFormModal: React.FC<Props> = ({ visible, certification, onClo
           <Text style={[s.sectionLabel, { color: colors.textSecondary, fontSize: typography.sm }]}>
             Skills Gained
           </Text>
-          <View style={[s.skillInput, { borderColor: colors.border, borderRadius: borderRadius.md, backgroundColor: colors.surface }]}>
+          <View style={[s.skillInput, {
+            borderColor: colors.border,
+            borderRadius: borderRadius.md,
+            backgroundColor: colors.surface,
+          }]}>
             <AppInput
               value={skillInput}
               onChangeText={setSkillInput}
@@ -233,7 +228,9 @@ const CertificationFormModal: React.FC<Props> = ({ visible, certification, onClo
           </View>
 
           <AppButton
-            label={isPending ? (isEditing ? 'Saving…' : 'Adding…') : (isEditing ? 'Save Changes' : 'Add Certification')}
+            label={isPending
+              ? (isEditing ? 'Saving…' : 'Adding…')
+              : (isEditing ? 'Save Changes' : 'Add Certification')}
             onPress={handleSubmit}
             loading={isPending}
             disabled={isPending}
@@ -247,10 +244,7 @@ const CertificationFormModal: React.FC<Props> = ({ visible, certification, onClo
 };
 
 const s = StyleSheet.create({
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1,
-  },
+  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
   dateRow:      { flexDirection: 'row', alignItems: 'flex-start' },
   sectionLabel: { fontWeight: '600', marginBottom: 8 },
   skillInput:   { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, paddingLeft: 4, gap: 8, marginBottom: 10 },

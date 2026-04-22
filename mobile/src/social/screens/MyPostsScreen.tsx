@@ -1,11 +1,13 @@
+// src/social/screens/MyPostsScreen.tsx
 import { useNavigation } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
-import { Share, StyleSheet } from 'react-native';
+import { Alert, Share, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CreatePostFAB, FeedList } from '../components/feed';
 import { CommentsSheet } from '../components/post';
 import {
   useDeletePost,
+  useDislike,
   useMyPosts,
   useReact,
   useRemoveInteraction,
@@ -21,6 +23,7 @@ const MyPostsScreen: React.FC = () => {
   const myPostsQ = useMyPosts();
   const { mutate: react } = useReact();
   const { mutate: removeReact } = useRemoveInteraction();
+  const { mutate: dislike } = useDislike();
   const { mutate: toggleSave } = useToggleSavePost();
   const { mutate: deletePost } = useDeletePost();
 
@@ -41,6 +44,11 @@ const MyPostsScreen: React.FC = () => {
     [posts, react]
   );
 
+  const handleDislike = useCallback(
+    (postId: string) => dislike({ postId }),
+    [dislike]
+  );
+
   const handleShare = useCallback(async (post: Post) => {
     try {
       await Share.share({
@@ -53,12 +61,34 @@ const MyPostsScreen: React.FC = () => {
 
   const handleMenu = useCallback(
     (post: Post) => {
-      // Minimal default: delete. A richer action sheet can replace this.
-      if (post.canDelete) {
-        deletePost(post._id);
+      const canEdit = !!post.canEdit;
+      const canDelete = !!post.canDelete;
+      const buttons: any[] = [];
+      if (canEdit) {
+        buttons.push({
+          text: 'Edit',
+          onPress: () => navigation.navigate('EditPost', { post }),
+        });
       }
+      if (canDelete) {
+        buttons.push({
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert('Delete post?', 'This cannot be undone.', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: () => deletePost(post._id),
+              },
+            ]),
+        });
+      }
+      buttons.push({ text: 'Cancel', style: 'cancel' });
+      Alert.alert('Post', undefined, buttons);
     },
-    [deletePost]
+    [navigation, deletePost]
   );
 
   const handleAdPress = useCallback(
@@ -89,6 +119,7 @@ const MyPostsScreen: React.FC = () => {
         isFetchingNextPage={myPostsQ.isFetchingNextPage}
         onReact={handleReact}
         onRemoveReact={removeReact}
+        onDislike={handleDislike}
         onComment={(p) => {
           setSelectedPost(p);
           setSheetVisible(true);
@@ -106,25 +137,11 @@ const MyPostsScreen: React.FC = () => {
         emptyIcon="create-outline"
         emptyAction={{
           label: 'Create post',
-          onPress: () => {
-            try {
-              navigation.navigate('CreatePost');
-            } catch {
-              /* noop */
-            }
-          },
+          onPress: () => navigation.navigate('CreatePost'),
         }}
       />
 
-      <CreatePostFAB
-        onPress={() => {
-          try {
-            navigation.navigate('CreatePost');
-          } catch {
-            /* noop */
-          }
-        }}
-      />
+      <CreatePostFAB onPress={() => navigation.navigate('CreatePost')} />
 
       <CommentsSheet
         visible={sheetVisible}

@@ -1,91 +1,29 @@
+// src/social/components/network/SuggestionsRow.tsx
 import React, { memo } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { useSocialTheme } from '../../theme/socialTheme';
-import type { FollowTarget } from '../../types';
+import type { BulkFollowStatus, FollowTarget } from '../../types';
+import { formatCount, truncate } from '../../utils/format';
 import Avatar from '../shared/Avatar';
-import FollowButton from '../shared/FollowButton';
 import RoleBadge from '../shared/RoleBadge';
 import VerifiedBadge from '../shared/VerifiedBadge';
-
-interface SuggestionItemProps {
-  user: FollowTarget;
-  isFollowing: boolean;
-  followLoading?: boolean;
-  onPress: () => void;
-  onFollowPress: () => void;
-}
-
-const SuggestionItem: React.FC<SuggestionItemProps> = memo(
-  ({ user, isFollowing, followLoading, onPress, onFollowPress }) => {
-    const theme = useSocialTheme();
-    return (
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: theme.card,
-            borderColor: theme.border,
-          },
-        ]}
-      >
-        <TouchableOpacity
-          onPress={onPress}
-          activeOpacity={0.8}
-          style={styles.cardInner}
-        >
-          <Avatar uri={user.avatar} name={user.name} size={64} />
-          <View style={styles.nameRow}>
-            <Text
-              style={[styles.name, { color: theme.text }]}
-              numberOfLines={1}
-            >
-              {user.name}
-            </Text>
-            <VerifiedBadge status={user.verificationStatus} size={12} />
-          </View>
-          {user.role ? <RoleBadge role={user.role} /> : null}
-          {user.headline ? (
-            <Text
-              style={[styles.headline, { color: theme.subtext }]}
-              numberOfLines={2}
-            >
-              {user.headline}
-            </Text>
-          ) : null}
-        </TouchableOpacity>
-        <FollowButton
-          isFollowing={isFollowing}
-          onPress={onFollowPress}
-          loading={followLoading}
-          size="sm"
-        />
-      </View>
-    );
-  }
-);
-
-SuggestionItem.displayName = 'SuggestionItem';
 
 interface Props {
   suggestions: FollowTarget[];
   loading?: boolean;
-  followStatus?: Record<string, { following: boolean }>;
+  followStatus?: BulkFollowStatus;
   pendingFollowId?: string | null;
   onUserPress: (userId: string) => void;
   onFollowPress: (user: FollowTarget) => void;
 }
 
-/**
- * Horizontally scrollable carousel of follow suggestions. Surfaces on the
- * Network tab above the main stats.
- */
 const SuggestionsRow: React.FC<Props> = memo(
   ({
     suggestions,
@@ -99,32 +37,105 @@ const SuggestionsRow: React.FC<Props> = memo(
 
     if (loading && suggestions.length === 0) {
       return (
-        <ActivityIndicator
-          color={theme.primary}
-          style={{ paddingVertical: 20 }}
-        />
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={theme.primary} />
+        </View>
       );
     }
 
-    if (!suggestions?.length) return null;
-
     return (
-      <FlatList
+      <ScrollView
         horizontal
-        data={suggestions}
-        keyExtractor={(u) => u._id}
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <SuggestionItem
-            user={item}
-            isFollowing={!!followStatus?.[item._id]?.following}
-            followLoading={pendingFollowId === item._id}
-            onPress={() => onUserPress(item._id)}
-            onFollowPress={() => onFollowPress(item)}
-          />
-        )}
-      />
+        contentContainerStyle={styles.row}
+      >
+        {suggestions.map((u) => {
+          const following = !!followStatus?.[u._id]?.following;
+          const pending = pendingFollowId === u._id;
+          return (
+            <View
+              key={u._id}
+              style={[
+                styles.card,
+                {
+                  backgroundColor: theme.card,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <TouchableOpacity
+                onPress={() => onUserPress(u._id)}
+                activeOpacity={0.8}
+                style={styles.cardInner}
+              >
+                <Avatar uri={u.avatar} name={u.name} size={64} />
+                <View style={styles.nameRow}>
+                  <Text
+                    style={[styles.name, { color: theme.text }]}
+                    numberOfLines={1}
+                  >
+                    {truncate(u.name, 14)}
+                  </Text>
+                  {u.verificationStatus === 'verified' ? (
+                    <VerifiedBadge size={12} />
+                  ) : null}
+                </View>
+                {u.role ? (
+                  <View style={{ marginTop: 4 }}>
+                    <RoleBadge role={u.role} size="sm" />
+                  </View>
+                ) : null}
+                {u.headline ? (
+                  <Text
+                    style={[styles.headline, { color: theme.muted }]}
+                    numberOfLines={2}
+                  >
+                    {u.headline}
+                  </Text>
+                ) : null}
+                {(u as any).followerCount !== undefined ? (
+                  <Text style={[styles.followers, { color: theme.muted }]}>
+                    {formatCount((u as any).followerCount)} followers
+                  </Text>
+                ) : null}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => onFollowPress(u)}
+                disabled={pending}
+                activeOpacity={0.85}
+                style={[
+                  styles.followBtn,
+                  following
+                    ? {
+                        backgroundColor: 'transparent',
+                        borderColor: theme.border,
+                        borderWidth: 1,
+                      }
+                    : { backgroundColor: theme.primary },
+                ]}
+                accessibilityLabel={following ? 'Unfollow' : 'Follow'}
+              >
+                {pending ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={following ? theme.text : '#fff'}
+                  />
+                ) : (
+                  <Text
+                    style={[
+                      styles.followText,
+                      { color: following ? theme.text : '#fff' },
+                    ]}
+                  >
+                    {following ? 'Following' : 'Follow'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          );
+        })}
+      </ScrollView>
     );
   }
 );
@@ -132,29 +143,42 @@ const SuggestionsRow: React.FC<Props> = memo(
 SuggestionsRow.displayName = 'SuggestionsRow';
 
 const styles = StyleSheet.create({
-  list: { paddingHorizontal: 12, paddingVertical: 8, gap: 10 },
+  row: { paddingHorizontal: 16, paddingVertical: 8, gap: 10 },
+  loadingRow: { paddingVertical: 28, alignItems: 'center' },
   card: {
-    width: 172,
-    padding: 14,
+    width: 160,
     borderRadius: 14,
     borderWidth: 1,
+    padding: 12,
     alignItems: 'center',
-    gap: 8,
+    marginRight: 10,
   },
-  cardInner: { alignItems: 'center', gap: 6, width: '100%' },
+  cardInner: { alignItems: 'center', width: '100%' },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    maxWidth: '100%',
+    gap: 4,
+    marginTop: 8,
   },
-  name: { fontSize: 13, fontWeight: '700', maxWidth: 130, textAlign: 'center' },
+  name: { fontSize: 13, fontWeight: '700' },
   headline: {
     fontSize: 11,
     textAlign: 'center',
-    lineHeight: 15,
-    minHeight: 30,
+    marginTop: 4,
+    minHeight: 28,
   },
+  followers: { fontSize: 10, marginTop: 4 },
+  followBtn: {
+    marginTop: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+    minHeight: 34,
+    minWidth: 96,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  followText: { fontSize: 12, fontWeight: '700' },
 });
 
 export default SuggestionsRow;

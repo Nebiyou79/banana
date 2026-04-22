@@ -27,6 +27,7 @@ import {
 } from '../../services/applicationService';
 import { ListSkeleton } from '../../components/skeletons';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ApplicationCard } from '../../components/application';
 
 interface Props { navigation: any }
 
@@ -207,7 +208,7 @@ export const ApplicationTracker: React.FC<Props> = ({ navigation }) => {
           keyExtractor={(a) => a._id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40 }}
           renderItem={({ item }) => (
-            <AppItem
+            <ApplicationCard
               application={item}
               colors={c}
               onPress={() =>

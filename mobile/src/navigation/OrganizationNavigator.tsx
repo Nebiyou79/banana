@@ -1,22 +1,12 @@
 /**
  * navigation/organization/OrganizationNavigator.tsx
  * Role: Organization — 6 main tabs + full stack for all built screens.
- *
- * Tab structure:
- *   1. Home     → OrganizationDashboardScreen
- *   2. Jobs     → Top tabs: OrgJobsScreen | OrgJobCreate | Placeholder(Applications)
- *   3. Social   → Shared SocialNavigator
- *   4. Tenders  → Top tabs (all placeholders — not built yet)
- *   5. Profile  → Top tabs: OrgProfileScreen | FreelancerMarketplace
- *   6. More     → OrganizationMoreScreen (stack with all extra screens)
  */
 
 import React from 'react';
-import { TouchableOpacity } from 'react-native';
 import { createBottomTabNavigator }      from '@react-navigation/bottom-tabs';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import { createNativeStackNavigator }    from '@react-navigation/native-stack';
-import { useNavigation }                 from '@react-navigation/native';
 import { Ionicons }                      from '@expo/vector-icons';
 import { useThemeStore }                 from '../store/themeStore';
 
@@ -28,8 +18,8 @@ import {
   OrganizationProfileTabParamList,
 } from './types';
 
-// ─── Shared ───────────────────────────────────────────────────
-import SocialNavigator   from './SocialNavigator';
+// ─── Social (full stack entry) ────────────────────────────────
+import SocialEntry       from '../social/navigation/SocialEntry';
 import PlaceholderScreen from '../screens/auth/PlaceholderScreen';
 
 // ─── Organization screens ─────────────────────────────────────
@@ -58,17 +48,14 @@ import { ReferralScreen }                   from '../screens/shared/ReferralScre
 // Products
 import { ProductMarketplaceScreen }         from '../screens/products/ProductMarketplaceScreen';
 import { ProductDetailsScreen as PublicProductDetailsScreen } from '../screens/products/ProductDetailsScreen';
-import { EmployerApplicationsScreen } from '../screens/company/EmployerApplicationListScreen';
+import { EmployerApplicationsScreen }       from '../screens/company/EmployerApplicationListScreen';
 
 // ─── Param list ───────────────────────────────────────────────
 export type OrganizationStackParamList = {
-  // Tabs
   MainTabs: undefined;
 
-  // Profile
   EditProfile: undefined;
 
-  // Jobs
   OrgJobList:        undefined;
   OrgJobCreate:      undefined;
   OrgJobEdit:        { jobId: string };
@@ -77,20 +64,16 @@ export type OrganizationStackParamList = {
   ApplicationList:   { jobId: string; jobTitle: string };
   ApplicationDetail: { applicationId: string };
 
-  // Freelancer Marketplace
   FreelancerMarketplace: undefined;
   FreelancerDetail:      { freelancerId: string };
   FreelancerShortlist:   undefined;
 
-  // Verification
   VerificationStatus:  undefined;
   RequestVerification: undefined;
 
-  // Referral
   Referral:    undefined;
   Leaderboard: undefined;
 
-  // Products
   ProductMarketplace: undefined;
   ProductDetails:     { productId: string };
 };
@@ -104,7 +87,6 @@ const Stack          = createNativeStackNavigator<OrganizationStackParamList>();
 
 // ─── Jobs top-tab navigator ───────────────────────────────────
 function OrganizationJobsNavigator() {
-  const nav = useNavigation<any>();
   const { theme } = useThemeStore();
   const { colors } = theme;
 
@@ -117,23 +99,16 @@ function OrganizationJobsNavigator() {
         tabBarStyle:             { backgroundColor: colors.surface },
       }}
     >
-      <JobsTopTab.Screen name="JobsList"        component={OrgJobsScreen}     options={{ title: 'Opportunities' }} />
+      <JobsTopTab.Screen name="JobsList"        component={OrgJobsScreen}      options={{ title: 'Opportunities' }} />
       <JobsTopTab.Screen name="CreateJob"       component={OrgJobCreateScreen} options={{ title: 'Post' }} />
       <JobsTopTab.Screen name="JobApplications" component={PlaceholderScreen}  options={{ title: 'Applications' }} />
-      <JobsTopTab.Screen
-        name="BackToHome"
-        component={PlaceholderScreen}
-        options={{
-          title: '← Back',
-        }}
-      />
+      <JobsTopTab.Screen name="BackToHome"      component={PlaceholderScreen}  options={{ title: '← Back' }} />
     </JobsTopTab.Navigator>
   );
 }
 
-// ─── Tenders top-tab navigator (all placeholders) ────────────
+// ─── Tenders top-tab navigator ────────────────────────────────
 function OrganizationTendersNavigator() {
-  const nav = useNavigation<any>();
   const { theme } = useThemeStore();
   const { colors } = theme;
 
@@ -149,20 +124,13 @@ function OrganizationTendersNavigator() {
       <TendersTopTab.Screen name="TendersList" component={PlaceholderScreen} options={{ title: 'Tenders' }} />
       <TendersTopTab.Screen name="Bids"        component={PlaceholderScreen} options={{ title: 'Bids' }} />
       <TendersTopTab.Screen name="Proposals"   component={PlaceholderScreen} options={{ title: 'Proposals' }} />
-      <TendersTopTab.Screen
-        name="BackToHome"
-        component={PlaceholderScreen}
-        options={{
-          title: '← Back',
-        }}
-      />
+      <TendersTopTab.Screen name="BackToHome"  component={PlaceholderScreen} options={{ title: '← Back' }} />
     </TendersTopTab.Navigator>
   );
 }
 
 // ─── Profile tab navigator ────────────────────────────────────
 function OrganizationProfileNavigator() {
-  const nav = useNavigation<any>();
   const { theme } = useThemeStore();
   const { colors } = theme;
 
@@ -175,26 +143,15 @@ function OrganizationProfileNavigator() {
         tabBarStyle:             { backgroundColor: colors.surface },
       }}
     >
-      <ProfileTopTab.Screen name="OrganizationProfile" component={OrganizationProfileScreen}   options={{ title: 'Profile' }} />
+      <ProfileTopTab.Screen name="OrganizationProfile" component={OrganizationProfileScreen} options={{ title: 'Profile' }} />
       <ProfileTopTab.Screen
         name="FreelanceMarketplace"
-        component={(props : any) => <FreelancerMarketplaceScreen {...props} />}
+        component={(props: any) => <FreelancerMarketplaceScreen {...props} />}
         options={{ title: 'Marketplace' }}
       />
-      <ProfileTopTab.Screen
-        name="BackToHome"
-        component={PlaceholderScreen}
-        options={{
-          title: '← Back',
-        }}
-      />
+      <ProfileTopTab.Screen name="BackToHome" component={PlaceholderScreen} options={{ title: '← Back' }} />
     </ProfileTopTab.Navigator>
   );
-}
-
-// ─── Social wrapper ───────────────────────────────────────────
-function OrganizationSocialNavigator() {
-  return <SocialNavigator parentNavigationKey="Home" />;
 }
 
 // ─── Main tab bar ─────────────────────────────────────────────
@@ -208,12 +165,15 @@ function OrganizationTabNavigator() {
         headerShown: false,
         tabBarActiveTintColor:   colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle:             { backgroundColor: colors.surface },
+        tabBarStyle:
+          route.name === 'Social'
+            ? { display: 'none' }
+            : { backgroundColor: colors.surface },
         tabBarIcon: ({ focused, color, size }) => {
           const icons: Record<string, [string, string]> = {
             Home:    ['home-outline',          'home'],
             Jobs:    ['briefcase-outline',     'briefcase'],
-            Social:  ['globe-outline',         'globe'],
+            Social:  ['people-outline',        'people'],
             Tenders: ['document-text-outline', 'document-text'],
             Profile: ['business-outline',      'business'],
             More:    ['menu-outline',          'menu'],
@@ -225,7 +185,7 @@ function OrganizationTabNavigator() {
     >
       <MainTab.Screen name="Home"    component={OrganizationDashboardScreen}  />
       <MainTab.Screen name="Jobs"    component={OrganizationJobsNavigator}    />
-      <MainTab.Screen name="Social"  component={OrganizationSocialNavigator}  />
+      <MainTab.Screen name="Social"  component={SocialEntry}                  />
       <MainTab.Screen name="Tenders" component={OrganizationTendersNavigator} />
       <MainTab.Screen name="Profile" component={OrganizationProfileNavigator} />
       <MainTab.Screen name="More"    component={OrganizationMoreScreen}        />
@@ -237,40 +197,33 @@ function OrganizationTabNavigator() {
 export default function OrganizationNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {/* Tab root */}
       <Stack.Screen name="MainTabs" component={OrganizationTabNavigator} />
 
-      {/* Profile */}
       <Stack.Screen name="EditProfile" component={OrganizationEditProfileScreen} />
 
-      {/* Jobs stack */}
-      <Stack.Screen name="OrgJobList"    component={OrgJobsScreen}                  />
-      <Stack.Screen name="OrgJobCreate"  component={OrgJobCreateScreen}             />
-      <Stack.Screen name="OrgJobEdit"    component={OrgJobEditScreen}               />
-      <Stack.Screen name="OrgJobDetail"  component={OrgJobDetail}                   />
-      <Stack.Screen name="OrgApplicants" component={EmployerApplicationsScreen}  />
-      <Stack.Screen name="ApplicationList"   component={EmployerApplicationsScreen}   />
+      <Stack.Screen name="OrgJobList"       component={OrgJobsScreen}                  />
+      <Stack.Screen name="OrgJobCreate"     component={OrgJobCreateScreen}             />
+      <Stack.Screen name="OrgJobEdit"       component={OrgJobEditScreen}               />
+      <Stack.Screen name="OrgJobDetail"     component={OrgJobDetail}                   />
+      <Stack.Screen name="OrgApplicants"    component={EmployerApplicationsScreen}     />
+      <Stack.Screen name="ApplicationList"  component={EmployerApplicationsScreen}     />
       <Stack.Screen name="ApplicationDetail" component={EmployerApplicationDetailScreen} />
 
-      {/* Freelancer Marketplace */}
       <Stack.Screen
         name="FreelancerMarketplace"
-        component={(props : any) => <FreelancerMarketplaceScreen {...props} />}
+        component={(props: any) => <FreelancerMarketplaceScreen {...props} />}
       />
-      <Stack.Screen name="FreelancerDetail"      component={FreelancerDetailScreen}      />
-      <Stack.Screen name="FreelancerShortlist"   component={FreelancerShortlistScreen}   />
+      <Stack.Screen name="FreelancerDetail"    component={FreelancerDetailScreen}    />
+      <Stack.Screen name="FreelancerShortlist" component={FreelancerShortlistScreen} />
 
-      {/* Verification */}
       <Stack.Screen name="VerificationStatus"  component={VerificationStatusScreen}  />
       <Stack.Screen name="RequestVerification" component={RequestVerificationScreen} />
 
-      {/* Referral */}
       <Stack.Screen name="Referral"    component={ReferralScreen}    />
       <Stack.Screen name="Leaderboard" component={PlaceholderScreen} />
 
-      {/* Products */}
-      <Stack.Screen name="ProductMarketplace" component={ProductMarketplaceScreen}      />
-      <Stack.Screen name="ProductDetails"     component={PublicProductDetailsScreen}    />
+      <Stack.Screen name="ProductMarketplace" component={ProductMarketplaceScreen}   />
+      <Stack.Screen name="ProductDetails"     component={PublicProductDetailsScreen} />
     </Stack.Navigator>
   );
 }

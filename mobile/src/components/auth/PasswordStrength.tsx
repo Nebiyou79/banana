@@ -1,9 +1,10 @@
 // src/components/auth/PasswordStrength.tsx
-// Usage: <PasswordStrength password={watchedPassword} />
+// Dark navy compatible password strength meter
 
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useTheme } from '../../hooks/useThemes';
+
+const TEXT_MUT = '#64748B';
 
 interface PasswordStrengthProps {
   password: string;
@@ -33,46 +34,34 @@ const analyze = (pw: string): StrengthResult => {
 };
 
 export const PasswordStrength: React.FC<PasswordStrengthProps> = ({ password }) => {
-  const { colors, type, spacing } = useTheme();
-  const { score, label, color }   = useMemo(() => analyze(password), [password]);
-
+  const { score, label, color } = useMemo(() => analyze(password), [password]);
   if (!password) return null;
 
   return (
-    <View style={[styles.container, { marginTop: spacing.sm }]}>
+    <View style={styles.container}>
       <View style={styles.bars}>
-        {[1, 2, 3, 4].map((bar) => (
+        {[1, 2, 3, 4].map(bar => (
           <View
             key={bar}
             style={[
               styles.bar,
-              {
-                backgroundColor: bar <= score ? color : colors.borderPrimary,
-                borderRadius:    999,
-              },
+              { backgroundColor: bar <= score ? color : 'rgba(255,255,255,0.08)' },
             ]}
           />
         ))}
       </View>
       {label ? (
-        <Text style={[type.caption, { color, marginTop: 4 }]}>
-          {label} password
-        </Text>
+        <Text style={[styles.label, { color }]}>{label} password</Text>
       ) : null}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {},
-  bars: {
-    flexDirection: 'row',
-    gap:           4,
-  },
-  bar: {
-    flex:   1,
-    height: 4,
-  },
+  container: { marginTop: -6, marginBottom: 12 },
+  bars:  { flexDirection: 'row', gap: 4 },
+  bar:   { flex: 1, height: 3, borderRadius: 2 },
+  label: { fontSize: 11, marginTop: 5 },
 });
 
 export default PasswordStrength;

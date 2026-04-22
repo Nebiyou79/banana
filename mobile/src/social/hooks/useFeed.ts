@@ -1,16 +1,21 @@
+// src/social/hooks/useFeed.ts
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { postService, type FeedParams } from '../services/postService';
 import { sanitizeSocialData } from '../services/sanitize';
-import { SOCIAL_KEYS } from './queryKeys';
 import type { Post } from '../types';
+import { SOCIAL_KEYS } from './queryKeys';
 
-/**
- * Paginated, infinite-scroll feed. Returns the raw query object along with a
- * flattened `posts` array in `data.posts` via `select`.
- *
- *   const { data, fetchNextPage, hasNextPage, isFetching, refetch } = useFeed();
- *   const posts = data?.posts ?? [];
- */
+const trendingScore = (p: Post): number => {
+  const s = p.stats ?? ({} as any);
+  return (
+    (s.likes ?? 0) +
+    (s.comments ?? 0) +
+    (s.shares ?? 0) +
+    (s.saves ?? 0) +
+    Math.floor((s.views ?? 0) / 10)
+  );
+};
+
 export const useFeed = (filters: FeedParams = {}) =>
   useInfiniteQuery({
     queryKey: SOCIAL_KEYS.feed(filters),
@@ -24,19 +29,21 @@ export const useFeed = (filters: FeedParams = {}) =>
       const data: Post[] = sanitizeSocialData
         .posts(raw?.data ?? [])
         .map(postService.fixPostMediaUrls);
-      return {
-        data,
-        pagination: raw?.pagination,
-      };
+      return { data, pagination: raw?.pagination };
     },
     initialPageParam: 1,
-    getNextPageParam: (lastPage) => {
-      const { page, pages } = lastPage.pagination ?? {};
+    getNextPageParam: (last) => {
+      const { page, pages } = last.pagination ?? {};
       return page && pages && page < pages ? page + 1 : undefined;
     },
-    staleTime: 1000 * 60 * 2,
-    select: (data) => ({
-      ...data,
-      posts: data.pages.flatMap((p) => p.data ?? []),
-    }),
+    staleTime: 1000 * 30,
+    select: (d) => {
+      const flat = d.pages.flatMap((p) => p.data ?? []);
+      // Client-side trending fallback when the backend doesn't sort
+      const posts =
+        filters.sortBy === 'trending'
+          ? [...flat].sort((a, b) => trendingScore(b) - trendingScore(a))
+          : flat;
+      return { ...d, posts };
+    },
   });

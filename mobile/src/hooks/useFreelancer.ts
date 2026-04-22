@@ -1,18 +1,31 @@
+/**
+ * hooks/useFreelancer.ts
+ *
+ * TanStack Query hooks for all freelancer data.
+ * Mirrors the backend controller endpoints exactly.
+ */
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { freelancerService } from '../services/freelancerService';
-import type { PortfolioFormData, ServiceFormData, CertificationFormData } from '../types/freelancer';
 import toast from '../lib/toast';
+import type {
+  PortfolioFormData,
+  ServiceFormData,
+  CertificationFormData,
+  FreelancerProfileUpdate,
+} from '../types/freelancer';
 
 // ─── Query Keys ───────────────────────────────────────────────────────────────
 
 export const FREELANCER_KEYS = {
-  dashboard:    ['freelancer', 'dashboard']    as const,
-  stats:        ['freelancer', 'stats']        as const,
-  profile:      ['freelancer', 'profile']      as const,
-  portfolio:    ['freelancer', 'portfolio']    as const,
-  portfolioItem: (id: string) => ['freelancer', 'portfolio', id] as const,
-  services:     ['freelancer', 'services']     as const,
-  certifications: ['freelancer', 'certifications'] as const,
+  all:             ['freelancer'] as const,
+  dashboard:       ['freelancer', 'dashboard'] as const,
+  stats:           ['freelancer', 'stats'] as const,
+  profile:         ['freelancer', 'profile'] as const,
+  portfolio:       ['freelancer', 'portfolio'] as const,
+  portfolioItem:   (id: string) => ['freelancer', 'portfolio', id] as const,
+  services:        ['freelancer', 'services'] as const,
+  certifications:  ['freelancer', 'certifications'] as const,
 };
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -43,11 +56,11 @@ export const useFreelancerProfile = () =>
 export const useUpdateFreelancerProfile = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: freelancerService.updateProfile,
+    mutationFn: (data: FreelancerProfileUpdate) => freelancerService.updateProfile(data),
     onSuccess: ({ profile }) => {
       qc.setQueryData(FREELANCER_KEYS.profile, profile);
       qc.invalidateQueries({ queryKey: FREELANCER_KEYS.dashboard });
-      toast.success('Profile updated successfully');
+      toast.success('Profile updated');
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -55,7 +68,12 @@ export const useUpdateFreelancerProfile = () => {
 
 // ─── Portfolio ────────────────────────────────────────────────────────────────
 
-export const useFreelancerPortfolio = (params?: { page?: number; limit?: number; featured?: boolean; category?: string }) =>
+export const useFreelancerPortfolio = (params?: {
+  page?: number;
+  limit?: number;
+  featured?: boolean;
+  category?: string;
+}) =>
   useQuery({
     queryKey: [...FREELANCER_KEYS.portfolio, params],
     queryFn:  () => freelancerService.getPortfolio(params),
@@ -76,6 +94,7 @@ export const useAddPortfolioItem = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: FREELANCER_KEYS.portfolio });
       qc.invalidateQueries({ queryKey: FREELANCER_KEYS.profile });
+      qc.invalidateQueries({ queryKey: FREELANCER_KEYS.dashboard });
       toast.success('Portfolio item added!');
     },
     onError: (err: Error) => toast.error(err.message),
@@ -90,6 +109,7 @@ export const useUpdatePortfolioItem = () => {
     onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: FREELANCER_KEYS.portfolio });
       qc.invalidateQueries({ queryKey: FREELANCER_KEYS.portfolioItem(id) });
+      qc.invalidateQueries({ queryKey: FREELANCER_KEYS.dashboard });
       toast.success('Portfolio item updated!');
     },
     onError: (err: Error) => toast.error(err.message),
@@ -102,6 +122,7 @@ export const useDeletePortfolioItem = () => {
     mutationFn: (id: string) => freelancerService.deletePortfolioItem(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: FREELANCER_KEYS.portfolio });
+      qc.invalidateQueries({ queryKey: FREELANCER_KEYS.dashboard });
       toast.success('Portfolio item deleted');
     },
     onError: (err: Error) => toast.error(err.message),
@@ -170,6 +191,7 @@ export const useAddCertification = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: FREELANCER_KEYS.certifications });
       qc.invalidateQueries({ queryKey: FREELANCER_KEYS.profile });
+      qc.invalidateQueries({ queryKey: FREELANCER_KEYS.dashboard });
       toast.success('Certification added!');
     },
     onError: (err: Error) => toast.error(err.message),
@@ -183,6 +205,7 @@ export const useUpdateCertification = () => {
       freelancerService.updateCertification(id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: FREELANCER_KEYS.certifications });
+      qc.invalidateQueries({ queryKey: FREELANCER_KEYS.dashboard });
       toast.success('Certification updated!');
     },
     onError: (err: Error) => toast.error(err.message),
@@ -196,6 +219,7 @@ export const useDeleteCertification = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: FREELANCER_KEYS.certifications });
       qc.invalidateQueries({ queryKey: FREELANCER_KEYS.profile });
+      qc.invalidateQueries({ queryKey: FREELANCER_KEYS.dashboard });
       toast.success('Certification deleted');
     },
     onError: (err: Error) => toast.error(err.message),

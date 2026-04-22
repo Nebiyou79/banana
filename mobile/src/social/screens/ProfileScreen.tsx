@@ -1,5 +1,6 @@
+// src/social/screens/ProfileScreen.tsx
 import { useNavigation } from '@react-navigation/native';
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -21,11 +22,7 @@ import {
   SkillChips,
   SocialLinksRow,
 } from '../components/profile';
-import {
-  EmptyState,
-  ErrorState,
-  SectionHeader,
-} from '../components/shared';
+import { EmptyState, ErrorState, SectionHeader } from '../components/shared';
 import {
   useOwnProfile,
   useProfileCompletion,
@@ -34,6 +31,8 @@ import {
 import { getAdForPlacement } from '../theme/adsConfig';
 import { useSocialTheme } from '../theme/socialTheme';
 import type { Profile, UserRole } from '../types';
+
+const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 
 const ProfileScreen: React.FC = () => {
   const theme = useSocialTheme();
@@ -49,24 +48,33 @@ const ProfileScreen: React.FC = () => {
     role === 'freelancer' || role === 'company' || role === 'organization';
   const showCompanyInfo = role === 'company' || role === 'organization';
 
-  const roleSpecific =
-    (roleQ.data && typeof roleQ.data === 'object' ? (roleQ.data as any) : {}) ||
-    {};
+  // Unwrap roleQ.data safely — backend may return { data: {...} } or the object directly
+  const roleSpecific = useMemo(() => {
+    const raw = roleQ.data as any;
+    if (!raw || typeof raw !== 'object') return {};
+    if (raw.data && typeof raw.data === 'object') return raw.data;
+    return raw;
+  }, [roleQ.data]);
 
-  const skills =
-    roleSpecific.skills ?? profile?.roleSpecific?.skills ?? [];
-  const experience =
-    roleSpecific.experience ?? profile?.roleSpecific?.experience ?? [];
-  const education =
-    roleSpecific.education ?? profile?.roleSpecific?.education ?? [];
-  const certifications =
-    roleSpecific.certifications ??
-    profile?.roleSpecific?.certifications ??
-    [];
-  const portfolio =
-    roleSpecific.portfolio ?? profile?.roleSpecific?.portfolio ?? [];
+  // Null-guard every array we iterate
+  const skills = asArray<any>(
+    (roleSpecific as any).skills ?? profile?.roleSpecific?.skills
+  );
+  const experience = asArray<any>(
+    (roleSpecific as any).experience ?? profile?.roleSpecific?.experience
+  );
+  const education = asArray<any>(
+    (roleSpecific as any).education ?? profile?.roleSpecific?.education
+  );
+  const certifications = asArray<any>(
+    (roleSpecific as any).certifications ??
+      profile?.roleSpecific?.certifications
+  );
+  const portfolio = asArray<any>(
+    (roleSpecific as any).portfolio ?? profile?.roleSpecific?.portfolio
+  );
   const companyInfo =
-    roleSpecific.companyInfo ?? profile?.roleSpecific?.companyInfo;
+    (roleSpecific as any).companyInfo ?? profile?.roleSpecific?.companyInfo;
 
   const ad = getAdForPlacement(theme.role, 'profile');
 
@@ -103,6 +111,13 @@ const ProfileScreen: React.FC = () => {
     );
   }
 
+  const completionPct =
+    typeof (completionQ.data as any)?.percentage === 'number'
+      ? (completionQ.data as any).percentage
+      : typeof (completionQ.data as any)?.data?.percentage === 'number'
+      ? (completionQ.data as any).data.percentage
+      : null;
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <ScrollView
@@ -111,7 +126,7 @@ const ProfileScreen: React.FC = () => {
       >
         <ProfileHeader
           profile={profile}
-          isOwn
+          isOwn={true}
           onEditPress={onEdit}
           onAvatarPress={onEdit}
           onCoverPress={onEdit}
@@ -119,10 +134,7 @@ const ProfileScreen: React.FC = () => {
           onFollowingPress={onFollowing}
         />
 
-        {/* Profile completion */}
-        {completionQ.data &&
-        typeof completionQ.data === 'object' &&
-        (completionQ.data as any)?.percentage !== undefined ? (
+        {completionPct !== null ? (
           <View
             style={[
               styles.completionCard,
@@ -132,10 +144,7 @@ const ProfileScreen: React.FC = () => {
               },
             ]}
           >
-            <CompletionRing
-              percentage={(completionQ.data as any).percentage ?? 0}
-              label="done"
-            />
+            <CompletionRing percentage={completionPct} label="done" />
             <View style={{ flex: 1, marginLeft: 14 }}>
               <Text
                 style={[styles.completionTitle, { color: theme.text }]}
@@ -163,25 +172,21 @@ const ProfileScreen: React.FC = () => {
           </View>
         ) : null}
 
-        {/* Social links */}
         <View style={{ paddingHorizontal: 16 }}>
           <SocialLinksRow links={profile.socialLinks} />
         </View>
 
-        {/* Skills */}
         <SectionHeader title="Skills" />
         <View style={{ paddingHorizontal: 16, paddingBottom: 4 }}>
           <SkillChips skills={skills} />
         </View>
 
-        {/* Ad between sections */}
         {ad ? (
           <View style={{ marginTop: 8 }}>
             <AdCard ad={ad} />
           </View>
         ) : null}
 
-        {/* Experience */}
         <SectionHeader title="Experience" />
         <View style={styles.section}>
           {experience.length === 0 ? (
@@ -198,7 +203,6 @@ const ProfileScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Education */}
         <SectionHeader title="Education" />
         <View style={styles.section}>
           {education.length === 0 ? (
@@ -215,7 +219,6 @@ const ProfileScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Certifications */}
         <SectionHeader title="Certifications" />
         <View style={styles.section}>
           {certifications.length === 0 ? (
@@ -232,7 +235,6 @@ const ProfileScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Company Info (company / org) */}
         {showCompanyInfo && companyInfo ? (
           <>
             <SectionHeader title="About" />
@@ -242,7 +244,6 @@ const ProfileScreen: React.FC = () => {
           </>
         ) : null}
 
-        {/* Portfolio (freelancer / company / organization) */}
         {showPortfolio ? (
           <>
             <SectionHeader title="Portfolio" />
@@ -269,11 +270,7 @@ const ProfileScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   completionCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -299,10 +296,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  section: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
+  section: { paddingHorizontal: 16, paddingBottom: 8 },
 });
 
 export default ProfileScreen;

@@ -1,3 +1,4 @@
+// src/social/screens/SavedPostsScreen.tsx
 import { useNavigation } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
 import { Share, StyleSheet } from 'react-native';
@@ -5,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { FeedList } from '../components/feed';
 import { CommentsSheet } from '../components/post';
 import {
+  useDislike,
   useReact,
   useRemoveInteraction,
   useSavedPosts,
@@ -20,6 +22,7 @@ const SavedPostsScreen: React.FC = () => {
   const savedQ = useSavedPosts();
   const { mutate: react } = useReact();
   const { mutate: removeReact } = useRemoveInteraction();
+  const { mutate: dislike } = useDislike();
   const { mutate: toggleSave } = useToggleSavePost();
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -37,6 +40,11 @@ const SavedPostsScreen: React.FC = () => {
       });
     },
     [posts, react]
+  );
+
+  const handleDislike = useCallback(
+    (postId: string) => dislike({ postId }),
+    [dislike]
   );
 
   const handleShare = useCallback(async (post: Post) => {
@@ -77,6 +85,7 @@ const SavedPostsScreen: React.FC = () => {
         isFetchingNextPage={savedQ.isFetchingNextPage}
         onReact={handleReact}
         onRemoveReact={removeReact}
+        onDislike={handleDislike}
         onComment={(p) => {
           setSelectedPost(p);
           setSheetVisible(true);

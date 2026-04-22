@@ -1,11 +1,13 @@
+// src/social/screens/FeedScreen.tsx
 import { useNavigation } from '@react-navigation/native';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Share, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CommentsSheet } from '../components/post';
 import { CreatePostFAB, FeedList, FeedTabs } from '../components/feed';
 import type { FeedSort } from '../components/feed';
+import { CommentsSheet } from '../components/post';
 import {
+  useDislike,
   useFeed,
   useReact,
   useRemoveInteraction,
@@ -19,18 +21,14 @@ const FeedScreen: React.FC = () => {
   const navigation = useNavigation<any>();
 
   const [activeSort, setActiveSort] = useState<FeedSort>('latest');
-  const filters = useMemo(
-    () => ({ sortBy: activeSort }),
-    [activeSort]
-  );
+  const filters = useMemo(() => ({ sortBy: activeSort }), [activeSort]);
 
   const feedQ = useFeed(filters);
   const { mutate: react } = useReact();
   const { mutate: removeReact } = useRemoveInteraction();
+  const { mutate: dislike } = useDislike();
   const { mutate: toggleSave } = useToggleSavePost();
 
-  // Comments sheet state (owned by this screen so the sheet persists across
-  // post re-renders inside the FlashList).
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [sheetVisible, setSheetVisible] = useState(false);
 
@@ -46,6 +44,11 @@ const FeedScreen: React.FC = () => {
       });
     },
     [posts, react]
+  );
+
+  const handleDislike = useCallback(
+    (postId: string) => dislike({ postId }),
+    [dislike]
   );
 
   const handleShare = useCallback(async (post: Post) => {
@@ -71,7 +74,7 @@ const FeedScreen: React.FC = () => {
         try {
           navigation.navigate(ad.ctaRoute as any);
         } catch {
-          /* route may not exist in this navigator — swallow */
+          /* route may not exist — swallow */
         }
       }
     },
@@ -83,11 +86,9 @@ const FeedScreen: React.FC = () => {
     setSheetVisible(true);
   }, []);
 
-const handleCreatePress = useCallback(() => {
-  navigation.navigate('SocialEntry' as any, {
-    screen: 'CreatePost',
-  });
-}, [navigation]);
+  const handleCreatePress = useCallback(() => {
+    navigation.navigate('CreatePost');
+  }, [navigation]);
 
   return (
     <SafeAreaView
@@ -107,6 +108,7 @@ const handleCreatePress = useCallback(() => {
           isFetchingNextPage={feedQ.isFetchingNextPage}
           onReact={handleReact}
           onRemoveReact={removeReact}
+          onDislike={handleDislike}
           onComment={handleComment}
           onShare={handleShare}
           onSave={(id, isSaved) => toggleSave({ id, isSaved })}

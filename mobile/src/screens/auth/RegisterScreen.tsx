@@ -1,6 +1,7 @@
 // src/screens/auth/RegisterScreen.tsx
+// Premium dark-navy register with staggered animations
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +11,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   StatusBar,
+  TextInput,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -19,357 +22,310 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Ionicons } from '@expo/vector-icons';
 
-import { useTheme }            from '../../hooks/useTheme';
-import { Input }               from '../../components/ui/Input';
-import { Button }              from '../../components/ui/Button';
-import { AuthHeader }          from '../../components/auth/AuthHeader';
-import { FormError }           from '../../components/auth/FormError';
-import { PasswordStrength }    from '../../components/auth/PasswordStrength';
-import { RoleCard }            from '../../components/auth/RoleCard';
-import { useRegister }         from '../../hooks/useAuth';
-import { ROLES }               from '../../constants/roles';
-import type { Role }           from '../../constants/roles';
+import { useRegister } from '../../hooks/useAuth';
+import { ROLES } from '../../constants/roles';
+import type { Role } from '../../constants/roles';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
-const schema = z
-  .object({
-    name:            z.string().min(2, 'Name must be at least 2 characters'),
-    email:           z.string().email('Enter a valid email address'),
-    password:        z.string().min(8, 'Password must be at least 8 characters'),
-    confirmPassword: z.string().min(1, 'Please confirm your password'),
-    referralCode:    z.string().optional(),
-  })
-  .refine((d) => d.password === d.confirmPassword, {
-    message: 'Passwords do not match',
-    path:    ['confirmPassword'],
-  });
+// ─── Constants ────────────────────────────────────────────────────────────────
+const NAVY      = '#050D1A';
+const NAVY3     = '#0F2040';
+const GOLD      = '#F1BB03';
+const TEXT_PRI  = '#F8FAFC';
+const TEXT_MUT  = '#64748B';
+const BORDER    = 'rgba(255,255,255,0.10)';
+const INPUT_BG  = 'rgba(255,255,255,0.05)';
+const ERROR     = '#EF4444';
+
+// ─── Schema ───────────────────────────────────────────────────────────────────
+const schema = z.object({
+  name:            z.string().min(2, 'Name must be at least 2 characters'),
+  email:           z.string().email('Enter a valid email'),
+  password:        z.string().min(8, 'Password must be at least 8 characters'),
+  confirmPassword: z.string().min(1, 'Please confirm your password'),
+  referralCode:    z.string().optional(),
+}).refine(d => d.password === d.confirmPassword, {
+  message: 'Passwords do not match',
+  path: ['confirmPassword'],
+});
 
 type FormData = z.infer<typeof schema>;
-type Nav      = NativeStackNavigationProp<AuthStackParamList>;
+type Nav = NativeStackNavigationProp<AuthStackParamList>;
 
-interface RoleOption {
-  role:         Role;
-  label:        string;
-  description:  string;
-  emoji:        string;
-  icon:         string;
-  primaryColor: string;
-}
+// ─── Role config ──────────────────────────────────────────────────────────────
+const ROLE_OPTIONS = [
+  { role: ROLES.CANDIDATE,    label: 'Job Seeker',   desc: 'Find jobs & grow your career',      emoji: '🎯', color: '#3B82F6' },
+  { role: ROLES.FREELANCER,   label: 'Freelancer',   desc: 'Win projects, showcase skills',      emoji: '💼', color: '#10B981' },
+  { role: ROLES.COMPANY,      label: 'Company',       desc: 'Post jobs & hire great talent',      emoji: '🏢', color: '#F1BB03' },
+  { role: ROLES.ORGANIZATION, label: 'Organization', desc: 'Post tenders, find professionals',   emoji: '🏛️', color: '#8B5CF6' },
+] as const;
 
-const ROLE_OPTIONS: RoleOption[] = [
-  {
-    role:         ROLES.CANDIDATE,
-    label:        'Job Seeker',
-    description:  'Find jobs, apply, and grow your career',
-    emoji:        '🎯',
-    icon:         'briefcase-outline',
-    primaryColor: '#3B82F6',
-  },
-  {
-    role:         ROLES.FREELANCER,
-    label:        'Freelancer',
-    description:  'Showcase your skills and win freelance projects',
-    emoji:        '💼',
-    icon:         'laptop-outline',
-    primaryColor: '#10B981',
-  },
-  {
-    role:         ROLES.COMPANY,
-    label:        'Company',
-    description:  'Post jobs and hire great talent',
-    emoji:        '🏢',
-    icon:         'business-outline',
-    primaryColor: '#F1BB03',
-  },
-  {
-    role:         ROLES.ORGANIZATION,
-    label:        'Organization',
-    description:  'Post tenders and find professionals',
-    emoji:        '🏛️',
-    icon:         'people-outline',
-    primaryColor: '#8B5CF6',
-  },
-];
+// ─── PremiumInput ─────────────────────────────────────────────────────────────
+const PremiumInput: React.FC<{
+  placeholder: string;
+  value: string;
+  onChangeText: (t: string) => void;
+  secureTextEntry?: boolean;
+  keyboardType?: any;
+  autoCapitalize?: any;
+  leftSlot?: React.ReactNode;
+  rightSlot?: React.ReactNode;
+  error?: string;
+  onSubmitEditing?: () => void;
+  returnKeyType?: any;
+}> = ({ placeholder, value, onChangeText, secureTextEntry, keyboardType,
+        autoCapitalize, leftSlot, rightSlot, error, onSubmitEditing, returnKeyType }) => {
+  const anim = useRef(new Animated.Value(0)).current;
+  const borderColor = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [error ? ERROR : BORDER, error ? ERROR : GOLD],
+  });
+  return (
+    <View style={{ marginBottom: 14 }}>
+      <Animated.View style={[pStyles.wrap, { borderColor }]}>
+        {leftSlot && <View style={{ marginRight: 10 }}>{leftSlot}</View>}
+        <TextInput
+          style={pStyles.input}
+          placeholder={placeholder}
+          placeholderTextColor={TEXT_MUT}
+          value={value}
+          onChangeText={onChangeText}
+          secureTextEntry={secureTextEntry}
+          keyboardType={keyboardType ?? 'default'}
+          autoCapitalize={autoCapitalize ?? 'none'}
+          onFocus={() => Animated.timing(anim, { toValue: 1, duration: 200, useNativeDriver: false }).start()}
+          onBlur={() => Animated.timing(anim, { toValue: 0, duration: 200, useNativeDriver: false }).start()}
+          onSubmitEditing={onSubmitEditing}
+          returnKeyType={returnKeyType ?? 'next'}
+        />
+        {rightSlot && <View style={{ marginLeft: 10 }}>{rightSlot}</View>}
+      </Animated.View>
+      {error && <Text style={pStyles.err}>{error}</Text>}
+    </View>
+  );
+};
+const pStyles = StyleSheet.create({
+  wrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: INPUT_BG, borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 16, height: 54 },
+  input: { flex: 1, color: TEXT_PRI, fontSize: 15 },
+  err: { color: ERROR, fontSize: 12, marginTop: 4 },
+});
 
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export const RegisterScreen: React.FC = () => {
-  const { colors, type, spacing, isDark } = useTheme();
   const navigation = useNavigation<Nav>();
   const register   = useRegister();
 
   const [selectedRole, setSelectedRole] = useState<Role>(ROLES.CANDIDATE);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm,  setShowConfirm]  = useState(false);
+  const [showPw, setShowPw]             = useState(false);
+  const [showConfirm, setShowConfirm]   = useState(false);
   const [showReferral, setShowReferral] = useState(false);
+
+  // Entrance animations
+  const headerAnim = useRef(new Animated.Value(0)).current;
+  const formAnim   = useRef(new Animated.Value(0)).current;
+  const rolesAnim  = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.stagger(120, [
+      Animated.timing(headerAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.parallel([
+        Animated.timing(formAnim,  { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.spring(rolesAnim, { toValue: 0, useNativeDriver: true, tension: 50, friction: 8 }),
+      ]),
+    ]).start();
+  }, []);
 
   const { control, handleSubmit, watch } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      name: '', email: '', password: '', confirmPassword: '', referralCode: '',
-    },
+    defaultValues: { name: '', email: '', password: '', confirmPassword: '', referralCode: '' },
   });
 
-  const watchedPassword = watch('password');
-
-  const onSubmit = handleSubmit((data) =>
+  const onSubmit = handleSubmit(data =>
     register.mutate({
-      name:         data.name,
-      email:        data.email,
-      password:     data.password,
-      role:         selectedRole,
-      referralCode: data.referralCode?.trim() || undefined,
+      name: data.name, email: data.email, password: data.password,
+      role: selectedRole, referralCode: data.referralCode?.trim() || undefined,
     }),
   );
 
   const apiError = (() => {
     const err = register.error as any;
     if (!err) return undefined;
-    if (!err.response) return 'Cannot reach the server. Check your network.';
-    return err.response?.data?.message ?? 'Registration failed. Please try again.';
+    if (!err.response) return 'Cannot reach the server.';
+    return err.response?.data?.message ?? 'Registration failed.';
   })();
 
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.bgPrimary }]}
-      edges={['top', 'bottom']}
-    >
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <ScrollView
-          contentContainerStyle={[
-            styles.scroll,
-            { paddingHorizontal: spacing.screen },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Back */}
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={styles.backBtn}
-            accessibilityLabel="Go back"
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+
+      {/* BG decorations */}
+      <View style={[styles.bgDot, { top: -60, right: -60, backgroundColor: GOLD }]} />
+      <View style={[styles.bgDot, { width: 180, height: 180, bottom: -50, left: -50, backgroundColor: '#8B5CF6' }]} />
+
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            <Ionicons name="arrow-back-outline" size={22} color={colors.textPrimary} />
-          </Pressable>
+            {/* Back */}
+            <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+              <View style={styles.backCircle}>
+                <Ionicons name="arrow-back" size={18} color={TEXT_PRI} />
+              </View>
+            </Pressable>
 
-          <AuthHeader
-            title="Create account"
-            subtitle="Join Banana and start your journey"
-          />
+            {/* Header */}
+            <Animated.View style={{ opacity: headerAnim, marginBottom: 24 }}>
+              <Text style={styles.title}>Join Banana</Text>
+              <Text style={styles.subtitle}>Create your account and start your journey</Text>
+            </Animated.View>
 
-          <FormError message={apiError} visible={!!apiError} />
-
-          {/* ── Role picker ───────────────────────────────── */}
-          <Text style={[type.label, { color: colors.textMuted, marginBottom: spacing.md }]}>
-            I am joining as
-          </Text>
-
-          {ROLE_OPTIONS.map((item, i) => (
-            <RoleCard
-              key={item.role}
-              role={item.role}
-              label={item.label}
-              description={item.description}
-              emoji={item.emoji}
-              icon={item.icon}
-              primaryColor={item.primaryColor}
-              selected={selectedRole === item.role}
-              onPress={() => setSelectedRole(item.role)}
-              index={i}
-            />
-          ))}
-
-          <View style={[styles.divider, { backgroundColor: colors.borderPrimary, marginVertical: spacing.xl }]} />
-
-          {/* ── Full Name ─────────────────────────────────── */}
-          <Controller
-            control={control}
-            name="name"
-            render={({ field, fieldState }) => (
-              <Input
-                label="Full Name"
-                placeholder="John Doe"
-                value={field.value}
-                onChangeText={field.onChange}
-                error={fieldState.error?.message}
-                returnKeyType="next"
-                autoCapitalize="words"
-                leftIcon={<Ionicons name="person-outline" size={18} color={colors.textMuted} />}
-              />
-            )}
-          />
-
-          {/* ── Email ─────────────────────────────────────── */}
-          <Controller
-            control={control}
-            name="email"
-            render={({ field, fieldState }) => (
-              <Input
-                label="Email address"
-                placeholder="you@example.com"
-                value={field.value}
-                onChangeText={field.onChange}
-                error={fieldState.error?.message}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                returnKeyType="next"
-                leftIcon={<Ionicons name="mail-outline" size={18} color={colors.textMuted} />}
-              />
-            )}
-          />
-
-          {/* ── Password ──────────────────────────────────── */}
-          <Controller
-            control={control}
-            name="password"
-            render={({ field, fieldState }) => (
-              <>
-                <Input
-                  label="Password"
-                  placeholder="Minimum 8 characters"
-                  value={field.value}
-                  onChangeText={field.onChange}
-                  error={fieldState.error?.message}
-                  secureTextEntry={!showPassword}
-                  returnKeyType="next"
-                  leftIcon={<Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} />}
-                  rightIcon={
+            {/* Role pills */}
+            <Animated.View style={{ opacity: formAnim, transform: [{ translateY: rolesAnim }], marginBottom: 24 }}>
+              <Text style={styles.sectionLabel}>I AM JOINING AS</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingBottom: 4 }}>
+                {ROLE_OPTIONS.map(item => {
+                  const active = selectedRole === item.role;
+                  return (
                     <Pressable
-                      onPress={() => setShowPassword((v) => !v)}
-                      accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                      key={item.role}
+                      onPress={() => setSelectedRole(item.role as Role)}
+                      style={[
+                        styles.rolePill,
+                        { borderColor: active ? item.color : BORDER, backgroundColor: active ? `${item.color}18` : INPUT_BG },
+                      ]}
                     >
-                      <Ionicons
-                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                        size={18}
-                        color={colors.textMuted}
-                      />
+                      <Text style={{ fontSize: 18 }}>{item.emoji}</Text>
+                      <View>
+                        <Text style={[styles.roleLabel, { color: active ? item.color : TEXT_PRI }]}>{item.label}</Text>
+                        <Text style={styles.roleDesc}>{item.desc}</Text>
+                      </View>
+                      {active && <Ionicons name="checkmark-circle" size={18} color={item.color} />}
                     </Pressable>
-                  }
-                />
-                <PasswordStrength password={field.value} />
-              </>
-            )}
-          />
+                  );
+                })}
+              </ScrollView>
+            </Animated.View>
 
-          {/* ── Confirm Password ──────────────────────────── */}
-          <Controller
-            control={control}
-            name="confirmPassword"
-            render={({ field, fieldState }) => (
-              <Input
-                label="Confirm Password"
-                placeholder="Repeat your password"
-                value={field.value}
-                onChangeText={field.onChange}
-                error={fieldState.error?.message}
-                secureTextEntry={!showConfirm}
-                returnKeyType="done"
-                onSubmitEditing={onSubmit}
-                leftIcon={<Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} />}
-                rightIcon={
-                  <Pressable
-                    onPress={() => setShowConfirm((v) => !v)}
-                    accessibilityLabel={showConfirm ? 'Hide password' : 'Show password'}
-                  >
-                    <Ionicons
-                      name={showConfirm ? 'eye-off-outline' : 'eye-outline'}
-                      size={18}
-                      color={colors.textMuted}
-                    />
-                  </Pressable>
-                }
+            {/* Error */}
+            {apiError && (
+              <View style={styles.errorBanner}>
+                <Ionicons name="alert-circle-outline" size={15} color={ERROR} />
+                <Text style={{ color: ERROR, fontSize: 13, flex: 1 }}>{apiError}</Text>
+              </View>
+            )}
+
+            {/* Form */}
+            <Animated.View style={{ opacity: formAnim }}>
+              <Text style={styles.sectionLabel}>YOUR DETAILS</Text>
+
+              <Controller control={control} name="name"
+                render={({ field, fieldState }) => (
+                  <PremiumInput placeholder="Full Name" value={field.value} onChangeText={field.onChange}
+                    autoCapitalize="words" error={fieldState.error?.message}
+                    leftSlot={<Ionicons name="person-outline" size={18} color={TEXT_MUT} />} />
+                )}
               />
-            )}
-          />
+              <Controller control={control} name="email"
+                render={({ field, fieldState }) => (
+                  <PremiumInput placeholder="Email address" value={field.value} onChangeText={field.onChange}
+                    keyboardType="email-address" error={fieldState.error?.message}
+                    leftSlot={<Ionicons name="mail-outline" size={18} color={TEXT_MUT} />} />
+                )}
+              />
+              <Controller control={control} name="password"
+                render={({ field, fieldState }) => (
+                  <PremiumInput placeholder="Password (min 8 characters)" value={field.value} onChangeText={field.onChange}
+                    secureTextEntry={!showPw} error={fieldState.error?.message}
+                    leftSlot={<Ionicons name="lock-closed-outline" size={18} color={TEXT_MUT} />}
+                    rightSlot={<Pressable onPress={() => setShowPw(v => !v)}><Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={18} color={TEXT_MUT} /></Pressable>} />
+                )}
+              />
+              <Controller control={control} name="confirmPassword"
+                render={({ field, fieldState }) => (
+                  <PremiumInput placeholder="Confirm Password" value={field.value} onChangeText={field.onChange}
+                    secureTextEntry={!showConfirm} error={fieldState.error?.message}
+                    leftSlot={<Ionicons name="lock-closed-outline" size={18} color={TEXT_MUT} />}
+                    rightSlot={<Pressable onPress={() => setShowConfirm(v => !v)}><Ionicons name={showConfirm ? 'eye-off-outline' : 'eye-outline'} size={18} color={TEXT_MUT} /></Pressable>}
+                    returnKeyType="done" onSubmitEditing={onSubmit} />
+                )}
+              />
 
-          {/* ── Referral Code ─────────────────────────────── */}
-          <Pressable
-            onPress={() => setShowReferral((v) => !v)}
-            style={styles.referralToggle}
-            accessibilityLabel="Toggle referral code field"
-          >
-            <Ionicons
-              name={showReferral ? 'chevron-up-outline' : 'chevron-down-outline'}
-              size={14}
-              color={colors.accent}
-            />
-            <Text style={[type.bodySm, { color: colors.accent, fontWeight: '600' }]}>
-              {showReferral ? 'Hide referral code' : 'Have a referral code?'}
-            </Text>
-          </Pressable>
+              {/* Referral toggle */}
+              <Pressable onPress={() => setShowReferral(v => !v)} style={styles.referralToggle}>
+                <Ionicons name={showReferral ? 'chevron-up' : 'chevron-down'} size={14} color={GOLD} />
+                <Text style={{ color: GOLD, fontSize: 13, fontWeight: '600' }}>
+                  {showReferral ? 'Hide referral code' : 'Have a referral code?'}
+                </Text>
+              </Pressable>
 
-          {showReferral && (
-            <Controller
-              control={control}
-              name="referralCode"
-              render={({ field }) => (
-                <Input
-                  label="Referral Code (optional)"
-                  placeholder="e.g. BANANA-ABC123"
-                  value={field.value ?? ''}
-                  onChangeText={field.onChange}
-                  autoCapitalize="characters"
-                  leftIcon={<Ionicons name="gift-outline" size={18} color={colors.textMuted} />}
+              {showReferral && (
+                <Controller control={control} name="referralCode"
+                  render={({ field }) => (
+                    <PremiumInput placeholder="Referral Code (optional)" value={field.value ?? ''} onChangeText={field.onChange}
+                      autoCapitalize="characters"
+                      leftSlot={<Ionicons name="gift-outline" size={18} color={TEXT_MUT} />} />
+                  )}
                 />
               )}
-            />
-          )}
 
-          {/* ── Submit ────────────────────────────────────── */}
-          <Button
-            title="Create Account"
-            onPress={onSubmit}
-            loading={register.isPending}
-            fullWidth
-            size="lg"
-            style={{ marginTop: spacing.sm }}
-          />
+              {/* CTA */}
+              <Pressable
+                style={({ pressed }) => [styles.cta, { opacity: pressed ? 0.88 : 1 }]}
+                onPress={onSubmit}
+                disabled={register.isPending}
+              >
+                <Text style={styles.ctaText}>{register.isPending ? 'Creating Account…' : 'Create Account'}</Text>
+              </Pressable>
 
-          {/* Terms */}
-          <Text
-            style={[
-              type.caption,
-              {
-                color:           colors.textMuted,
-                textAlign:       'center',
-                marginTop:       spacing.lg,
-                paddingHorizontal: spacing.md,
-                lineHeight:      18,
-              },
-            ]}
-          >
-            By creating an account you agree to our{' '}
-            <Text style={{ color: colors.accent }}>Terms of Service</Text>
-            {' '}and{' '}
-            <Text style={{ color: colors.accent }}>Privacy Policy</Text>.
-          </Text>
-
-          {/* Login link */}
-          <View style={styles.bottomRow}>
-            <Text style={[type.body, { color: colors.textMuted }]}>
-              Already have an account?{' '}
-            </Text>
-            <Pressable onPress={() => navigation.navigate('Login')}>
-              <Text style={[type.body, { color: colors.accent, fontWeight: '700' }]}>
-                Sign In
+              <Text style={styles.termsText}>
+                By creating an account you agree to our{' '}
+                <Text style={{ color: GOLD }}>Terms of Service</Text>
+                {' '}and{' '}
+                <Text style={{ color: GOLD }}>Privacy Policy</Text>.
               </Text>
-            </Pressable>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+
+              <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 16 }}>
+                <Text style={{ color: TEXT_MUT, fontSize: 14 }}>Already have an account? </Text>
+                <Pressable onPress={() => navigation.navigate('Login')}>
+                  <Text style={{ color: GOLD, fontSize: 14, fontWeight: '700' }}>Sign In</Text>
+                </Pressable>
+              </View>
+            </Animated.View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safe:           { flex: 1 },
-  scroll:         { flexGrow: 1, paddingTop: 16, paddingBottom: 40 },
-  backBtn:        { marginBottom: 20 },
-  divider:        { height: 1 },
-  referralToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8, marginTop: 4 },
-  bottomRow:      { flexDirection: 'row', justifyContent: 'center', marginTop: 20, marginBottom: 8 },
+  root:   { flex: 1, backgroundColor: NAVY },
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 48 },
+  bgDot:  { position: 'absolute', width: 220, height: 220, borderRadius: 999, opacity: 0.07 },
+
+  backBtn:    { marginBottom: 20 },
+  backCircle: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.07)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: BORDER },
+
+  title:    { fontSize: 32, fontWeight: '900', color: TEXT_PRI, letterSpacing: -0.5 },
+  subtitle: { fontSize: 14, color: TEXT_MUT, marginTop: 6 },
+
+  sectionLabel: { fontSize: 11, color: TEXT_MUT, letterSpacing: 1.2, marginBottom: 12, textTransform: 'uppercase' },
+
+  rolePill:  { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, minWidth: 180 },
+  roleLabel: { fontSize: 13, fontWeight: '700' },
+  roleDesc:  { fontSize: 11, color: TEXT_MUT, marginTop: 1 },
+
+  errorBanner: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', backgroundColor: 'rgba(239,68,68,0.10)', borderColor: ERROR, borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 16 },
+
+  referralToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+
+  cta:     { backgroundColor: GOLD, borderRadius: 16, height: 56, alignItems: 'center', justifyContent: 'center', marginTop: 8, shadowColor: GOLD, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8 },
+  ctaText: { color: NAVY, fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
+
+  termsText: { color: TEXT_MUT, fontSize: 12, textAlign: 'center', marginTop: 14, lineHeight: 18 },
 });
 
 export default RegisterScreen;

@@ -1,35 +1,28 @@
 /**
- * navigation/candidate/CandidateNavigator.tsx
- * Role: Candidate — 5 main tabs + full stack navigator for all built screens.
+ * navigation/CandidateNavigator.tsx
+ * Role: Candidate — 5 main tabs + full stack navigator.
  *
- * Tab structure:
- *   1. Home        → CandidateDashboardScreen
- *   2. Jobs        → Top tabs: JobBrowse | SavedJobs | ApplicationTracker
- *   3. Social      → Shared SocialNavigator (all placeholders)
- *   4. Profile     → CandidateProfileScreen
- *   5. More        → CandidateMoreScreen  (stack with all extra screens)
+ * Updated: LeaderboardScreen is now a real screen (not PlaceholderScreen).
+ * DashboardScreen import updated to new file name.
  */
 
 import React from 'react';
-import { TouchableOpacity } from 'react-native';
 import { createBottomTabNavigator }      from '@react-navigation/bottom-tabs';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import { createNativeStackNavigator }    from '@react-navigation/native-stack';
-import { useNavigation }                 from '@react-navigation/native';
 import { Ionicons }                      from '@expo/vector-icons';
 import { useThemeStore }                 from '../store/themeStore';
 
-// ─── Types ────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 import {
   CandidateMainTabParamList,
   CandidateJobsTabParamList,
 } from './types';
 
-// ─── Shared ───────────────────────────────────────────────────
-import SocialNavigator  from '../social/navigation/SocialNavigator';
-import PlaceholderScreen from '../screens/auth/PlaceholderScreen';
+// ─── Shared ───────────────────────────────────────────────────────────────────
+import SocialNavigator from '../social/navigation/SocialNavigator';
 
-// ─── Candidate screens ────────────────────────────────────────
+// ─── Candidate screens ────────────────────────────────────────────────────────
 import { CandidateDashboardScreen }   from '../screens/candidate/Dashboardscreen';
 import { CandidateProfileScreen }     from '../screens/candidate/ProfileScreen';
 import { CandidateEditProfileScreen } from '../screens/candidate/EditProfileScreen';
@@ -50,14 +43,15 @@ import { GeneratedCVsScreen } from '../screens/candidate/cv-generator/GeneratedC
 import { VerificationStatusScreen }  from '../screens/shared/VerificationStatusScreen';
 import { RequestVerificationScreen } from '../screens/shared/RequestVerificationScreen';
 import { ReferralScreen }            from '../screens/shared/ReferralScreen';
+import { LeaderboardScreen }         from '../screens/shared/LeaderboardScreen';
 
 // Products
-import { ProductMarketplaceScreen }  from '../screens/products/ProductMarketplaceScreen';
-import { ProductDetailsScreen }      from '../screens/products/ProductDetailsScreen';
+import { ProductMarketplaceScreen } from '../screens/products/ProductMarketplaceScreen';
+import { ProductDetailsScreen }     from '../screens/products/ProductDetailsScreen';
 
-// ─── Param lists ──────────────────────────────────────────────
+// ─── Param lists ──────────────────────────────────────────────────────────────
 export type CandidateStackParamList = {
-  // Tabs
+  // Tabs root
   MainTabs: undefined;
 
   // Profile
@@ -88,58 +82,57 @@ export type CandidateStackParamList = {
   ProductDetails:     { productId: string };
 };
 
-// ─── Navigators ───────────────────────────────────────────────
+// ─── Navigators ───────────────────────────────────────────────────────────────
 const MainTab    = createBottomTabNavigator<CandidateMainTabParamList>();
 const JobsTopTab = createMaterialTopTabNavigator<CandidateJobsTabParamList>();
 const Stack      = createNativeStackNavigator<CandidateStackParamList>();
 
-// ─── Jobs top-tab navigator ───────────────────────────────────
+// ─── Jobs top-tab navigator ───────────────────────────────────────────────────
+
 function CandidateJobsNavigator() {
-  const nav = useNavigation<any>();
   const { theme } = useThemeStore();
   const { colors } = theme;
-
   return (
     <JobsTopTab.Navigator
       screenOptions={{
         tabBarActiveTintColor:   colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarIndicatorStyle:    { backgroundColor: colors.primary },
-        tabBarStyle:             { backgroundColor: colors.surface },
+        tabBarStyle:             { backgroundColor: colors.surface ?? colors.secondary },
       }}
     >
-      <JobsTopTab.Screen name="JobsList"     component={JobBrowseScreen}       options={{ title: 'Browse' }} />
-      <JobsTopTab.Screen name="SavedJobs"    component={SavedJobsScreen}       options={{ title: 'Saved' }} />
-      <JobsTopTab.Screen name="Applications" component={ApplicationTracker}    options={{ title: 'Applied' }} />
-      {/* Removed BackToHome tab as tabBarButton is not supported in MaterialTopTabNavigator */}
+      <JobsTopTab.Screen name="JobsList"     component={JobBrowseScreen}    options={{ title: 'Browse' }} />
+      <JobsTopTab.Screen name="SavedJobs"    component={SavedJobsScreen}    options={{ title: 'Saved' }} />
+      <JobsTopTab.Screen name="Applications" component={ApplicationTracker} options={{ title: 'Applied' }} />
     </JobsTopTab.Navigator>
   );
 }
 
-// ─── Social wrapper ───────────────────────────────────────────
+// ─── Social wrapper ───────────────────────────────────────────────────────────
+
 function CandidateSocialNavigator() {
   return <SocialNavigator />;
 }
 
-// ─── Main tab bar ─────────────────────────────────────────────
+// ─── Main tab bar ─────────────────────────────────────────────────────────────
+
 function CandidateTabNavigator() {
   const { theme } = useThemeStore();
   const { colors } = theme;
-
   return (
     <MainTab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor:   colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle:             { backgroundColor: colors.surface },
+        tabBarStyle:             { backgroundColor: colors.surface ?? colors.secondary },
         tabBarIcon: ({ focused, color, size }) => {
           const icons: Record<string, [string, string]> = {
-            Home:    ['home-outline',       'home'],
-            Jobs:    ['briefcase-outline',  'briefcase'],
-            Social:  ['globe-outline',      'globe'],
-            Profile: ['person-outline',     'person'],
-            More:    ['menu-outline',       'menu'],
+            Home:    ['home-outline',      'home'],
+            Jobs:    ['briefcase-outline', 'briefcase'],
+            Social:  ['globe-outline',     'globe'],
+            Profile: ['person-outline',    'person'],
+            More:    ['menu-outline',      'menu'],
           };
           const [outline, filled] = icons[route.name] ?? ['ellipse-outline', 'ellipse'];
           return <Ionicons name={(focused ? filled : outline) as any} size={size} color={color} />;
@@ -150,17 +143,17 @@ function CandidateTabNavigator() {
       <MainTab.Screen name="Jobs"    component={CandidateJobsNavigator}   />
       <MainTab.Screen name="Social"  component={CandidateSocialNavigator} />
       <MainTab.Screen name="Profile" component={CandidateProfileScreen}   />
-      <MainTab.Screen name="More"    component={CandidateMoreScreen}       />
+      <MainTab.Screen name="More"    component={CandidateMoreScreen}      />
     </MainTab.Navigator>
   );
 }
 
-// ─── Root stack (handles all push screens) ────────────────────
+// ─── Root stack ───────────────────────────────────────────────────────────────
+
 export default function CandidateNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {/* Tab root */}
-      <Stack.Screen name="MainTabs" component={CandidateTabNavigator} />
+      <Stack.Screen name="MainTabs"   component={CandidateTabNavigator} />
 
       {/* Profile */}
       <Stack.Screen name="EditProfile" component={CandidateEditProfileScreen} />
@@ -181,7 +174,7 @@ export default function CandidateNavigator() {
 
       {/* Referral */}
       <Stack.Screen name="Referral"    component={ReferralScreen}    />
-      <Stack.Screen name="Leaderboard" component={PlaceholderScreen} />
+      <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
 
       {/* Products */}
       <Stack.Screen name="ProductMarketplace" component={ProductMarketplaceScreen} />

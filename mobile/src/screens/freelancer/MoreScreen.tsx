@@ -1,51 +1,33 @@
 /**
  * screens/freelancer/MoreScreen.tsx
- *
- * Freelancer "More" hub — surfaces every screen not in the 5 main tabs:
- *   • Portfolio (List, Details, Add, Edit)
- *   • Services List
- *   • Certifications List
- *   • My Reviews
- *   • Freelancer Marketplace (browse other freelancers)
- *   • Verification + Request Verification
- *   • Referrals & Rewards / Leaderboard
- *   • Product Marketplace (public browsing)
- *   • Notifications, Privacy (placeholders)
- *   • Help, Terms, Contact (placeholders)
- *   • Sign Out
+ * Updated to include MyReviews and use correct types.
  */
-
 import React from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  Alert,
+  View, Text, ScrollView, TouchableOpacity,
+  StyleSheet, Image, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { useThemeStore }                 from '../../store/themeStore';
-import { useAuthStore }                  from '../../store/authStore';
+import { useThemeStore }                     from '../../store/themeStore';
+import { useAuthStore }                      from '../../store/authStore';
 import { useProfile, useVerificationStatus } from '../../hooks/useProfile';
-import { useLogout }                     from '../../hooks/useAuth';
-import type { FreelancerStackParamList } from '../../navigation/FreelancerNavigator';
+import { useLogout }                         from '../../hooks/useAuth';
+import type { FreelancerStackParamList }     from '../../navigation/FreelancerNavigator';
 
 type Nav = NativeStackNavigationProp<FreelancerStackParamList>;
 
-const ACCENT = '#10B981'; // Freelancer accent — emerald
+const ACCENT = '#10B981';
 
 interface MenuItem {
-  icon:      keyof typeof Ionicons.glyphMap;
-  label:     string;
-  sublabel?: string;
-  color:     string;
-  screen?:   keyof FreelancerStackParamList;
-  badge?:    string;
+  icon:       keyof typeof Ionicons.glyphMap;
+  label:      string;
+  sublabel?:  string;
+  color:      string;
+  screen?:    keyof FreelancerStackParamList;
+  badge?:     string;
   badgeColor?: string;
 }
 
@@ -80,19 +62,19 @@ const MenuSection: React.FC<{
               <Text style={{ color: colors.text, fontSize: typography.base, fontWeight: '500' }}>
                 {item.label}
               </Text>
-              {item.sublabel ? (
+              {item.sublabel && (
                 <Text style={{ color: colors.textMuted, fontSize: typography.xs, marginTop: 1 }}>
                   {item.sublabel}
                 </Text>
-              ) : null}
+              )}
             </View>
-            {item.badge ? (
+            {item.badge && (
               <View style={[ms.badge, { backgroundColor: (item.badgeColor ?? item.color) + '20' }]}>
                 <Text style={{ fontSize: 10, fontWeight: '700', color: item.badgeColor ?? item.color }}>
                   {item.badge}
                 </Text>
               </View>
-            ) : null}
+            )}
             <Ionicons name="chevron-forward" size={15} color={colors.textMuted} />
           </TouchableOpacity>
         ))}
@@ -111,7 +93,7 @@ export const FreelancerMoreScreen: React.FC = () => {
   const { data: profile }      = useProfile();
   const { data: verification } = useVerificationStatus();
 
-  const avatarUrl  = profile?.avatar?.secure_url ?? null;
+  const avatarUrl  = (profile as any)?.avatar?.secure_url ?? null;
   const initials   = (user?.name ?? 'F').split(' ').map((p: string) => p[0]).join('').toUpperCase().slice(0, 2);
   const vStatus    = verification?.verificationStatus ?? 'none';
   const isVerified = vStatus === 'full';
@@ -123,58 +105,22 @@ export const FreelancerMoreScreen: React.FC = () => {
       { text: 'Sign Out', style: 'destructive', onPress: () => logout.mutate() },
     ]);
 
-  // ── Menu sections ─────────────────────────────────────────
-
   const workSection: MenuItem[] = [
-    {
-      icon: 'images-outline',
-      label: 'My Portfolio',
-      sublabel: 'Manage projects & work samples',
-      color: ACCENT,
-      screen: 'PortfolioList',
-    },
-    {
-      icon: 'briefcase-outline',
-      label: 'My Services',
-      sublabel: 'Manage offered services & pricing',
-      color: ACCENT,
-      screen: 'ServicesList',
-    },
-    {
-      icon: 'ribbon-outline',
-      label: 'Certifications',
-      sublabel: 'Add professional credentials',
-      color: ACCENT,
-      screen: 'CertificationsList',
-    },
-    {
-      icon: 'star-outline',
-      label: 'My Reviews',
-      sublabel: 'View ratings from clients',
-      color: '#F59E0B',
-      screen: 'MyReviews',
-    },
+    { icon: 'images-outline', label: 'My Portfolio',     sublabel: 'Manage projects & work samples', color: ACCENT,    screen: 'PortfolioList' },
+    { icon: 'briefcase-outline', label: 'My Services',   sublabel: 'Manage offered services & pricing', color: ACCENT, screen: 'ServicesList' },
+    { icon: 'ribbon-outline', label: 'Certifications',   sublabel: 'Add professional credentials',    color: ACCENT,   screen: 'CertificationsList' },
+    { icon: 'star-outline',   label: 'My Reviews',       sublabel: 'View ratings from clients',        color: '#F59E0B', screen: 'MyReviews' },
   ];
 
   const marketplaceSection: MenuItem[] = [
-    {
-      icon: 'people-outline',
-      label: 'Find Other Freelancers',
-      sublabel: 'Browse the freelancer marketplace',
-      color: '#6366F1',
-      screen: 'FreelancerMarketplace',
-    },
+    { icon: 'people-outline', label: 'Find Freelancers', sublabel: 'Browse the freelancer marketplace', color: '#6366F1', screen: 'FreelancerMarketplace' },
   ];
 
   const verificationSection: MenuItem[] = [
     {
       icon: 'shield-checkmark-outline',
       label: 'Verification',
-      sublabel: isVerified
-        ? 'Fully verified ✓'
-        : isPartial
-        ? 'Partially verified — continue'
-        : 'Get verified to build client trust',
+      sublabel: isVerified ? 'Fully verified ✓' : isPartial ? 'Partially verified — continue' : 'Get verified to build client trust',
       color: isVerified ? ACCENT : '#F59E0B',
       screen: 'VerificationStatus',
       badge: isVerified ? 'Verified' : isPartial ? 'Partial' : undefined,
@@ -183,43 +129,17 @@ export const FreelancerMoreScreen: React.FC = () => {
   ];
 
   const rewardsSection: MenuItem[] = [
-    {
-      icon: 'gift-outline',
-      label: 'Referrals & Rewards',
-      sublabel: 'Invite friends, earn reward points',
-      color: '#F59E0B',
-      screen: 'Referral',
-    },
-    {
-      icon: 'trophy-outline',
-      label: 'Leaderboard',
-      sublabel: 'See top referrers',
-      color: '#F59E0B',
-      screen: 'Leaderboard',
-    },
+    { icon: 'gift-outline',   label: 'Referrals & Rewards', sublabel: 'Invite friends, earn reward points', color: '#F59E0B', screen: 'Referral' },
+    { icon: 'trophy-outline', label: 'Leaderboard',         sublabel: 'See top referrers',                  color: '#F59E0B', screen: 'Leaderboard' },
   ];
 
   const shopSection: MenuItem[] = [
-    {
-      icon: 'storefront-outline',
-      label: 'Product Marketplace',
-      sublabel: 'Browse products & services',
-      color: colors.primary,
-      screen: 'ProductMarketplace',
-    },
+    { icon: 'storefront-outline', label: 'Product Marketplace', sublabel: 'Browse products & services', color: colors.primary, screen: 'ProductMarketplace' },
   ];
 
   const accountSection: MenuItem[] = [
-    {
-      icon: 'notifications-outline',
-      label: 'Notifications',
-      color: colors.primary,
-    },
-    {
-      icon: 'lock-closed-outline',
-      label: 'Privacy & Security',
-      color: colors.primary,
-    },
+    { icon: 'notifications-outline', label: 'Notifications',     color: colors.primary },
+    { icon: 'lock-closed-outline',   label: 'Privacy & Security', color: colors.primary },
   ];
 
   const supportSection: MenuItem[] = [
@@ -234,7 +154,7 @@ export const FreelancerMoreScreen: React.FC = () => {
       contentContainerStyle={{ padding: spacing[4], paddingTop: 56, paddingBottom: 40 }}
       showsVerticalScrollIndicator={false}
     >
-      {/* ── User card ───────────────────────────────── */}
+      {/* User card */}
       <TouchableOpacity
         onPress={() => navigation.navigate('EditProfile')}
         activeOpacity={0.85}
@@ -264,16 +184,15 @@ export const FreelancerMoreScreen: React.FC = () => {
         </View>
       </TouchableOpacity>
 
-      {/* ── Sections ────────────────────────────────── */}
-      <MenuSection title="Work"          items={workSection}         navigation={navigation} />
-      <MenuSection title="Marketplace"   items={marketplaceSection}  navigation={navigation} />
-      <MenuSection title="Verification"  items={verificationSection} navigation={navigation} />
-      <MenuSection title="Rewards"       items={rewardsSection}      navigation={navigation} />
-      <MenuSection title="Shop"          items={shopSection}         navigation={navigation} />
-      <MenuSection title="Account"       items={accountSection}      navigation={navigation} />
-      <MenuSection title="Support"       items={supportSection}      navigation={navigation} />
+      <MenuSection title="Work"         items={workSection}         navigation={navigation} />
+      <MenuSection title="Marketplace"  items={marketplaceSection}  navigation={navigation} />
+      <MenuSection title="Verification" items={verificationSection} navigation={navigation} />
+      <MenuSection title="Rewards"      items={rewardsSection}      navigation={navigation} />
+      <MenuSection title="Shop"         items={shopSection}         navigation={navigation} />
+      <MenuSection title="Account"      items={accountSection}      navigation={navigation} />
+      <MenuSection title="Support"      items={supportSection}      navigation={navigation} />
 
-      {/* ── Sign out ────────────────────────────────── */}
+      {/* Sign out */}
       <TouchableOpacity
         onPress={handleLogout}
         disabled={logout.isPending}

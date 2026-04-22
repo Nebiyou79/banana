@@ -1,127 +1,116 @@
-import { useEffect, useState } from 'react';
+// src/social/hooks/useSocialSearch.ts
 import {
   useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { socialSearchService } from '../services/socialSearchService';
+import { useEffect, useState } from 'react';
+import {
+  socialSearchService,
+  type SearchHistoryEntry,
+} from '../services/socialSearchService';
+import type { SearchParams, SearchResponse } from '../types';
 import { SOCIAL_KEYS } from './queryKeys';
-import type {
-  SearchParams,
-  SearchResponse,
-} from '../types';
-import type { SearchHistoryEntry } from '../services/socialSearchService';
 
-/**
- * Local debounce hook. Avoids pulling in lodash.
- */
-function useDebounce<T>(value: T, delay: number): T {
-  const [dv, setDv] = useState(value);
+const DEBOUNCE_MS = 300;
+
+const useDebounced = (value: string, delay = DEBOUNCE_MS) => {
+  const [v, setV] = useState(value);
   useEffect(() => {
-    const t = setTimeout(() => setDv(value), delay);
+    const t = setTimeout(() => setV(value), delay);
     return () => clearTimeout(t);
   }, [value, delay]);
-  return dv;
-}
+  return v;
+};
 
-/**
- * Profile search. Debounces the `q` param so we don't hammer the API
- * on every keystroke. Query is disabled until the debounced term has at
- * least 2 characters.
- */
 export const useSocialSearch = (params: SearchParams) => {
-  const debouncedQuery = useDebounce(params.q, 400);
+  const debouncedQuery = useDebounced(params.q ?? '');
+  const hasTypeFilter = Boolean(params.type && params.type !== 'all');
+  const queryLen = debouncedQuery.trim().length;
 
   return useQuery({
-    queryKey: SOCIAL_KEYS.searchProfiles({
-      ...params,
-      q: debouncedQuery,
-    }),
+    queryKey: SOCIAL_KEYS.searchProfiles({ ...params, q: debouncedQuery }),
     queryFn: async () => {
       const res = await socialSearchService.searchProfiles({
         ...params,
         q: debouncedQuery,
       });
-      return (res.data?.data ?? res.data) as SearchResponse;
+      const raw = res.data?.data ?? res.data;
+      // Normalise to SearchResponse
+      return {
+        results: raw?.results ?? raw?.data ?? raw ?? [],
+        pagination: raw?.pagination ?? {
+          page: 1,
+          limit: 20,
+          total: 0,
+          pages: 0,
+        },
+        total: raw?.total ?? raw?.pagination?.total ?? 0,
+      } as SearchResponse;
     },
-    enabled: (debouncedQuery?.length ?? 0) >= 2,
+    enabled: queryLen >= 2 || hasTypeFilter,
     staleTime: 1000 * 30,
     placeholderData: (prev) => prev,
   });
 };
 
-export const useSearchPosts = (query: string, page = 1, limit = 10) => {
-  const debounced = useDebounce(query, 400);
-  return useQuery({
-    queryKey: SOCIAL_KEYS.searchPosts(debounced),
+export const useSearchPosts = (params: {
+  q: string;
+  hashtag?: string;
+  type?: string;
+}) =>
+  useQuery({
+    queryKey: SOCIAL_KEYS.searchPosts(params),
     queryFn: async () => {
-      const res = await socialSearchService.searchPosts(debounced, page, limit);
+      const res = await socialSearchService.searchPosts(params);
       return res.data?.data ?? res.data;
     },
-    enabled: (debounced?.length ?? 0) >= 2,
+    enabled: (params.q?.length ?? 0) >= 2 || Boolean(params.hashtag),
     staleTime: 1000 * 30,
   });
-};
 
-export const useSearchHashtags = (query: string, trending = false) => {
-  const debounced = useDebounce(query, 400);
-  return useQuery({
-    queryKey: SOCIAL_KEYS.searchHashtags(debounced),
+export const useSearchHashtags = (query: string, trending = false) =>
+  useQuery({
+    queryKey: SOCIAL_KEYS.searchHashtags(query),
     queryFn: async () => {
-      const res = await socialSearchService.searchHashtags(debounced, trending);
+      const res = await socialSearchService.searchHashtags(query, trending);
       return res.data?.data ?? res.data;
     },
-    enabled: (debounced?.length ?? 0) >= 2,
+    enabled: trending || (query?.length ?? 0) >= 2,
     staleTime: 1000 * 60,
   });
-};
 
-export const useUnifiedSearch = (query: string) => {
-  const debounced = useDebounce(query, 400);
+export const useSearchUnified = (params: SearchParams) => {
+  const debouncedQuery = useDebounced(params.q ?? '');
   return useQuery({
-    queryKey: SOCIAL_KEYS.unifiedSearch(debounced),
+    queryKey: SOCIAL_KEYS.unifiedSearch(params),
     queryFn: async () => {
-      const res = await socialSearchService.unifiedSearch(debounced);
+      const res = await socialSearchService.unified({
+        ...params,
+        q: debouncedQuery,
+      });
       return res.data?.data ?? res.data;
     },
-    enabled: (debounced?.length ?? 0) >= 2,
+    enabled: (debouncedQuery?.length ?? 0) >= 2,
     staleTime: 1000 * 30,
   });
 };
 
-// ---------- Search history ----------
-
+// ── History ────────────────────────────────────────────────────
 export const useSearchHistory = () =>
   useQuery({
     queryKey: SOCIAL_KEYS.searchHistory,
-    queryFn: () => socialSearchService.getSearchHistory(),
-    staleTime: 1000 * 60,
+    queryFn: () => socialSearchService.getHistory(),
+    staleTime: Infinity,
   });
 
 export const useAddSearchHistory = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ query, type }: { query: string; type?: string }) =>
-      socialSearchService.addToSearchHistory(query, type),
-    onMutate: async ({ query, type }) => {
-      await qc.cancelQueries({ queryKey: SOCIAL_KEYS.searchHistory });
-      const prev = qc.getQueryData<SearchHistoryEntry[]>(
-        SOCIAL_KEYS.searchHistory
-      );
-      const trimmed = query.trim();
-      if (!trimmed) return { prev };
-      const next: SearchHistoryEntry[] = [
-        { query: trimmed, type, timestamp: Date.now() },
-        ...(prev ?? []).filter((h) => h.query !== trimmed),
-      ].slice(0, 20);
+    mutationFn: (entry: { query: string; type?: string }) =>
+      socialSearchService.addHistory(entry),
+    onSuccess: (next: SearchHistoryEntry[]) => {
       qc.setQueryData(SOCIAL_KEYS.searchHistory, next);
-      return { prev };
-    },
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(SOCIAL_KEYS.searchHistory, ctx.prev);
-    },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: SOCIAL_KEYS.searchHistory });
     },
   });
 };
@@ -130,23 +119,9 @@ export const useRemoveSearchHistoryEntry = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (query: string) =>
-      socialSearchService.removeSearchHistoryEntry(query),
-    onMutate: async (query) => {
-      await qc.cancelQueries({ queryKey: SOCIAL_KEYS.searchHistory });
-      const prev = qc.getQueryData<SearchHistoryEntry[]>(
-        SOCIAL_KEYS.searchHistory
-      );
-      qc.setQueryData<SearchHistoryEntry[]>(
-        SOCIAL_KEYS.searchHistory,
-        (old) => (old ?? []).filter((h) => h.query !== query)
-      );
-      return { prev };
-    },
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(SOCIAL_KEYS.searchHistory, ctx.prev);
-    },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: SOCIAL_KEYS.searchHistory });
+      socialSearchService.removeHistoryEntry(query),
+    onSuccess: (next: SearchHistoryEntry[]) => {
+      qc.setQueryData(SOCIAL_KEYS.searchHistory, next);
     },
   });
 };
@@ -154,17 +129,9 @@ export const useRemoveSearchHistoryEntry = () => {
 export const useClearSearchHistory = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => socialSearchService.clearSearchHistory(),
-    onMutate: async () => {
-      await qc.cancelQueries({ queryKey: SOCIAL_KEYS.searchHistory });
-      const prev = qc.getQueryData<SearchHistoryEntry[]>(
-        SOCIAL_KEYS.searchHistory
-      );
-      qc.setQueryData<SearchHistoryEntry[]>(SOCIAL_KEYS.searchHistory, []);
-      return { prev };
-    },
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(SOCIAL_KEYS.searchHistory, ctx.prev);
+    mutationFn: () => socialSearchService.clearHistory(),
+    onSuccess: () => {
+      qc.setQueryData(SOCIAL_KEYS.searchHistory, []);
     },
   });
 };

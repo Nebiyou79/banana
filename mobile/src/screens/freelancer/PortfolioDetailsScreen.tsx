@@ -1,14 +1,11 @@
+/**
+ * screens/freelancer/PortfolioDetailsScreen.tsx
+ * Uses GET /freelancer/portfolio/:id from backend.
+ */
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  Image,
-  TouchableOpacity,
-  StyleSheet,
-  Dimensions,
-  Linking,
-  Alert,
+  View, Text, ScrollView, Image, TouchableOpacity,
+  StyleSheet, Dimensions, Linking, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -20,20 +17,20 @@ import { ScreenWrapper, ScreenHeader, LoadingState, EmptyState } from '../../com
 import type { FreelancerStackParamList } from '../../navigation/FreelancerNavigator';
 
 const { width } = Dimensions.get('window');
-type Nav = NativeStackNavigationProp<FreelancerStackParamList>;
+type Nav   = NativeStackNavigationProp<FreelancerStackParamList>;
 type Route = RouteProp<FreelancerStackParamList, 'PortfolioDetails'>;
 
 export const PortfolioDetailsScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
-  const { params } = useRoute<Route>();
-  const { theme } = useThemeStore();
-  const { colors, spacing, typography, borderRadius, shadows } = theme;
+  const { params }  = useRoute<Route>();
+  const { theme }   = useThemeStore();
+  const { colors, spacing, typography, borderRadius } = theme;
 
   const [activeImage, setActiveImage] = useState(0);
   const { data: item, isLoading, error } = usePortfolioItem(params.itemId);
   const deleteMutation = useDeletePortfolioItem();
 
-  const imageUrls = item?.mediaUrls?.filter(u => u?.includes('cloudinary.com')) ?? [];
+  const imageUrls = (item?.mediaUrls ?? []).filter(u => u?.includes('cloudinary.com'));
 
   const handleDelete = () => {
     Alert.alert('Delete Project', 'This cannot be undone. Continue?', [
@@ -72,11 +69,14 @@ export const PortfolioDetailsScreen: React.FC = () => {
       <ScreenHeader
         title={item.title}
         onBack={() => navigation.goBack()}
-        rightAction={{ icon: 'pencil-outline', onPress: () => navigation.navigate('EditPortfolio', { itemId: item._id }) }}
+        rightAction={{
+          icon: 'pencil-outline',
+          onPress: () => navigation.navigate('EditPortfolio', { itemId: item._id }),
+        }}
       />
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-        {/* Image Carousel */}
+        {/* Image carousel */}
         {imageUrls.length > 0 && (
           <View>
             <Image
@@ -85,40 +85,42 @@ export const PortfolioDetailsScreen: React.FC = () => {
               resizeMode="cover"
             />
             {imageUrls.length > 1 && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.thumbnailRow}
-                style={[styles.thumbnailScroll, { backgroundColor: colors.surface }]}
-              >
-                {imageUrls.map((url, i) => (
-                  <TouchableOpacity key={i} onPress={() => setActiveImage(i)}>
-                    <Image
-                      source={{ uri: getOptimizedUrl(url, 80, 80) }}
-                      style={[
-                        styles.thumbnail,
-                        {
-                          borderColor: i === activeImage ? colors.primary : colors.border,
-                          borderRadius: borderRadius.md,
-                          opacity: i === activeImage ? 1 : 0.6,
-                        },
-                      ]}
-                      resizeMode="cover"
+              <>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.thumbnailRow}
+                  style={[styles.thumbnailScroll, { backgroundColor: colors.surface }]}
+                >
+                  {imageUrls.map((url, i) => (
+                    <TouchableOpacity key={i} onPress={() => setActiveImage(i)}>
+                      <Image
+                        source={{ uri: getOptimizedUrl(url, 80, 80) }}
+                        style={[
+                          styles.thumbnail,
+                          {
+                            borderColor: i === activeImage ? colors.primary : colors.border,
+                            borderRadius: borderRadius.md,
+                            opacity: i === activeImage ? 1 : 0.6,
+                          },
+                        ]}
+                        resizeMode="cover"
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                {/* Dots */}
+                <View style={styles.dotsRow}>
+                  {imageUrls.map((_, i) => (
+                    <View
+                      key={i}
+                      style={[styles.dot, {
+                        backgroundColor: i === activeImage ? colors.primary : colors.border,
+                      }]}
                     />
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-            {/* Dots */}
-            {imageUrls.length > 1 && (
-              <View style={styles.dotsRow}>
-                {imageUrls.map((_, i) => (
-                  <View
-                    key={i}
-                    style={[styles.dot, { backgroundColor: i === activeImage ? colors.primary : colors.border }]}
-                  />
-                ))}
-              </View>
+                  ))}
+                </View>
+              </>
             )}
           </View>
         )}
@@ -159,8 +161,12 @@ export const PortfolioDetailsScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Stats Cards */}
-          <View style={[styles.statsGrid, { backgroundColor: colors.surface, borderRadius: borderRadius.xl, borderColor: colors.border }]}>
+          {/* Stats */}
+          <View style={[styles.statsGrid, {
+            backgroundColor: colors.surface,
+            borderRadius: borderRadius.xl,
+            borderColor: colors.border,
+          }]}>
             {item.budget != null && (
               <View style={[styles.statCell, { borderRightWidth: 1, borderRightColor: colors.border }]}>
                 <Ionicons name="pricetag-outline" size={16} color={colors.primary} />
@@ -206,7 +212,10 @@ export const PortfolioDetailsScreen: React.FC = () => {
               <SectionTitle icon="code-slash-outline" label="Technologies Used" />
               <View style={styles.tagWrap}>
                 {item.technologies.map((t, i) => (
-                  <View key={i} style={[styles.techTag, { backgroundColor: colors.primaryLight, borderRadius: borderRadius.md }]}>
+                  <View key={i} style={[styles.techTag, {
+                    backgroundColor: colors.primaryLight,
+                    borderRadius: borderRadius.md,
+                  }]}>
                     <Text style={{ fontSize: typography.xs, color: colors.primary, fontWeight: '600' }}>{t}</Text>
                   </View>
                 ))}
@@ -214,11 +223,15 @@ export const PortfolioDetailsScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Project Link */}
+          {/* Live link */}
           {item.projectUrl && (
             <TouchableOpacity
               onPress={() => Linking.openURL(item.projectUrl!)}
-              style={[styles.linkBtn, { backgroundColor: colors.primaryLight, borderRadius: borderRadius.lg, borderColor: colors.primary + '40' }]}
+              style={[styles.linkBtn, {
+                backgroundColor: colors.primaryLight,
+                borderRadius: borderRadius.lg,
+                borderColor: colors.primary + '40',
+              }]}
             >
               <Ionicons name="open-outline" size={18} color={colors.primary} />
               <Text style={{ fontSize: typography.sm, color: colors.primary, fontWeight: '700', marginLeft: 8 }}>
@@ -263,20 +276,20 @@ const SectionTitle: React.FC<{ icon: keyof typeof Ionicons.glyphMap; label: stri
 };
 
 const styles = StyleSheet.create({
-  heroImage: { height: 280 },
-  thumbnailScroll: { paddingVertical: 10 },
-  thumbnailRow: { paddingHorizontal: 16, gap: 8 },
-  thumbnail: { width: 64, height: 64, borderWidth: 2 },
-  dotsRow: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingVertical: 8 },
-  dot: { width: 6, height: 6, borderRadius: 3 },
-  titleRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
-  metaBadges: { flexDirection: 'row', gap: 6, marginTop: 8 },
-  metaBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4 },
-  statsGrid: { flexDirection: 'row', borderWidth: 1, overflow: 'hidden', marginTop: 4 },
-  statCell: { flex: 1, alignItems: 'center', paddingVertical: 16 },
-  tagWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  techTag: { paddingHorizontal: 12, paddingVertical: 6 },
-  linkBtn: { flexDirection: 'row', alignItems: 'center', padding: 16, marginTop: 20, borderWidth: 1 },
-  actionsRow: { flexDirection: 'row', gap: 10 },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 50 },
+  heroImage:      { height: 280 },
+  thumbnailScroll:{ paddingVertical: 10 },
+  thumbnailRow:   { paddingHorizontal: 16, gap: 8 },
+  thumbnail:      { width: 64, height: 64, borderWidth: 2 },
+  dotsRow:        { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingVertical: 8 },
+  dot:            { width: 6, height: 6, borderRadius: 3 },
+  titleRow:       { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
+  metaBadges:     { flexDirection: 'row', gap: 6, marginTop: 8 },
+  metaBadge:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4 },
+  statsGrid:      { flexDirection: 'row', borderWidth: 1, overflow: 'hidden', marginTop: 4 },
+  statCell:       { flex: 1, alignItems: 'center', paddingVertical: 16 },
+  tagWrap:        { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  techTag:        { paddingHorizontal: 12, paddingVertical: 6 },
+  linkBtn:        { flexDirection: 'row', alignItems: 'center', padding: 16, marginTop: 20, borderWidth: 1 },
+  actionsRow:     { flexDirection: 'row', gap: 10 },
+  actionBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 50 },
 });

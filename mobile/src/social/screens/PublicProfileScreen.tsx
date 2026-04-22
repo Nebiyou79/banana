@@ -1,12 +1,13 @@
+// src/social/screens/PublicProfileScreen.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Share,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -25,6 +26,7 @@ import {
 } from '../components/profile';
 import { ErrorState, SectionHeader } from '../components/shared';
 import {
+  useDislike,
   usePublicProfile,
   useReact,
   useRemoveInteraction,
@@ -32,6 +34,7 @@ import {
   useToggleFollow,
   useToggleSavePost,
 } from '../hooks';
+import { SOCIAL_KEYS } from '../hooks/queryKeys';
 import { postService } from '../services/postService';
 import { sanitizeSocialData } from '../services/sanitize';
 import { useSocialTheme } from '../theme/socialTheme';
@@ -40,11 +43,8 @@ import type {
   PublicProfile as PublicProfileT,
   ReactionType,
 } from '../types';
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { SOCIAL_KEYS } from '../hooks/queryKeys';
-import { SocialStackParamList } from '../navigation/types';
+import type { SocialStackParamList } from '../navigation/types';
 
-// A lightweight inline infinite-query for THIS user's posts (reusing postService).
 const useUserPosts = (userId: string) =>
   useInfiniteQuery({
     queryKey: SOCIAL_KEYS.profilePosts(userId),
@@ -80,10 +80,10 @@ const PublicProfileScreen: React.FC = () => {
   const { profile, isLoading, isError, refetch, isFollowing } =
     usePublicProfile(userId);
   const postsQ = useUserPosts(userId);
-  const { mutate: toggleFollow, isPending: followPending } =
-    useToggleFollow();
+  const { mutate: toggleFollow, isPending: followPending } = useToggleFollow();
   const { mutate: react } = useReact();
   const { mutate: removeReact } = useRemoveInteraction();
+  const { mutate: dislike } = useDislike();
   const { mutate: toggleSave } = useToggleSavePost();
   const { mutate: sharePost } = useSharePost();
 
@@ -102,6 +102,11 @@ const PublicProfileScreen: React.FC = () => {
       });
     },
     [posts, react]
+  );
+
+  const handleDislike = useCallback(
+    (postId: string) => dislike({ postId }),
+    [dislike]
   );
 
   const handleFollow = useCallback(() => {
@@ -146,10 +151,7 @@ const PublicProfileScreen: React.FC = () => {
   if (isError || !profile) {
     return (
       <SafeAreaView style={[styles.center, { backgroundColor: theme.bg }]}>
-        <ErrorState
-          message="Couldn't load profile"
-          onRetry={refetch}
-        />
+        <ErrorState message="Couldn't load profile" onRetry={refetch} />
       </SafeAreaView>
     );
   }
@@ -258,25 +260,18 @@ const PublicProfileScreen: React.FC = () => {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      {/* Floating back button */}
       <SafeAreaView edges={['top']} pointerEvents="box-none">
         <View style={styles.topBar} pointerEvents="box-none">
           <TouchableOpacity
             onPress={() => navigation.goBack()}
-            style={[
-              styles.iconBtn,
-              { backgroundColor: 'rgba(0,0,0,0.35)' },
-            ]}
+            style={[styles.iconBtn, { backgroundColor: 'rgba(0,0,0,0.35)' }]}
             accessibilityLabel="Back"
           >
             <Ionicons name="arrow-back" size={22} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={handleShareProfile}
-            style={[
-              styles.iconBtn,
-              { backgroundColor: 'rgba(0,0,0,0.35)' },
-            ]}
+            style={[styles.iconBtn, { backgroundColor: 'rgba(0,0,0,0.35)' }]}
             accessibilityLabel="Share profile"
           >
             <Ionicons name="share-outline" size={20} color="#fff" />
@@ -297,6 +292,7 @@ const PublicProfileScreen: React.FC = () => {
         isFetchingNextPage={postsQ.isFetchingNextPage}
         onReact={handleReact}
         onRemoveReact={removeReact}
+        onDislike={handleDislike}
         onComment={(post) => {
           setSelectedPost(post);
           setSheetVisible(true);
@@ -326,11 +322,7 @@ const PublicProfileScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   section: { paddingHorizontal: 16, paddingBottom: 8 },
   topBar: {
     position: 'absolute',
@@ -351,8 +343,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
-
-// Satisfy unused-import linter for Text
-void Text;
 
 export default PublicProfileScreen;

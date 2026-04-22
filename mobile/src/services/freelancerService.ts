@@ -1,306 +1,295 @@
 /**
- * freelancerService.ts
- * Matches backend: freelancerController.js + freelancerRoutes.js
- * Key: Images via Cloudinary, PUT /freelancer/profile for all updates
+ * services/freelancerService.ts
+ *
+ * Mobile freelancer API service.
+ * Aligned to:
+ *  - Backend: freelancerController.js + freelancerRoutes.js
+ *  - Web:     frontend/src/services/freelancerService.ts
+ *
+ * All image URLs must be Cloudinary. Local URLs are filtered out.
  */
-import api, { apiGet, apiPost, apiPut, apiDelete } from '../lib/api';
+
+import api, { apiGet } from '../lib/api';
+import { getToken } from '../lib/storage';
 import { FREELANCER } from '../constants/api';
+import type {
+  FreelancerProfile,
+  FreelancerProfileUpdate,
+  FreelancerStats,
+  DashboardData,
+  PortfolioItem,
+  PortfolioFormData,
+  FreelancerCertification,
+  CertificationFormData,
+  FreelancerServiceItem,
+  ServiceFormData,
+  UploadedMediaFile,
+} from '../types/freelancer';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export interface FreelancerSkill {
-  name: string;
-  level?: 'beginner' | 'intermediate' | 'expert';
-  yearsOfExperience?: number;
-}
-
-export interface FreelancerExperience {
-  _id?: string;
-  company: string;
-  position: string;
-  startDate: string;
-  endDate?: string;
-  current: boolean;
-  description?: string;
-  skills: string[];
-}
-
-export interface FreelancerEducation {
-  _id?: string;
-  institution: string;
-  degree: string;
-  field?: string;
-  startDate: string;
-  endDate?: string;
-  current: boolean;
-  description?: string;
-}
-
-export interface FreelancerCertification {
-  _id?: string;
-  name: string;
-  issuer: string;
-  issueDate: string;
-  expiryDate?: string;
-  credentialId?: string;
-  credentialUrl?: string;
-  description?: string;
-  skills?: string[];
-}
-
-export interface FreelancerService {
-  _id?: string;
-  title: string;
-  description: string;
-  price: number;
-  priceType: 'fixed' | 'hourly';
-  deliveryTime: number;
-  category?: string;
-}
-
-export interface PortfolioItem {
-  _id: string;
-  title: string;
-  description: string;
-  mediaUrl?: string;
-  mediaUrls?: string[];
-  projectUrl?: string;
-  category?: string;
-  technologies?: string[];
-  budget?: number;
-  budgetType?: 'fixed' | 'hourly' | 'daily' | 'monthly';
-  duration?: string;
-  client?: string;
-  completionDate?: string;
-  featured?: boolean;
-  visibility?: 'public' | 'private';
-  isCloudinary?: boolean;
-  createdAt: string;
-  updatedAt?: string;
-}
-
-export interface FreelancerProfile {
-  _id: string;
-  name: string;
-  email: string;
-  role: string;
-  bio?: string;
-  location?: string;
-  phone?: string;
-  website?: string;
-  avatar?: string;
-  dateOfBirth?: string;
-  gender?: string;
-  age?: number;
-  skills: Array<FreelancerSkill | string>;
-  experience: FreelancerExperience[];
-  education: FreelancerEducation[];
-  certifications?: FreelancerCertification[];
-  portfolio: PortfolioItem[];
-  socialLinks?: Record<string, string>;
-  freelancerProfile?: {
-    headline?: string;
-    hourlyRate?: number;
-    availability?: 'available' | 'not-available' | 'part-time';
-    experienceLevel?: 'entry' | 'intermediate' | 'expert';
-    englishProficiency?: 'basic' | 'conversational' | 'fluent' | 'native';
-    timezone?: string;
-    specialization?: string[];
-    services?: FreelancerService[];
-    profileCompletion?: number;
-    totalEarnings?: number;
-    successRate?: number;
-    ratings?: { average: number; count: number };
-    verified?: boolean;
-    profileViews?: number;
-    socialLinks?: Record<string, string>;
-  };
-  profileCompleted: boolean;
-  verificationStatus: string;
-}
-
-export interface FreelancerProfileUpdate {
-  name?: string;
-  bio?: string;
-  location?: string;
-  phone?: string;
-  website?: string;
-  dateOfBirth?: string;
-  gender?: 'male' | 'female' | 'other' | 'prefer-not-to-say';
-  skills?: Array<{ name: string; level?: string; yearsOfExperience?: number }>;
-  experience?: FreelancerExperience[];
-  education?: FreelancerEducation[];
-  // Freelancer-specific via nested object:
-  freelancerProfile?: {
-    headline?: string;
-    hourlyRate?: number;
-    availability?: 'available' | 'not-available' | 'part-time';
-    experienceLevel?: 'entry' | 'intermediate' | 'expert';
-    englishProficiency?: 'basic' | 'conversational' | 'fluent' | 'native';
-    timezone?: string;
-    specialization?: string[];
-    socialLinks?: Record<string, string>;
-  };
-  // Flat social links also accepted by backend:
-  socialLinks?: Record<string, string>;
-}
-
-export interface FreelancerStats {
-  profileStrength: number;
-  jobSuccessScore: number;
-  onTimeDelivery: number;
-  responseRate: number;
-  totalEarnings: number;
-  totalJobs: number;
-  activeProposals: number;
-  profileViews: number;
-  clientReviews: number;
-  averageRating: number;
-  age?: number | null;
-  gender?: string;
-  portfolioCount: number;
-}
-
-export interface DashboardData {
-  stats: {
-    profile: { completion: number; views: number; verified: boolean };
-    portfolio: { total: number; featured: number };
-    skills: { total: number; categories: string[] };
-    earnings: { total: number; successRate: number };
-    ratings: { average: number; count: number };
-    proposals: { sent: number; accepted: number; pending: number };
-    socialLinks?: { total: number };
-    demographics?: { age: number | null; gender: string };
-  };
-  recentActivities: any[];
-  profileStrength: { score: number; strengths: string[]; suggestions: string[] };
-}
-
-export interface UploadedMediaFile {
-  filename: string;
-  originalName: string;
-  url: string;
-  path: string;
-  size: number;
-  mimetype: string;
-  uploadedAt: string;
-  isCloudinary: boolean;
-}
-
-// ─── API Response wrapper ─────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 interface ApiResp<T> {
   success: boolean;
   data: T;
   message?: string;
   profileCompletion?: number;
+  pagination?: {
+    current: number;
+    pages: number;
+    total: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
 }
+
+const isCloudinaryUrl = (url?: string): boolean =>
+  Boolean(url?.includes('cloudinary.com'));
+
+const filterCloudinaryItems = (items: PortfolioItem[]): PortfolioItem[] =>
+  items
+    .map(item => {
+      const urls: string[] = [];
+      if (item.mediaUrls?.length) urls.push(...item.mediaUrls);
+      else if (item.mediaUrl) urls.push(item.mediaUrl);
+      const cloudinary = urls.filter(isCloudinaryUrl);
+      return { ...item, mediaUrls: cloudinary, isCloudinary: cloudinary.length > 0 };
+    })
+    .filter(item => (item.mediaUrls?.length ?? 0) > 0);
+
+/**
+ * Returns a Cloudinary transformation URL for efficient image delivery.
+ * Falls back gracefully to the original URL if transformation is impossible.
+ */
+export const getOptimizedUrl = (url: string, w = 400, h = 300): string => {
+  if (!url?.includes('cloudinary.com')) return url ?? '';
+  const parts = url.split('/upload/');
+  if (parts.length !== 2) return url;
+  return `${parts[0]}/upload/w_${w},h_${h},c_fill,g_auto,q_auto,f_auto/${parts[1]}`;
+};
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 export const freelancerService = {
-  // GET /freelancer/dashboard/overview
+  // ── Utilities ──────────────────────────────────────────────────────────────
+
+  isCloudinaryUrl,
+  getOptimizedUrl,
+
+  getSkillName: (skill: { name: string } | string): string =>
+    typeof skill === 'string' ? skill : skill.name,
+
+  // ── Dashboard ──────────────────────────────────────────────────────────────
+
   getDashboard: async (): Promise<DashboardData> => {
     const res = await apiGet<ApiResp<DashboardData>>(FREELANCER.DASHBOARD);
     if (!res.data.success) throw new Error(res.data.message ?? 'Failed to load dashboard');
     return res.data.data;
   },
 
-  // GET /freelancer/stats
   getStats: async (): Promise<FreelancerStats> => {
     const res = await apiGet<ApiResp<FreelancerStats>>(FREELANCER.STATS);
     if (!res.data.success) throw new Error(res.data.message ?? 'Failed to load stats');
     return res.data.data;
   },
 
-  // GET /freelancer/profile
+  // ── Profile ────────────────────────────────────────────────────────────────
+
   getProfile: async (): Promise<FreelancerProfile> => {
     const res = await apiGet<ApiResp<FreelancerProfile>>(FREELANCER.PROFILE);
     if (!res.data.success) throw new Error(res.data.message ?? 'Failed to load profile');
+    const profile = res.data.data;
+    // Only Cloudinary portfolio items
+    if (profile.portfolio) {
+      profile.portfolio = filterCloudinaryItems(profile.portfolio);
+    }
+    // Only Cloudinary avatar
+    if (profile.avatar && !isCloudinaryUrl(profile.avatar)) {
+      profile.avatar = '';
+    }
+    return profile;
+  },
+
+  updateProfile: async (
+    data: FreelancerProfileUpdate,
+  ): Promise<{ profile: FreelancerProfile; profileCompletion: number }> => {
+    const res = await api.put<ApiResp<FreelancerProfile>>(FREELANCER.PROFILE, data);
+    if (!res.data.success) throw new Error(res.data.message ?? 'Failed to update profile');
+    const profile = res.data.data;
+    if (profile.portfolio) {
+      profile.portfolio = filterCloudinaryItems(profile.portfolio);
+    }
+    return { profile, profileCompletion: res.data.profileCompletion ?? 0 };
+  },
+
+  // ── Portfolio ──────────────────────────────────────────────────────────────
+
+  getPortfolio: async (params?: {
+    page?: number;
+    limit?: number;
+    featured?: boolean;
+    category?: string;
+  }): Promise<{ items: PortfolioItem[]; pagination: ApiResp<unknown>['pagination'] }> => {
+    const res = await apiGet<ApiResp<{ items: PortfolioItem[]; pagination: any }>>(
+      FREELANCER.PORTFOLIO,
+      { params },
+    );
+    if (!res.data.success) throw new Error(res.data.message ?? 'Failed to fetch portfolio');
+    const items = filterCloudinaryItems(res.data.data?.items ?? []);
+    return { items, pagination: res.data.data?.pagination ?? {} };
+  },
+
+  getPortfolioItem: async (id: string): Promise<PortfolioItem> => {
+    const res = await apiGet<ApiResp<PortfolioItem>>(FREELANCER.PORTFOLIO_ITEM(id));
+    if (!res.data.success) throw new Error(res.data.message ?? 'Portfolio item not found');
+    const item = res.data.data;
+    // Ensure mediaUrls is populated
+    return {
+      ...item,
+      mediaUrls: item.mediaUrls?.length
+        ? item.mediaUrls
+        : item.mediaUrl
+          ? [item.mediaUrl]
+          : [],
+      isCloudinary: true,
+    };
+  },
+
+  addPortfolioItem: async (
+    data: PortfolioFormData,
+  ): Promise<{ item: PortfolioItem; profileCompletion: number }> => {
+    const cloudinaryUrls = data.mediaUrls.filter(isCloudinaryUrl);
+    if (cloudinaryUrls.length === 0) throw new Error('At least one Cloudinary image is required');
+
+    const payload = {
+      ...data,
+      mediaUrl: cloudinaryUrls[0],
+      mediaUrls: cloudinaryUrls,
+    };
+
+    const res = await api.post<ApiResp<PortfolioItem>>(FREELANCER.PORTFOLIO, payload);
+    if (!res.data.success) throw new Error(res.data.message ?? 'Failed to add portfolio item');
+
+    const item = res.data.data;
+    return {
+      item: {
+        ...item,
+        mediaUrls: item.mediaUrls?.length ? item.mediaUrls : item.mediaUrl ? [item.mediaUrl] : [],
+        isCloudinary: true,
+      },
+      profileCompletion: res.data.profileCompletion ?? 0,
+    };
+  },
+
+  updatePortfolioItem: async (
+    id: string,
+    data: Partial<PortfolioFormData>,
+  ): Promise<{ item: PortfolioItem; profileCompletion: number }> => {
+    const payload: Record<string, unknown> = { ...data };
+    if (data.mediaUrls?.length) {
+      const cloudinary = data.mediaUrls.filter(isCloudinaryUrl);
+      if (cloudinary.length === 0) throw new Error('At least one Cloudinary image is required');
+      payload.mediaUrl = cloudinary[0];
+      payload.mediaUrls = cloudinary;
+    }
+
+    const res = await api.put<ApiResp<PortfolioItem>>(FREELANCER.PORTFOLIO_ITEM(id), payload);
+    if (!res.data.success) throw new Error(res.data.message ?? 'Failed to update portfolio item');
+
+    const item = res.data.data;
+    return {
+      item: {
+        ...item,
+        mediaUrls: item.mediaUrls?.length ? item.mediaUrls : item.mediaUrl ? [item.mediaUrl] : [],
+        isCloudinary: true,
+      },
+      profileCompletion: res.data.profileCompletion ?? 0,
+    };
+  },
+
+  deletePortfolioItem: async (id: string): Promise<{ profileCompletion: number }> => {
+    const res = await api.delete<ApiResp<unknown>>(FREELANCER.PORTFOLIO_ITEM(id));
+    if (!res.data.success) throw new Error(res.data.message ?? 'Failed to delete portfolio item');
+    return { profileCompletion: res.data.profileCompletion ?? 0 };
+  },
+
+  // ── Services ───────────────────────────────────────────────────────────────
+
+  getServices: async (): Promise<FreelancerServiceItem[]> => {
+    const res = await apiGet<ApiResp<FreelancerServiceItem[]>>(FREELANCER.SERVICES);
+    if (!res.data.success) throw new Error(res.data.message ?? 'Failed to fetch services');
+    return res.data.data ?? [];
+  },
+
+  addService: async (data: ServiceFormData): Promise<FreelancerServiceItem> => {
+    const res = await api.post<ApiResp<FreelancerServiceItem>>(FREELANCER.SERVICES, data);
+    if (!res.data.success) throw new Error(res.data.message ?? 'Failed to add service');
     return res.data.data;
   },
 
-  // PUT /freelancer/profile
-  updateProfile: async (data: FreelancerProfileUpdate): Promise<{ profile: FreelancerProfile; profileCompletion: number }> => {
-    const res = await api.put<ApiResp<FreelancerProfile>>(FREELANCER.PROFILE, data);
-    if (!res.data.success) throw new Error(res.data.message ?? 'Failed to update profile');
-    return { profile: res.data.data, profileCompletion: res.data.profileCompletion ?? 0 };
+  updateService: async (
+    id: string,
+    data: Partial<ServiceFormData>,
+  ): Promise<FreelancerServiceItem> => {
+    const res = await api.put<ApiResp<FreelancerServiceItem>>(FREELANCER.SERVICE(id), data);
+    if (!res.data.success) throw new Error(res.data.message ?? 'Failed to update service');
+    return res.data.data;
   },
 
-  // GET /freelancer/certifications
+  deleteService: async (id: string): Promise<void> => {
+    const res = await api.delete<ApiResp<unknown>>(FREELANCER.SERVICE(id));
+    if (!res.data.success) throw new Error(res.data.message ?? 'Failed to delete service');
+  },
+
+  // ── Certifications ─────────────────────────────────────────────────────────
+
   getCertifications: async (): Promise<FreelancerCertification[]> => {
     const res = await apiGet<ApiResp<FreelancerCertification[]>>(FREELANCER.CERTIFICATIONS);
     if (!res.data.success) throw new Error(res.data.message ?? 'Failed to fetch certifications');
     return res.data.data ?? [];
   },
 
-  // POST /freelancer/certifications
-  addCertification: async (data: Omit<FreelancerCertification, '_id'>): Promise<{ cert: FreelancerCertification; profileCompletion: number }> => {
+  addCertification: async (
+    data: CertificationFormData,
+  ): Promise<{ cert: FreelancerCertification; profileCompletion: number }> => {
     const res = await api.post<ApiResp<FreelancerCertification>>(FREELANCER.CERTIFICATIONS, data);
     if (!res.data.success) throw new Error(res.data.message ?? 'Failed to add certification');
     return { cert: res.data.data, profileCompletion: res.data.profileCompletion ?? 0 };
   },
 
-  // PUT /freelancer/certifications/:id
-  updateCertification: async (id: string, data: Partial<FreelancerCertification>): Promise<{ cert: FreelancerCertification; profileCompletion: number }> => {
+  updateCertification: async (
+    id: string,
+    data: Partial<CertificationFormData>,
+  ): Promise<{ cert: FreelancerCertification; profileCompletion: number }> => {
     const res = await api.put<ApiResp<FreelancerCertification>>(FREELANCER.CERTIFICATION(id), data);
     if (!res.data.success) throw new Error(res.data.message ?? 'Failed to update certification');
     return { cert: res.data.data, profileCompletion: res.data.profileCompletion ?? 0 };
   },
 
-  // DELETE /freelancer/certifications/:id
   deleteCertification: async (id: string): Promise<{ profileCompletion: number }> => {
-    const res = await api.delete<ApiResp<any>>(FREELANCER.CERTIFICATION(id));
-    if (!res.data.success) throw new Error('Failed to delete certification');
+    const res = await api.delete<ApiResp<unknown>>(FREELANCER.CERTIFICATION(id));
+    if (!res.data.success) throw new Error(res.data.message ?? 'Failed to delete certification');
     return { profileCompletion: res.data.profileCompletion ?? 0 };
   },
 
-  // GET /freelancer/services
-  getServices: async (): Promise<FreelancerService[]> => {
-    const res = await apiGet<ApiResp<FreelancerService[]>>(FREELANCER.SERVICES);
-    if (!res.data.success) throw new Error('Failed to fetch services');
-    return res.data.data ?? [];
-  },
+  // ── Image Upload ───────────────────────────────────────────────────────────
 
-  // POST /freelancer/services
-  addService: async (data: Omit<FreelancerService, '_id'>): Promise<FreelancerService> => {
-    const res = await api.post<ApiResp<FreelancerService>>(FREELANCER.SERVICES, data);
-    if (!res.data.success) throw new Error(res.data.message ?? 'Failed to add service');
-    return res.data.data;
-  },
-
-  // GET /freelancer/portfolio
-  getPortfolio: async (params?: { page?: number; limit?: number; featured?: boolean; category?: string }): Promise<{
-    items: PortfolioItem[];
-    pagination: any;
-  }> => {
-    const res = await apiGet<ApiResp<{ items: PortfolioItem[]; pagination: any }>>(FREELANCER.PORTFOLIO, { params });
-    if (!res.data.success) throw new Error('Failed to fetch portfolio');
-    const items = (res.data.data?.items ?? []).filter(
-      item => item.mediaUrls?.some((u: string) => u?.includes('cloudinary.com')) ||
-        (item.mediaUrl ?? '').includes('cloudinary.com')
-    );
-    return { items, pagination: res.data.data?.pagination ?? {} };
-  },
-
-  // POST /freelancer/upload/portfolio — uploads media files to Cloudinary
-  // field name: 'media' (matches cloudinaryMediaUpload.multiple)
+  /**
+   * Upload portfolio images via multipart/form-data.
+   * Field name must be 'media' — matches cloudinaryMediaUpload.multiple on the backend.
+   */
   uploadPortfolioImages: async (
-    files: Array<{ uri: string; name: string; type: string }>
+    files: Array<{ uri: string; name: string; type: string }>,
   ): Promise<UploadedMediaFile[]> => {
     const formData = new FormData();
     files.forEach(f => {
-      (formData as FormData).append('media', {
-        uri: f.uri,
-        name: f.name,
-        type: f.type,
-      } as unknown as Blob);
+      (formData as any).append('media', { uri: f.uri, name: f.name, type: f.type });
     });
 
-    const token = await import('../lib/storage').then(m => m.getToken());
-    const baseUrl = process.env.EXPO_PUBLIC_API_URL?.replace('/api/v1', '') ?? 'http://192.168.1.7:4000';
+    const token = await getToken();
+    const baseUrl =
+      (process.env.EXPO_PUBLIC_API_URL?.replace('/api/v1', '') ?? 'http://192.168.1.7:4000');
 
-    const response = await fetch(`${baseUrl}/api/v1/freelancer/upload/portfolio`, {
+    const response = await fetch(`${baseUrl}/api/v1${FREELANCER.UPLOAD_PORTFOLIO}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token ?? ''}` },
       body: formData,
@@ -308,37 +297,41 @@ export const freelancerService = {
 
     const data = await response.json();
     if (!data.success) throw new Error(data.message ?? 'Upload failed');
-    return data.data as UploadedMediaFile[];
+
+    const uploaded: UploadedMediaFile[] = (data.data as any[]).map(f => ({
+      filename: f.filename ?? `portfolio-${Date.now()}`,
+      originalName: f.originalName ?? f.originalname ?? 'unknown',
+      url: f.url ?? f.path ?? '',
+      path: f.path ?? f.url ?? '',
+      size: f.size ?? 0,
+      mimetype: f.mimetype ?? 'image/jpeg',
+      uploadedAt: f.uploadedAt ?? new Date().toISOString(),
+      isCloudinary: isCloudinaryUrl(f.url ?? f.path),
+    }));
+
+    const cloudinary = uploaded.filter(f => f.isCloudinary);
+    if (cloudinary.length === 0) throw new Error('No Cloudinary URLs received from server');
+    return cloudinary;
   },
 
-  // POST /freelancer/upload/avatar — uploads avatar to Cloudinary
-  uploadAvatar: async (file: { uri: string; name: string; type: string }): Promise<{ avatarUrl: string; filename: string; size: number; path: string }> => {
+  /**
+   * Upload avatar via multipart/form-data.
+   * Field name must be 'avatar'.
+   */
+  uploadAvatar: async (
+    file: { uri: string; name: string; type: string },
+  ): Promise<{ avatarUrl: string; filename: string; size: number; path: string }> => {
     const formData = new FormData();
-    (formData as FormData).append('avatar', {
-      uri: file.uri,
-      name: file.name,
-      type: file.type,
-    } as unknown as Blob);
+    (formData as any).append('avatar', { uri: file.uri, name: file.name, type: file.type });
 
-    const res = await api.post<ApiResp<any>>(`${FREELANCER.PROFILE.replace('/profile', '')}/upload/avatar`, formData, {
+    const res = await api.post<ApiResp<any>>(FREELANCER.UPLOAD_AVATAR, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 60_000,
     });
     if (!res.data.success) throw new Error(res.data.message ?? 'Failed to upload avatar');
     return res.data.data;
   },
-
-  // ── Cloudinary URL helpers ─────────────────────────────────────────────────
-
-  isCloudinaryUrl: (url?: string): boolean => Boolean(url?.includes('cloudinary.com')),
-
-  getOptimizedUrl: (url: string, w = 400, h = 300): string => {
-    if (!url?.includes('cloudinary.com')) return url;
-    const parts = url.split('/upload/');
-    if (parts.length !== 2) return url;
-    return `${parts[0]}/upload/w_${w},h_${h},c_fill,g_auto,q_auto,f_auto/${parts[1]}`;
-  },
-
-  getSkillName: (skill: FreelancerSkill | string): string =>
-    typeof skill === 'string' ? skill : skill.name,
 };
+
+// Named re-export for convenience (used in PortfolioDetailsScreen, DashboardScreen)
+export { getOptimizedUrl as optimizeCloudinaryUrl };

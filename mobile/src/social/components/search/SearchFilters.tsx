@@ -1,33 +1,9 @@
+// src/social/components/search/SearchFilters.tsx
 import React, { memo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSocialTheme } from '../../theme/socialTheme';
 import type { SearchSortBy, SearchType } from '../../types';
 import Chip from '../shared/Chip';
-
-interface TypeOption {
-  key: SearchType;
-  label: string;
-}
-
-interface SortOption {
-  key: SearchSortBy;
-  label: string;
-}
-
-const TYPE_OPTIONS: TypeOption[] = [
-  { key: 'all', label: 'All' },
-  { key: 'candidate', label: 'Candidates' },
-  { key: 'freelancer', label: 'Freelancers' },
-  { key: 'company', label: 'Companies' },
-  { key: 'organization', label: 'Organizations' },
-];
-
-const SORT_OPTIONS: SortOption[] = [
-  { key: 'relevance', label: 'Relevant' },
-  { key: 'followers', label: 'Most followed' },
-  { key: 'recent', label: 'Recent' },
-  { key: 'alphabetical', label: 'A–Z' },
-];
 
 interface Props {
   type: SearchType;
@@ -36,10 +12,21 @@ interface Props {
   onSortChange: (s: SearchSortBy) => void;
 }
 
-/**
- * Two horizontally scrollable chip rows: role filter and sort order.
- * Each row is independently scrollable so long labels never truncate.
- */
+const TYPES: { key: SearchType; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'candidate', label: 'Candidates' },
+  { key: 'freelancer', label: 'Freelancers' },
+  { key: 'company', label: 'Companies' },
+  { key: 'organization', label: 'Organizations' },
+];
+
+const SORTS: { key: SearchSortBy; label: string }[] = [
+  { key: 'relevance', label: 'Relevance' },
+  { key: 'followers', label: 'Most followers' },
+  { key: 'recent', label: 'Recently active' },
+  { key: 'alphabetical', label: 'A–Z' },
+];
+
 const SearchFilters: React.FC<Props> = memo(
   ({ type, sortBy, onTypeChange, onSortChange }) => {
     const theme = useSocialTheme();
@@ -47,36 +34,36 @@ const SearchFilters: React.FC<Props> = memo(
       <View
         style={[
           styles.wrap,
-          { backgroundColor: theme.bg, borderBottomColor: theme.border },
+          { borderBottomColor: theme.border },
         ]}
       >
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.row}
+          keyboardShouldPersistTaps="handled"
         >
-          {TYPE_OPTIONS.map((o) => (
+          {TYPES.map((t) => (
             <Chip
-              key={o.key}
-              label={o.label}
-              selected={type === o.key}
-              onPress={() => onTypeChange(o.key)}
+              key={t.key}
+              label={t.label}
+              selected={type === t.key}
+              onPress={() => onTypeChange(t.key)}
             />
           ))}
         </ScrollView>
-
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.row}
+          contentContainerStyle={[styles.row, { paddingTop: 6 }]}
+          keyboardShouldPersistTaps="handled"
         >
-          {SORT_OPTIONS.map((o) => (
+          {SORTS.map((s) => (
             <Chip
-              key={o.key}
-              label={o.label}
-              selected={sortBy === o.key}
-              onPress={() => onSortChange(o.key)}
-              compact
+              key={s.key}
+              label={s.label}
+              selected={sortBy === s.key}
+              onPress={() => onSortChange(s.key)}
             />
           ))}
         </ScrollView>
@@ -88,10 +75,12 @@ const SearchFilters: React.FC<Props> = memo(
 SearchFilters.displayName = 'SearchFilters';
 
 const styles = StyleSheet.create({
-  wrap: { borderBottomWidth: 0.5, paddingVertical: 4 },
+  wrap: {
+    paddingVertical: 10,
+    borderBottomWidth: 0.5,
+  },
   row: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
     gap: 8,
     alignItems: 'center',
   },

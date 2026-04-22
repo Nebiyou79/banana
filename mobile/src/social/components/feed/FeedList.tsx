@@ -1,3 +1,4 @@
+// src/social/components/feed/FeedList.tsx
 import { FlashList } from '@shopify/flash-list';
 import React, { memo, useCallback, useMemo } from 'react';
 import {
@@ -20,6 +21,8 @@ type ListItem =
   | (Post & { __kind?: 'post' })
   | { __kind: 'ad'; id: string; ad: AdConfig };
 
+  type CardMode = 'feed' | 'compact' | 'minimal';
+
 interface Props {
   posts: Post[];
   loading: boolean;
@@ -30,6 +33,7 @@ interface Props {
   isFetchingNextPage?: boolean;
   onReact: (postId: string, reaction: ReactionType) => void;
   onRemoveReact: (postId: string) => void;
+  onDislike: (postId: string) => void;
   onComment: (post: Post) => void;
   onShare: (post: Post) => void;
   onSave: (postId: string, isSaved: boolean) => void;
@@ -38,20 +42,14 @@ interface Props {
   onMediaPress?: (post: Post, index: number) => void;
   onMenuPress?: (post: Post) => void;
   onAdPress?: (ad: AdConfig) => void;
+   cardMode?: CardMode;
   adPlacement?: AdPlacement;
   adFrequency?: number;
   emptyTitle?: string;
   emptySubtitle?: string;
-  emptyIcon?: ComponentProps<typeof Ionicons>['name'];
-  emptyAction?: { label: string; onPress: () => void };
+ emptyIcon?: ComponentProps<typeof Ionicons>['name'];  emptyAction?: { label: string; onPress: () => void };
   ListHeaderComponent?: React.ComponentType<any> | React.ReactElement;
 }
-
-/**
- * Shared feed list. Uses FlashList for performance, injects a role-specific
- * ad every `adFrequency` posts, and renders skeletons while loading.
- * Used by FeedScreen, MyPostsScreen, SavedPostsScreen, and profile posts.
- */
 const FeedList: React.FC<Props> = memo(
   ({
     posts,
@@ -63,6 +61,7 @@ const FeedList: React.FC<Props> = memo(
     isFetchingNextPage,
     onReact,
     onRemoveReact,
+    onDislike,
     onComment,
     onShare,
     onSave,
@@ -86,11 +85,7 @@ const FeedList: React.FC<Props> = memo(
       const result: ListItem[] = [];
       posts.forEach((post, i) => {
         result.push({ ...post, __kind: 'post' });
-        if (
-          ad &&
-          (i + 1) % adFrequency === 0 &&
-          i < posts.length - 1
-        ) {
+        if (ad && (i + 1) % adFrequency === 0 && i < posts.length - 1) {
           result.push({
             __kind: 'ad',
             id: `ad_${post._id}_${i}`,
@@ -112,6 +107,7 @@ const FeedList: React.FC<Props> = memo(
             post={post}
             onReact={onReact}
             onRemoveReact={onRemoveReact}
+            onDislike={onDislike}
             onComment={onComment}
             onShare={onShare}
             onSave={onSave}
@@ -125,6 +121,7 @@ const FeedList: React.FC<Props> = memo(
       [
         onReact,
         onRemoveReact,
+        onDislike,
         onComment,
         onShare,
         onSave,
@@ -148,7 +145,6 @@ const FeedList: React.FC<Props> = memo(
       if (hasNextPage && !isFetchingNextPage) onEndReached?.();
     }, [hasNextPage, isFetchingNextPage, onEndReached]);
 
-    // First-load skeleton
     if (loading && posts.length === 0) {
       return (
         <View style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -192,10 +188,7 @@ const FeedList: React.FC<Props> = memo(
         }
         ListFooterComponent={
           isFetchingNextPage ? (
-            <ActivityIndicator
-              color={theme.primary}
-              style={styles.footer}
-            />
+            <ActivityIndicator color={theme.primary} style={styles.footer} />
           ) : null
         }
         contentContainerStyle={styles.content}

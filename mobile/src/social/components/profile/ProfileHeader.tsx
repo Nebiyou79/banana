@@ -1,203 +1,221 @@
+// src/social/components/profile/ProfileHeader.tsx
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import React, { memo } from 'react';
 import {
-  Animated,
+  ActivityIndicator,
   Image,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useFadeIn, useSlideUp } from '../../theme/animations';
 import { SOCIAL_LAYOUT } from '../../theme/layout';
 import { useSocialTheme } from '../../theme/socialTheme';
 import type { Profile, PublicProfile } from '../../types';
 import { formatCount } from '../../utils/format';
+import { getAvatarUrl, getCoverUrl } from '../../utils/profileUtils';
 import Avatar from '../shared/Avatar';
-import FollowButton from '../shared/FollowButton';
 import RoleBadge from '../shared/RoleBadge';
 import VerifiedBadge from '../shared/VerifiedBadge';
 
 interface Props {
   profile: Profile | PublicProfile;
-  isOwn: boolean;
+  isOwn?: boolean;
   isFollowing?: boolean;
   followLoading?: boolean;
-  onFollowPress?: () => void;
   onEditPress?: () => void;
   onAvatarPress?: () => void;
   onCoverPress?: () => void;
+  onFollowPress?: () => void;
+  onMessagePress?: () => void;
   onFollowersPress?: () => void;
   onFollowingPress?: () => void;
-  onMessagePress?: () => void;
 }
 
-/**
- * Profile hero: cover photo → overlapping avatar → name + role + verified →
- * headline + location → follower/following/posts stats → primary action.
- *
- * If no cover photo is set, we render a role-gradient placeholder so the
- * four roles feel distinct even for brand-new profiles.
- */
+const COVER_HEIGHT = 160;
+
 const ProfileHeader: React.FC<Props> = memo(
   ({
     profile,
     isOwn,
     isFollowing,
     followLoading,
-    onFollowPress,
     onEditPress,
     onAvatarPress,
     onCoverPress,
+    onFollowPress,
+    onMessagePress,
     onFollowersPress,
     onFollowingPress,
-    onMessagePress,
   }) => {
     const theme = useSocialTheme();
-    const opacity = useFadeIn(0, 300);
-    const { translateY } = useSlideUp(20, 120);
-
-    const user = profile.user;
-    const name = user?.name ?? 'Unknown';
-    const avatarUri = profile.avatar?.secure_url ?? user?.avatar;
-    const coverUri = profile.coverPhoto?.secure_url;
-    const stats = profile.socialStats ?? {
-      followerCount: 0,
-      followingCount: 0,
-      postCount: 0,
-    };
+    const coverUri = getCoverUrl(profile);
+    const avatarUri = getAvatarUrl(profile);
+    const verified = profile.verificationStatus === 'verified';
+    const stats = profile.socialStats ?? ({} as any);
 
     return (
-      <Animated.View
-        style={[styles.wrap, { backgroundColor: theme.card, opacity }]}
-      >
+      <View>
         {/* Cover */}
         <TouchableOpacity
-          onPress={onCoverPress}
           activeOpacity={isOwn ? 0.85 : 1}
+          onPress={isOwn ? onCoverPress : undefined}
           disabled={!isOwn}
+          style={[
+            styles.coverWrap,
+            { backgroundColor: theme.primaryLighter },
+          ]}
         >
           {coverUri ? (
-            <Image
-              source={{ uri: coverUri }}
-              style={styles.cover}
-              resizeMode="cover"
-            />
+            <Image source={{ uri: coverUri }} style={styles.cover} />
           ) : (
-            <LinearGradient
-              colors={theme.splashGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.cover}
+            <View
+              style={[
+                styles.coverFallback,
+                { backgroundColor: theme.primaryLighter },
+              ]}
             />
           )}
           {isOwn ? (
-            <View style={styles.coverEditBadge}>
-              <Ionicons name="camera" size={14} color="#fff" />
+            <View
+              style={[
+                styles.coverEdit,
+                { backgroundColor: 'rgba(0,0,0,0.45)' },
+              ]}
+            >
+              <Ionicons name="camera-outline" size={16} color="#fff" />
+              <Text style={styles.coverEditText}>Edit cover</Text>
             </View>
           ) : null}
         </TouchableOpacity>
 
-        <Animated.View
-          style={[styles.body, { transform: [{ translateY }] }]}
-        >
-          {/* Avatar + action button row */}
-          <View style={styles.avatarRow}>
-            <TouchableOpacity
-              onPress={onAvatarPress}
-              activeOpacity={isOwn ? 0.85 : 1}
-              disabled={!isOwn && !onAvatarPress}
-              style={styles.avatarWrap}
+        {/* Avatar + actions row */}
+        <View style={styles.topRow}>
+          <TouchableOpacity
+            onPress={onAvatarPress}
+            activeOpacity={isOwn ? 0.85 : 1}
+            disabled={!isOwn}
+          >
+            <View
+              style={[
+                styles.avatarWrap,
+                { borderColor: theme.card, backgroundColor: theme.card },
+              ]}
             >
               <Avatar
-                uri={avatarUri}
-                name={name}
+                uri={avatarUri ?? undefined}
+                name={profile.user?.name}
                 size={SOCIAL_LAYOUT.avatarLg}
-                borderWidth={4}
-                borderColor={theme.card}
               />
-              {isOwn ? (
-                <View
-                  style={[
-                    styles.avatarEditBadge,
-                    { backgroundColor: theme.primary },
-                  ]}
-                >
-                  <Ionicons name="camera" size={12} color="#fff" />
-                </View>
-              ) : null}
-            </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
 
-            <View style={styles.actionRow}>
-              {isOwn ? (
-                <TouchableOpacity
-                  onPress={onEditPress}
-                  activeOpacity={0.85}
+          <View style={styles.actions}>
+            {isOwn ? (
+              <TouchableOpacity
+                onPress={onEditPress}
+                activeOpacity={0.85}
+                style={[
+                  styles.actionBtn,
+                  {
+                    backgroundColor: 'transparent',
+                    borderColor: theme.border,
+                    borderWidth: 1,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="create-outline"
+                  size={15}
+                  color={theme.text}
+                />
+                <Text
                   style={[
-                    styles.editBtn,
-                    {
-                      borderColor: theme.border,
-                      backgroundColor: theme.cardAlt,
-                    },
+                    styles.actionText,
+                    { color: theme.text },
                   ]}
                 >
-                  <Ionicons
-                    name="create-outline"
-                    size={14}
-                    color={theme.text}
-                  />
-                  <Text style={[styles.editText, { color: theme.text }]}>
-                    Edit Profile
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <>
-                  {onMessagePress ? (
-                    <TouchableOpacity
-                      onPress={onMessagePress}
-                      activeOpacity={0.85}
-                      style={[
-                        styles.iconBtn,
-                        {
-                          backgroundColor: theme.cardAlt,
+                  Edit profile
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <>
+                <TouchableOpacity
+                  onPress={onFollowPress}
+                  activeOpacity={0.85}
+                  disabled={followLoading}
+                  style={[
+                    styles.actionBtn,
+                    isFollowing
+                      ? {
+                          backgroundColor: 'transparent',
                           borderColor: theme.border,
-                        },
+                          borderWidth: 1,
+                        }
+                      : { backgroundColor: theme.primary },
+                  ]}
+                >
+                  {followLoading ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={isFollowing ? theme.text : '#fff'}
+                    />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.actionText,
+                        { color: isFollowing ? theme.text : '#fff' },
                       ]}
                     >
-                      <Ionicons
-                        name="chatbubble-outline"
-                        size={18}
-                        color={theme.text}
-                      />
-                    </TouchableOpacity>
-                  ) : null}
-                  <FollowButton
-                    isFollowing={isFollowing ?? false}
-                    onPress={onFollowPress ?? (() => undefined)}
-                    loading={followLoading}
-                  />
-                </>
-              )}
-            </View>
+                      {isFollowing ? 'Following' : 'Follow'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+                {onMessagePress ? (
+                  <TouchableOpacity
+                    onPress={onMessagePress}
+                    activeOpacity={0.85}
+                    style={[
+                      styles.actionBtn,
+                      {
+                        backgroundColor: 'transparent',
+                        borderColor: theme.border,
+                        borderWidth: 1,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name="chatbubble-ellipses-outline"
+                      size={15}
+                      color={theme.text}
+                    />
+                    <Text
+                      style={[styles.actionText, { color: theme.text }]}
+                    >
+                      Message
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </>
+            )}
           </View>
+        </View>
 
-          {/* Name */}
+        {/* Name + headline */}
+        <View style={styles.info}>
           <View style={styles.nameRow}>
             <Text
               style={[styles.name, { color: theme.text }]}
               numberOfLines={1}
             >
-              {name}
+              {profile.user?.name ?? 'Unknown'}
             </Text>
-            <VerifiedBadge
-              status={user?.verificationStatus ?? profile.verificationStatus}
-              size={18}
-            />
-            {user?.role ? <RoleBadge role={user.role} size="sm" /> : null}
+            {verified ? <VerifiedBadge size={16} /> : null}
+            {profile.user?.role ? (
+              <RoleBadge role={profile.user.role} size="sm" />
+            ) : null}
           </View>
 
-          {/* Headline */}
           {profile.headline ? (
             <Text
               style={[styles.headline, { color: theme.subtext }]}
@@ -207,40 +225,32 @@ const ProfileHeader: React.FC<Props> = memo(
             </Text>
           ) : null}
 
-          {/* Location / website */}
-          {(profile.location || profile.website) ? (
-            <View style={styles.metaRow}>
-              {profile.location ? (
-                <View style={styles.metaItem}>
-                  <Ionicons
-                    name="location-outline"
-                    size={13}
-                    color={theme.muted}
-                  />
-                  <Text style={[styles.meta, { color: theme.muted }]}>
-                    {profile.location}
-                  </Text>
-                </View>
-              ) : null}
-              {profile.website ? (
-                <View style={styles.metaItem}>
-                  <Ionicons
-                    name="globe-outline"
-                    size={13}
-                    color={theme.muted}
-                  />
-                  <Text
-                    style={[styles.meta, { color: theme.primary }]}
-                    numberOfLines={1}
-                  >
-                    {profile.website.replace(/^https?:\/\//, '')}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          ) : null}
+          <View style={styles.metaRow}>
+            {profile.location ? (
+              <View style={styles.metaItem}>
+                <Ionicons
+                  name="location-outline"
+                  size={13}
+                  color={theme.muted}
+                />
+                <Text style={[styles.metaText, { color: theme.muted }]}>
+                  {profile.location}
+                </Text>
+              </View>
+            ) : null}
+            {profile.website ? (
+              <View style={styles.metaItem}>
+                <Ionicons name="link-outline" size={13} color={theme.muted} />
+                <Text
+                  style={[styles.metaText, { color: theme.primary }]}
+                  numberOfLines={1}
+                >
+                  {profile.website.replace(/^https?:\/\//, '')}
+                </Text>
+              </View>
+            ) : null}
+          </View>
 
-          {/* Bio */}
           {profile.bio ? (
             <Text
               style={[styles.bio, { color: theme.text }]}
@@ -249,146 +259,135 @@ const ProfileHeader: React.FC<Props> = memo(
               {profile.bio}
             </Text>
           ) : null}
+        </View>
 
-          {/* Stats */}
-          <View style={styles.stats}>
-            <Stat
-              label="Followers"
-              value={stats.followerCount}
-              onPress={onFollowersPress}
-            />
-            <Stat
-              label="Following"
-              value={stats.followingCount}
-              onPress={onFollowingPress}
-            />
-            <Stat label="Posts" value={stats.postCount} />
+        {/* Stats */}
+        <View style={[styles.stats, { borderTopColor: theme.border }]}>
+          <TouchableOpacity
+            style={styles.statCell}
+            onPress={onFollowersPress}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.statNum, { color: theme.text }]}>
+              {formatCount(stats.followerCount ?? 0)}
+            </Text>
+            <Text style={[styles.statLabel, { color: theme.muted }]}>
+              Followers
+            </Text>
+          </TouchableOpacity>
+          <View
+            style={[styles.statDivider, { backgroundColor: theme.border }]}
+          />
+          <TouchableOpacity
+            style={styles.statCell}
+            onPress={onFollowingPress}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.statNum, { color: theme.text }]}>
+              {formatCount(stats.followingCount ?? 0)}
+            </Text>
+            <Text style={[styles.statLabel, { color: theme.muted }]}>
+              Following
+            </Text>
+          </TouchableOpacity>
+          <View
+            style={[styles.statDivider, { backgroundColor: theme.border }]}
+          />
+          <View style={styles.statCell}>
+            <Text style={[styles.statNum, { color: theme.text }]}>
+              {formatCount(stats.postCount ?? 0)}
+            </Text>
+            <Text style={[styles.statLabel, { color: theme.muted }]}>
+              Posts
+            </Text>
           </View>
-        </Animated.View>
-      </Animated.View>
+        </View>
+      </View>
     );
   }
 );
 
 ProfileHeader.displayName = 'ProfileHeader';
 
-// ── Stat ──────────────────────────────────────────────────────────────
-const Stat: React.FC<{
-  label: string;
-  value: number;
-  onPress?: () => void;
-}> = ({ label, value, onPress }) => {
-  const theme = useSocialTheme();
-  const content = (
-    <View style={styles.stat}>
-      <Text style={[styles.statValue, { color: theme.text }]}>
-        {formatCount(value)}
-      </Text>
-      <Text style={[styles.statLabel, { color: theme.muted }]}>{label}</Text>
-    </View>
-  );
-  if (onPress) {
-    return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
-        {content}
-      </TouchableOpacity>
-    );
-  }
-  return content;
-};
-
-const COVER_HEIGHT = SOCIAL_LAYOUT.coverHeight;
-const AVATAR_OVERLAP = SOCIAL_LAYOUT.avatarLg / 2;
-
 const styles = StyleSheet.create({
-  wrap: {},
-  cover: { height: COVER_HEIGHT, width: '100%' },
-  coverEditBadge: {
+  coverWrap: {
+    width: '100%',
+    height: COVER_HEIGHT,
+    overflow: 'hidden',
+  },
+  cover: { width: '100%', height: '100%' },
+  coverFallback: { width: '100%', height: '100%' },
+  coverEdit: {
     position: 'absolute',
-    right: 12,
-    bottom: 12,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  body: { paddingHorizontal: 16, paddingBottom: 16 },
-  avatarRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    marginTop: -AVATAR_OVERLAP,
-    marginBottom: 12,
-  },
-  avatarWrap: { position: 'relative' },
-  avatarEditBadge: {
-    position: 'absolute',
-    right: 2,
-    bottom: 2,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 2,
-    borderColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  editBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 20,
-    borderWidth: 1,
-    minHeight: 44,
-  },
-  editText: { fontSize: 13, fontWeight: '700' },
-  iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    marginTop: 4,
-  },
-  name: { fontSize: 22, fontWeight: '800', maxWidth: '80%' },
-  headline: { fontSize: 14, marginTop: 4, lineHeight: 19 },
-  metaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 14,
-    marginTop: 8,
-  },
-  metaItem: {
+    right: 10,
+    bottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    maxWidth: '48%',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
   },
-  meta: { fontSize: 12 },
+  coverEditText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginTop: -40,
+  },
+  avatarWrap: {
+    borderRadius: 9999,
+    borderWidth: 4,
+    padding: 0,
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 4,
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+    minHeight: 36,
+  },
+  actionText: { fontSize: 13, fontWeight: '700' },
+  info: { paddingHorizontal: 16, marginTop: 10 },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  name: { fontSize: 20, fontWeight: '800' },
+  headline: { fontSize: 13, marginTop: 4, lineHeight: 18 },
+  metaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 6,
+  },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText: { fontSize: 12 },
   bio: { fontSize: 13, lineHeight: 19, marginTop: 10 },
   stats: {
     flexDirection: 'row',
-    gap: 24,
-    marginTop: 16,
+    marginTop: 14,
+    borderTopWidth: 0.5,
+    paddingVertical: 12,
   },
-  stat: { minHeight: 44 },
-  statValue: { fontSize: 18, fontWeight: '800' },
+  statCell: {
+    flex: 1,
+    alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  statDivider: { width: 0.5 },
+  statNum: { fontSize: 15, fontWeight: '800' },
   statLabel: { fontSize: 11, marginTop: 2 },
 });
 

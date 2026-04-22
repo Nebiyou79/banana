@@ -81,17 +81,32 @@ export const APPLICATIONS = {
   STATISTICS: '/applications/statistics/overview',
 } as const;
 
-// ─── FREELANCER (self) ────────────────────────────────────────────────────────
+
+const BASE = '/freelancer';
+ 
 export const FREELANCER = {
-  DASHBOARD: '/freelancer/dashboard/overview',
-  STATS: '/freelancer/stats',
-  PROFILE: '/freelancer/profile',
-  PORTFOLIO: '/freelancer/portfolio',
-  PORTFOLIO_ITEM: (id: string) => `/freelancer/portfolio/${id}`,
-  SERVICES: '/freelancer/services',
-  CERTIFICATIONS: '/freelancer/certifications',
-  CERTIFICATION: (id: string) => `/freelancer/certifications/${id}`,
-  UPLOAD_PORTFOLIO: '/freelancer/upload/portfolio',
+  // Dashboard & Stats
+  DASHBOARD:       `${BASE}/dashboard/overview`,
+  STATS:           `${BASE}/stats`,
+ 
+  // Profile
+  PROFILE:         `${BASE}/profile`,
+ 
+  // Portfolio
+  PORTFOLIO:       `${BASE}/portfolio`,
+  PORTFOLIO_ITEM:  (id: string) => `${BASE}/portfolio/${id}`,
+ 
+  // Services
+  SERVICES:        `${BASE}/services`,
+  SERVICE:         (id: string) => `${BASE}/services/${id}`,
+ 
+  // Certifications
+  CERTIFICATIONS:  `${BASE}/certifications`,
+  CERTIFICATION:   (id: string) => `${BASE}/certifications/${id}`,
+ 
+  // Uploads
+  UPLOAD_PORTFOLIO: `${BASE}/upload/portfolio`,
+  UPLOAD_AVATAR:    `${BASE}/upload/avatar`,
 } as const;
 
 // ─── FREELANCER MARKETPLACE ────────────────────────────────────────────────────

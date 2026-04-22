@@ -1,8 +1,10 @@
+// src/social/screens/SearchScreen.tsx
 import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   StyleSheet,
   View,
 } from 'react-native';
@@ -21,6 +23,7 @@ import {
   useAddSearchHistory,
   useBulkFollowStatus,
   useClearSearchHistory,
+  usePopularProfiles,
   useRemoveSearchHistoryEntry,
   useSearchHashtags,
   useSearchHistory,
@@ -40,39 +43,57 @@ const SearchScreen: React.FC = () => {
   const [sortBy, setSortBy] = useState<SearchSortBy>('relevance');
   const [pendingFollowId, setPendingFollowId] = useState<string | null>(null);
 
-  const searchQ = useSocialSearch({
-    q: query,
-    type: typeFilter,
-    sortBy,
-  });
+  const trimmed = query.trim();
+  const hasTypeFilter = typeFilter !== 'all';
+  const isActive = trimmed.length >= 2 || hasTypeFilter;
+
+  const searchQ = useSocialSearch({ q: trimmed, type: typeFilter, sortBy });
   const historyQ = useSearchHistory();
   const hashtagsQ = useSearchHashtags('trending', true);
+  const popularQ = usePopularProfiles();
 
   const addHistoryM = useAddSearchHistory();
   const removeHistoryM = useRemoveSearchHistoryEntry();
   const clearHistoryM = useClearSearchHistory();
   const { mutate: toggleFollow } = useToggleFollow();
 
-  const isActive = query.trim().length >= 2;
   const results: SearchResult[] = searchQ.data?.results ?? [];
+  const popular: SearchResult[] = useMemo(() => {
+    const raw = popularQ.data as any;
+    const list = Array.isArray(raw) ? raw : raw?.data ?? raw?.results ?? [];
+    return list.map((u: any): SearchResult => ({
+      _id: u?._id ?? u?.user?._id ?? '',
+      name: u?.name ?? u?.user?.name ?? 'Unknown',
+      avatar: u?.avatar?.secure_url ?? u?.avatar ?? u?.user?.avatar,
+      role: u?.role ?? u?.user?.role ?? 'candidate',
+      headline: u?.headline,
+      followerCount: u?.socialStats?.followerCount,
+      verificationStatus: u?.verificationStatus ?? u?.user?.verificationStatus,
+    }));
+  }, [popularQ.data]);
 
-  // Bulk follow status for result rows
   const resultIds = useMemo(() => results.map((r) => r._id), [results]);
+  const popularIds = useMemo(() => popular.map((r) => r._id), [popular]);
+
   const bulkStatusQ = useBulkFollowStatus(
     resultIds,
     'User',
     resultIds.length > 0
   );
+  const popularStatusQ = useBulkFollowStatus(
+    popularIds,
+    'User',
+    !isActive && popularIds.length > 0
+  );
 
   const ad = getAdForPlacement(theme.role, 'search');
 
-  // ── Handlers ─────────────────────────────────────────────────────
   const handleSubmit = useCallback(() => {
-    const q = query.trim();
-    if (q.length >= 2) {
-      addHistoryM.mutate({ query: q, type: typeFilter });
+    if (trimmed.length >= 2) {
+      addHistoryM.mutate({ query: trimmed, type: typeFilter });
     }
-  }, [query, typeFilter, addHistoryM]);
+    Keyboard.dismiss();
+  }, [trimmed, typeFilter, addHistoryM]);
 
   const handleHistoryPress = useCallback(
     (entry: { query: string; type?: string }) => {
@@ -107,9 +128,9 @@ const SearchScreen: React.FC = () => {
 
   const handleCancel = useCallback(() => {
     setQuery('');
+    Keyboard.dismiss();
   }, []);
 
-  // ── Trending hashtags normalisation ──────────────────────────────
   const trending: TrendingHashtag[] = useMemo(() => {
     const raw = hashtagsQ.data;
     if (!raw) return [];
@@ -121,42 +142,100 @@ const SearchScreen: React.FC = () => {
     }));
   }, [hashtagsQ.data]);
 
-  // ── Discover (default) view ──────────────────────────────────────
+  // ── Discover view (no query, no type filter) ────────────────────
   const DiscoverView = (
-    <View style={{ flex: 1 }}>
-      {historyQ.data && historyQ.data.length > 0 ? (
-        <SearchHistoryList
-          history={historyQ.data}
-          onPressEntry={handleHistoryPress}
-          onRemoveEntry={(e) => removeHistoryM.mutate(e.query)}
-          onClearAll={() => clearHistoryM.mutate()}
-        />
-      ) : null}
+    <FlashList
+      data={popular}
+      keyExtractor={(u) => u._id}
+      ListHeaderComponent={
+        <View>
+          {historyQ.data && historyQ.data.length > 0 ? (
+            <SearchHistoryList
+              history={historyQ.data}
+              onPressEntry={handleHistoryPress}
+              onRemoveEntry={(e) => removeHistoryM.mutate(e.query)}
+              onClearAll={() => clearHistoryM.mutate()}
+            />
+          ) : null}
 
-      {ad ? (
-        <View style={{ paddingTop: 8 }}>
-          <AdCard ad={ad} />
+          {ad ? (
+            <View style={{ paddingTop: 8 }}>
+              <AdCard ad={ad} />
+            </View>
+          ) : null}
+
+          {trending.length > 0 ? (
+            <>
+              <SectionHeader title="Trending hashtags" />
+              <TrendingHashtags
+                hashtags={trending}
+                onPress={(name) => setQuery(`#${name}`)}
+              />
+            </>
+          ) : null}
+
+          {popular.length > 0 ? (
+            <SectionHeader title="People you may know" />
+          ) : null}
         </View>
-      ) : null}
-
-      {trending.length > 0 ? (
-        <>
-          <SectionHeader title="Trending hashtags" />
-          <TrendingHashtags
-            hashtags={trending}
-            onPress={(name) => setQuery(`#${name}`)}
-          />
-        </>
-      ) : null}
-
-      {(!historyQ.data?.length && !trending.length) ? (
-        <EmptyState
-          icon="search-outline"
-          title="Discover people and topics"
-          subtitle="Search for candidates, freelancers, companies, organizations, or hashtags."
+      }
+      renderItem={({ item }) => (
+        <UserCard
+          user={item}
+          isFollowing={!!popularStatusQ.data?.[item._id]?.following}
+          followLoading={pendingFollowId === item._id}
+          onPress={() => goToProfile(item._id)}
+          onFollowPress={() => handleToggle(item._id)}
         />
-      ) : null}
-    </View>
+      )}
+      ListEmptyComponent={
+        popularQ.isLoading ? (
+          <ActivityIndicator
+            color={theme.primary}
+            style={{ padding: 24 }}
+          />
+        ) : !historyQ.data?.length && !trending.length ? (
+          <EmptyState
+            icon="search-outline"
+            title="Discover people and topics"
+            subtitle="Search for candidates, freelancers, companies, organizations, or hashtags."
+          />
+        ) : null
+      }
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={{ paddingBottom: 32 }}
+    />
+  );
+
+  // ── Results view ────────────────────────────────────────────────
+  const ResultsView = searchQ.isLoading ? (
+    <ActivityIndicator color={theme.primary} style={{ padding: 32 }} />
+  ) : results.length === 0 ? (
+    <EmptyState
+      icon="sad-outline"
+      title="No matches"
+      subtitle={
+        trimmed
+          ? `We couldn't find anyone for "${trimmed}". Try different keywords.`
+          : 'No results for that filter. Try a different role or add a keyword.'
+      }
+    />
+  ) : (
+    <FlashList
+      data={results}
+      keyExtractor={(u) => u._id}
+      renderItem={({ item }) => (
+        <UserCard
+          user={item}
+          isFollowing={!!bulkStatusQ.data?.[item._id]?.following}
+          followLoading={pendingFollowId === item._id}
+          onPress={() => goToProfile(item._id)}
+          onFollowPress={() => handleToggle(item._id)}
+        />
+      )}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={{ paddingBottom: 32 }}
+    />
   );
 
   return (
@@ -179,49 +258,14 @@ const SearchScreen: React.FC = () => {
         />
       </View>
 
-      {isActive ? (
-        <>
-          <SearchFilters
-            type={typeFilter}
-            sortBy={sortBy}
-            onTypeChange={setTypeFilter}
-            onSortChange={setSortBy}
-          />
+      <SearchFilters
+        type={typeFilter}
+        sortBy={sortBy}
+        onTypeChange={setTypeFilter}
+        onSortChange={setSortBy}
+      />
 
-          {searchQ.isLoading ? (
-            <ActivityIndicator
-              color={theme.primary}
-              style={{ padding: 24 }}
-            />
-          ) : results.length === 0 ? (
-            <EmptyState
-              icon="sad-outline"
-              title="No matches"
-              subtitle={`We couldn't find anyone for "${query}". Try different keywords.`}
-            />
-          ) : (
-            <FlashList
-              data={results}
-              keyExtractor={(u) => u._id}
-              renderItem={({ item }) => (
-                <UserCard
-                  user={item}
-                  isFollowing={
-                    !!bulkStatusQ.data?.[item._id]?.following
-                  }
-                  followLoading={pendingFollowId === item._id}
-                  onPress={() => goToProfile(item._id)}
-                  onFollowPress={() => handleToggle(item._id)}
-                />
-              )}
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ paddingBottom: 32 }}
-            />
-          )}
-        </>
-      ) : (
-        DiscoverView
-      )}
+      {isActive ? ResultsView : DiscoverView}
     </SafeAreaView>
   );
 };
