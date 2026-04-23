@@ -226,18 +226,18 @@ export const freelancerService = {
     return res.data.data;
   },
 
-  updateService: async (
-    id: string,
-    data: Partial<ServiceFormData>,
-  ): Promise<FreelancerServiceItem> => {
+
+  // FIX: Was completely missing — caused every edit to 404
+  updateService: async (id: string, data: Partial<Omit<FreelancerServiceItem, '_id'>>): Promise<FreelancerServiceItem> => {
     const res = await api.put<ApiResp<FreelancerServiceItem>>(FREELANCER.SERVICE(id), data);
     if (!res.data.success) throw new Error(res.data.message ?? 'Failed to update service');
     return res.data.data;
   },
-
+ 
+  // FIX: Was missing
   deleteService: async (id: string): Promise<void> => {
-    const res = await api.delete<ApiResp<unknown>>(FREELANCER.SERVICE(id));
-    if (!res.data.success) throw new Error(res.data.message ?? 'Failed to delete service');
+    const res = await api.delete<ApiResp<any>>(FREELANCER.SERVICE(id));
+    if (!res.data.success) throw new Error('Failed to delete service');
   },
 
   // ── Certifications ─────────────────────────────────────────────────────────

@@ -11,17 +11,14 @@ import { getAdForPlacement } from '../../theme/adsConfig';
 import { useSocialTheme } from '../../theme/socialTheme';
 import type { AdConfig, AdPlacement, Post, ReactionType } from '../../types';
 import AdCard from '../ads/AdCard';
-import EmptyState from '../shared/EmptyState';
-import PostCard from '../post/PostCard';
+import PostCard, { type PostCardMode } from '../post/PostCard';
 import PostSkeleton from '../post/PostSkeleton';
+import EmptyState from '../shared/EmptyState';
 import type { ComponentProps } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-
 type ListItem =
   | (Post & { __kind?: 'post' })
   | { __kind: 'ad'; id: string; ad: AdConfig };
-
-  type CardMode = 'feed' | 'compact' | 'minimal';
 
 interface Props {
   posts: Post[];
@@ -40,16 +37,20 @@ interface Props {
   onAuthorPress: (userId: string) => void;
   onHashtagPress?: (tag: string) => void;
   onMediaPress?: (post: Post, index: number) => void;
-  onMenuPress?: (post: Post) => void;
+  onEditPost?: (post: Post) => void;
+  onDeletePost?: (postId: string) => void;
+  onPinPost?: (post: Post) => void;
   onAdPress?: (ad: AdConfig) => void;
-   cardMode?: CardMode;
   adPlacement?: AdPlacement;
   adFrequency?: number;
+  cardMode?: PostCardMode;
   emptyTitle?: string;
   emptySubtitle?: string;
- emptyIcon?: ComponentProps<typeof Ionicons>['name'];  emptyAction?: { label: string; onPress: () => void };
+ emptyIcon?: ComponentProps<typeof Ionicons>['name'];  
+ emptyAction?: { label: string; onPress: () => void };
   ListHeaderComponent?: React.ComponentType<any> | React.ReactElement;
 }
+
 const FeedList: React.FC<Props> = memo(
   ({
     posts,
@@ -68,10 +69,13 @@ const FeedList: React.FC<Props> = memo(
     onAuthorPress,
     onHashtagPress,
     onMediaPress,
-    onMenuPress,
+    onEditPost,
+    onDeletePost,
+    onPinPost,
     onAdPress,
     adPlacement = 'feed',
     adFrequency = 5,
+    cardMode = 'feed',
     emptyTitle = 'Nothing here yet',
     emptySubtitle,
     emptyIcon,
@@ -99,12 +103,13 @@ const FeedList: React.FC<Props> = memo(
     const renderItem = useCallback(
       ({ item }: { item: ListItem }) => {
         if (item.__kind === 'ad') {
-          return <AdCard ad={item.ad} onPress={onAdPress} />;
+          return <AdCard ad={(item as any).ad} onPress={onAdPress} />;
         }
         const post = item as Post;
         return (
           <PostCard
             post={post}
+            mode={cardMode}
             onReact={onReact}
             onRemoveReact={onRemoveReact}
             onDislike={onDislike}
@@ -114,11 +119,14 @@ const FeedList: React.FC<Props> = memo(
             onAuthorPress={onAuthorPress}
             onHashtagPress={onHashtagPress}
             onMediaPress={onMediaPress}
-            onMenuPress={onMenuPress}
+            onEditPost={onEditPost}
+            onDeletePost={onDeletePost}
+            onPinPost={onPinPost}
           />
         );
       },
       [
+        cardMode,
         onReact,
         onRemoveReact,
         onDislike,
@@ -128,7 +136,9 @@ const FeedList: React.FC<Props> = memo(
         onAuthorPress,
         onHashtagPress,
         onMediaPress,
-        onMenuPress,
+        onEditPost,
+        onDeletePost,
+        onPinPost,
         onAdPress,
       ]
     );
@@ -200,7 +210,7 @@ const FeedList: React.FC<Props> = memo(
 FeedList.displayName = 'FeedList';
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: 24 },
+  content: { paddingTop: 8, paddingBottom: 24 },
   footer: { paddingVertical: 22 },
 });
 

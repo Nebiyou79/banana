@@ -1,166 +1,287 @@
+// src/social/components/post/PostMedia.tsx
 import { Ionicons } from '@expo/vector-icons';
-import React, { memo, useState } from 'react';
+import { VideoView, useVideoPlayer } from 'expo-video';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
   Image,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SOCIAL_LAYOUT } from '../../theme/layout';
 import { useSocialTheme } from '../../theme/socialTheme';
 import type { PostMedia as PostMediaT } from '../../types';
 
 const { width: SCREEN_W } = Dimensions.get('window');
+const MEDIA_H = 300;
 
 interface Props {
   media: PostMediaT[];
   onMediaPress?: (index: number) => void;
 }
 
-/**
- * Renders a post's media array:
- *  - 1 item  → single image/video preview
- *  - 2 items → 2-column grid
- *  - 3+ items → first large, then 2 stacked; overlay "+N" on the last
- *
- * Videos show a circular play icon overlay.
- */
+const getVideoThumbnail = (m: PostMediaT): string => {
+  if (m.thumbnail) return m.thumbnail;
+  const url = m.secure_url || m.url || '';
+  if (url.includes('cloudinary.com')) {
+    return url
+      .replace('/upload/', '/upload/w_600,h_400,c_fill,so_0/')
+      .replace(/\.(mp4|mov|avi|webm)$/i, '.jpg');
+  }
+  return url;
+};
+
+const VideoTile: React.FC<{ item: PostMediaT; width: number }> = memo(
+  ({ item, width }) => {
+    const theme = useSocialTheme();
+    const src = item.secure_url || item.url || '';
+    const thumb = getVideoThumbnail(item);
+
+    const player = useVideoPlayer(src, player => {
+      player.loop = false;
+    });
+
+    const [playing, setPlaying] = useState(false);
+    const [progress, setProgress] = useState(0);
+
+    const togglePlay = useCallback(() => {
+      if (player.playing) {
+        player.pause();
+        setPlaying(false);
+      } else {
+        player.play();
+        setPlaying(true);
+      }
+    }, [player]);
+
+    // Progress tracking
+    useEffect(() => {
+      const interval = setInterval(() => {
+        if (player.duration > 0) {
+          setProgress(player.currentTime / player.duration);
+        }
+      }, 300);
+      return () => clearInterval(interval);
+    }, [player]);
+
+    return (
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={togglePlay}
+        style={{ width, height: MEDIA_H, backgroundColor: '#000' }}
+      >
+        {!playing && (
+          <Image
+            source={{ uri: thumb }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+          />
+        )}
+
+        <VideoView
+          player={player}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+        />
+
+        {!playing && (
+          <View pointerEvents="none" style={styles.playOverlay}>
+            <View style={styles.playBtn}>
+              <Ionicons name="play" size={26} color="#fff" />
+            </View>
+          </View>
+        )}
+
+        {playing && (
+          <View pointerEvents="none" style={styles.pauseHint}>
+            <Ionicons name="pause" size={16} color="#fff" />
+          </View>
+        )}
+
+        <View style={styles.progressTrack}>
+          <View
+            style={[
+              styles.progressFill,
+              {
+                width: `${Math.min(100, progress * 100)}%`,
+                backgroundColor: theme.primary,
+              },
+            ]}
+          />
+        </View>
+      </TouchableOpacity>
+    );
+  }
+);
+
 const PostMedia: React.FC<Props> = memo(({ media, onMediaPress }) => {
   const theme = useSocialTheme();
-  const [activeIndex, setActiveIndex] = useState(0);
-  if (!media?.length) return null;
+  const [index, setIndex] = useState(0);
+  const itemWidth = SCREEN_W;
 
-  const count = media.length;
+  const onMomentumEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const x = e.nativeEvent.contentOffset.x;
+      setIndex(Math.round(x / itemWidth));
+    },
+    [itemWidth]
+  );
 
-  if (count === 1) {
+  if (!media || media.length === 0) return null;
+
+  if (media.length === 1) {
     const m = media[0];
-    const aspect =
-      m.width && m.height ? m.width / m.height : 1.5;
-    const maxH = SOCIAL_LAYOUT.postMediaMaxHeight;
-    const calcH = Math.min(SCREEN_W / aspect, maxH);
+    if (m.resource_type === 'video') {
+      return (
+        <View style={styles.singleWrap}>
+          <VideoTile item={m} width={itemWidth} />
+        </View>
+      );
+    }
     return (
       <TouchableOpacity
         activeOpacity={0.95}
         onPress={() => onMediaPress?.(0)}
+        style={styles.singleWrap}
       >
         <Image
-          source={{ uri: m.url || m.secure_url }}
-          style={{
-            width: SCREEN_W,
-            height: calcH,
-            backgroundColor: theme.skeleton,
-          }}
+          source={{ uri: m.secure_url || m.url }}
+          style={[
+            styles.singleImage,
+            { width: itemWidth, backgroundColor: theme.skeleton },
+          ]}
           resizeMode="cover"
         />
-        {m.type === 'video' ? <PlayOverlay /> : null}
       </TouchableOpacity>
     );
   }
 
-  if (count === 2) {
-    return (
-      <View style={styles.row}>
-        {media.slice(0, 2).map((m, i) => (
-          <TouchableOpacity
-            key={m._id ?? i}
-            activeOpacity={0.95}
-            onPress={() => onMediaPress?.(i)}
-            style={{ flex: 1 }}
-          >
-            <Image
-              source={{ uri: m.thumbnail || m.url || m.secure_url }}
-              style={[styles.gridItem, { backgroundColor: theme.skeleton }]}
-              resizeMode="cover"
-            />
-            {m.type === 'video' ? <PlayOverlay small /> : null}
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  }
-
-  // 3+ items: 1 large + 2 stacked
   return (
-    <View style={styles.row}>
-      <TouchableOpacity
-        activeOpacity={0.95}
-        onPress={() => onMediaPress?.(0)}
-        style={{ flex: 2 }}
+    <View style={styles.carouselWrap}>
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={onMomentumEnd}
+        scrollEventThrottle={16}
       >
-        <Image
-          source={{ uri: media[0].thumbnail || media[0].url || media[0].secure_url }}
-          style={[styles.gridItemTall, { backgroundColor: theme.skeleton }]}
-          resizeMode="cover"
-        />
-        {media[0].type === 'video' ? <PlayOverlay /> : null}
-      </TouchableOpacity>
-      <View style={{ flex: 1 }}>
-        {media.slice(1, 3).map((m, i) => {
-          const isLast = i === 1 && count > 3;
-          return (
+        {media.map((m, i) =>
+          m.resource_type === 'video' ? (
+            <VideoTile key={m.public_id ?? m.url ?? i} item={m} width={itemWidth} />
+          ) : (
             <TouchableOpacity
-              key={m._id ?? i + 1}
+              key={m.public_id ?? m.url ?? i}
               activeOpacity={0.95}
-              onPress={() => onMediaPress?.(i + 1)}
-              style={{ flex: 1 }}
+              onPress={() => onMediaPress?.(i)}
+              style={{ width: itemWidth, height: MEDIA_H }}
             >
               <Image
-                source={{ uri: m.thumbnail || m.url || m.secure_url }}
-                style={[styles.gridItemSmall, { backgroundColor: theme.skeleton }]}
+                source={{ uri: m.secure_url || m.url }}
+                style={[
+                  styles.carouselImage,
+                  { backgroundColor: theme.skeleton },
+                ]}
                 resizeMode="cover"
               />
-              {isLast ? (
-                <View style={styles.moreOverlay}>
-                  <Text style={styles.moreText}>+{count - 3}</Text>
-                </View>
-              ) : null}
             </TouchableOpacity>
-          );
-        })}
+          )
+        )}
+      </ScrollView>
+
+      <View style={styles.counterPill}>
+        <Text style={styles.counterText}>
+          {index + 1}/{media.length}
+        </Text>
+      </View>
+
+      <View style={styles.dotsRow} pointerEvents="none">
+        {media.map((_, i) => (
+          <View
+            key={i}
+            style={[
+              styles.dot,
+              {
+                backgroundColor:
+                  i === index ? '#fff' : 'rgba(255,255,255,0.45)',
+                width: i === index ? 8 : 6,
+                height: i === index ? 8 : 6,
+              },
+            ]}
+          />
+        ))}
       </View>
     </View>
   );
 });
 
-const PlayOverlay: React.FC<{ small?: boolean }> = ({ small }) => (
-  <View style={styles.playWrap} pointerEvents="none">
-    <View
-      style={[
-        styles.playCircle,
-        { width: small ? 44 : 56, height: small ? 44 : 56, borderRadius: small ? 22 : 28 },
-      ]}
-    >
-      <Ionicons name="play" size={small ? 18 : 24} color="#fff" />
-    </View>
-  </View>
-);
-
 PostMedia.displayName = 'PostMedia';
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 2 },
-  gridItem: { width: '100%', height: 240 },
-  gridItemTall: { width: '100%', height: 320 },
-  gridItemSmall: { width: '100%', height: 159, marginBottom: 2 },
-  playWrap: {
+  singleWrap: { width: '100%', height: MEDIA_H },
+  singleImage: { height: MEDIA_H },
+  carouselWrap: {
+    width: '100%',
+    height: MEDIA_H,
+    position: 'relative',
+  },
+  carouselImage: { width: '100%', height: MEDIA_H },
+  counterPill: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 12,
+  },
+  counterText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  dotsRow: {
+    position: 'absolute',
+    bottom: 10,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  dot: { borderRadius: 4 },
+  playOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  playCircle: {
+  playBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  moreOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+  pauseHint: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.4)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  moreText: { color: '#fff', fontSize: 22, fontWeight: '700' },
+  progressTrack: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  progressFill: { height: 3 },
 });
 
 export default PostMedia;

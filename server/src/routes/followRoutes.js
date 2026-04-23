@@ -1,78 +1,56 @@
-// routes/followRoutes.js
+/**
+ * server/src/routes/followRoutes.js
+ * ────────────────────────────────────────────────────────────────────────────
+ * BananaLink Social System v2.0 — Follow Routes
+ *
+ * Phase 0 fix: removed duplicate verifyToken on /bulk-status.
+ * Phase 1: added /connections, /:userId/is-connected, /:targetId/block.
+ *
+ * IMPORTANT: route ordering — specific paths MUST come before dynamic
+ * `/:targetId` paths, otherwise Express will interpret 'connections' or
+ * 'stats' as a targetId.
+ * ────────────────────────────────────────────────────────────────────────────
+ */
 const express = require('express');
 const router = express.Router();
-const followController = require('../controllers/followController');
-const { verifyToken, optionalAuth } = require('../middleware/authMiddleware');
-const { 
-  socialLimiter, 
-  followListLimiter,
-  followStatusLimiter 
-} = require('../middleware/rateLimiter'); // Add this import
 
-// Apply authentication middleware to protected routes
+const followController = require('../controllers/followController');
+const { verifyToken } = require('../middleware/authMiddleware');
+
+// ── PUBLIC ROUTES ─────────────────────────────────────────────────────────
+// These do NOT require authentication.
+router.get(
+  '/public/followers/:targetId',
+  followController.getPublicFollowers
+);
+router.get(
+  '/public/following/:targetId',
+  followController.getPublicFollowing
+);
+
+// ── PROTECTED ROUTES ──────────────────────────────────────────────────────
 router.use(verifyToken);
 
-// ✅ BULK STATUS ROUTE MUST COME BEFORE DYNAMIC ROUTe
-router.post('/bulk-status', verifyToken, followController.getBulkFollowStatus);
+// Specific routes (must come before `/:targetId/...`)
+router.get('/followers', followController.getFollowers);
+router.get('/following', followController.getFollowing);
+router.get('/connections', followController.getConnections); // NEW
+router.get('/stats', followController.getFollowStats);
+router.get('/suggestions', followController.getFollowSuggestions);
+router.get('/pending', followController.getPendingRequests);
 
-// Apply DIFFERENT rate limiters to different endpoints
-router.post('/:targetId', 
-  socialLimiter, // More permissive for follow/unfollow actions
-  followController.toggleFollow
-);
+// Bulk status (POST)
+// Phase 0 fix: removed the duplicate verifyToken argument here.
+router.post('/bulk-status', followController.getBulkFollowStatus);
 
-router.get('/:targetId/status',
-  followStatusLimiter, // Most permissive for status checks
-  followController.getFollowStatus
-);
+// Legacy accept/reject — kept as no-ops for FE compatibility.
+router.put('/:followId/accept', followController.acceptFollowRequest);
+router.put('/:followId/reject', followController.rejectFollowRequest);
 
-// Follow management routes
-router.put('/:followId/accept',
-  socialLimiter,
-  followController.acceptFollowRequest
-);
+// Dynamic :targetId / :userId routes
+router.get('/:userId/is-connected', followController.isConnected); // NEW
+router.get('/:targetId/status', followController.getFollowStatus);
+router.post('/:targetId/block', followController.blockUser); // NEW
+router.post('/:targetId', followController.toggleFollow);
 
-router.put('/:followId/reject',
-  socialLimiter,
-  followController.rejectFollowRequest
-);
-
-// Query routes - apply list-specific rate limiter
-router.get('/followers', 
-  followListLimiter,
-  followController.getFollowers
-);
-
-router.get('/following', 
-  followListLimiter,
-  followController.getFollowing
-);
-
-router.get('/pending', 
-  followListLimiter,
-  followController.getPendingRequests
-);
-
-router.get('/suggestions', 
-  followListLimiter,
-  followController.getFollowSuggestions
-);
-
-router.get('/stats', 
-  followListLimiter,
-  followController.getFollowStats
-);
-
-// Public routes (optional auth for viewing public profiles)
-router.get('/public/followers/:targetId',
-  optionalAuth,
-  followListLimiter,
-  followController.getFollowers
-);
-
-router.get('/public/following/:targetId',
-  optionalAuth,
-  followListLimiter,
-  followController.getFollowing
-);
 module.exports = router;

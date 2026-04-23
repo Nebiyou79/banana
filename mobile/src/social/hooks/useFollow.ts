@@ -1,10 +1,25 @@
 // src/social/hooks/useFollow.ts
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
-import { followService, type ValidFollowSource } from '../services/followService';
+import {
+  followService,
+  type ValidFollowSource,
+} from '../services/followService';
 import { SOCIAL_KEYS } from './queryKeys';
-import type { BulkFollowStatus, FollowStatus, FollowTargetType } from '../types';
+import type {
+  BulkFollowStatus,
+  FollowStatus,
+  FollowTargetType,
+} from '../types';
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * useFollowStatus — single target
+ * ────────────────────────────────────────────────────────────────────────── */
 export const useFollowStatus = (
   targetId: string,
   targetType: FollowTargetType = 'User'
@@ -19,6 +34,9 @@ export const useFollowStatus = (
     staleTime: 1000 * 60,
   });
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * useBulkFollowStatus
+ * ────────────────────────────────────────────────────────────────────────── */
 export const useBulkFollowStatus = (
   userIds: string[],
   targetType: FollowTargetType = 'User',
@@ -34,6 +52,11 @@ export const useBulkFollowStatus = (
     staleTime: 1000 * 30,
   });
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * useToggleFollow — optimistic
+ * Also invalidates the new ['social','connections'] cache when settled, since a
+ * (un)follow can form/break a mutual connection.
+ * ────────────────────────────────────────────────────────────────────────── */
 export const useToggleFollow = () => {
   const qc = useQueryClient();
 
@@ -64,7 +87,7 @@ export const useToggleFollow = () => {
 
       qc.setQueryData<FollowStatus>(
         SOCIAL_KEYS.followStatus(targetId),
-        (old) => ({ ...(old ?? {}), following: !wasFollowing })
+        (old) => ({ ...(old ?? {}), following: !wasFollowing } as FollowStatus)
       );
 
       if (prevStats) {
@@ -116,6 +139,8 @@ export const useToggleFollow = () => {
       qc.invalidateQueries({ queryKey: SOCIAL_KEYS.followStats });
       qc.invalidateQueries({ queryKey: ['social', 'followers'] });
       qc.invalidateQueries({ queryKey: ['social', 'following'] });
+      qc.invalidateQueries({ queryKey: ['social', 'connections'] }); // NEW in v2
+      qc.invalidateQueries({ queryKey: ['social', 'isConnected', targetId] }); // NEW in v2
       qc.invalidateQueries({
         queryKey: SOCIAL_KEYS.publicProfile(targetId),
       });
@@ -123,6 +148,82 @@ export const useToggleFollow = () => {
   });
 };
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * useConnections (NEW) — paginated mutual-follow list
+ * ────────────────────────────────────────────────────────────────────────── */
+export const useConnections = () =>
+  useInfiniteQuery({
+    queryKey: ['social', 'connections'] as const,
+    queryFn: async ({ pageParam = 1 }) => {
+      const res = await followService.getConnections({
+        page: pageParam as number,
+        limit: 20,
+      });
+      const raw = res.data;
+      return {
+        data: raw?.data ?? [],
+        pagination: raw?.pagination,
+      };
+    },
+    initialPageParam: 1,
+    getNextPageParam: (last) => {
+      const { page, pages } = last.pagination ?? ({} as any);
+      return page && pages && page < pages ? page + 1 : undefined;
+    },
+    staleTime: 1000 * 60,
+    select: (data) => ({
+      ...data,
+      list: data.pages.flatMap((p) => p.data ?? []),
+    }),
+  });
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * useIsConnected (NEW)
+ * ────────────────────────────────────────────────────────────────────────── */
+export const useIsConnected = (userId: string) =>
+  useQuery({
+    queryKey: ['social', 'isConnected', userId] as const,
+    queryFn: async () => {
+      const res = await followService.isConnected(userId);
+      const payload = res.data?.data ?? res.data;
+      return payload as {
+        isConnected: boolean;
+        iFollow: boolean;
+        theyFollow: boolean;
+      };
+    },
+    enabled: Boolean(userId),
+    staleTime: 1000 * 60,
+  });
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * useBlockUser (NEW)
+ * ────────────────────────────────────────────────────────────────────────── */
+export const useBlockUser = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (targetId: string) => followService.blockUser(targetId),
+    onSuccess: (_d, targetId) => {
+      qc.invalidateQueries({ queryKey: SOCIAL_KEYS.followStatus(targetId) });
+      qc.invalidateQueries({ queryKey: SOCIAL_KEYS.followStats });
+      qc.invalidateQueries({ queryKey: ['social', 'followers'] });
+      qc.invalidateQueries({ queryKey: ['social', 'following'] });
+      qc.invalidateQueries({ queryKey: ['social', 'connections'] });
+      qc.invalidateQueries({ queryKey: ['social', 'isConnected', targetId] });
+      Toast.show({ type: 'success', text1: 'User blocked' });
+    },
+    onError: (err: any) => {
+      Toast.show({
+        type: 'error',
+        text1: err?.response?.data?.message ?? 'Block failed',
+      });
+    },
+  });
+};
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * LEGACY — pending requests (always empty in v2; kept for FE compatibility).
+ * ────────────────────────────────────────────────────────────────────────── */
 export const usePendingRequests = () =>
   useQuery({
     queryKey: SOCIAL_KEYS.pending,
@@ -142,6 +243,7 @@ export const useAcceptFollowRequest = () => {
       qc.invalidateQueries({ queryKey: SOCIAL_KEYS.pending });
       qc.invalidateQueries({ queryKey: SOCIAL_KEYS.followStats });
       qc.invalidateQueries({ queryKey: ['social', 'followers'] });
+      qc.invalidateQueries({ queryKey: ['social', 'connections'] });
     },
     onError: (err: any) => {
       Toast.show({

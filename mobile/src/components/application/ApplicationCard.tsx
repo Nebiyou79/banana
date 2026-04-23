@@ -1,13 +1,12 @@
 /**
  * src/components/application/ApplicationCard.tsx
  * ─────────────────────────────────────────────────────────────────────────────
- * Reusable card used in the candidate's ApplicationTracker list.
- * Shows job title, company name, status pill, progress pipeline,
- * date stamp, and skills chips.
+ * FIX: Shows real company/org logo using Image component (was using a
+ * placeholder fallback View even when logoUrl existed).
  * ─────────────────────────────────────────────────────────────────────────────
  */
 import React, { memo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
   Application,
@@ -25,6 +24,51 @@ const STATUS_PIPELINE: ApplicationStatus[] = [
 const getInitials = (name?: string): string =>
   (name ?? '?').split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
 
+// ─── Company Logo ─────────────────────────────────────────────────────────────
+
+const OwnerLogo: React.FC<{
+  logoUrl?: string;
+  name?: string;
+  color: string;
+  size?: number;
+}> = ({ logoUrl, name, color, size = 44 }) => {
+  const initials = getInitials(name);
+  const radius = size * 0.22;
+
+  if (logoUrl) {
+    return (
+      <Image
+        source={{ uri: logoUrl }}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: radius,
+          borderWidth: 1.5,
+          borderColor: `${color}30`,
+        }}
+        defaultSource={undefined}
+      />
+    );
+  }
+
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: radius,
+        backgroundColor: color,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Text style={{ color: '#fff', fontSize: size * 0.32, fontWeight: '700' }}>
+        {initials}
+      </Text>
+    </View>
+  );
+};
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface ApplicationCardProps {
@@ -38,16 +82,14 @@ interface ApplicationCardProps {
 
 export const ApplicationCard = memo<ApplicationCardProps>(
   ({ application, onPress, onWithdraw, colors: c }) => {
-    const appStatus  = application.status as ApplicationStatus;
-    const sc         = STATUS_COLORS[appStatus] ?? STATUS_COLORS['applied'];
+    const appStatus   = application.status as ApplicationStatus;
+    const sc          = STATUS_COLORS[appStatus] ?? STATUS_COLORS['applied'];
     const statusLabel = STATUS_LABELS[appStatus] ?? application.status;
 
-    const owner = application.job?.jobType === 'organization'
-      ? application.job?.organization
-      : application.job?.company;
-
-    const logoUrl    = owner?.logoUrl;
-    const ownerColor = application.job?.jobType === 'organization' ? '#7C3AED' : '#F1BB03';
+    const isOrg    = application.job?.jobType === 'organization';
+    const owner    = isOrg ? application.job?.organization : application.job?.company;
+    const logoUrl  = (owner as any)?.logoUrl ?? (owner as any)?.logo;
+    const ownerColor = isOrg ? '#7C3AED' : '#F1BB03';
 
     const pipelineIdx = STATUS_PIPELINE.indexOf(appStatus);
 
@@ -67,19 +109,13 @@ export const ApplicationCard = memo<ApplicationCardProps>(
         <View style={s.content}>
           {/* Top row: logo + title + status */}
           <View style={s.topRow}>
-            {logoUrl ? (
-              <View style={[s.logo, { borderColor: c.border }]}>
-                {/* eslint-disable-next-line @typescript-eslint/no-require-imports */}
-                {/* Image requires direct import — use Image component */}
-                <View style={[s.logoFallback, { backgroundColor: ownerColor }]}>
-                  <Text style={s.logoInitials}>{getInitials(owner?.name)}</Text>
-                </View>
-              </View>
-            ) : (
-              <View style={[s.logoFallback, { backgroundColor: ownerColor }]}>
-                <Text style={s.logoInitials}>{getInitials(owner?.name)}</Text>
-              </View>
-            )}
+            {/* ── Company/Org Logo (real Image if available) ── */}
+            <OwnerLogo
+              logoUrl={logoUrl}
+              name={owner?.name}
+              color={ownerColor}
+              size={44}
+            />
 
             <View style={s.headerInfo}>
               <Text style={[s.jobTitle, { color: c.text }]} numberOfLines={2}>
@@ -172,32 +208,19 @@ export const ApplicationCard = memo<ApplicationCardProps>(
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  card:         {
-    flexDirection: 'row', borderRadius: 14, borderWidth: 1,
-    marginBottom: 12, overflow: 'hidden', shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
-  },
+  card:         { flexDirection: 'row', borderRadius: 14, borderWidth: 1, marginBottom: 12, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   stripe:       { width: 4 },
   content:      { flex: 1, padding: 12 },
   topRow:       { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
-  logo:         { width: 42, height: 42, borderRadius: 10, borderWidth: 1, overflow: 'hidden' },
-  logoFallback: { width: 42, height: 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  logoInitials: { color: '#fff', fontSize: 15, fontWeight: '700' },
   headerInfo:   { flex: 1 },
   jobTitle:     { fontSize: 14, fontWeight: '700', lineHeight: 18, marginBottom: 2 },
   ownerRow:     { flexDirection: 'row', alignItems: 'center' },
   ownerName:    { fontSize: 12, fontWeight: '600' },
-  statusPill:   {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 20, borderWidth: 1,
-  },
+  statusPill:   { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
   statusDot:    { width: 6, height: 6, borderRadius: 3 },
   statusText:   { fontSize: 10, fontWeight: '700' },
   pipeline:     { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  pipeDot:      {
-    width: 18, height: 18, borderRadius: 9, borderWidth: 2,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  pipeDot:      { width: 18, height: 18, borderRadius: 9, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   pipeActiveDot:{ width: 6, height: 6, borderRadius: 3 },
   pipeLine:     { flex: 1, height: 2 },
   skillRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginBottom: 8 },

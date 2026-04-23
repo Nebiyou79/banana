@@ -83,7 +83,7 @@ export const useSearchHashtags = (query: string, trending = false) =>
 export const useSearchUnified = (params: SearchParams) => {
   const debouncedQuery = useDebounced(params.q ?? '');
   return useQuery({
-    queryKey: SOCIAL_KEYS.unifiedSearch(params),
+    queryKey: SOCIAL_KEYS.unifiedSearch(debouncedQuery),
     queryFn: async () => {
       const res = await socialSearchService.unified({
         ...params,

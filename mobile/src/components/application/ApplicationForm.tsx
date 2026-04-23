@@ -2,18 +2,11 @@
  * src/components/application/ApplicationForm.tsx
  * ─────────────────────────────────────────────────────────────────────────────
  * FIXES:
- *  1. Bug: "Path 'userInfo.name' is required"
- *     Root cause: userInfo was built from useAuthStore which may not have the
- *     candidate's full name. Fixed by loading the full profile via
- *     candidateService.getProfile() and using that as the source of truth.
- *
- *  2. Bug: Skills and profile data not pre-filled.
- *     Root cause: The form never called candidateService.getProfile().
- *     Fixed: On mount, getProfile() is called and skills, contact info,
- *     and userInfo are pre-populated from the returned profile data.
- *
- *  3. File submission: referenceFiles / experienceFiles are passed as
- *     Array<{uri,name,type,_tempId}> to match the service's ApplyJobData type.
+ *  1. DatePickerField integrated for experience startDate/endDate and
+ *     reference (no date fields on reference, kept as-is but experience uses picker).
+ *  2. Profile pre-fill on mount (name, email, phone, location, skills).
+ *  3. Skills pre-filled from candidate profile.
+ *  4. File submission with proper types.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -42,6 +35,7 @@ import {
   WorkExperience,
 } from '../../services/applicationService';
 import { candidateService, CandidateProfile } from '../../services/candidateService';
+import { DatePickerField } from '../shared/DatePickerField';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,10 +55,10 @@ interface DocFile {
 }
 
 const STEPS = [
-  { num: 1, label: 'Profile',     icon: 'person-outline' },
-  { num: 2, label: 'Letter',      icon: 'document-text-outline' },
-  { num: 3, label: 'Documents',   icon: 'briefcase-outline' },
-  { num: 4, label: 'Review',      icon: 'checkmark-circle-outline' },
+  { num: 1, label: 'Profile',   icon: 'person-outline' },
+  { num: 2, label: 'Letter',    icon: 'document-text-outline' },
+  { num: 3, label: 'Documents', icon: 'briefcase-outline' },
+  { num: 4, label: 'Review',    icon: 'checkmark-circle-outline' },
 ];
 
 const genTmpId = () =>
@@ -175,7 +169,7 @@ const Step1 = ({
             <View style={{ flex: 1 }}>
               <Text style={[fi.cvName, { color: c.text }]} numberOfLines={1}>{name}</Text>
               {size ? <Text style={[fi.cvSize, { color: c.textMuted }]}>{size}</Text> : null}
-              {(cv.isPrimary || cv.isDefault) && (
+              {(cv.isPrimary || (cv as any).isDefault) && (
                 <Text style={[fi.cvPrimary, { color: c.primary }]}>Primary CV</Text>
               )}
             </View>
@@ -283,7 +277,7 @@ const Step2 = ({
   );
 };
 
-// ─── STEP 3 — Work Experience & References ────────────────────────────────────
+// ─── STEP 3 — Work Experience & References (with DatePickerField) ─────────────
 
 const Step3 = ({
   c,
@@ -381,7 +375,7 @@ const Step3 = ({
         Fill a form or upload a document for each entry.
       </Text>
 
-      {experiences.map((exp: WorkExperience & { _tempId?: string }, i: number) => (
+      {experiences.map((exp: WorkExperience & { _tempId?: string; providedAsDocument?: boolean }, i: number) => (
         <View key={i} style={[fi.docCard, { backgroundColor: c.surface, borderColor: c.border }]}>
           <View style={fi.docCardHeader}>
             <Text style={[fi.docCardTitle, { color: c.text }]}>
@@ -389,7 +383,7 @@ const Step3 = ({
             </Text>
             <TouchableOpacity onPress={() => {
               setExperiences(experiences.filter((_: any, j: number) => j !== i));
-              if (exp._tempId) setExpFiles(expFiles.filter((f: DocFile) => f._tempId !== exp._tempId));
+              if ((exp as any)._tempId) setExpFiles(expFiles.filter((f: DocFile) => f._tempId !== (exp as any)._tempId));
             }}>
               <Ionicons name="trash-outline" size={18} color="#EF4444" />
             </TouchableOpacity>
@@ -400,11 +394,11 @@ const Step3 = ({
               style={[fi.uploadBtn, { borderColor: c.border, backgroundColor: c.background }]}
               onPress={() => pickFile('exp', i)}
             >
-              {getExpFile(exp._tempId) ? (
+              {getExpFile((exp as any)._tempId) ? (
                 <View style={fi.fileRow}>
                   <Ionicons name="document-text" size={20} color={c.primary} />
                   <Text style={[fi.fileName, { color: c.text }]} numberOfLines={1}>
-                    {getExpFile(exp._tempId)?.name}
+                    {getExpFile((exp as any)._tempId)?.name}
                   </Text>
                   <Ionicons name="checkmark-circle" size={16} color="#10B981" />
                 </View>
@@ -420,29 +414,33 @@ const Step3 = ({
             </TouchableOpacity>
           ) : (
             <View style={{ gap: 8 }}>
+              {/* Company */}
               <TextInput
                 style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
-                placeholder="Company" placeholderTextColor={c.textMuted}
-                value={exp.company} onChangeText={v => updateExp(i, 'company', v)}
+                placeholder="Company"
+                placeholderTextColor={c.textMuted}
+                value={exp.company}
+                onChangeText={v => updateExp(i, 'company', v)}
               />
+              {/* Position */}
               <TextInput
                 style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text }]}
-                placeholder="Position/Role" placeholderTextColor={c.textMuted}
-                value={exp.position} onChangeText={v => updateExp(i, 'position', v)}
+                placeholder="Position/Role"
+                placeholderTextColor={c.textMuted}
+                value={exp.position}
+                onChangeText={v => updateExp(i, 'position', v)}
               />
-              <View style={fi.row}>
-                <TextInput
-                  style={[fi.input, { flex: 1, backgroundColor: c.background, borderColor: c.border, color: c.text }]}
-                  placeholder="Start (YYYY-MM-DD)" placeholderTextColor={c.textMuted}
-                  value={exp.startDate} onChangeText={v => updateExp(i, 'startDate', v)}
-                />
-                <TextInput
-                  style={[fi.input, { flex: 1, backgroundColor: c.background, borderColor: c.border, color: c.text }]}
-                  placeholder="End or leave blank" placeholderTextColor={c.textMuted}
-                  value={exp.endDate} onChangeText={v => updateExp(i, 'endDate', v)}
-                  editable={!exp.current}
-                />
-              </View>
+
+              {/* ── DatePickerField for Start Date ── */}
+              <DatePickerField
+                label="Start Date *"
+                value={exp.startDate}
+                onChange={v => updateExp(i, 'startDate', v)}
+                maxDate={new Date()}
+                containerStyle={{ marginBottom: 0 }}
+              />
+
+              {/* Currently working toggle */}
               <View style={fi.switchRow}>
                 <Switch
                   value={exp.current}
@@ -451,6 +449,29 @@ const Step3 = ({
                 />
                 <Text style={[fi.switchLabel, { color: c.text }]}>Currently working here</Text>
               </View>
+
+              {/* ── DatePickerField for End Date (only if not current) ── */}
+              {!exp.current && (
+                <DatePickerField
+                  label="End Date"
+                  value={exp.endDate}
+                  onChange={v => updateExp(i, 'endDate', v)}
+                  minDate={exp.startDate ? new Date(exp.startDate) : undefined}
+                  maxDate={new Date()}
+                  optional
+                  containerStyle={{ marginBottom: 0 }}
+                />
+              )}
+
+              {/* Description */}
+              <TextInput
+                style={[fi.input, { backgroundColor: c.background, borderColor: c.border, color: c.text, height: 80, textAlignVertical: 'top', paddingTop: 10 }]}
+                placeholder="Brief description (optional)"
+                placeholderTextColor={c.textMuted}
+                value={exp.description}
+                onChangeText={v => updateExp(i, 'description', v)}
+                multiline
+              />
             </View>
           )}
         </View>
@@ -481,7 +502,7 @@ const Step3 = ({
         Fill a form or upload a document for each reference.
       </Text>
 
-      {references.map((ref: Reference & { _tempId?: string }, i: number) => (
+      {references.map((ref: Reference & { _tempId?: string; providedAsDocument?: boolean }, i: number) => (
         <View key={i} style={[fi.docCard, { backgroundColor: c.surface, borderColor: c.border }]}>
           <View style={fi.docCardHeader}>
             <Text style={[fi.docCardTitle, { color: c.text }]}>
@@ -707,34 +728,27 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
 
   const applyMut = useApplyForJob();
 
-  // ── Profile loading state ─────────────────────────────────────────────────
   const [profileLoading, setProfileLoading] = useState(true);
-  // Holds the full candidate profile — source of truth for name + pre-fills
   const candidateProfileRef = useRef<CandidateProfile | null>(null);
 
   const [step, setStep] = useState(1);
 
-  // Step 1 contact state
-  const [candidateName, setCandidateName]   = useState('');
-  const [contactEmail, setContactEmail]     = useState(user?.email ?? '');
-  const [contactPhone, setContactPhone]     = useState('');
+  const [candidateName, setCandidateName]     = useState('');
+  const [contactEmail, setContactEmail]       = useState(user?.email ?? '');
+  const [contactPhone, setContactPhone]       = useState('');
   const [contactLocation, setContactLocation] = useState('');
 
-  // Step 2 cover letter + skills
   const [coverLetter, setCoverLetter] = useState('');
   const [skillInput, setSkillInput]   = useState('');
   const [skills, setSkills]           = useState<string[]>([]);
 
-  // CV selection
   const [selectedCVIds, setSelectedCVIds] = useState<string[]>([]);
 
-  // Step 3 docs
   const [experiences, setExperiences] = useState<any[]>([]);
   const [expFiles, setExpFiles]       = useState<DocFile[]>([]);
   const [references, setReferences]   = useState<any[]>([]);
   const [refFiles, setRefFiles]       = useState<DocFile[]>([]);
 
-  // ── FIX 1 & 2: Load full candidate profile on mount ──────────────────────
   useEffect(() => {
     let mounted = true;
     const loadProfile = async () => {
@@ -744,31 +758,22 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
         if (!mounted) return;
 
         candidateProfileRef.current = profile;
-
-        // Pre-fill name (critical — fixes "userInfo.name is required")
         setCandidateName(profile.name ?? '');
-
-        // Pre-fill contact info
         setContactEmail(profile.email ?? user?.email ?? '');
         setContactPhone(profile.phone ?? '');
         setContactLocation(profile.location ?? '');
 
-        // FIX 2: Pre-fill skills from candidate profile
         if (profile.skills && profile.skills.length > 0) {
           setSkills(profile.skills);
         }
 
-        // Generate default cover letter using profile data
         const defaultCover = generateCoverLetter(profile, jobTitle, companyName);
         setCoverLetter(defaultCover);
-      } catch (err) {
-        // Non-fatal: fall back to auth store data
+      } catch {
         if (!mounted) return;
         const fallbackName = (user as any)?.name ?? '';
         setCandidateName(fallbackName);
         setContactEmail(user?.email ?? '');
-        setContactPhone((user as any)?.phone ?? '');
-        setContactLocation((user as any)?.location ?? '');
         const defaultCover = generateCoverLetterFallback(fallbackName, jobTitle, companyName);
         setCoverLetter(defaultCover);
       } finally {
@@ -779,10 +784,9 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
     return () => { mounted = false; };
   }, []);
 
-  // Auto-select primary CV when CVs load
   useEffect(() => {
     if (myCVs.length > 0 && selectedCVIds.length === 0) {
-      const primary = myCVs.find(cv => cv.isPrimary || cv.isDefault) ?? myCVs[0];
+      const primary = myCVs.find(cv => cv.isPrimary || (cv as any).isDefault) ?? myCVs[0];
       setSelectedCVIds([primary._id]);
     }
   }, [myCVs]);
@@ -792,8 +796,6 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
   }, []);
-
-  // ── Step validation ───────────────────────────────────────────────────────
 
   const validateStep = (): boolean => {
     if (step === 1) {
@@ -820,16 +822,13 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
     setStep(s => Math.min(s + 1, 4));
   };
 
-  // ── Submit ────────────────────────────────────────────────────────────────
-
   const handleSubmit = useCallback(async () => {
     if (!validateStep()) return;
 
-    // ── FIX 1: Build userInfo from the loaded profile, guaranteeing name ──
     const profile = candidateProfileRef.current;
     const resolvedName = profile?.name?.trim()
       || (user as any)?.name?.trim()
-      || contactEmail.split('@')[0]; // last resort: derive from email
+      || contactEmail.split('@')[0];
 
     if (!resolvedName) {
       Alert.alert('Profile Incomplete', 'Could not determine your name. Please update your profile.');
@@ -840,11 +839,11 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
       .filter(cv => selectedCVIds.includes(cv._id))
       .map(cv => ({
         cvId: cv._id,
-        filename: cv.filename,
+        filename: (cv as any).filename,
         originalName: cv.originalName,
-        url: cv.url ?? '',
-        downloadUrl: cv.downloadUrl ?? cv.url ?? '',
-        size: cv.fileSize ?? cv.size ?? 0,
+        url: (cv as any).url ?? '',
+        downloadUrl: cv.downloadUrl ?? (cv as any).url ?? '',
+        size: (cv as any).fileSize ?? cv.size ?? 0,
         mimetype: cv.mimetype ?? 'application/pdf',
       }));
 
@@ -860,7 +859,6 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
             phone: contactPhone.trim(),
             location: contactLocation.trim(),
           },
-          // ── FIX 1: All fields explicitly set so backend validation passes ──
           userInfo: {
             name:     resolvedName,
             email:    contactEmail.trim() || profile?.email || user?.email || '',
@@ -871,7 +869,6 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
           },
           references,
           workExperience: experiences,
-          // Pass files as array of {uri, name, type, _tempId}
           referenceFiles: refFiles,
           experienceFiles: expFiles,
         },
@@ -885,8 +882,6 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
     contactEmail, contactPhone, contactLocation,
     references, experiences, refFiles, expFiles, user,
   ]);
-
-  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <View style={[fi.root, { backgroundColor: c.background }]}>
@@ -1030,11 +1025,7 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
 
 // ─── Cover Letter Generators ──────────────────────────────────────────────────
 
-function generateCoverLetter(
-  profile: CandidateProfile,
-  jobTitle: string,
-  companyName: string,
-): string {
+function generateCoverLetter(profile: CandidateProfile, jobTitle: string, companyName: string): string {
   const topSkill = profile.skills?.[0] ?? 'this field';
   const name = profile.name ?? 'Candidate';
   return `Dear Hiring Manager,
@@ -1052,11 +1043,7 @@ Sincerely,
 ${name}`;
 }
 
-function generateCoverLetterFallback(
-  name: string,
-  jobTitle: string,
-  companyName: string,
-): string {
+function generateCoverLetterFallback(name: string, jobTitle: string, companyName: string): string {
   return `Dear Hiring Manager,
 
 I am excited to apply for the ${jobTitle} position at ${companyName}. I believe my skills and experience make me a strong candidate for this role.
@@ -1071,43 +1058,22 @@ ${name || 'Applicant'}`;
 
 const fi = StyleSheet.create({
   root:              { flex: 1 },
-  header:            {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1,
-  },
+  header:            { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
   closeBtn:          { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   headerTitle:       { fontSize: 16, fontWeight: '700' },
   headerSub:         { fontSize: 12, marginTop: 1 },
-  stepBar:           {
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1,
-  },
+  stepBar:           { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
   stepItem:          { alignItems: 'center', flex: 1 },
-  stepCircle:        {
-    width: 28, height: 28, borderRadius: 14, borderWidth: 2,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 4,
-  },
+  stepCircle:        { width: 28, height: 28, borderRadius: 14, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   stepNum:           { fontSize: 12, fontWeight: '700' },
   stepLabel:         { fontSize: 10, fontWeight: '600', textAlign: 'center' },
   body:              { padding: 16, paddingBottom: 40 },
-  footer:            {
-    flexDirection: 'row', alignItems: 'center',
-    padding: 16, borderTopWidth: 1,
-  },
-  backBtn:           {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, borderWidth: 1,
-  },
+  footer:            { flexDirection: 'row', alignItems: 'center', padding: 16, borderTopWidth: 1 },
+  backBtn:           { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
   backBtnText:       { fontSize: 14, fontWeight: '600' },
-  nextBtn:           {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10,
-  },
+  nextBtn:           { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 },
   nextBtnText:       { color: '#fff', fontWeight: '700', fontSize: 15 },
-  submitBtn:         {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10,
-  },
+  submitBtn:         { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 },
   submitBtnText:     { color: '#fff', fontWeight: '700', fontSize: 15 },
   sectionHeader:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, marginTop: 4 },
   sectionIconBox:    { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
@@ -1116,29 +1082,17 @@ const fi = StyleSheet.create({
   label:             { fontSize: 13, fontWeight: '600', marginBottom: 4, marginTop: 8 },
   input:             { padding: 12, borderRadius: 10, borderWidth: 1, fontSize: 14, marginBottom: 4 },
   divider:           { height: 1, marginVertical: 16 },
-  loadingBox:        {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    padding: 12, borderRadius: 10, marginBottom: 8,
-  },
+  loadingBox:        { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 10, marginBottom: 8 },
   loadingText:       { fontSize: 13 },
-  emptyBox:          {
-    padding: 24, borderRadius: 12, borderWidth: 1,
-    alignItems: 'center', gap: 8, marginTop: 4,
-  },
+  emptyBox:          { padding: 24, borderRadius: 12, borderWidth: 1, alignItems: 'center', gap: 8, marginTop: 4 },
   emptyText:         { fontSize: 13, textAlign: 'center' },
-  cvCard:            {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    padding: 12, borderRadius: 12, borderWidth: 2, marginBottom: 8,
-  },
+  cvCard:            { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, borderWidth: 2, marginBottom: 8 },
   cvIcon:            { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   cvName:            { fontSize: 14, fontWeight: '600' },
   cvSize:            { fontSize: 11, marginTop: 2 },
   cvPrimary:         { fontSize: 10, fontWeight: '700', marginTop: 1 },
   checkbox:          { width: 22, height: 22, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  selectionInfo:     {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    padding: 10, borderRadius: 8, borderWidth: 1, marginTop: 4,
-  },
+  selectionInfo:     { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 10, borderRadius: 8, borderWidth: 1, marginTop: 4 },
   selectionText:     { fontSize: 13, fontWeight: '600' },
   textAreaWrapper:   { borderWidth: 1, borderRadius: 10, marginBottom: 4 },
   textArea:          { padding: 12, fontSize: 14, minHeight: 140, textAlignVertical: 'top' },
@@ -1146,10 +1100,7 @@ const fi = StyleSheet.create({
   skillInputRow:     { flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 8 },
   addBtn:            { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   skillCloud:        { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  skillChip:         {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1,
-  },
+  skillChip:         { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
   skillText:         { fontSize: 13, fontWeight: '600' },
   docCard:           { padding: 14, borderRadius: 12, borderWidth: 1, marginBottom: 10 },
   docCardHeader:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
@@ -1161,12 +1112,8 @@ const fi = StyleSheet.create({
   fileRow:           { flexDirection: 'row', alignItems: 'center', gap: 10 },
   fileName:          { flex: 1, fontSize: 13, fontWeight: '600' },
   addBtnRow:         { flexDirection: 'row', gap: 10, marginTop: 6 },
-  addDocBtn:         {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, padding: 12, borderRadius: 10, borderWidth: 1,
-  },
+  addDocBtn:         { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 12, borderRadius: 10, borderWidth: 1 },
   addDocBtnText:     { fontSize: 13, fontWeight: '600' },
-  row:               { flexDirection: 'row', gap: 8 },
   switchRow:         { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 4 },
   switchLabel:       { fontSize: 13 },
   reviewSection:     { padding: 14, borderRadius: 12, borderWidth: 1, gap: 6 },

@@ -1,256 +1,166 @@
 // src/screens/auth/SplashScreen.tsx
-// Premium splash: dark navy + glowing Banana logo + fade-in animation (no Reanimated)
+// Uses the real Banana logo from assets/logo.png
+// Dark navy background, constellation dots, gold glow halo, spring entrance
 
 import React, { useEffect, useRef } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  StatusBar,
-  Animated,
-  Dimensions,
+  View, StyleSheet, StatusBar, Animated,
+  Dimensions, Image, Text,
 } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
-// Constellation dot helper
-const Dot: React.FC<{ x: number; y: number; size?: number; opacity?: number }> = ({
-  x, y, size = 3, opacity = 0.25,
-}) => (
-  <View style={[styles.dot, { left: x, top: y, width: size, height: size, opacity }]} />
-);
+const NAVY = '#050D1A';
+const GOLD = '#F1BB03';
 
-// Static constellation lines (decorative)
+// Constellation dots (decorative)
 const DOTS = [
-  { x: 30,  y: 80,  s: 3,   o: 0.3 },
-  { x: 100, y: 40,  s: 2,   o: 0.2 },
-  { x: 200, y: 120, s: 4,   o: 0.35 },
-  { x: 300, y: 60,  s: 2,   o: 0.2 },
-  { x: 350, y: 180, s: 3,   o: 0.25 },
-  { x: 60,  y: 250, s: 2,   o: 0.2 },
-  { x: 280, y: 300, s: 3,   o: 0.3 },
-  { x: 150, y: 400, s: 2,   o: 0.15 },
-  { x: 320, y: 450, s: 4,   o: 0.25 },
-  { x: 40,  y: 550, s: 2,   o: 0.2 },
-  { x: 180, y: 600, s: 3,   o: 0.3 },
-  { x: 340, y: 680, s: 2,   o: 0.2 },
-  { x: 80,  y: 720, s: 3,   o: 0.25 },
+  [30, 80], [100, 40], [200, 120], [300, 60], [350, 180],
+  [60, 250], [280, 300], [150, 400], [320, 450],
+  [40, 550], [180, 600], [340, 680], [80, 720],
+];
+
+// Connection lines between some dot pairs (decorative)
+const LINES = [
+  { x1:30,y1:80,  x2:100,y2:40  },
+  { x1:100,y1:40, x2:200,y2:120 },
+  { x1:200,y1:120,x2:300,y2:60  },
+  { x1:300,y1:60, x2:350,y2:180 },
+  { x1:280,y1:300,x2:320,y2:450 },
 ];
 
 export const SplashScreen: React.FC = () => {
-  const glowAnim   = useRef(new Animated.Value(0)).current;
-  const logoScale  = useRef(new Animated.Value(0.7)).current;
-  const logoOpacity= useRef(new Animated.Value(0)).current;
-  const textOpacity= useRef(new Animated.Value(0)).current;
-  const tagOpacity = useRef(new Animated.Value(0)).current;
-  const spinnerOp  = useRef(new Animated.Value(0)).current;
+  const glowScale   = useRef(new Animated.Value(0.85)).current;
+  const glowOpacity = useRef(new Animated.Value(0.3)).current;
+  const logoScale   = useRef(new Animated.Value(0.6)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+  const textOpacity = useRef(new Animated.Value(0)).current;
+  const tagOpacity  = useRef(new Animated.Value(0)).current;
+  const spinnerOp   = useRef(new Animated.Value(0)).current;
+  const dotsOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Logo entrance
+    // Dots fade in
+    Animated.timing(dotsOpacity, { toValue:1, duration:800, useNativeDriver:true }).start();
+
+    // Main sequence
     Animated.sequence([
       Animated.parallel([
-        Animated.spring(logoScale, { toValue: 1, useNativeDriver: true, tension: 60, friction: 7 }),
-        Animated.timing(logoOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.spring(logoScale,   { toValue:1,   tension:60, friction:7, useNativeDriver:true }),
+        Animated.timing(logoOpacity, { toValue:1,   duration:500, useNativeDriver:true }),
       ]),
-      // Text fade in
-      Animated.timing(textOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-      // Tagline fade in
-      Animated.timing(tagOpacity, { toValue: 1, duration: 350, useNativeDriver: true }),
-      // Spinner
-      Animated.timing(spinnerOp, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(textOpacity,  { toValue:1, duration:350, useNativeDriver:true }),
+      Animated.timing(tagOpacity,   { toValue:1, duration:300, useNativeDriver:true }),
+      Animated.timing(spinnerOp,    { toValue:1, duration:300, useNativeDriver:true }),
     ]).start();
 
     // Glow pulse loop
     Animated.loop(
       Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1, duration: 1400, useNativeDriver: true }),
-        Animated.timing(glowAnim, { toValue: 0, duration: 1400, useNativeDriver: true }),
+        Animated.parallel([
+          Animated.timing(glowScale,   { toValue:1.12, duration:1600, useNativeDriver:true }),
+          Animated.timing(glowOpacity, { toValue:0.7,  duration:1600, useNativeDriver:true }),
+        ]),
+        Animated.parallel([
+          Animated.timing(glowScale,   { toValue:0.85, duration:1600, useNativeDriver:true }),
+          Animated.timing(glowOpacity, { toValue:0.3,  duration:1600, useNativeDriver:true }),
+        ]),
       ]),
     ).start();
   }, []);
 
-  const glowScale   = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1.08] });
-  const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0.9] });
-
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#050D1A" />
+    <View style={S.root}>
+      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
 
-      {/* Constellation dots */}
-      {DOTS.map((d, i) => (
-        <Dot key={i} x={d.x} y={d.y} size={d.s} opacity={d.o} />
-      ))}
+      {/* Constellation layer */}
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity: dotsOpacity }]}>
+        {/* Dots */}
+        {DOTS.map(([x, y], i) => (
+          <View key={`d${i}`} style={[S.dot, { left:x, top:y, opacity: 0.2 + (i%3)*0.08 }]} />
+        ))}
+        {/* Lines */}
+        {LINES.map((l, i) => {
+          const dx = l.x2 - l.x1;
+          const dy = l.y2 - l.y1;
+          const len = Math.sqrt(dx*dx + dy*dy);
+          const angle = Math.atan2(dy, dx) * (180/Math.PI);
+          return (
+            <View key={`l${i}`} style={[S.line, {
+              width: len, left: l.x1, top: l.y1,
+              transform: [{ rotate: `${angle}deg` }],
+            }]} />
+          );
+        })}
+      </Animated.View>
 
-      {/* Gradient circles for depth */}
-      <View style={[styles.glowCircle, styles.glowTL]} />
-      <View style={[styles.glowCircle, styles.glowBR]} />
+      {/* Corner glow blobs */}
+      <View style={[S.blob, { top:-100, right:-80, backgroundColor:'rgba(241,187,3,0.06)' }]} />
+      <View style={[S.blob, { bottom:-120, left:-100, backgroundColor:'rgba(59,130,246,0.05)', width:350, height:350 }]} />
 
-      {/* Main content */}
-      <View style={styles.content}>
+      {/* Centre content */}
+      <View style={S.centre}>
         {/* Glow halo behind logo */}
-        <Animated.View
-          style={[
-            styles.halo,
-            {
-              transform:  [{ scale: glowScale }],
-              opacity:    glowOpacity,
-            },
-          ]}
-        />
+        <Animated.View style={[S.halo, { transform:[{scale:glowScale}], opacity:glowOpacity }]} />
 
-        {/* Logo */}
-        <Animated.View
-          style={{
-            transform: [{ scale: logoScale }],
-            opacity:   logoOpacity,
-            alignItems: 'center',
-          }}
-        >
-          <View style={styles.logoWrap}>
-            <Text style={styles.logoEmoji}>🍌</Text>
-            <View style={styles.briefcaseOverlay}>
-              <Text style={styles.briefcaseEmoji}>💼</Text>
-            </View>
-          </View>
-        </Animated.View>
-
-        {/* App name */}
-        <Animated.View style={{ opacity: textOpacity, alignItems: 'center', marginTop: 20 }}>
-          <Text style={styles.appName}>Banana</Text>
+        {/* Logo image */}
+        <Animated.View style={[S.logoWrap, { opacity:logoOpacity, transform:[{scale:logoScale}] }]}>
+          <Image
+            source={require('../../../assets/logo.png')}
+            style={S.logoImg}
+            resizeMode="contain"
+          />
         </Animated.View>
 
         {/* Tagline */}
-        <Animated.View style={{ opacity: tagOpacity }}>
-          <Text style={styles.tagline}>Connecting Professionals</Text>
-        </Animated.View>
+        <Animated.Text style={[S.tagline, { opacity:tagOpacity }]}>
+          Connecting Professionals
+        </Animated.Text>
       </View>
 
-      {/* Spinner + version */}
-      <Animated.View style={[styles.bottom, { opacity: spinnerOp }]}>
-        <View style={styles.spinner}>
-          <View style={styles.spinnerArc} />
-        </View>
-        <Text style={styles.version}>v1.0.0</Text>
+      {/* Bottom spinner + version */}
+      <Animated.View style={[S.bottom, { opacity:spinnerOp }]}>
+        <View style={S.spinner} />
+        <Text style={S.version}>v1.0.0</Text>
       </Animated.View>
     </View>
   );
 };
 
-const NAVY = '#050D1A';
-const GOLD = '#F1BB03';
-const NAVY2 = '#0A1628';
-
-const styles = StyleSheet.create({
-  root: {
-    flex:            1,
-    backgroundColor: NAVY,
-    justifyContent:  'center',
-    alignItems:      'center',
-  },
+const S = StyleSheet.create({
+  root: { flex:1, backgroundColor:NAVY, alignItems:'center', justifyContent:'center' },
 
   // Constellation
-  dot: {
-    position:     'absolute',
-    borderRadius: 99,
-    backgroundColor: '#F1BB03',
-  },
+  dot:  { position:'absolute', width:4, height:4, borderRadius:2, backgroundColor:GOLD },
+  line: { position:'absolute', height:1, backgroundColor:'rgba(241,187,3,0.18)', transformOrigin:'0 0' },
 
-  // Deep glow circles
-  glowCircle: {
-    position:     'absolute',
-    borderRadius: 999,
-    backgroundColor: 'transparent',
-    borderWidth:  1,
-    borderColor:  'rgba(241,187,3,0.06)',
-  },
-  glowTL: {
-    width: 300, height: 300,
-    top: -100, left: -100,
-    borderColor: 'rgba(59,130,246,0.06)',
-  },
-  glowBR: {
-    width: 400, height: 400,
-    bottom: -150, right: -130,
-    borderColor: 'rgba(241,187,3,0.05)',
-  },
+  // Blobs
+  blob: { position:'absolute', width:300, height:300, borderRadius:999 },
 
-  content: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-  },
-
-  // Glow halo
+  // Centre
+  centre: { alignItems:'center', flex:1, justifyContent:'center' },
   halo: {
-    position:        'absolute',
-    width:           200,
-    height:          200,
-    borderRadius:    100,
-    backgroundColor: GOLD,
-    opacity:         0.18,
-    // Spread the blur via outer shadow trick on iOS
-    shadowColor:     GOLD,
-    shadowOffset:    { width: 0, height: 0 },
-    shadowOpacity:   0.9,
-    shadowRadius:    60,
-    elevation:       30,
+    position:'absolute', width:220, height:220, borderRadius:110,
+    backgroundColor:GOLD, opacity:0.15,
+    shadowColor:GOLD, shadowOffset:{width:0,height:0}, shadowOpacity:1, shadowRadius:80, elevation:30,
   },
+  logoWrap: { alignItems:'center', justifyContent:'center' },
+  logoImg:  { width:200, height:200 },
 
-  logoWrap: {
-    width:          130,
-    height:         130,
-    position:       'relative',
-    alignItems:     'center',
-    justifyContent: 'center',
-  },
-  logoEmoji: {
-    fontSize:  90,
-    position:  'absolute',
-    bottom:    0,
-    left:      0,
-  },
-  briefcaseOverlay: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-  },
-  briefcaseEmoji: {
-    fontSize: 64,
-  },
-
-  appName: {
-    fontSize:      48,
-    fontWeight:    '900',
-    color:         GOLD,
-    letterSpacing: -1,
-  },
   tagline: {
-    fontSize:      14,
-    color:         'rgba(241,187,3,0.65)',
-    letterSpacing: 1.5,
-    marginTop:     6,
-    textTransform: 'uppercase',
+    marginTop:8, fontSize:14, color:'rgba(241,187,3,0.6)',
+    letterSpacing:2, textTransform:'uppercase',
   },
 
-  bottom: {
-    position:   'absolute',
-    bottom:     48,
-    alignItems: 'center',
-    gap:        12,
-  },
+  // Bottom
+  bottom: { position:'absolute', bottom:48, alignItems:'center', gap:10 },
   spinner: {
-    width:       32,
-    height:      32,
-    borderRadius: 16,
-    borderWidth:  2.5,
-    borderColor:  'rgba(241,187,3,0.15)',
-    borderTopColor: GOLD,
+    width:32, height:32, borderRadius:16,
+    borderWidth:2.5,
+    borderColor:'rgba(241,187,3,0.15)',
+    borderTopColor:GOLD,
   },
-  spinnerArc: {},
-  version: {
-    fontSize: 12,
-    color:    'rgba(241,187,3,0.35)',
-  },
+  version: { fontSize:12, color:'rgba(241,187,3,0.35)' },
 });
 
 export default SplashScreen;

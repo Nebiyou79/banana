@@ -267,7 +267,25 @@ const userSchema = new mongoose.Schema({
     },
     default: 'prefer-not-to-say'
   },
+lastSeen: {
 
+ type: Date,
+
+
+ default: Date.now,
+
+
+ index: true,   // supports "online contacts" queries
+
+},
+isOnline: {
+
+ type: Boolean,
+
+
+ default: false,
+
+},
   verificationStatus: {
     type: String,
     enum: ['none', 'partial', 'full'],

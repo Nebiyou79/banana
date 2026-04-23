@@ -98,8 +98,7 @@ export const FREELANCER = {
  
   // Services
   SERVICES:        `${BASE}/services`,
-  SERVICE:         (id: string) => `${BASE}/services/${id}`,
- 
+SERVICE: (id: string) => `/freelancer/services/${id}`, 
   // Certifications
   CERTIFICATIONS:  `${BASE}/certifications`,
   CERTIFICATION:   (id: string) => `${BASE}/certifications/${id}`,

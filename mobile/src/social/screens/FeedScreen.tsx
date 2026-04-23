@@ -21,7 +21,17 @@ const FeedScreen: React.FC = () => {
   const navigation = useNavigation<any>();
 
   const [activeSort, setActiveSort] = useState<FeedSort>('latest');
-  const filters = useMemo(() => ({ sortBy: activeSort }), [activeSort]);
+
+  // Pass followingOnly=true when the Following tab is active so the
+  // backend filters server-side; the client-side trending fallback lives
+  // inside useFeed.
+  const filters = useMemo(
+    () => ({
+      sortBy: activeSort,
+      ...(activeSort === 'following' ? { followingOnly: true } : {}),
+    }),
+    [activeSort]
+  );
 
   const feedQ = useFeed(filters);
   const { mutate: react } = useReact();
@@ -74,7 +84,7 @@ const FeedScreen: React.FC = () => {
         try {
           navigation.navigate(ad.ctaRoute as any);
         } catch {
-          /* route may not exist — swallow */
+          /* noop */
         }
       }
     },
@@ -115,8 +125,15 @@ const FeedScreen: React.FC = () => {
           onAuthorPress={handleAuthorPress}
           onAdPress={handleAdPress}
           adPlacement="feed"
-          emptyTitle="No posts yet"
-          emptySubtitle="Follow more people or create your first post to fill your feed."
+          cardMode="feed"
+          emptyTitle={
+            activeSort === 'following' ? 'No posts from people you follow' : 'No posts yet'
+          }
+          emptySubtitle={
+            activeSort === 'following'
+              ? 'Follow more people to see their updates here.'
+              : 'Follow more people or create your first post to fill your feed.'
+          }
           emptyIcon="newspaper-outline"
           emptyAction={{ label: 'Create post', onPress: handleCreatePress }}
         />

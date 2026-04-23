@@ -1,16 +1,16 @@
 {
-  "totalUploads": 183,
-  "successfulUploads": 181,
+  "totalUploads": 196,
+  "successfulUploads": 194,
   "failedUploads": 2,
-  "totalSize": 45876996,
+  "totalSize": 47405150,
   "byType": {
     "documents": {
       "count": 6,
       "size": 2295535
     },
     "images": {
-      "count": 172,
-      "size": 36934871
+      "count": 185,
+      "size": 38463025
     },
     "videos": {
       "count": 3,
@@ -215,7 +215,13 @@
       "successes": 9,
       "failures": 0,
       "totalSize": 5078590
+    },
+    "2026-04-22": {
+      "uploads": 13,
+      "successes": 13,
+      "failures": 0,
+      "totalSize": 1528154
     }
   },
-  "lastUpdated": "2026-04-21T12:45:45.020Z"
+  "lastUpdated": "2026-04-22T14:06:35.350Z"
 }

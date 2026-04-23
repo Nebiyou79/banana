@@ -1,588 +1,785 @@
-// controllers/followController.js
+/**
+ * server/src/controllers/followController.js
+ * ────────────────────────────────────────────────────────────────────────────
+ * BananaLink Social System v2.0 — Follow Controller
+ *
+ * Methods:
+ *   toggleFollow(req,res)         POST   /follow/:targetId
+ *   getFollowStatus(req,res)      GET    /follow/:targetId/status
+ *   getBulkFollowStatus(req,res)  POST   /follow/bulk-status
+ *   getFollowers(req,res)         GET    /follow/followers
+ *   getFollowing(req,res)         GET    /follow/following
+ *   getConnections(req,res)       GET    /follow/connections        NEW
+ *   getFollowStats(req,res)       GET    /follow/stats
+ *   getFollowSuggestions(req,res) GET    /follow/suggestions
+ *   getPublicFollowers(req,res)   GET    /follow/public/followers/:targetId
+ *   getPublicFollowing(req,res)   GET    /follow/public/following/:targetId
+ *   isConnected(req,res)          GET    /follow/:userId/is-connected NEW
+ *   blockUser(req,res)            POST   /follow/:targetId/block     NEW
+ *   // Legacy, kept for frontend compatibility (always empty / 0):
+ *   getPendingRequests(req,res)   GET    /follow/pending
+ *   acceptFollowRequest(req,res)  PUT    /follow/:followId/accept
+ *   rejectFollowRequest(req,res)  PUT    /follow/:followId/reject
+ * ────────────────────────────────────────────────────────────────────────────
+ */
+const mongoose = require('mongoose');
 const Follow = require('../models/Follow');
 const User = require('../models/User');
-const Profile = require('../models/Profile');
-const mongoose = require('mongoose');
 
-class FollowController {
-   constructor() {
-    // Bind all methods to maintain 'this' context
-    this.toggleFollow = this.toggleFollow.bind(this);
-    this.getFollowStatus = this.getFollowStatus.bind(this);
-    this.getFollowers = this.getFollowers.bind(this);
-    this.getFollowing = this.getFollowing.bind(this);
-    this.getPendingRequests = this.getPendingRequests.bind(this);
-    this.acceptFollowRequest = this.acceptFollowRequest.bind(this);
-    this.rejectFollowRequest = this.rejectFollowRequest.bind(this);
-    this.getFollowSuggestions = this.getFollowSuggestions.bind(this);
-    this.getFollowStats = this.getFollowStats.bind(this);
-    
-    // Bind helper methods
-    this.findTarget = this.findTarget.bind(this);
-    this.handleUnfollow = this.handleUnfollow.bind(this);
-    this.handleFollow = this.handleFollow.bind(this);
-    this.updateFollowerCounts = this.updateFollowerCounts.bind(this);
-    this.updateFollowingCount = this.updateFollowingCount.bind(this);
-  }
+/* ──────────────────────────────────────────────────────────────────────────
+ * Helpers
+ * ────────────────────────────────────────────────────────────────────────── */
 
-  // Toggle follow/unfollow
-  async toggleFollow(req, res) {
-    try {
-      const { targetId } = req.params;
-      const { targetType = 'User', followSource = 'manual' } = req.body;
-      const followerId = req.user.userId;
+const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
-      console.log('Toggle follow called:', { targetId, targetType, followerId });
-
-      // Validate input
-      if (!targetId || !mongoose.Types.ObjectId.isValid(targetId)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Valid target ID is required'
-        });
-      }
-
-      if (!['User', 'Company', 'Organization'].includes(targetType)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid target type'
-        });
-      }
-
-      // Check if target exists
-      const target = await this.findTarget(targetType, targetId);
-      if (!target) {
-        return res.status(404).json({
-          success: false,
-          message: `${targetType} not found`
-        });
-      }
-
-      // Prevent self-follow for users
-      if (targetType === 'User' && targetId === followerId) {
-        return res.status(400).json({
-          success: false,
-          message: 'You cannot follow yourself'
-        });
-      }
-
-      const existingFollow = await Follow.findOne({
-        follower: followerId,
-        targetType,
-        targetId
-      });
-
-      if (existingFollow) {
-        // Unfollow logic
-        return await this.handleUnfollow(existingFollow, targetType, followerId, targetId, res);
-      } else {
-        // Follow logic
-        return await this.handleFollow(followerId, targetType, targetId, followSource, target, res);
-      }
-    } catch (error) {
-      console.error('Toggle follow error:', error);
-      return res.status(500).json({
-        success: false,
-        message: 'Internal server error while toggling follow'
-      });
-    }
-  }
-
-  // Check follow status
-  async getFollowStatus(req, res) {
-    try {
-      const { targetId } = req.params;
-      const { targetType = 'User' } = req.query;
-      const followerId = req.user.userId;
-
-      if (!targetId || !mongoose.Types.ObjectId.isValid(targetId)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Valid target ID is required'
-        });
-      }
-
-      const follow = await Follow.getFollowStatus(followerId, targetType, targetId);
-
-      res.json({
-        success: true,
-        data: {
-          following: !!follow && follow.status === 'accepted',
-          status: follow ? follow.status : 'none',
-          follow: follow || null
-        }
-      });
-    } catch (error) {
-      console.error('Get follow status error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error checking follow status'
-      });
-    }
-  }
-
-  // Get followers with advanced filtering
-  async getFollowers(req, res) {
-    try {
-      const { 
-        targetType = 'User', 
-        targetId = req.user.userId,
-        page = 1, 
-        limit = 50,
-        status = 'accepted'
-      } = req.query;
-
-      const options = {
-        page: Math.max(1, parseInt(page)),
-        limit: Math.min(100, Math.max(1, parseInt(limit))),
-        status
-      };
-
-      const followers = await Follow.getFollowers(targetType, targetId, options);
-
-      const total = await Follow.countDocuments({
-        targetType,
-        targetId,
-        status
-      });
-
-      res.json({
-        success: true,
-        data: followers,
-        pagination: {
-          page: options.page,
-          limit: options.limit,
-          total,
-          pages: Math.ceil(total / options.limit)
-        }
-      });
-    } catch (error) {
-      console.error('Get followers error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching followers'
-      });
-    }
-  }
-
-  // Get following with filtering
-  async getFollowing(req, res) {
-    try {
-      const { 
-        targetType, 
-        page = 1, 
-        limit = 50,
-        status = 'accepted'
-      } = req.query;
-
-      const options = {
-        page: Math.max(1, parseInt(page)),
-        limit: Math.min(100, Math.max(1, parseInt(limit))),
-        targetType,
-        status
-      };
-
-      const following = await Follow.getFollowing(req.user.userId, options);
-
-      const query = { follower: req.user.userId, status };
-      if (targetType) query.targetType = targetType;
-
-      const total = await Follow.countDocuments(query);
-
-      res.json({
-        success: true,
-        data: following,
-        pagination: {
-          page: options.page,
-          limit: options.limit,
-          total,
-          pages: Math.ceil(total / options.limit)
-        }
-      });
-    } catch (error) {
-      console.error('Get following error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching following'
-      });
-    }
-  }
-
-  // Get pending follow requests
-  async getPendingRequests(req, res) {
-    try {
-      const { 
-        targetType = 'User',
-        page = 1, 
-        limit = 50 
-      } = req.query;
-
-      const options = {
-        page: Math.max(1, parseInt(page)),
-        limit: Math.min(100, Math.max(1, parseInt(limit)))
-      };
-
-      const pendingRequests = await Follow.getPendingRequests(
-        targetType, 
-        req.user.userId, 
-        options
-      );
-
-      const total = await Follow.countDocuments({
-        targetType,
-        targetId: req.user.userId,
-        status: 'pending'
-      });
-
-      res.json({
-        success: true,
-        data: pendingRequests,
-        pagination: {
-          page: options.page,
-          limit: options.limit,
-          total,
-          pages: Math.ceil(total / options.limit)
-        }
-      });
-    } catch (error) {
-      console.error('Get pending requests error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching pending requests'
-      });
-    }
-  }
-
-  // Accept follow request
-  async acceptFollowRequest(req, res) {
-    try {
-      const { followId } = req.params;
-
-      const follow = await Follow.findById(followId);
-      
-      if (!follow) {
-        return res.status(404).json({
-          success: false,
-          message: 'Follow request not found'
-        });
-      }
-
-      // Check if current user is the target of the follow request
-      if (follow.targetId.toString() !== req.user.userId) {
-        return res.status(403).json({
-          success: false,
-          message: 'Not authorized to accept this follow request'
-        });
-      }
-
-      if (follow.status !== 'pending') {
-        return res.status(400).json({
-          success: false,
-          message: 'Follow request is not pending'
-        });
-      }
-
-      await follow.accept();
-
-      // Update follower counts
-      await this.updateFollowerCounts(follow.targetType, follow.targetId, 1);
-
-      res.json({
-        success: true,
-        message: 'Follow request accepted',
-        data: { follow }
-      });
-    } catch (error) {
-      console.error('Accept follow request error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error accepting follow request'
-      });
-    }
-  }
-
-  // Reject follow request
-  async rejectFollowRequest(req, res) {
-    try {
-      const { followId } = req.params;
-
-      const follow = await Follow.findById(followId);
-      
-      if (!follow) {
-        return res.status(404).json({
-          success: false,
-          message: 'Follow request not found'
-        });
-      }
-
-      if (follow.targetId.toString() !== req.user.userId) {
-        return res.status(403).json({
-          success: false,
-          message: 'Not authorized to reject this follow request'
-        });
-      }
-
-      await follow.reject();
-
-      res.json({
-        success: true,
-        message: 'Follow request rejected'
-      });
-    } catch (error) {
-      console.error('Reject follow request error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error rejecting follow request'
-      });
-    }
-  }
-
-  // Get AI-based follow suggestions - SIMPLIFIED VERSION
-  async getFollowSuggestions(req, res) {
-    try {
-      const { limit = 10, algorithm = 'popular' } = req.query;
-      const userId = req.user.userId;
-
-      let suggestions = [];
-
-      // Get current user's following to exclude them
-      const userFollowing = await Follow.find({
-        follower: userId,
-        status: 'accepted'
-      }).select('targetId');
-
-      const followingIds = userFollowing.map(f => f.targetId);
-      followingIds.push(userId); // Exclude self
-
-      // SIMPLIFIED: Always use popular algorithm for now
-      const popularProfiles = await Profile.find({
-        user: { $nin: followingIds }
-      })
-      .populate('user', 'name avatar headline role verificationStatus')
-      .sort({ 'socialStats.followerCount': -1 })
-      .limit(parseInt(limit));
-
-      suggestions = popularProfiles.map(profile => ({
-        _id: profile.user._id,
-        name: profile.user.name,
-        avatar: profile.user.avatar,
-        headline: profile.headline,
-        role: profile.user.role,
-        verificationStatus: profile.user.verificationStatus,
-        reason: 'Popular in your network',
-        mutualConnections: 0,
-        followerCount: profile.socialStats.followerCount
-      }));
-
-      res.json({
-        success: true,
-        data: suggestions,
-        algorithm: 'popular' // Force popular for now
-      });
-    } catch (error) {
-      console.error('Get follow suggestions error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching follow suggestions: ' + error.message
-      });
-    }
-  }
-
-  // Get follow statistics
-  async getFollowStats(req, res) {
-    try {
-      const { targetType = 'User', targetId = req.user.userId } = req.query;
-
-      const counts = await Follow.getFollowCounts(targetType, targetId);
-      
-      // Additional stats
-      const pendingCount = await Follow.countDocuments({
-        targetType,
-        targetId,
-        status: 'pending'
-      });
-
-      const stats = {
-        ...counts,
-        pendingRequests: pendingCount,
-        totalConnections: counts.followers + counts.following
-      };
-
-      res.json({
-        success: true,
-        data: stats
-      });
-    } catch (error) {
-      console.error('Get follow stats error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching follow statistics'
-      });
-    }
-  }
-
-  // Helper methods - REGULAR METHODS (not private)
-  async findTarget(targetType, targetId) {
-    try {
-      console.log('Finding target:', { targetType, targetId });
-      
-      switch (targetType) {
-        case 'User':
-          const user = await User.findById(targetId);
-          console.log('User found:', user ? 'Yes' : 'No');
-          return user;
-        case 'Company':
-          const Company = require('../models/Company');
-          return await Company.findById(targetId);
-        case 'Organization':
-          const Organization = require('../models/Organization');
-          return await Organization.findById(targetId);
-        default:
-          return null;
-      }
-    } catch (error) {
-      console.error('Error finding target:', error);
-      return null;
-    }
-  }
-
-  async handleUnfollow(existingFollow, targetType, followerId, targetId, res) {
-    console.log('Handling unfollow:', { existingFollow: existingFollow._id });
-    
-    await Follow.findByIdAndDelete(existingFollow._id);
-
-    // Update follower counts
-    await this.updateFollowerCounts(targetType, targetId, -1);
-    await this.updateFollowingCount(followerId, -1);
-
-    res.json({
-      success: true,
-      message: 'Unfollowed successfully',
-      data: { following: false }
+/**
+ * Safely bump a User's socialStats counter.
+ */
+async function bumpStat(userId, field, delta) {
+  try {
+    if (!userId) return;
+    await User.findByIdAndUpdate(userId, {
+      $inc: { [`socialStats.${field}`]: delta },
     });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('bumpStat failed:', field, delta, err.message);
   }
+}
 
-  async handleFollow(followerId, targetType, targetId, followSource, target, res) {
-    console.log('Handling follow:', { followerId, targetType, targetId });
-    
-    const followData = {
+/* ──────────────────────────────────────────────────────────────────────────
+ * toggleFollow
+ * POST /follow/:targetId
+ * body: { targetType?: 'User'|'Company'|'Organization', followSource?: string }
+ * ────────────────────────────────────────────────────────────────────────── */
+exports.toggleFollow = async (req, res) => {
+  try {
+    const followerId = req.user.userId;
+    const { targetId } = req.params;
+    const { targetType = 'User', followSource = 'manual' } = req.body || {};
+
+    console.log('➡️  Handling follow:', {
+      followerId,
+      targetId,
+      targetType,
+      followSource,
+    });
+
+    if (!isValidObjectId(targetId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Invalid targetId' });
+    }
+
+    if (followerId === targetId && targetType === 'User') {
+      return res
+        .status(400)
+        .json({ success: false, message: 'You cannot follow yourself' });
+    }
+
+    const existing = await Follow.findOne({
+      follower: followerId,
+      targetType,
+      targetId,
+    });
+
+    // ── UNFOLLOW path ────────────────────────────────────────────────────
+    if (existing && existing.status === 'active') {
+      await existing.deleteOne();
+
+      // Update stats
+      await Promise.all([
+        bumpStat(followerId, 'followingCount', -1),
+        targetType === 'User'
+          ? bumpStat(targetId, 'followerCount', -1)
+          : Promise.resolve(),
+      ]);
+
+      return res.json({
+        success: true,
+        message: 'Unfollowed',
+        data: { following: false, isConnected: false, follow: null },
+      });
+    }
+
+    // ── Blocked? ─────────────────────────────────────────────────────────
+    if (existing && existing.status === 'blocked') {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot follow a blocked target',
+      });
+    }
+
+    // ── FOLLOW path ──────────────────────────────────────────────────────
+    const follow = await Follow.create({
       follower: followerId,
       targetType,
       targetId,
       followSource,
-      status: 'accepted'
-    };
+      status: 'active',
+      followedAt: new Date(),
+    });
 
-    const follow = new Follow(followData);
-    await follow.save();
-    await follow.populate('targetId', 'name avatar headline verificationStatus');
+    await Promise.all([
+      bumpStat(followerId, 'followingCount', 1),
+      targetType === 'User'
+        ? bumpStat(targetId, 'followerCount', 1)
+        : Promise.resolve(),
+    ]);
 
-    // Update follower counts
-    await this.updateFollowerCounts(targetType, targetId, 1);
-    await this.updateFollowingCount(followerId, 1);
+    // Mutual?
+    let isConnected = false;
+    if (targetType === 'User') {
+      const reverse = await Follow.findOne({
+        follower: targetId,
+        targetType: 'User',
+        targetId: followerId,
+        status: 'active',
+      });
+      isConnected = !!reverse;
 
-    res.status(201).json({
+      // Bump connectionCount for both users when a new connection forms.
+      if (isConnected) {
+        await Promise.all([
+          bumpStat(followerId, 'connectionCount', 1),
+          bumpStat(targetId, 'connectionCount', 1),
+        ]);
+      }
+    }
+
+    return res.status(201).json({
       success: true,
-      message: 'Followed successfully',
+      message: 'Followed',
       data: {
         following: true,
-        follow: follow
-      }
+        isConnected,
+        follow,
+      },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Toggle follow error:', err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to toggle follow',
     });
   }
+};
 
-  async updateFollowerCounts(targetType, targetId, increment) {
-    try {
-      if (targetType === 'User') {
-        await Profile.updateOne(
-          { user: targetId },
-          { $inc: { 'socialStats.followerCount': increment } }
-        );
-      }
-      // Add similar logic for Company and Organization if needed
-    } catch (error) {
-      console.error('Error updating follower counts:', error);
-    }
-  }
-
-  async updateFollowingCount(userId, increment) {
-    try {
-      await Profile.updateOne(
-        { user: userId },
-        { $inc: { 'socialStats.followingCount': increment } }
-      );
-    } catch (error) {
-      console.error('Error updating following count:', error);
-    }
-  }
-// In followController.js - Add this method:
-
-// Bulk follow status check
-async getBulkFollowStatus(req, res) {
+/* ──────────────────────────────────────────────────────────────────────────
+ * getFollowStatus
+ * GET /follow/:targetId/status
+ * ────────────────────────────────────────────────────────────────────────── */
+exports.getFollowStatus = async (req, res) => {
   try {
-    const { userIds, targetType = 'User' } = req.body;
     const followerId = req.user.userId;
+    const { targetId } = req.params;
+    const targetType = req.query.targetType || 'User';
 
-    console.log('📊 Bulk follow status called:', { 
-      followerId, 
-      userIdsCount: userIds?.length || 0,
-      targetType 
-    });
-
-    if (!userIds || !Array.isArray(userIds)) {
-      return res.status(400).json({
-        success: false,
-        message: 'User IDs array is required'
-      });
+    if (!isValidObjectId(targetId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Invalid targetId' });
     }
 
-    // Validate ObjectIds
-    const validUserIds = userIds.filter(id => {
-      try {
-        return mongoose.Types.ObjectId.isValid(id) && id !== followerId.toString();
-      } catch (error) {
-        return false;
-      }
-    });
-    
-    if (validUserIds.length === 0) {
-      console.log('📊 No valid user IDs to check');
-      return res.json({
-        success: true,
-        data: {}
-      });
-    }
-
-    // Get follow status for all users in one query
-    const follows = await Follow.find({
+    const follow = await Follow.findOne({
       follower: followerId,
       targetType,
-      targetId: { $in: validUserIds },
-      status: 'accepted'
+      targetId,
     });
 
-    console.log(`📊 Found ${follows.length} follows for ${validUserIds.length} users`);
+    let isConnected = false;
+    if (follow && follow.status === 'active' && targetType === 'User') {
+      const reverse = await Follow.findOne({
+        follower: targetId,
+        targetType: 'User',
+        targetId: followerId,
+        status: 'active',
+      });
+      isConnected = !!reverse;
+    }
 
-    // Create a map for quick lookup
-    const statusMap = {};
-    validUserIds.forEach(userId => {
-      statusMap[userId] = follows.some(
-        follow => follow.targetId.toString() === userId.toString()
-      );
-    });
-
-    res.json({
+    return res.json({
       success: true,
-      data: statusMap
+      data: {
+        following: !!(follow && follow.status === 'active'),
+        status: follow ? follow.status : 'none',
+        followId: follow?._id?.toString() ?? null,
+        isConnected,
+        follow: follow || null,
+      },
     });
-  } catch (error) {
-    console.error('❌ Bulk follow status error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error checking bulk follow status'
-    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('getFollowStatus error:', err);
+    return res
+      .status(500)
+      .json({ success: false, message: 'Failed to get follow status' });
   }
-}
-}
+};
 
-module.exports = new FollowController();
+/* ──────────────────────────────────────────────────────────────────────────
+ * getBulkFollowStatus
+ * POST /follow/bulk-status
+ * body: { userIds: string[], targetType?: 'User'|'Company'|'Organization' }
+ *
+ * Legacy response shape kept: { data: { [userId]: boolean } }
+ * Plus detailed status accessible via getFollowStatus.
+ * ────────────────────────────────────────────────────────────────────────── */
+exports.getBulkFollowStatus = async (req, res) => {
+  try {
+    const followerId = req.user.userId;
+    const { userIds = [], targetType = 'User' } = req.body || {};
+
+    const valid = (Array.isArray(userIds) ? userIds : []).filter(
+      isValidObjectId
+    );
+
+    if (valid.length === 0) {
+      return res.json({ success: true, data: {} });
+    }
+
+    const map = await Follow.getBulkFollowStatus(followerId, valid, targetType);
+
+    // Legacy simple shape: { userId: true/false }
+    const simple = {};
+    Object.keys(map).forEach((uid) => {
+      simple[uid] = !!map[uid]?.following;
+    });
+
+    return res.json({ success: true, data: simple });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('getBulkFollowStatus error:', err);
+    return res
+      .status(500)
+      .json({ success: false, message: 'Failed to get bulk follow status' });
+  }
+};
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * getFollowers
+ * GET /follow/followers   (authenticated — current user's followers)
+ * Also supports ?userId=... to fetch another user's followers (public view).
+ * ────────────────────────────────────────────────────────────────────────── */
+exports.getFollowers = async (req, res) => {
+  try {
+    const { page = 1, limit = 20, targetType = 'User' } = req.query;
+    const userId = req.query.userId || req.user.userId;
+
+    if (!isValidObjectId(userId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Invalid userId' });
+    }
+
+    const result = await Follow.getFollowers(targetType, userId, {
+      page: parseInt(page, 10),
+      limit: parseInt(limit, 10),
+    });
+
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('getFollowers error:', err);
+    return res
+      .status(500)
+      .json({ success: false, message: 'Failed to get followers' });
+  }
+};
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * getFollowing
+ * GET /follow/following   (authenticated — current user's following)
+ * Also supports ?userId=... to fetch another user's following.
+ * ────────────────────────────────────────────────────────────────────────── */
+exports.getFollowing = async (req, res) => {
+  try {
+    const { page = 1, limit = 20, targetType } = req.query;
+    const userId = req.query.userId || req.user.userId;
+
+    if (!isValidObjectId(userId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Invalid userId' });
+    }
+
+    const result = await Follow.getFollowing(userId, {
+      page: parseInt(page, 10),
+      limit: parseInt(limit, 10),
+      targetType,
+    });
+
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('getFollowing error:', err);
+    return res
+      .status(500)
+      .json({ success: false, message: 'Failed to get following' });
+  }
+};
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * getConnections (NEW)
+ * GET /follow/connections
+ * Returns mutual-follow users (paginated).
+ * ────────────────────────────────────────────────────────────────────────── */
+exports.getConnections = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
+
+    const [connections, total] = await Promise.all([
+      Follow.getConnections(userId, { page, limit }),
+      Follow.countConnections(userId),
+    ]);
+
+    return res.json({
+      success: true,
+      data: connections,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit) || 1,
+      },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('getConnections error:', err);
+    return res
+      .status(500)
+      .json({ success: false, message: 'Failed to get connections' });
+  }
+};
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * isConnected (NEW)
+ * GET /follow/:userId/is-connected
+ * Returns { isConnected, iFollow, theyFollow }
+ * ────────────────────────────────────────────────────────────────────────── */
+exports.isConnected = async (req, res) => {
+  try {
+    const myId = req.user.userId;
+    const { userId } = req.params;
+
+    if (!isValidObjectId(userId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Invalid userId' });
+    }
+
+    if (myId === userId) {
+      return res.json({
+        success: true,
+        data: { isConnected: false, iFollow: false, theyFollow: false },
+      });
+    }
+
+    const [iFollow, theyFollow] = await Promise.all([
+      Follow.findOne({
+        follower: myId,
+        targetType: 'User',
+        targetId: userId,
+        status: 'active',
+      }),
+      Follow.findOne({
+        follower: userId,
+        targetType: 'User',
+        targetId: myId,
+        status: 'active',
+      }),
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        isConnected: !!(iFollow && theyFollow),
+        iFollow: !!iFollow,
+        theyFollow: !!theyFollow,
+      },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('isConnected error:', err);
+    return res
+      .status(500)
+      .json({ success: false, message: 'Failed to check connection' });
+  }
+};
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * blockUser (NEW)
+ * POST /follow/:targetId/block
+ * Blocks a user: any existing follow edges (either direction) become status=blocked.
+ * ────────────────────────────────────────────────────────────────────────── */
+exports.blockUser = async (req, res) => {
+  try {
+    const blockerId = req.user.userId;
+    const { targetId } = req.params;
+
+    if (!isValidObjectId(targetId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Invalid targetId' });
+    }
+    if (blockerId === targetId) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'You cannot block yourself' });
+    }
+
+    // Upsert blocker→target as blocked
+    await Follow.findOneAndUpdate(
+      { follower: blockerId, targetType: 'User', targetId },
+      {
+        $set: {
+          follower: blockerId,
+          targetType: 'User',
+          targetId,
+          status: 'blocked',
+          followSource: 'manual',
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    // Remove any reverse active follow the target has on blocker.
+    await Follow.findOneAndDelete({
+      follower: targetId,
+      targetType: 'User',
+      targetId: blockerId,
+      status: 'active',
+    });
+
+    return res.json({ success: true, message: 'User blocked' });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('blockUser error:', err);
+    return res
+      .status(500)
+      .json({ success: false, message: 'Failed to block user' });
+  }
+};
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * getFollowStats
+ * GET /follow/stats
+ * Returns { followers, following, connections, pendingRequests: 0 }
+ * `pendingRequests` is always 0 in the new system (kept for FE compatibility).
+ * ────────────────────────────────────────────────────────────────────────── */
+exports.getFollowStats = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const [followers, following, connections] = await Promise.all([
+      Follow.countDocuments({
+        targetType: 'User',
+        targetId: userId,
+        status: 'active',
+      }),
+      Follow.countDocuments({ follower: userId, status: 'active' }),
+      Follow.countConnections(userId),
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        followers,
+        following,
+        connections,
+        totalConnections: connections, // legacy alias
+        pendingRequests: 0, // always 0, kept for FE compatibility
+      },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('getFollowStats error:', err);
+    return res
+      .status(500)
+      .json({ success: false, message: 'Failed to get follow stats' });
+  }
+};
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * getFollowSuggestions
+ * GET /follow/suggestions?algorithm=popular|skills|connections|hybrid&limit=10
+ * ────────────────────────────────────────────────────────────────────────── */
+exports.getFollowSuggestions = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const algorithm = String(req.query.algorithm || 'hybrid').toLowerCase();
+    const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
+
+    // Users I already follow → exclude them from suggestions.
+    const following = await Follow.find({
+      follower: userId,
+      targetType: 'User',
+      status: 'active',
+    })
+      .select('targetId')
+      .lean();
+    const followingIds = following.map((f) => f.targetId.toString());
+    const excludeIds = [...followingIds, userId];
+
+    const baseMatch = {
+      _id: { $nin: excludeIds.map((id) => new mongoose.Types.ObjectId(id)) },
+      isActive: { $ne: false },
+    };
+
+    // ── Popular ─────────────────────────────────────────────────────────
+    if (algorithm === 'popular') {
+      const users = await User.find(baseMatch)
+        .sort({ 'socialStats.followerCount': -1, createdAt: -1 })
+        .limit(limit)
+        .select('name avatar headline role verificationStatus socialStats')
+        .lean();
+      return res.json({ success: true, data: users });
+    }
+
+    // ── Skills ──────────────────────────────────────────────────────────
+    if (algorithm === 'skills') {
+      const me = await User.findById(userId).select('skills').lean();
+      const mySkills =
+        (me?.skills || [])
+          .map((s) => (typeof s === 'string' ? s : s?.name))
+          .filter(Boolean)
+          .slice(0, 20) || [];
+
+      if (mySkills.length === 0) {
+        // fall through to popular
+        const users = await User.find(baseMatch)
+          .sort({ 'socialStats.followerCount': -1 })
+          .limit(limit)
+          .select('name avatar headline role verificationStatus socialStats')
+          .lean();
+        return res.json({ success: true, data: users });
+      }
+
+      const users = await User.find({
+        ...baseMatch,
+        $or: [
+          { 'skills.name': { $in: mySkills } },
+          { skills: { $in: mySkills } },
+        ],
+      })
+        .sort({ 'socialStats.followerCount': -1 })
+        .limit(limit)
+        .select('name avatar headline role verificationStatus socialStats')
+        .lean();
+      return res.json({ success: true, data: users });
+    }
+
+    // ── Connections-of-connections ──────────────────────────────────────
+    if (algorithm === 'connections') {
+      const connections = await Follow.getConnections(userId, {
+        page: 1,
+        limit: 50,
+      });
+      const connectionIds = connections.map((u) => u._id);
+
+      if (connectionIds.length === 0) {
+        const users = await User.find(baseMatch)
+          .sort({ 'socialStats.followerCount': -1 })
+          .limit(limit)
+          .select('name avatar headline role verificationStatus socialStats')
+          .lean();
+        return res.json({ success: true, data: users });
+      }
+
+      // Who do my connections follow (that I don't)?
+      const hops = await Follow.aggregate([
+        {
+          $match: {
+            follower: { $in: connectionIds },
+            targetType: 'User',
+            status: 'active',
+            targetId: {
+              $nin: excludeIds.map(
+                (id) => new mongoose.Types.ObjectId(id)
+              ),
+            },
+          },
+        },
+        {
+          $group: {
+            _id: '$targetId',
+            score: { $sum: 1 },
+          },
+        },
+        { $sort: { score: -1 } },
+        { $limit: limit },
+      ]);
+
+      const ids = hops.map((h) => h._id);
+      const users = await User.find({ _id: { $in: ids } })
+        .select('name avatar headline role verificationStatus socialStats')
+        .lean();
+
+      // preserve hop order
+      const ordered = ids
+        .map((id) => users.find((u) => u._id.toString() === id.toString()))
+        .filter(Boolean);
+
+      return res.json({ success: true, data: ordered });
+    }
+
+    // ── Hybrid (default): weighted blend ────────────────────────────────
+    // Gather 3 pools, weight them, dedupe, truncate to limit.
+    const me = await User.findById(userId).select('skills').lean();
+    const mySkills =
+      (me?.skills || [])
+        .map((s) => (typeof s === 'string' ? s : s?.name))
+        .filter(Boolean)
+        .slice(0, 20) || [];
+
+    const [popularPool, skillsPool, connections] = await Promise.all([
+      User.find(baseMatch)
+        .sort({ 'socialStats.followerCount': -1 })
+        .limit(limit * 2)
+        .select('name avatar headline role verificationStatus socialStats')
+        .lean(),
+      mySkills.length
+        ? User.find({
+            ...baseMatch,
+            $or: [
+              { 'skills.name': { $in: mySkills } },
+              { skills: { $in: mySkills } },
+            ],
+          })
+            .sort({ 'socialStats.followerCount': -1 })
+            .limit(limit * 2)
+            .select('name avatar headline role verificationStatus socialStats')
+            .lean()
+        : Promise.resolve([]),
+      Follow.getConnections(userId, { page: 1, limit: 50 }),
+    ]);
+
+    const connectionIds = connections.map((u) => u._id);
+    let hopUsers = [];
+    if (connectionIds.length > 0) {
+      const hops = await Follow.aggregate([
+        {
+          $match: {
+            follower: { $in: connectionIds },
+            targetType: 'User',
+            status: 'active',
+            targetId: {
+              $nin: excludeIds.map(
+                (id) => new mongoose.Types.ObjectId(id)
+              ),
+            },
+          },
+        },
+        { $group: { _id: '$targetId', score: { $sum: 1 } } },
+        { $sort: { score: -1 } },
+        { $limit: limit * 2 },
+      ]);
+      const ids = hops.map((h) => h._id);
+      hopUsers = await User.find({ _id: { $in: ids } })
+        .select('name avatar headline role verificationStatus socialStats')
+        .lean();
+    }
+
+    // Weighted merge: connections-of-connections (3) > skills (2) > popular (1)
+    const scoreMap = new Map();
+    const addToMap = (users, weight) => {
+      users.forEach((u) => {
+        const id = u._id.toString();
+        const prev = scoreMap.get(id) || { user: u, score: 0 };
+        prev.score += weight;
+        scoreMap.set(id, prev);
+      });
+    };
+    addToMap(hopUsers, 3);
+    addToMap(skillsPool, 2);
+    addToMap(popularPool, 1);
+
+    const merged = Array.from(scoreMap.values())
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map((x) => x.user);
+
+    return res.json({ success: true, data: merged });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('getFollowSuggestions error:', err);
+    return res
+      .status(500)
+      .json({ success: false, message: 'Failed to get suggestions' });
+  }
+};
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * getPublicFollowers / getPublicFollowing
+ * GET /follow/public/followers/:targetId
+ * GET /follow/public/following/:targetId
+ * ────────────────────────────────────────────────────────────────────────── */
+exports.getPublicFollowers = async (req, res) => {
+  try {
+    const { targetId } = req.params;
+    const targetType = req.query.targetType || 'User';
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
+
+    if (!isValidObjectId(targetId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Invalid targetId' });
+    }
+
+    const result = await Follow.getFollowers(targetType, targetId, {
+      page,
+      limit,
+    });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('getPublicFollowers error:', err);
+    return res
+      .status(500)
+      .json({ success: false, message: 'Failed to get public followers' });
+  }
+};
+
+exports.getPublicFollowing = async (req, res) => {
+  try {
+    const { targetId } = req.params;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
+
+    if (!isValidObjectId(targetId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Invalid targetId' });
+    }
+
+    const result = await Follow.getFollowing(targetId, { page, limit });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('getPublicFollowing error:', err);
+    return res
+      .status(500)
+      .json({ success: false, message: 'Failed to get public following' });
+  }
+};
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * LEGACY — kept for frontend compatibility.
+ * New system has no pending/approval flow; these always resolve empty / noop.
+ * ────────────────────────────────────────────────────────────────────────── */
+exports.getPendingRequests = async (_req, res) =>
+  res.json({
+    success: true,
+    data: [],
+    pagination: { page: 1, limit: 20, total: 0, pages: 0 },
+  });
+
+exports.acceptFollowRequest = async (_req, res) =>
+  res.json({ success: true, message: 'No-op (new system has no pending state)' });
+
+exports.rejectFollowRequest = async (_req, res) =>
+  res.json({ success: true, message: 'No-op (new system has no pending state)' });

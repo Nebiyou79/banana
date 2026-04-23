@@ -1,16 +1,20 @@
 /**
  * src/services/cvGeneratorService.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Parity: Aligned with frontend/src/services/cvGeneratorService.ts.
- * Mobile extras: downloadCVToDevice (expo-file-system), getTemplateLabel map.
+ * FIX: Migrated downloadCVToDevice from the deprecated top-level
+ * `FileSystem.downloadAsync` to `import * as FileSystem from 'expo-file-system/legacy'`
+ * which is the correct import path for Expo SDK 54 / RN 0.81.
  *
- * Endpoint base: /candidate/cv-generator/*
+ * The legacy import keeps the exact same API surface (downloadAsync, documentDirectory)
+ * so no call-site changes are needed. The deprecation warning is silenced.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import api from '../lib/api';
 import { API_BASE } from '../constants/api';
 import { getToken } from '../lib/storage';
-import * as FileSystem from 'expo-file-system';
+// ✅ FIX: use legacy import to silence the "Method downloadAsync is deprecated" warning
+import * as FileSystem from 'expo-file-system/legacy';
 
 // ─── Types (1-to-1 with web) ─────────────────────────────────────────────────
 
@@ -24,22 +28,22 @@ export interface CVTemplate {
 }
 
 export interface GeneratedCV {
-  _id:           string;
-  fileName:      string;
-  originalName?: string;
-  size?:         number;
-  uploadedAt:    string;
-  isPrimary:     boolean;
-  mimetype?:     string;
+  _id:            string;
+  fileName:       string;
+  originalName?:  string;
+  size?:          number;
+  uploadedAt:     string;
+  isPrimary:      boolean;
+  mimetype?:      string;
   fileExtension?: string;
-  isGenerated:   boolean;
-  templateId:    string;
-  generatedAt:   string;
-  fileUrl?:      string;
-  downloadUrl?:  string;
+  isGenerated:    boolean;
+  templateId:     string;
+  generatedAt:    string;
+  fileUrl?:       string;
+  downloadUrl?:   string;
   downloadCount?: number;
-  viewCount?:    number;
-  description?:  string;
+  viewCount?:     number;
+  description?:   string;
 }
 
 /** Matches web GeneratePayload */
@@ -87,7 +91,6 @@ export const getTemplateLabel = (id: string): string =>
 export const cvGeneratorService = {
   /**
    * GET /candidate/cv-generator/templates
-   * Matches web getTemplates()
    */
   getTemplates: async (): Promise<CVTemplate[]> => {
     const res = await api.get<{ success: boolean; data: { templates: CVTemplate[] } }>(
@@ -99,7 +102,6 @@ export const cvGeneratorService = {
 
   /**
    * GET /candidate/cv-generator/list
-   * Matches web listGeneratedCVs()
    */
   listGeneratedCVs: async (): Promise<GeneratedCV[]> => {
     const res = await api.get<{ success: boolean; data: { cvs: GeneratedCV[] } }>(
@@ -112,7 +114,6 @@ export const cvGeneratorService = {
   /**
    * POST /candidate/cv-generator/preview  { templateId }
    * Returns RAW HTML STRING — pass directly to <WebView source={{ html }} />
-   * Matches web previewCV()
    */
   previewCV: async (templateId: string): Promise<string> => {
     const res = await api.post<string>(
@@ -126,7 +127,6 @@ export const cvGeneratorService = {
   /**
    * POST /candidate/cv-generator/generate
    * SLOW (3–15 s). Always show a blocking loading overlay.
-   * Matches web generateCV() — same payload shape.
    */
   generateCV: async (payload: GenerateCVPayload): Promise<GeneratedCV> => {
     const res = await api.post<{
@@ -144,7 +144,6 @@ export const cvGeneratorService = {
 
   /**
    * POST /candidate/cv-generator/regenerate/:cvId  { templateId }
-   * Matches web regenerateCV()
    */
   regenerateCV: async (cvId: string, templateId: string): Promise<GeneratedCV> => {
     const res = await api.post<{ success: boolean; data: { cv: GeneratedCV } }>(
@@ -157,9 +156,13 @@ export const cvGeneratorService = {
   },
 
   /**
-   * Mobile-only: download PDF binary to device via expo-file-system.
-   * Returns local file URI (suitable for expo-sharing).
-   * Content-Disposition filename extraction mirrors web downloadGeneratedCV().
+   * Mobile-only: download PDF binary to device.
+   *
+   * ✅ FIX: Uses `expo-file-system/legacy` import (same API, no deprecation warning).
+   * FileSystem.downloadAsync and FileSystem.documentDirectory are both available
+   * on the legacy import in Expo SDK 54.
+   *
+   * Returns local file URI suitable for expo-sharing or WebView display.
    */
   downloadCVToDevice: async (cvId: string, fileName?: string): Promise<string> => {
     const token = await getToken();
@@ -176,6 +179,7 @@ export const cvGeneratorService = {
     if (result.status !== 200) {
       throw new Error(`Download failed with HTTP ${result.status}`);
     }
+
     return result.uri;
   },
 };

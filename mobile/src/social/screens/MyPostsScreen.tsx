@@ -1,7 +1,7 @@
 // src/social/screens/MyPostsScreen.tsx
 import { useNavigation } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
-import { Alert, Share, StyleSheet } from 'react-native';
+import { Share, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CreatePostFAB, FeedList } from '../components/feed';
 import { CommentsSheet } from '../components/post';
@@ -12,6 +12,7 @@ import {
   useReact,
   useRemoveInteraction,
   useToggleSavePost,
+  useUpdatePost,
 } from '../hooks';
 import { useSocialTheme } from '../theme/socialTheme';
 import type { AdConfig, Post, ReactionType } from '../types';
@@ -26,6 +27,7 @@ const MyPostsScreen: React.FC = () => {
   const { mutate: dislike } = useDislike();
   const { mutate: toggleSave } = useToggleSavePost();
   const { mutate: deletePost } = useDeletePost();
+  const { mutate: updatePost } = useUpdatePost();
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -59,36 +61,28 @@ const MyPostsScreen: React.FC = () => {
     }
   }, []);
 
-  const handleMenu = useCallback(
+  const handleEdit = useCallback(
     (post: Post) => {
-      const canEdit = !!post.canEdit;
-      const canDelete = !!post.canDelete;
-      const buttons: any[] = [];
-      if (canEdit) {
-        buttons.push({
-          text: 'Edit',
-          onPress: () => navigation.navigate('EditPost', { post }),
-        });
-      }
-      if (canDelete) {
-        buttons.push({
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () =>
-            Alert.alert('Delete post?', 'This cannot be undone.', [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Delete',
-                style: 'destructive',
-                onPress: () => deletePost(post._id),
-              },
-            ]),
-        });
-      }
-      buttons.push({ text: 'Cancel', style: 'cancel' });
-      Alert.alert('Post', undefined, buttons);
+      navigation.navigate('EditPost', { post });
     },
-    [navigation, deletePost]
+    [navigation]
+  );
+
+  const handleDelete = useCallback(
+    (postId: string) => {
+      deletePost(postId);
+    },
+    [deletePost]
+  );
+
+  const handlePin = useCallback(
+    (post: Post) => {
+      updatePost({
+        id: post._id,
+        data: { pinned: !post.pinned },
+      });
+    },
+    [updatePost]
   );
 
   const handleAdPress = useCallback(
@@ -129,9 +123,12 @@ const MyPostsScreen: React.FC = () => {
         onAuthorPress={(userId) =>
           navigation.navigate('PublicProfile', { userId })
         }
-        onMenuPress={handleMenu}
+        onEditPost={handleEdit}
+        onDeletePost={handleDelete}
+        onPinPost={handlePin}
         onAdPress={handleAdPress}
         adPlacement="myPosts"
+        cardMode="myPosts"
         emptyTitle="You haven't posted yet"
         emptySubtitle="Share your first update and start building your presence."
         emptyIcon="create-outline"

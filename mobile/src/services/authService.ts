@@ -73,6 +73,7 @@ export interface AuthResponse {
     token?: string;
     requiresVerification?: boolean;
     email?: string;
+     resetToken?: string;
   };
 }
 
@@ -190,14 +191,16 @@ export const authService = {
    * Our internal type uses: { email, otp, newPassword }
    * We map them here so the rest of the app keeps clean types.
    */
-  resetPassword: async (data: ResetPasswordData): Promise<AuthResponse> => {
-    const payload = {
-      email:           data.email,
-      token:           data.otp,           // backend reads "token"
-      password:        data.newPassword,   // backend reads "password"
-      confirmPassword: data.newPassword,   // backend validates match
-    };
-    const res = await api.post<AuthResponse>(AUTH.RESET_PASSWORD, payload);
-    return res.data;
-  },
+resetPasswordWithToken: async (data: {
+  token: string;
+  password: string;
+  confirmPassword: string;
+}): Promise<AuthResponse> => {
+  const res = await api.post<AuthResponse>(AUTH.RESET_PASSWORD, {
+    token: data.token,
+    password: data.password,
+    confirmPassword: data.confirmPassword,
+  });
+  return res.data;
+},
 };
