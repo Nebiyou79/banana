@@ -21,7 +21,8 @@ import { CompanyProductCard } from '../../components/products/CompanyProductCard
 import { Product, ProductStatus } from '../../services/productService';
 import { CompanyStackParamList } from '../../navigation/CompanyNavigator';
 import { ProductCard } from '../../components/products/ProductCard';
-
+import { useCompanyId } from '../../hooks/useCompanyId';
+import { useIsCompanyOwner } from '../../hooks/useIsCompanyOwner';
 type Props = NativeStackScreenProps<CompanyStackParamList, 'CompanyProductList'>;
 
 type StatusFilter = 'all' | ProductStatus;
@@ -39,11 +40,8 @@ export const CompanyProductListScreen: React.FC<Props> = ({ navigation }) => {
   const { user } = useAuthStore();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
-  // Resolve id the same way the frontend does: user.company ?? user._id.
-  // Backend accepts either Company._id or User._id (falls back via
-  // Company.findOne({ user: <id> })), so user._id is a safe default.
-  const companyId =
-    (typeof user?.company === 'string' ? user.company : user?.company?._id) ?? user?._id;
+const companyId = useCompanyId();
+const isOwner = useIsCompanyOwner();
 
   const {
     data: companyProductsData, isLoading, refetch, isRefetching,

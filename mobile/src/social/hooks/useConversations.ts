@@ -1,128 +1,119 @@
-// src/social/hooks/useConversations.ts
 /**
- * Conversations list hooks + socket-driven cache invalidation.
- *
- * Provides:
- *  - useConversations(status)            → paginated inbox
- *  - useMessageRequests()                → paginated requests list
- *  - useMessageRequestsCount()           → just the count, for the banner
- *  - useOrCreateConversation()           → mutation: open / create DM
- *  - useMarkConversationRead()           → mutation: zero unread
- *  - useDeleteConversation()             → mutation: soft-delete for me
- *  - useAcceptConversation() / decline   → request accept/decline
- *  - useSocketConversationUpdates()      → registers socket listeners that
- *                                           invalidate list caches
+ * useConversations — conversation list, requests, and per-conversation actions.
+ * -----------------------------------------------------------------------------
+ * Hooks exported:
+ *   - useConversations(filter?)        → list with optional tab filter
+ *   - useMessageRequests()             → pending requests list
+ *   - useConversation(id)              → single conversation (for chat header)
+ *   - useGetOrCreateConversation()     → opens / creates DM with a user
+ *   - useAcceptRequest()
+ *   - useDeclineRequest()
+ *   - useMarkConversationRead()
+ *   - useDeleteConversation()
+ *   - useOnlineContacts()
  */
+
 import {
   useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useEffect } from 'react';
 import Toast from 'react-native-toast-message';
-import {
-  conversationService,
-  type ConversationStatus,
-} from '../services/conversationService';
-import { useSocket } from './useSocket';
 
-const KEY_ACTIVE = ['social', 'conversations', 'active'] as const;
-const KEY_REQUEST = ['social', 'conversations', 'request'] as const;
-const KEY_REQUESTS_COUNT = [
-  'social',
-  'conversations',
-  'requestsCount',
-] as const;
+import { conversationService } from '../services/conversationService';
+import type { Conversation, ConversationListResponse } from '../types/chat';
+import { SOCIAL_KEYS } from './queryKeys';
 
-/* ── List: inbox ──────────────────────────────────────────────────── */
-export const useConversations = (
-  status: ConversationStatus = 'active'
-) =>
+// ──────────────────────────────────────────────────────────────────────────────
+// Lists
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const useConversations = (filter?: string) =>
   useInfiniteQuery({
-    queryKey: ['social', 'conversations', status] as const,
-    queryFn: async ({ pageParam = 1 }) => {
-      const res = await conversationService.getMyConversations({
-        page: pageParam as number,
-        limit: 20,
-        status,
-      });
-      return {
-        data: res.data?.data ?? [],
-        pagination: res.data?.pagination,
-      };
-    },
-    initialPageParam: 1,
+    queryKey: SOCIAL_KEYS.conversations(filter),
+    queryFn: ({ pageParam = 1 }) =>
+      conversationService
+        .getMyConversations({ page: pageParam, filter })
+        .then((r) => r.data as ConversationListResponse),
     getNextPageParam: (last) => {
-      const { page, pages } = last.pagination ?? ({} as any);
+      const { page, pages } = last?.pagination ?? {};
       return page && pages && page < pages ? page + 1 : undefined;
     },
-    staleTime: 1000 * 30,
+    initialPageParam: 1,
     select: (data) => ({
       ...data,
-      conversations: data.pages.flatMap((p) => p.data ?? []),
+      list: data.pages.flatMap((p) => p?.data ?? []) as Conversation[],
+      // Surface requestsCount from the first page so the banner can render.
+      requestsCount: data.pages[0]?.requestsCount ?? 0,
     }),
+    staleTime: 15_000,
   });
 
-/* ── List: requests ───────────────────────────────────────────────── */
 export const useMessageRequests = () =>
   useInfiniteQuery({
-    queryKey: KEY_REQUEST,
-    queryFn: async ({ pageParam = 1 }) => {
-      const res = await conversationService.getRequests({
-        page: pageParam as number,
-        limit: 20,
-      });
-      return {
-        data: res.data?.data ?? [],
-        pagination: res.data?.pagination,
-      };
-    },
-    initialPageParam: 1,
+    queryKey: SOCIAL_KEYS.messageRequests,
+    queryFn: ({ pageParam = 1 }) =>
+      conversationService
+        .getMessageRequests({ page: pageParam })
+        .then((r) => r.data as ConversationListResponse),
     getNextPageParam: (last) => {
-      const { page, pages } = last.pagination ?? ({} as any);
+      const { page, pages } = last?.pagination ?? {};
       return page && pages && page < pages ? page + 1 : undefined;
     },
-    staleTime: 1000 * 30,
+    initialPageParam: 1,
     select: (data) => ({
       ...data,
-      requests: data.pages.flatMap((p) => p.data ?? []),
+      list: data.pages.flatMap((p) => p?.data ?? []) as Conversation[],
     }),
+    staleTime: 15_000,
   });
 
-/* ── Just the count, cheap poll for the banner ───────────────────── */
-export const useMessageRequestsCount = () =>
-  useQuery({
-    queryKey: KEY_REQUESTS_COUNT,
-    queryFn: async () => {
-      const res = await conversationService.getRequests({
-        page: 1,
-        limit: 1,
-      });
-      return (res.data?.pagination?.total as number) ?? 0;
-    },
-    staleTime: 1000 * 30,
+export const useConversation = (conversationId?: string) =>
+  useQuery<Conversation>({
+    queryKey: SOCIAL_KEYS.conversation(conversationId ?? ''),
+    queryFn: () =>
+      conversationService
+        .getById(conversationId as string)
+        .then((r) => r.data?.data),
+    enabled: Boolean(conversationId),
+    staleTime: 15_000,
   });
 
-/* ── Online contacts (mutual-follow, active in last 5min) ────────── */
 export const useOnlineContacts = () =>
   useQuery({
-    queryKey: ['social', 'conversations', 'onlineContacts'] as const,
-    queryFn: async () => {
-      const res = await conversationService.getOnlineContacts(30);
-      return (res.data?.data as any[]) ?? [];
-    },
-    staleTime: 1000 * 30,
+    queryKey: SOCIAL_KEYS.onlineContacts,
+    queryFn: () =>
+      conversationService.getOnlineContacts().then((r) => r.data?.data ?? []),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 
-/* ── Open or create a DM ──────────────────────────────────────────── */
-export const useOrCreateConversation = () => {
+// ──────────────────────────────────────────────────────────────────────────────
+// Get-or-create — the workhorse behind "Start Chat" and "Send Message Request"
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface GetOrCreateArgs {
+  userId: string;
+  initialMessage?: string;
+}
+
+export const useGetOrCreateConversation = () => {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (userId: string) => conversationService.getOrCreate(userId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEY_ACTIVE });
-      qc.invalidateQueries({ queryKey: KEY_REQUEST });
+
+  return useMutation<Conversation, unknown, GetOrCreateArgs>({
+    mutationFn: ({ userId, initialMessage }) =>
+      conversationService
+        .getOrCreateWith(userId, initialMessage)
+        .then((r) => r.data?.data as Conversation),
+
+    onSuccess: (conv) => {
+      // Seed caches so the Chat screen doesn't need a second round-trip.
+      qc.setQueryData(SOCIAL_KEYS.conversation(conv._id), conv);
+      qc.invalidateQueries({ queryKey: ['social', 'conversations'] });
+      if (conv.status === 'request') {
+        qc.invalidateQueries({ queryKey: SOCIAL_KEYS.messageRequests });
+      }
     },
     onError: (err: any) => {
       Toast.show({
@@ -133,87 +124,106 @@ export const useOrCreateConversation = () => {
   });
 };
 
-/* ── Read receipts ────────────────────────────────────────────────── */
-export const useMarkConversationRead = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => conversationService.markRead(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEY_ACTIVE });
-      qc.invalidateQueries({ queryKey: KEY_REQUESTS_COUNT });
-    },
-  });
-};
+// ──────────────────────────────────────────────────────────────────────────────
+// Request flow
+// ──────────────────────────────────────────────────────────────────────────────
 
-/* ── Delete (soft, for me) ────────────────────────────────────────── */
-export const useDeleteConversation = () => {
+export const useAcceptRequest = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => conversationService.delete(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEY_ACTIVE });
-      qc.invalidateQueries({ queryKey: KEY_REQUEST });
+    mutationFn: (conversationId: string) =>
+      conversationService.acceptRequest(conversationId),
+    onSuccess: (_, conversationId) => {
+      qc.invalidateQueries({ queryKey: SOCIAL_KEYS.messageRequests });
+      qc.invalidateQueries({ queryKey: ['social', 'conversations'] });
+      qc.invalidateQueries({
+        queryKey: SOCIAL_KEYS.conversation(conversationId),
+      });
+      Toast.show({ type: 'success', text1: 'Request accepted' });
     },
     onError: (err: any) => {
       Toast.show({
         type: 'error',
-        text1: err?.response?.data?.message ?? 'Delete failed',
+        text1: err?.response?.data?.message ?? 'Could not accept request',
       });
     },
   });
 };
 
-/* ── Accept / decline request ─────────────────────────────────────── */
-export const useAcceptConversation = () => {
+export const useDeclineRequest = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => conversationService.accept(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEY_ACTIVE });
-      qc.invalidateQueries({ queryKey: KEY_REQUEST });
-      qc.invalidateQueries({ queryKey: KEY_REQUESTS_COUNT });
+    mutationFn: (conversationId: string) =>
+      conversationService.declineRequest(conversationId),
+    onMutate: async (conversationId) => {
+      await qc.cancelQueries({ queryKey: SOCIAL_KEYS.messageRequests });
+      const prev = qc.getQueryData(SOCIAL_KEYS.messageRequests);
+      // Optimistically remove from requests list.
+      qc.setQueryData(SOCIAL_KEYS.messageRequests, (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((p: any) => ({
+            ...p,
+            data: (p.data ?? []).filter(
+              (c: Conversation) => c._id !== conversationId,
+            ),
+          })),
+        };
+      });
+      return { prev };
+    },
+    onError: (err: any, _, ctx: any) => {
+      if (ctx?.prev) qc.setQueryData(SOCIAL_KEYS.messageRequests, ctx.prev);
+      Toast.show({
+        type: 'error',
+        text1: err?.response?.data?.message ?? 'Could not decline request',
+      });
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: SOCIAL_KEYS.messageRequests });
     },
   });
 };
 
-export const useDeclineConversation = () => {
+// ──────────────────────────────────────────────────────────────────────────────
+// Read / delete
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface MarkReadArgs {
+  conversationId: string;
+  messageId?: string;
+}
+
+export const useMarkConversationRead = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => conversationService.decline(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEY_REQUEST });
-      qc.invalidateQueries({ queryKey: KEY_REQUESTS_COUNT });
-    },
-  });
-};
-
-/* ── Socket-driven list invalidation ──────────────────────────────── *
- * Call this ONCE at a top-level screen (MessagesScreen). When a new
- * message arrives for any conversation, we refresh the inbox so unread
- * counts & last-message previews stay fresh.                          */
-export const useSocketConversationUpdates = () => {
-  const qc = useQueryClient();
-  const { socket } = useSocket();
-
-  useEffect(() => {
-    if (!socket) return;
-
-    const invalidateAll = () => {
+    mutationFn: ({ conversationId, messageId }: MarkReadArgs) =>
+      conversationService.markAsRead(conversationId, messageId),
+    onSuccess: (_, { conversationId }) => {
       qc.invalidateQueries({ queryKey: ['social', 'conversations'] });
-    };
+      qc.invalidateQueries({
+        queryKey: SOCIAL_KEYS.conversation(conversationId),
+      });
+    },
+  });
+};
 
-    socket.on('chat:new_message', invalidateAll);
-    socket.on('chat:conversation_created', invalidateAll);
-    socket.on('chat:conversation_updated', invalidateAll);
-    socket.on('chat:request_accepted', invalidateAll);
-    socket.on('chat:message_deleted', invalidateAll);
-
-    return () => {
-      socket.off('chat:new_message', invalidateAll);
-      socket.off('chat:conversation_created', invalidateAll);
-      socket.off('chat:conversation_updated', invalidateAll);
-      socket.off('chat:request_accepted', invalidateAll);
-      socket.off('chat:message_deleted', invalidateAll);
-    };
-  }, [socket, qc]);
+export const useDeleteConversation = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      conversationService.deleteConversation(conversationId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['social', 'conversations'] });
+      qc.invalidateQueries({ queryKey: SOCIAL_KEYS.messageRequests });
+      Toast.show({ type: 'success', text1: 'Conversation deleted' });
+    },
+    onError: (err: any) => {
+      Toast.show({
+        type: 'error',
+        text1: err?.response?.data?.message ?? 'Could not delete conversation',
+      });
+    },
+  });
 };

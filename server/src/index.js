@@ -1,4 +1,4 @@
-// /server/src/index.js (FINAL FIXED VERSION - HYBRID UPLOAD SYSTEM)
+// /server/src/index.js (FINAL FIXED VERSION - HYBRID UPLOAD SYSTEM + SOCKET.IO)
 // ================== ENV MUST LOAD FIRST ==================
 const path = require('path');
 const dotenv = require('dotenv');
@@ -28,6 +28,8 @@ console.log('🔍 Cloudinary config check:', {
 });
 
 const express = require('express');
+const http = require('http');                                    // ── PATCH 1: http
+const { Server: SocketIOServer } = require('socket.io');        // ── PATCH 1: socket.io
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const connectDB = require('./config/db');
@@ -62,6 +64,31 @@ const countdownService = require('./services/countdownService');
 
 const app = express();
 
+// ── PATCH 2: Create httpServer wrapping app ──────────────────────────────────
+const httpServer = http.createServer(app);
+
+// ── PATCH 3: Create Socket.IO server with same CORS origins as Express ───────
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: process.env.CORS_ORIGIN
+      ? process.env.CORS_ORIGIN.split(',')
+      : [
+          'http://localhost:3000',
+          'http://localhost:3001',
+          'http://127.0.0.1:3000',
+          'http://127.0.0.1:3001',
+          'http://localhost:19006',   // Expo web
+          'exp://127.0.0.1:19000',    // Expo Go tunnel (mobile)
+          'https://getbananalink.com',
+          'https://www.getbananalink.com',
+        ],
+    credentials: true,
+  },
+  // Ping at ~25s, disconnect after 60s — keeps presence snappy
+  pingInterval: 25_000,
+  pingTimeout: 60_000,
+});
+
 // ========== SET UPLOAD BASE PATH ==========
 const UPLOAD_BASE_PATH = process.env.UPLOAD_BASE_PATH || path.join(process.cwd(), 'uploads');
 console.log('📁 Upload base path:', UPLOAD_BASE_PATH);
@@ -75,6 +102,7 @@ console.log('☁️ Cloudinary ENV check:', {
   UPLOAD_BASE_PATH: UPLOAD_BASE_PATH,
   MAX_DOCUMENT_SIZE: process.env.MAX_DOCUMENT_SIZE || '100MB'
 });
+
 // ========== DEBUG: CHECK FILE PATHS ==========
 app.get('/debug/file/:folder/:filename', (req, res) => {
   const { folder, filename } = req.params;
@@ -97,9 +125,6 @@ app.get('/debug/file/:folder/:filename', (req, res) => {
     isFile: fs.existsSync(filePath) ? fs.statSync(filePath).isFile() : false,
     size: fs.existsSync(filePath) ? fs.statSync(filePath).size : null
   }));
-
-  // Also check if the file exists with the original name (without encoding)
-  const originalPath = path.join(process.cwd(), 'uploads', folder, decodedFilename);
 
   res.json({
     requested: {
@@ -179,6 +204,7 @@ app.get('/uploads/download/:folder/:filename', (req, res) => {
     }
   });
 });
+
 // ========== CORS CONFIGURATION ==========
 const corsOptions = {
   origin: function (origin, callback) {
@@ -244,9 +270,15 @@ app.use((req, res, next) => {
 app.use(morgan('combined'));
 
 // ========== BODY PARSING ==========
-app.use(express.json({ limit: '100mb' }));  // Increased from 50mb
-app.use(express.urlencoded({ extended: true, limit: '100mb' }));  // Increased from 50mb
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 app.use(cookieParser());
+
+// ── PATCH 4: Expose io on every request BEFORE route mounting ────────────────
+app.use((req, _res, next) => {
+  req.io = io;
+  next();
+});
 
 // ========== UPLOADS DIRECTORY SETUP (HYBRID SYSTEM) ==========
 const UPLOADS_DIR = UPLOAD_BASE_PATH;
@@ -277,20 +309,15 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 }
 
 // ========== STATIC FILE SERVING (for both legacy and new documents) ==========
-// Serve uploads with proper headers
 app.use('/uploads', express.static(UPLOADS_DIR, {
   maxAge: '1y',
   etag: true,
   index: false,
   setHeaders: (res, filePath) => {
-    // Set proper caching headers
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-
-    // Allow cross-origin access
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.setHeader('Access-Control-Allow-Origin', '*');
 
-    // Set content-type based on file extension
     const ext = path.extname(filePath).toLowerCase();
     const mimeTypes = {
       '.jpg': 'image/jpeg',
@@ -318,7 +345,6 @@ app.get('/uploads/health', (req, res) => {
   try {
     const cloudinaryStats = cloudinaryStorageService.getStatistics();
 
-    // Get local document statistics
     const documentFolders = ['cv', 'applications', 'tenders', 'proposals', 'documents'];
     const localStats = {
       totalFiles: 0,
@@ -349,7 +375,7 @@ app.get('/uploads/health', (req, res) => {
         localStats.byFolder[folder] = {
           count: files.length,
           size: folderSize,
-          files: folderStats.slice(0, 10) // Show first 10 files
+          files: folderStats.slice(0, 10)
         };
 
         localStats.totalFiles += files.length;
@@ -499,8 +525,12 @@ const socialSearchRoutes = require('./routes/socialSearchRoutes');
 const freelanceTenderRoutes = require('./routes/freelanceTenderRoutes');
 const professionalTenderRoutes = require('./routes/professionalTenderRoutes');
 const bidRoutes = require('./routes/bidRoutes');
-   const freelancerMarketplaceRoutes = require('./routes/freelancerMarketplaceRoutes');
-   const companyShortlistRoutes      = require('./routes/companyShortlistRoutes');
+const freelancerMarketplaceRoutes = require('./routes/freelancerMarketplaceRoutes');
+const companyShortlistRoutes = require('./routes/companyShortlistRoutes');
+
+// ── PATCH 5: Chat / messaging routes ─────────────────────────────────────────
+const conversationRoutes = require('./routes/conversationRoutes');
+const messageRoutes = require('./routes/messageRoutes');
 
 // ========== REGISTER ALL ROUTES ==========
 // Core API Routes
@@ -541,7 +571,11 @@ app.use('/api/v1/social-search', socialSearchRoutes);
 app.use('/api/v1/freelance-tenders', freelanceTenderRoutes);
 app.use('/api/v1/professional-tenders', professionalTenderRoutes);
 
-// ========== HEALTH & TEST ENDPOINTS (updated for Hybrid System) ==========
+// ── PATCH 5 (continued): Mount chat routes ────────────────────────────────────
+app.use('/api/v1/conversations', conversationRoutes);
+app.use('/api/v1/messages', messageRoutes);
+
+// ========== HEALTH & TEST ENDPOINTS ==========
 app.get('/api/test', (req, res) => {
   res.json({
     success: true,
@@ -580,10 +614,8 @@ app.get('/api/health', async (req, res) => {
       3: 'disconnecting'
     }[dbState] || 'unknown';
 
-    // Check Cloudinary storage service
     const cloudinaryStats = cloudinaryStorageService.getStatistics();
 
-    // Get local document stats
     let localDocStats = { totalFiles: 0, totalSize: 0 };
     try {
       const documentFolders = ['cv', 'applications', 'tenders', 'proposals', 'documents'];
@@ -628,6 +660,7 @@ app.get('/api/health', async (req, res) => {
       },
       services: {
         countdown: 'Active',
+        socketIO: 'Active',
         cloudinary: {
           configured: !!process.env.CLOUDINARY_CLOUD_NAME,
           status: 'active'
@@ -649,12 +682,10 @@ app.get('/api/health', async (req, res) => {
 });
 
 // ========== CLOUDINARY REDIRECT ENDPOINTS ==========
-// Redirect to Cloudinary for optimized image delivery
 app.get('/cloudinary/:publicId', (req, res) => {
   const { publicId } = req.params;
   const { width, height, crop, quality, format } = req.query;
 
-  // Import Cloudinary config
   const { cloudinary } = require('./config/cloudinary');
 
   const options = {
@@ -691,7 +722,6 @@ app.get('/uploads/download/:folder/:filename', (req, res) => {
     });
   }
 
-  // Check if file is a document (not an image)
   const ext = path.extname(filename).toLowerCase();
   const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
 
@@ -702,7 +732,6 @@ app.get('/uploads/download/:folder/:filename', (req, res) => {
     });
   }
 
-  // Set headers for download
   res.download(filePath, filename, (err) => {
     if (err) {
       console.error('Download error:', err);
@@ -846,7 +875,13 @@ async function startServer() {
       console.warn('⚠️  Local storage may not be fully initialized:', localError.message);
     }
 
-    app.listen(PORT, () => {
+    // ── PATCH 6: Wire up Socket.IO handlers ──────────────────────────────────
+    console.log('🔌 Wiring up Socket.IO handlers...');
+    require('./socket')(io);
+    console.log('✅ Socket.IO handlers ready');
+
+    // ── PATCH 7: Replace app.listen with httpServer.listen ───────────────────
+    httpServer.listen(PORT, () => {
       console.log(`
 🚀 Server running on port ${PORT}
 📍 Local: http://localhost:${PORT}
@@ -869,6 +904,11 @@ async function startServer() {
   • Documents: /api/v1/upload/documents (Local)
   • Download: /uploads/download/:folder/:filename
 
+💬 CHAT ENDPOINTS:
+  • Conversations: /api/v1/conversations
+  • Messages: /api/v1/messages
+  • Socket.IO: ws://localhost:${PORT}
+
 🔄 ROUTES:
   • Static Files: http://localhost:${PORT}/uploads/
   • Cloudinary: http://localhost:${PORT}/cloudinary/
@@ -878,6 +918,7 @@ async function startServer() {
   • Countdown: ACTIVE
   • Cloudinary: ACTIVE (images/media)
   • Local Storage: ACTIVE (documents)
+  • Socket.IO: ACTIVE (real-time chat)
 `);
 
       console.log('🌐 CORS enabled for origins:');
@@ -891,6 +932,7 @@ async function startServer() {
       console.log('   • Cloudinary uploads use: multer with Cloudinary storage');
       console.log('   • Local uploads use: multer with disk storage');
       console.log('   • No global express-fileupload middleware interfering');
+      console.log('\n🔌 Socket.IO is listening on the same port as HTTP');
     });
 
   } catch (error) {
@@ -898,7 +940,8 @@ async function startServer() {
 
     // Start server without database for development
     if (process.env.NODE_ENV === 'development') {
-      app.listen(PORT, () => {
+      // ── PATCH 7 (dev fallback): use httpServer instead of app ────────────
+      httpServer.listen(PORT, () => {
         console.log(`🚀 Server running on port ${PORT} (without database)`);
         console.log('⚠️  Database connection failed, but API will still work for testing');
         console.log(`📍 Local: http://localhost:${PORT}`);

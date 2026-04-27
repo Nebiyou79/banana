@@ -1,4 +1,18 @@
 // src/social/screens/FollowListScreen.tsx
+/**
+ * FollowListScreen — followers / following list for a given user.
+ * -----------------------------------------------------------------------------
+ * Updated for the v2 follow system:
+ *   - No pending logic anywhere.
+ *   - Uses the new `useBulkConnectionStatus` so each row's button shows
+ *     Follow / Following / Follow Back correctly.
+ *   - Pulls list data from the v2 hooks (`useFollowers` / `useFollowing`).
+ *
+ * The `UserCard` component is expected to accept a `connectionStatus` prop
+ * (the v2-aware variant). If your UserCard hasn't been migrated yet, you
+ * can swap to `<SearchResultCard>` here without losing functionality.
+ */
+
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
@@ -13,10 +27,10 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { UserCard } from '../components/network';
+
+import SearchResultCard from '../components/shared/SearchResultCard';
 import { EmptyState, ErrorState } from '../components/shared';
 import {
-  useBulkFollowStatus,
   useFollowers,
   useFollowing,
   useToggleFollow,
@@ -24,6 +38,7 @@ import {
 import { useSocialTheme } from '../theme/socialTheme';
 import type { SearchResult } from '../types';
 import type { SocialStackParamList } from '../navigation/types';
+import { useBulkConnectionStatus } from '../hooks/useFollow';
 
 type FollowListRoute = RouteProp<
   SocialStackParamList,
@@ -49,49 +64,60 @@ const FollowListScreen: React.FC = () => {
   const { mutate: toggleFollow } = useToggleFollow();
   const [pendingFollowId, setPendingFollowId] = useState<string | null>(null);
 
-  // Normalise list entries to UserCard shape
+  // ── Normalise list entries onto SearchResult shape ─────────────────────
   const listData: SearchResult[] = useMemo(() => {
-    if (!listQ.data?.list) return [];
-    return (listQ.data.list as any[]).map((entry: any): SearchResult => {
-      const u = entry.user ?? entry.targetId ?? entry.follower ?? entry;
-      return {
-        _id: u?._id ?? entry?._id ?? '',
-        name: u?.name ?? 'Unknown',
-        avatar: u?.avatar,
-        role: u?.role ?? 'candidate',
-        headline: u?.headline,
-        followerCount: u?.socialStats?.followerCount,
-        verificationStatus: u?.verificationStatus,
-      };
-    });
+    const list = listQ.data?.list as any[] | undefined;
+    if (!list?.length) return [];
+    return list
+      .map((entry: any): SearchResult | null => {
+        const u =
+          (entry?.user && typeof entry.user === 'object' ? entry.user : null) ??
+          (entry?.targetId && typeof entry.targetId === 'object'
+            ? entry.targetId
+            : null) ??
+          (entry?.follower && typeof entry.follower === 'object'
+            ? entry.follower
+            : null) ??
+          entry;
+        const id = u?._id ?? entry?._id;
+        if (!id) return null;
+        return {
+          _id: id,
+          name: u?.name ?? 'Unknown',
+          avatar: u?.avatar,
+          role: u?.role ?? 'candidate',
+          headline: u?.headline,
+          followerCount: u?.socialStats?.followerCount,
+          verificationStatus: u?.verificationStatus,
+        };
+      })
+      .filter(Boolean) as SearchResult[];
   }, [listQ.data?.list]);
 
   const listUserIds = useMemo(
-    () => listData.map((u) => u._id).filter(Boolean),
-    [listData]
+    () => listData.map((u) => u._id),
+    [listData],
   );
-  const statusQ = useBulkFollowStatus(
-    listUserIds,
-    'User',
-    listUserIds.length > 0
-  );
+  const { statusMap } = useBulkConnectionStatus(listUserIds);
 
+  // ── Handlers ───────────────────────────────────────────────────────────
   const handleToggle = useCallback(
     (targetId: string) => {
       setPendingFollowId(targetId);
       toggleFollow(
         { targetId, targetType: 'User', source: 'profile' },
-        { onSettled: () => setPendingFollowId(null) }
+        { onSettled: () => setPendingFollowId(null) },
       );
     },
-    [toggleFollow]
+    [toggleFollow],
   );
 
   const goToProfile = useCallback(
     (uid: string) => navigation.navigate('PublicProfile', { userId: uid }),
-    [navigation]
+    [navigation],
   );
 
+  // ── Render ─────────────────────────────────────────────────────────────
   if (listQ.isError) {
     return (
       <SafeAreaView
@@ -122,6 +148,7 @@ const FollowListScreen: React.FC = () => {
           style={styles.headerBtn}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           accessibilityLabel="Back"
+          accessibilityRole="button"
         >
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
@@ -147,12 +174,12 @@ const FollowListScreen: React.FC = () => {
           />
         }
         renderItem={({ item }) => (
-          <UserCard
-            user={item}
-            isFollowing={!!statusQ.data?.[item._id]?.following}
-            followLoading={pendingFollowId === item._id}
+          <SearchResultCard
+            result={item}
+            status={statusMap[item._id] ?? 'none'}
             onPress={() => goToProfile(item._id)}
             onFollowPress={() => handleToggle(item._id)}
+            followLoading={pendingFollowId === item._id}
           />
         )}
         ListEmptyComponent={
@@ -162,7 +189,9 @@ const FollowListScreen: React.FC = () => {
                 mode === 'followers' ? 'people-outline' : 'person-add-outline'
               }
               title={
-                mode === 'followers' ? 'No followers yet' : 'Not following anyone'
+                mode === 'followers'
+                  ? 'No followers yet'
+                  : 'Not following anyone'
               }
               subtitle={
                 mode === 'followers'
@@ -195,7 +224,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     minHeight: 52,
   },
   headerBtn: {

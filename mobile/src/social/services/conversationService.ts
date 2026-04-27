@@ -1,99 +1,41 @@
-/**
- * mobile/src/social/services/conversationService.ts
- * ────────────────────────────────────────────────────────────────────────────
- * BananaLink Social System v2.0 — Conversation Service (mobile, NEW)
- *
- * Parity note: every method name, path, and body shape matches
- * frontend/src/services/conversationService.ts.
- * ────────────────────────────────────────────────────────────────────────────
- */
-import api from '../../lib/api';
+import axios from "axios";
 
-export type ConversationStatus = 'active' | 'request' | 'declined';
-
-export interface ConversationParticipant {
-  _id: string;
-  name: string;
-  avatar?: string | { url?: string; secure_url?: string };
-  role?: string;
-  headline?: string;
-  lastSeen?: string;
-  isOnline?: boolean;
-  verificationStatus?: 'none' | 'partial' | 'full';
-}
-
-export interface LastMessagePreview {
-  _id: string;
-  content: string | null;
-  type: 'text' | 'emoji' | 'image' | 'system' | 'deleted';
-  sender: string | { _id: string; name: string };
-  createdAt: string;
-  readBy?: Array<{ user: string; readAt: string }>;
-  deletedAt?: string | null;
-}
-
-export interface Conversation {
-  _id: string;
-  participants: ConversationParticipant[];
-  type: 'direct';
-  status: ConversationStatus;
-  requestedBy?: string | null;
-  lastMessage?: LastMessagePreview | null;
-  lastMessageAt: string;
-  unreadCounts?: Record<string, number>;
-  deletedFor?: string[];
-  isArchived?: boolean;
-  createdAt: string;
-  updatedAt: string;
-  unreadCount: number;
-  otherParticipant: ConversationParticipant | null;
-}
-
-export interface ConversationListParams {
-  page?: number;
-  limit?: number;
-  status?: ConversationStatus;
-}
+const BASE_URL = '/api/v1/conversations';
 
 export const conversationService = {
-  // GET /conversations
-  getMyConversations: (params: ConversationListParams = {}) =>
-    api.get('/conversations', {
-      params: {
-        page: params.page ?? 1,
-        limit: params.limit ?? 20,
-        status: params.status ?? 'active',
-      },
-    }),
+  // ✅ Get all conversations
+  getConversations: (params?: { page?: number; limit?: number }) =>
+    axios.get(BASE_URL, { params }),
 
-  // POST /conversations/with/:userId
+  // ✅ Message requests
+  getRequests: () =>
+    axios.get(`${BASE_URL}/requests`),
+
+  // ✅ Online contacts
+  getOnlineContacts: () =>
+    axios.get(`${BASE_URL}/contacts/online`),
+
+  // ✅ Get or create conversation with user
   getOrCreate: (userId: string) =>
-    api.post(`/conversations/with/${userId}`),
+    axios.post(`${BASE_URL}/with/${userId}`),
 
-  // GET /conversations/requests
-  getRequests: (params: { page?: number; limit?: number } = {}) =>
-    api.get('/conversations/requests', {
-      params: { page: params.page ?? 1, limit: params.limit ?? 20 },
-    }),
+  // ✅ Get single conversation
+  getById: (id: string) =>
+    axios.get(`${BASE_URL}/${id}`),
 
-  // GET /conversations/contacts/online
-  getOnlineContacts: (limit = 30) =>
-    api.get('/conversations/contacts/online', { params: { limit } }),
+  // ✅ Accept request
+  accept: (id: string) =>
+    axios.put(`${BASE_URL}/${id}/accept`),
 
-  // GET /conversations/:id
-  getById: (id: string) => api.get(`/conversations/${id}`),
+  // ✅ Decline request
+  decline: (id: string) =>
+    axios.put(`${BASE_URL}/${id}/decline`),
 
-  // PUT /conversations/:id/accept
-  accept: (id: string) => api.put(`/conversations/${id}/accept`),
+  // ✅ Mark as read
+  markAsRead: (id: string) =>
+    axios.put(`${BASE_URL}/${id}/read`),
 
-  // PUT /conversations/:id/decline
-  decline: (id: string) => api.put(`/conversations/${id}/decline`),
-
-  // PUT /conversations/:id/read
-  markRead: (id: string) => api.put(`/conversations/${id}/read`),
-
-  // DELETE /conversations/:id
-  delete: (id: string) => api.delete(`/conversations/${id}`),
+  // ✅ Delete conversation
+  delete: (id: string) =>
+    axios.delete(`${BASE_URL}/${id}`),
 };
-
-export default conversationService;

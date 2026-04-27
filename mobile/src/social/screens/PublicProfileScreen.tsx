@@ -1,4 +1,29 @@
 // src/social/screens/PublicProfileScreen.tsx
+/**
+ * PublicProfileScreen — viewing another user's profile.
+ * -----------------------------------------------------------------------------
+ * v2 layout:
+ *
+ *      ┌───────────────────────────────┐
+ *      │            COVER              │
+ *      │        ┌──────────┐           │
+ *      │        │  AVATAR  │           │   ← centered, prominent
+ *      │        └──────────┘           │
+ *      │      Name  ✓  Role            │
+ *      │      Headline                 │
+ *      │      📍 Location              │
+ *      │   123 followers · 45 posts    │
+ *      │  ┌─Follow─┐  ┌─Message─┐  ⋯   │   ← v2 actions
+ *      └───────────────────────────────┘
+ *      [Tabs: Info | Posts | Network …]
+ *
+ * Action rules (per spec):
+ *   • Connected (mutual)  → "Start Chat"      opens chat directly
+ *   • Following (one-way) → "Send Message"    creates a request
+ *   • None (unknown)      → "Message" disabled, tooltip "Follow first"
+ *   • Self / blocked      → action hidden
+ */
+
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
@@ -6,6 +31,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Image as RNImage,
   Linking,
   ScrollView,
   Share,
@@ -15,6 +41,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { FeedList } from '../components/feed';
 import { CommentsSheet } from '../components/post';
 import {
@@ -27,6 +54,12 @@ import {
   SocialLinksRow,
 } from '../components/profile';
 import { EmptyState, ErrorState } from '../components/shared';
+import Avatar from '../components/shared/Avatar';
+import RoleBadge from '../components/shared/RoleBadge';
+import VerifiedBadge from '../components/shared/VerifiedBadge';
+import FollowButton from '../components/shared/FollowButton';
+import ChatActionButton from '../components/shared/ChatActionButton';
+
 import {
   useDislike,
   usePublicProfile,
@@ -40,6 +73,7 @@ import { SOCIAL_KEYS } from '../hooks/queryKeys';
 import { postService } from '../services/postService';
 import { sanitizeSocialData } from '../services/sanitize';
 import { useSocialTheme } from '../theme/socialTheme';
+import type { ChatUser } from '../types/chat';
 import type {
   Post,
   PublicProfile as PublicProfileT,
@@ -48,10 +82,8 @@ import type {
 } from '../types';
 import type { SocialStackParamList } from '../navigation/types';
 import { getAvatarUrl, getCoverUrl } from '../utils/profileUtils';
-import Avatar from '../components/shared/Avatar';
-import RoleBadge from '../components/shared/RoleBadge';
-import VerifiedBadge from '../components/shared/VerifiedBadge';
 import { formatCount } from '../utils/format';
+import { useConnectionStatus } from '../hooks/useFollow';
 
 type TabKey =
   | 'info'
@@ -91,7 +123,9 @@ const TABS_BY_ROLE: Record<UserRole, { key: TabKey; label: string }[]> = {
   ],
 };
 
-// Local user-posts infinite query
+type PublicProfileRoute = RouteProp<SocialStackParamList, 'PublicProfile'>;
+
+// User-posts infinite query — kept local so it can be replaced later.
 const useUserPosts = (userId: string) =>
   useInfiniteQuery({
     queryKey: SOCIAL_KEYS.profilePosts(userId),
@@ -116,16 +150,13 @@ const useUserPosts = (userId: string) =>
     select: (d) => ({ ...d, posts: d.pages.flatMap((p) => p.data ?? []) }),
   });
 
-type PublicProfileRoute = RouteProp<SocialStackParamList, 'PublicProfile'>;
-
 const PublicProfileScreen: React.FC = () => {
   const theme = useSocialTheme();
   const navigation = useNavigation<any>();
   const route = useRoute<PublicProfileRoute>();
   const userId = route.params?.userId ?? '';
 
-  const { profile, isLoading, isError, refetch, isFollowing } =
-    usePublicProfile(userId);
+  const { profile, isLoading, isError, refetch } = usePublicProfile(userId);
   const postsQ = useUserPosts(userId);
   const { mutate: toggleFollow, isPending: followPending } = useToggleFollow();
   const { mutate: react } = useReact();
@@ -133,6 +164,10 @@ const PublicProfileScreen: React.FC = () => {
   const { mutate: dislike } = useDislike();
   const { mutate: toggleSave } = useToggleSavePost();
   const { mutate: sharePost } = useSharePost();
+
+  // v2 connection status drives both Follow + Chat buttons.
+  const { status: connectionStatus, isLoading: connLoading } =
+    useConnectionStatus(userId);
 
   const [activeTab, setActiveTab] = useState<TabKey>('info');
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -144,7 +179,7 @@ const PublicProfileScreen: React.FC = () => {
   const posts = postsQ.data?.posts ?? [];
   const roleSpecific = useMemo(
     () => (profile?.roleSpecific ?? {}) as any,
-    [profile?.roleSpecific]
+    [profile?.roleSpecific],
   );
 
   const handleReact = useCallback(
@@ -156,12 +191,12 @@ const PublicProfileScreen: React.FC = () => {
         hasInteraction: !!current?.userInteraction,
       });
     },
-    [posts, react]
+    [posts, react],
   );
 
   const handleDislike = useCallback(
     (postId: string) => dislike({ postId }),
-    [dislike]
+    [dislike],
   );
 
   const handleFollow = useCallback(() => {
@@ -190,12 +225,16 @@ const PublicProfileScreen: React.FC = () => {
         /* noop */
       }
     },
-    [sharePost]
+    [sharePost],
   );
 
+  // ── Loading / error gates ───────────────────────────────────────────
   if (isLoading) {
     return (
-      <SafeAreaView style={[styles.center, { backgroundColor: theme.bg }]}>
+      <SafeAreaView
+        style={[styles.center, { backgroundColor: theme.bg }]}
+        edges={['top']}
+      >
         <ActivityIndicator color={theme.primary} />
       </SafeAreaView>
     );
@@ -218,43 +257,50 @@ const PublicProfileScreen: React.FC = () => {
   const stats = p.socialStats ?? ({} as any);
   const verified = p.verificationStatus === 'verified';
 
-  // ── Shared header (cover + avatar + info + actions) ──────────────
+  const otherUser: ChatUser = {
+    _id: p.user?._id ?? userId,
+    name: p.user?.name ?? 'Unknown',
+    avatar: avatarUri ?? undefined,
+    role: p.user?.role as UserRole,
+    headline: p.headline,
+    verificationStatus: p.user?.verificationStatus,
+    lastSeen: (p as any).lastActive,
+  };
+
+  // ── Header block (cover + centered avatar + actions) ────────────────
   const HeaderBlock = (
     <View>
+      {/* Cover */}
       <View
         style={[styles.coverWrap, { backgroundColor: theme.primaryLighter }]}
       >
         {coverUri ? (
-          <View style={StyleSheet.absoluteFill}>
-            <ScrollView scrollEnabled={false}>
-              <View
-                style={{
-                  width: '100%',
-                  height: 200,
-                  backgroundColor: theme.primaryLighter,
-                }}
-              >
-                <View style={StyleSheet.absoluteFill}>
-                  <Image uri={coverUri} />
-                </View>
-              </View>
-            </ScrollView>
-          </View>
+          <RNImage
+            source={{ uri: coverUri }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+          />
         ) : null}
       </View>
 
+      {/* Centered avatar overlapping the cover */}
       <View style={styles.avatarRow}>
         <View
           style={[
             styles.avatarWrap,
-            { borderColor: theme.card, backgroundColor: theme.card },
+            { borderColor: theme.bg, backgroundColor: theme.bg },
           ]}
         >
-          <Avatar uri={avatarUri ?? undefined} name={p.user?.name} size={80} />
+          <Avatar
+            uri={avatarUri ?? undefined}
+            name={p.user?.name}
+            size={104}
+          />
         </View>
       </View>
 
-      <View style={styles.info}>
+      {/* Name + verified + role */}
+      <View style={styles.identity}>
         <View style={styles.nameRow}>
           <Text
             style={[styles.name, { color: theme.text }]}
@@ -262,9 +308,13 @@ const PublicProfileScreen: React.FC = () => {
           >
             {p.user?.name ?? 'Unknown'}
           </Text>
-          {verified ? <VerifiedBadge size={16} /> : null}
-          {p.user?.role ? <RoleBadge role={p.user.role} size="sm" /> : null}
+          {verified ? <VerifiedBadge size={18} /> : null}
         </View>
+        {p.user?.role ? (
+          <View style={{ marginTop: 6 }}>
+            <RoleBadge role={p.user.role} size="sm" />
+          </View>
+        ) : null}
         {p.headline ? (
           <Text
             style={[styles.headline, { color: theme.subtext }]}
@@ -273,6 +323,8 @@ const PublicProfileScreen: React.FC = () => {
             {p.headline}
           </Text>
         ) : null}
+
+        {/* Meta */}
         <View style={styles.metaRow}>
           {p.location ? (
             <View style={styles.metaItem}>
@@ -294,59 +346,35 @@ const PublicProfileScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* v2 actions: Follow + Chat + Share */}
         <View style={styles.actions}>
-          <TouchableOpacity
-            onPress={handleFollow}
-            disabled={followPending}
-            activeOpacity={0.85}
-            style={[
-              styles.actionBtn,
-              isFollowing
-                ? {
-                    backgroundColor: 'transparent',
-                    borderColor: theme.border,
-                    borderWidth: 1,
-                  }
-                : { backgroundColor: theme.primary },
-            ]}
-          >
-            {followPending ? (
-              <ActivityIndicator
-                size="small"
-                color={isFollowing ? theme.text : '#fff'}
+          {!connLoading && connectionStatus !== 'self' ? (
+            <>
+              <FollowButton
+                status={connectionStatus}
+                onPress={handleFollow}
+                loading={followPending}
               />
-            ) : (
-              <Text
-                style={[
-                  styles.actionText,
-                  { color: isFollowing ? theme.text : '#fff' },
-                ]}
-              >
-                {isFollowing ? 'Following' : 'Follow'}
-              </Text>
-            )}
-          </TouchableOpacity>
+              <ChatActionButton
+                status={connectionStatus}
+                otherUser={otherUser}
+                variant="secondary"
+              />
+            </>
+          ) : null}
 
           <TouchableOpacity
             onPress={handleShareProfile}
             activeOpacity={0.85}
             style={[
-              styles.actionBtn,
-              {
-                backgroundColor: 'transparent',
-                borderColor: theme.border,
-                borderWidth: 1,
-              },
+              styles.shareBtn,
+              { borderColor: theme.border },
             ]}
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel="Share profile"
           >
-            <Ionicons
-              name="share-outline"
-              size={15}
-              color={theme.text}
-            />
-            <Text style={[styles.actionText, { color: theme.text }]}>
-              Share
-            </Text>
+            <Ionicons name="share-outline" size={18} color={theme.text} />
           </TouchableOpacity>
         </View>
       </View>
@@ -388,7 +416,7 @@ const PublicProfileScreen: React.FC = () => {
     </View>
   );
 
-  // ── Tab content (everything except Posts) ───────────────────────
+  // ── Tab content (everything except Posts) ───────────────────────────
   const renderTabContent = () => {
     if (activeTab === 'info') {
       return (
@@ -398,32 +426,35 @@ const PublicProfileScreen: React.FC = () => {
           ) : (
             <EmptyState
               icon="information-circle-outline"
-              title="No bio provided"
+              title="No bio yet"
+              subtitle="This profile hasn't added a bio."
             />
           )}
-          <SocialLinksRow links={p.socialLinks} />
-          {roleSpecific.skills && roleSpecific.skills.length > 0 ? (
-            <View style={{ paddingTop: 10 }}>
-              <Text
-                style={[styles.sectionTitle, { color: theme.text }]}
-              >
-                Skills
-              </Text>
-              <SkillChips skills={roleSpecific.skills} />
-            </View>
+
+          {p.skills?.length ? (
+            <Section title="Skills">
+              <SkillChips skills={p.skills} />
+            </Section>
           ) : null}
+
+          {p.socialLinks ? (
+            <Section title="Links">
+              <SocialLinksRow links={p.socialLinks} />
+            </Section>
+          ) : null}
+
           {p.website ? (
             <TouchableOpacity
               onPress={() => Linking.openURL(p.website!).catch(() => {})}
               style={styles.websiteRow}
-              activeOpacity={0.7}
+              hitSlop={6}
             >
               <Ionicons name="link-outline" size={16} color={theme.primary} />
               <Text
                 style={[styles.websiteText, { color: theme.primary }]}
                 numberOfLines={1}
               >
-                {p.website.replace(/^https?:\/\//, '')}
+                {p.website}
               </Text>
             </TouchableOpacity>
           ) : null}
@@ -440,7 +471,7 @@ const PublicProfileScreen: React.FC = () => {
             onPress={() =>
               navigation.navigate('Followers', {
                 userId,
-                title: `${p.user?.name ?? ''} · Followers`,
+                title: `${p.user?.name}'s followers`,
               })
             }
           />
@@ -450,72 +481,78 @@ const PublicProfileScreen: React.FC = () => {
             onPress={() =>
               navigation.navigate('Following', {
                 userId,
-                title: `${p.user?.name ?? ''} · Following`,
+                title: `${p.user?.name}'s following`,
               })
             }
           />
-          <NetworkCell label="Posts" count={stats.postCount ?? 0} />
+          <NetworkCell
+            label="Connections"
+            count={stats.connectionCount ?? 0}
+          />
         </View>
       );
     }
 
     if (activeTab === 'experience') {
+      const items = roleSpecific.experience ?? roleSpecific.workHistory ?? [];
+      const education = roleSpecific.education ?? [];
+      const certs = roleSpecific.certifications ?? [];
+      if (!items.length && !education.length && !certs.length) {
+        return (
+          <View style={styles.tabContent}>
+            <EmptyState
+              icon="briefcase-outline"
+              title="No experience listed"
+              subtitle="When this user adds experience, it will appear here."
+            />
+          </View>
+        );
+      }
       return (
         <View style={styles.tabContent}>
-          <Section title="Experience">
-            {(roleSpecific.experience ?? []).length > 0 ? (
-              (roleSpecific.experience as any[]).map((e, i) => (
+          {items.length ? (
+            <Section title="Experience">
+              {items.map((e: any, i: number) => (
                 <ExperienceItem key={e._id ?? i} experience={e} />
-              ))
-            ) : (
-              <EmptyState
-                icon="briefcase-outline"
-                title="No experience listed"
-              />
-            )}
-          </Section>
-          <Section title="Education">
-            {(roleSpecific.education ?? []).length > 0 ? (
-              (roleSpecific.education as any[]).map((e, i) => (
+              ))}
+            </Section>
+          ) : null}
+          {education.length ? (
+            <Section title="Education">
+              {education.map((e: any, i: number) => (
                 <EducationItem key={e._id ?? i} education={e} />
-              ))
-            ) : (
-              <EmptyState
-                icon="school-outline"
-                title="No education listed"
-              />
-            )}
-          </Section>
-          <Section title="Certifications">
-            {(roleSpecific.certifications ?? []).length > 0 ? (
-              (roleSpecific.certifications as any[]).map((c, i) => (
-                <CertificationItem key={c._id ?? i} cert={c} />
-              ))
-            ) : (
-              <EmptyState
-                icon="ribbon-outline"
-                title="No certifications listed"
-              />
-            )}
-          </Section>
+              ))}
+            </Section>
+          ) : null}
+          {certs.length ? (
+            <Section title="Certifications">
+              {certs.map((c: any, i: number) => (
+                <CertificationItem key={c._id ?? i} item={c} />
+              ))}
+            </Section>
+          ) : null}
         </View>
       );
     }
 
     if (activeTab === 'portfolio') {
-      return (
-        <View style={styles.tabContent}>
-          {(roleSpecific.portfolio ?? []).length > 0 ? (
-            (roleSpecific.portfolio as any[]).map((item, i) => (
-              <PortfolioTile key={item._id ?? i} item={item} />
-            ))
-          ) : (
+      const portfolio = roleSpecific.portfolio ?? [];
+      if (!portfolio.length) {
+        return (
+          <View style={styles.tabContent}>
             <EmptyState
               icon="albums-outline"
-              title="No portfolio items yet"
-              subtitle="This freelancer hasn't added any work samples."
+              title="No portfolio items"
+              subtitle="This freelancer hasn't shared portfolio work yet."
             />
-          )}
+          </View>
+        );
+      }
+      return (
+        <View style={styles.tabContent}>
+          {portfolio.map((item: any, i: number) => (
+            <PortfolioTile key={item._id ?? i} item={item} />
+          ))}
         </View>
       );
     }
@@ -523,8 +560,9 @@ const PublicProfileScreen: React.FC = () => {
     if (activeTab === 'products') {
       return (
         <View style={styles.tabContent}>
-          <CompanyInfoCard info={roleSpecific.companyInfo ?? {}} />
-          <View style={{ height: 12 }} />
+          {roleSpecific.companyInfo ? (
+            <CompanyInfoCard info={roleSpecific.companyInfo} />
+          ) : null}
           <EmptyState
             icon="cube-outline"
             title="Products coming soon"
@@ -544,8 +582,8 @@ const PublicProfileScreen: React.FC = () => {
             title={cvUrl ? 'CV available' : 'No CV uploaded'}
             subtitle={
               cvUrl
-                ? 'Tap below to view this candidate\u2019s CV.'
-                : 'This candidate hasn\u2019t uploaded a CV yet.'
+                ? "Tap below to view this candidate's CV."
+                : "This candidate hasn't uploaded a CV yet."
             }
             actionLabel={cvUrl ? 'View CV' : undefined}
             onAction={
@@ -571,7 +609,7 @@ const PublicProfileScreen: React.FC = () => {
     return null;
   };
 
-  // ── Render ──────────────────────────────────────────────────────
+  // ── Render: Posts tab uses FeedList ─────────────────────────────────
   if (activeTab === 'posts') {
     return (
       <View style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -631,14 +669,18 @@ const PublicProfileScreen: React.FC = () => {
   );
 };
 
-// ── Fragments ────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
+// Fragments
+// ──────────────────────────────────────────────────────────────────────────────
+
 const TopBar: React.FC<{ onBack: () => void }> = ({ onBack }) => (
   <SafeAreaView edges={['top']} pointerEvents="box-none">
     <View style={styles.topBar} pointerEvents="box-none">
       <TouchableOpacity
         onPress={onBack}
-        style={[styles.iconBtn, { backgroundColor: 'rgba(0,0,0,0.35)' }]}
+        style={[styles.iconBtn, { backgroundColor: 'rgba(0,0,0,0.45)' }]}
         accessibilityLabel="Back"
+        accessibilityRole="button"
       >
         <Ionicons name="arrow-back" size={22} color="#fff" />
       </TouchableOpacity>
@@ -652,7 +694,7 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({
 }) => {
   const theme = useSocialTheme();
   return (
-    <View style={{ marginTop: 12 }}>
+    <View style={{ marginTop: 16 }}>
       <Text style={[styles.sectionTitle, { color: theme.text }]}>{title}</Text>
       {children}
     </View>
@@ -690,11 +732,7 @@ const NetworkCell: React.FC<{
   );
 };
 
-// Tiny internal Image wrapper so the cover doesn't import react-native Image twice
-import { Image as RNImage } from 'react-native';
-const Image: React.FC<{ uri: string }> = ({ uri }) => (
-  <RNImage source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-);
+// ──────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -715,47 +753,63 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  coverWrap: { width: '100%', height: 200, overflow: 'hidden' },
+  coverWrap: { width: '100%', height: 180, overflow: 'hidden' },
   avatarRow: {
-    paddingHorizontal: 16,
-    marginTop: -40,
-    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: -56,
   },
   avatarWrap: {
     borderRadius: 9999,
     borderWidth: 4,
+    padding: 2,
   },
-  info: { paddingHorizontal: 16, marginTop: 10 },
+  identity: {
+    paddingHorizontal: 16,
+    marginTop: 12,
+    alignItems: 'center',
+  },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     flexWrap: 'wrap',
+    justifyContent: 'center',
   },
-  name: { fontSize: 20, fontWeight: '800' },
-  headline: { fontSize: 13, marginTop: 4, lineHeight: 18 },
+  name: { fontSize: 22, fontWeight: '800' },
+  headline: {
+    fontSize: 14,
+    marginTop: 6,
+    lineHeight: 19,
+    textAlign: 'center',
+    paddingHorizontal: 8,
+  },
   metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    marginTop: 6,
+    marginTop: 8,
+    justifyContent: 'center',
   },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaText: { fontSize: 12 },
-  actions: { flexDirection: 'row', gap: 8, marginTop: 14 },
-  actionBtn: {
+  actions: {
     flexDirection: 'row',
+    gap: 8,
+    marginTop: 16,
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 22,
-    minHeight: 44,
+    justifyContent: 'center',
   },
-  actionText: { fontSize: 13, fontWeight: '700' },
+  shareBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   tabsWrap: {
-    marginTop: 18,
-    borderBottomWidth: 0.5,
+    marginTop: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   tabsRow: {
     paddingHorizontal: 12,
@@ -776,7 +830,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: '700',
-    marginBottom: 8,
+    marginBottom: 10,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
@@ -784,7 +838,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 10,
+    marginTop: 14,
     minHeight: 44,
   },
   websiteText: { fontSize: 13, fontWeight: '600' },

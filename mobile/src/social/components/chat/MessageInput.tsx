@@ -1,139 +1,64 @@
-// src/social/components/chat/MessageInput.tsx
 /**
- * Mobile chat input.
- *
- *   [😊]  [  TextInput autoexpand  ]  [Send]
- *
- *  • TextInput multiline, max 4 visible lines.
- *  • Left: emoji button → opens EmojiPicker bottom sheet.
- *  • Right: send button (disabled when empty or sending).
- *  • Emits `chat:typing_start` on text change, `chat:typing_stop` after
- *    2s of idle.
- *  • Minimum touch target: 44×44.
+ * MessageInput — composer at the bottom of ChatScreen.
+ * -----------------------------------------------------------------------------
+ * - Multiline (auto-grows to ~4 lines)
+ * - Emoji button (left) toggles the EmojiPicker bottom sheet
+ * - Send button (right) disabled when empty
+ * - Emits typing_start on change, typing_stop after 2s idle (via useTyping)
  */
-import { Ionicons } from '@expo/vector-icons';
-import React, {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+
+import React, { useState } from 'react';
 import {
-  ActivityIndicator,
-  NativeSyntheticEvent,
   StyleSheet,
-  Text,
   TextInput,
-  TextInputContentSizeChangeEventData,
-//   TCfUqPqByNuTTTR2w1SCXfKnwkQvVBjreGa,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { socketService } from '../../services/socketService';
+import { Ionicons } from '@expo/vector-icons';
+
 import { useSocialTheme } from '../../theme/socialTheme';
 import EmojiPicker from './EmojiPicker';
 
-interface MessageInputProps {
-  conversationId: string;
-  onSend: (content: string) => void | Promise<void>;
-  isSending?: boolean;
+export interface MessageInputProps {
+  value: string;
+  onChangeText: (v: string) => void;
+  onSend: () => void;
+  onTyping?: () => void;
   disabled?: boolean;
   placeholder?: string;
 }
 
-const MAX_HEIGHT = 4 * 22; // ~4 lines @ 22px line-height
+const MAX_LINES = 4;
+const LINE_HEIGHT = 20;
 
 const MessageInput: React.FC<MessageInputProps> = ({
-  conversationId,
+  value,
+  onChangeText,
   onSend,
-  isSending = false,
-  disabled = false,
-  placeholder = 'Type a message…',
+  onTyping,
+  disabled,
+  placeholder = 'Message…',
 }) => {
   const theme = useSocialTheme();
-  const inputRef = useRef<TextInput>(null);
-  const [value, setValue] = useState('');
   const [height, setHeight] = useState(40);
-  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
 
-  const typingIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasEmittedStart = useRef(false);
+  const canSend = value.trim().length > 0 && !disabled;
 
-  /* ── typing emitter ────────────────────────────────────────────── */
-  const emitStart = useCallback(() => {
-    if (hasEmittedStart.current) return;
-    socketService.emit('chat:typing_start', { conversationId });
-    hasEmittedStart.current = true;
-  }, [conversationId]);
-
-  const emitStop = useCallback(() => {
-    if (!hasEmittedStart.current) return;
-    socketService.emit('chat:typing_stop', { conversationId });
-    hasEmittedStart.current = false;
-  }, [conversationId]);
-
-  const scheduleStop = useCallback(() => {
-    if (typingIdleTimer.current) clearTimeout(typingIdleTimer.current);
-    typingIdleTimer.current = setTimeout(emitStop, 2000);
-  }, [emitStop]);
-
-  useEffect(() => {
-    return () => {
-      if (typingIdleTimer.current) clearTimeout(typingIdleTimer.current);
-      emitStop();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId]);
-
-  /* ── handlers ──────────────────────────────────────────────────── */
-  const handleChange = (text: string) => {
-    setValue(text);
-    if (text.length > 0) {
-      emitStart();
-      scheduleStop();
-    } else {
-      emitStop();
-    }
+  const handleChange = (v: string) => {
+    onChangeText(v);
+    onTyping?.();
   };
 
-  const handleContentSize = (
-    e: NativeSyntheticEvent<TextInputContentSizeChangeEventData>
-  ) => {
-    const h = e.nativeEvent.contentSize.height;
-    setHeight(Math.min(Math.max(40, h + 8), MAX_HEIGHT));
+  const handleEmojiSelect = (emoji: string) => {
+    onChangeText(value + emoji);
   };
-
-  const handleSubmit = useCallback(async () => {
-    const trimmed = value.trim();
-    if (!trimmed || disabled || isSending) return;
-
-    // Clear immediately for snappy UX.
-    const toSend = trimmed;
-    setValue('');
-    setHeight(40);
-    emitStop();
-
-    try {
-      await onSend(toSend);
-    } catch {
-      // Restore draft on failure.
-      setValue(toSend);
-    }
-  }, [value, disabled, isSending, onSend, emitStop]);
-
-  const insertEmoji = (emoji: string) => {
-    setValue((v) => v + emoji);
-    emitStart();
-    scheduleStop();
-  };
-
-  const canSend = value.trim().length > 0 && !disabled && !isSending;
 
   return (
     <>
       <View
         style={[
-          styles.wrap,
+          styles.container,
           {
             backgroundColor: theme.card,
             borderTopColor: theme.border,
@@ -141,119 +66,101 @@ const MessageInput: React.FC<MessageInputProps> = ({
         ]}
       >
         <TouchableOpacity
-          onPress={() => setEmojiOpen((v) => !v)}
-          disabled={disabled}
+          onPress={() => setShowEmoji(true)}
           style={styles.iconBtn}
-          accessibilityLabel="Insert emoji"
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Open emoji picker"
         >
-          <Ionicons
-            name="happy-outline"
-            size={24}
-            color={disabled ? theme.muted : theme.subtext}
-          />
+          <Ionicons name="happy-outline" size={24} color={theme.muted} />
         </TouchableOpacity>
 
         <TextInput
-          ref={inputRef}
           value={value}
           onChangeText={handleChange}
-          onContentSizeChange={handleContentSize}
           placeholder={placeholder}
           placeholderTextColor={theme.muted}
           multiline
-          editable={!disabled}
-          maxLength={2000}
+          onContentSizeChange={(e) => {
+            const h = Math.min(
+              Math.max(40, e.nativeEvent.contentSize.height + 10),
+              LINE_HEIGHT * MAX_LINES + 20,
+            );
+            setHeight(h);
+          }}
           style={[
             styles.input,
             {
-              color: theme.text,
               backgroundColor: theme.inputBg,
-              borderColor: theme.border,
+              color: theme.text,
               height,
-              maxHeight: MAX_HEIGHT,
+              maxHeight: LINE_HEIGHT * MAX_LINES + 20,
             },
           ]}
+          editable={!disabled}
+          returnKeyType="default"
         />
 
         <TouchableOpacity
-          onPress={handleSubmit}
+          onPress={onSend}
           disabled={!canSend}
           style={[
             styles.sendBtn,
             {
-              backgroundColor: canSend ? theme.primary : theme.skeleton,
-              opacity: canSend ? 1 : 0.6,
+              backgroundColor: canSend ? theme.primary : theme.cardAlt,
             },
           ]}
+          accessibilityRole="button"
           accessibilityLabel="Send message"
         >
-          {isSending ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <Ionicons name="send" size={18} color="#FFFFFF" />
-          )}
+          <Ionicons
+            name="send"
+            size={18}
+            color={canSend ? '#fff' : theme.muted}
+          />
         </TouchableOpacity>
       </View>
 
-      {value.length > 1800 ? (
-        <View style={styles.counterRow}>
-          <Text style={[styles.counter, { color: theme.muted }]}>
-            {2000 - value.length} characters remaining
-          </Text>
-        </View>
-      ) : null}
-
       <EmojiPicker
-        open={emojiOpen}
-        onClose={() => setEmojiOpen(false)}
-        onPick={insertEmoji}
+        visible={showEmoji}
+        onClose={() => setShowEmoji(false)}
+        onSelect={handleEmojiSelect}
       />
     </>
   );
 };
 
 const styles = StyleSheet.create({
-  wrap: {
+  container: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 8,
-    gap: 8,
+    paddingBottom: 10,
+    gap: 6,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   iconBtn: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 22,
   },
   input: {
     flex: 1,
+    borderRadius: 20,
     paddingHorizontal: 14,
     paddingTop: 10,
     paddingBottom: 10,
-    borderRadius: 20,
     fontSize: 15,
-    lineHeight: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-    textAlignVertical: 'center',
+    lineHeight: LINE_HEIGHT,
   },
   sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  counterRow: {
-    paddingHorizontal: 64,
-    paddingBottom: 4,
-    backgroundColor: 'transparent',
-  },
-  counter: {
-    fontSize: 11,
   },
 });
 

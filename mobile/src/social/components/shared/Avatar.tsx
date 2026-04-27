@@ -1,73 +1,101 @@
-import React, { memo } from 'react';
-import { Image, ImageStyle, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { useSocialTheme } from '../../theme/socialTheme';
-import { getInitials } from '../../utils/format';
+/**
+ * Avatar — a consistent identity element with optional presence dot.
+ * -----------------------------------------------------------------------------
+ * Falls back to an initial on a tinted background when no avatar is provided,
+ * so we never render a blank placeholder.
+ */
 
-interface Props {
-  uri?: string;
+import React from 'react';
+import { Image, StyleSheet, Text, View } from 'react-native';
+
+import { useSocialTheme } from '../../theme/socialTheme';
+import OnlineStatusDot from '../chat/OnlineStatusDot';
+
+export interface AvatarProps {
+  uri?: string | null;
   name?: string;
   size?: number;
-  borderColor?: string;
-  borderWidth?: number;
-  style?: ViewStyle;
+  /** Show presence dot at bottom-right. */
+  lastSeen?: string | Date | null;
+  isOnline?: boolean;
+  showPresence?: boolean;
+  /** White ring around avatar (e.g. when presence dot is shown). */
+  ring?: boolean;
 }
 
-/**
- * Avatar with graceful fallback to the first initial of the name tinted with
- * the current role's primary colour.
- */
-const Avatar: React.FC<Props> = memo(
-  ({ uri, name, size = 44, borderColor, borderWidth = 0, style }) => {
-    const theme = useSocialTheme();
-    const radius = size / 2;
+const Avatar: React.FC<AvatarProps> = ({
+  uri,
+  name,
+  size = 48,
+  lastSeen,
+  isOnline,
+  showPresence,
+  ring,
+}) => {
+  const theme = useSocialTheme();
+  const dotSize = Math.max(10, Math.round(size * 0.24));
+  const initial = (name ?? '?').charAt(0).toUpperCase();
 
-    const base: ImageStyle = {
-      width: size,
-      height: size,
-      borderRadius: radius,
-      borderWidth,
-      borderColor: borderColor ?? theme.border,
-      overflow: 'hidden',
-    };
-
-    if (uri) {
-      return (
+  return (
+    <View style={{ width: size, height: size }}>
+      {uri ? (
         <Image
           source={{ uri }}
-          style={[base]}
-          resizeMode="cover"
-          accessibilityLabel={name ? `${name}'s avatar` : 'avatar'}
-        />
-      );
-    }
-
-    return (
-      <View
-        style={[
-          base,
-          styles.fallback,
-          { backgroundColor: theme.primaryLighter },
-          style,
-        ]}
-      >
-        <Text
           style={[
-            styles.initial,
-            { color: theme.primary, fontSize: size * 0.38 },
+            styles.img,
+            {
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+              borderWidth: ring ? 2 : 0,
+              borderColor: theme.card,
+            },
+          ]}
+        />
+      ) : (
+        <View
+          style={[
+            styles.fallback,
+            {
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+              backgroundColor: theme.primaryLighter,
+              borderWidth: ring ? 2 : 0,
+              borderColor: theme.card,
+            },
           ]}
         >
-          {getInitials(name)}
-        </Text>
-      </View>
-    );
-  }
-);
+          <Text
+            style={{
+              color: theme.primary,
+              fontSize: Math.round(size * 0.42),
+              fontWeight: '700',
+            }}
+          >
+            {initial}
+          </Text>
+        </View>
+      )}
 
-Avatar.displayName = 'Avatar';
+      {showPresence && (
+        <View style={styles.dot}>
+          <OnlineStatusDot
+            lastSeen={lastSeen}
+            isOnline={isOnline}
+            size={dotSize}
+            showBorder
+          />
+        </View>
+      )}
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
+  img: { backgroundColor: '#E5E7EB' },
   fallback: { alignItems: 'center', justifyContent: 'center' },
-  initial: { fontWeight: '700' },
+  dot: { position: 'absolute', right: 0, bottom: 0 },
 });
 
 export default Avatar;

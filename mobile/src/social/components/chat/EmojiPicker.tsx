@@ -1,136 +1,126 @@
-// src/social/components/chat/EmojiPicker.tsx
 /**
- * Emoji picker bottom sheet. Wraps `rn-emoji-keyboard` which handles all
- * platform-specific keyboard sizing and searching.
- *
- * If the dependency isn't installed yet the picker falls back to a small
- * inline grid — ChatScreen will still work, just without full emoji support.
+ * EmojiPicker — bottom sheet wrapper.
+ * -----------------------------------------------------------------------------
+ * Primary: rn-emoji-keyboard (installed per blueprint dependencies).
+ * Fallback: a compact curated grid, so the app still runs if the package
+ * isn't yet installed. The dynamic require() pattern avoids a hard crash.
  */
+
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  FlatList,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+
 import { useSocialTheme } from '../../theme/socialTheme';
 
-interface EmojiPickerProps {
-  open: boolean;
+export interface EmojiPickerProps {
+  visible: boolean;
   onClose: () => void;
-  onPick: (emoji: string) => void;
+  onSelect: (emoji: string) => void;
 }
 
-// Attempt to use rn-emoji-keyboard; if missing, use a fallback.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let EmojiKeyboard: any = null;
+// Lazy, optional load — package may not be installed yet in every env.
+let RnEmojiKeyboard: any = null;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
-  EmojiKeyboard = require('rn-emoji-keyboard').default;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  RnEmojiKeyboard = require('rn-emoji-keyboard').default;
 } catch {
-  EmojiKeyboard = null;
+  RnEmojiKeyboard = null;
 }
 
-const FALLBACK = [
-  '😀','😂','😊','😍','🥰','😎','🤔','😢','😭','😡',
-  '👍','👎','❤️','🔥','🎉','✨','💯','🙏','👋','🤝',
-  '✅','❌','⭐','💡','📌','📎','🚀','⏰','📅','💬',
+const FALLBACK_EMOJIS = [
+  '😀', '😂', '😍', '😊', '😎', '🤔', '👍', '👏',
+  '🙏', '❤️', '🔥', '🎉', '🚀', '💯', '✨', '💡',
+  '😢', '😮', '😡', '🤝', '💪', '👀', '☕', '📌',
 ];
 
-const EmojiPicker: React.FC<EmojiPickerProps> = ({
-  open,
-  onClose,
-  onPick,
-}) => {
+const FallbackGrid: React.FC<EmojiPickerProps> = ({ visible, onClose, onSelect }) => {
   const theme = useSocialTheme();
-
-  if (EmojiKeyboard) {
-    return (
-      <EmojiKeyboard
-        open={open}
-        onClose={onClose}
-        onEmojiSelected={(e: { emoji: string }) => onPick(e.emoji)}
-        theme={{
-          backdrop: theme.overlay,
-          knob: theme.primary,
-          container: theme.card,
-          header: theme.subtext,
-          category: {
-            icon: theme.muted,
-            iconActive: theme.primary,
-            container: theme.card,
-            containerActive: theme.primaryLighter,
-          },
-          search: {
-            text: theme.text,
-            placeholder: theme.muted,
-            background: theme.inputBg,
-          },
-        }}
-        enableSearchBar
-        categoryPosition="top"
-      />
-    );
-  }
-
-  // Fallback picker — absolute-positioned grid.
-  if (!open) return null;
   return (
-    <>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
       <TouchableOpacity
         activeOpacity={1}
         onPress={onClose}
         style={[styles.backdrop, { backgroundColor: theme.overlay }]}
-      />
-      <View style={[styles.sheet, { backgroundColor: theme.card }]}>
-        <View style={styles.grid}>
-          {FALLBACK.map((e) => (
-            <TouchableOpacity
-              key={e}
-              onPress={() => {
-                onPick(e);
-                onClose();
-              }}
-              style={styles.cell}
-            >
-              <Text style={styles.emoji}>{e}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-    </>
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={[styles.sheet, { backgroundColor: theme.card }]}
+        >
+          <View style={[styles.handle, { backgroundColor: theme.muted }]} />
+          <Text style={[styles.title, { color: theme.text }]}>Emoji</Text>
+          <FlatList
+            data={FALLBACK_EMOJIS}
+            keyExtractor={(e, i) => `${e}-${i}`}
+            numColumns={8}
+            contentContainerStyle={{ paddingVertical: 8 }}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.cell}
+                onPress={() => {
+                  onSelect(item);
+                  onClose();
+                }}
+              >
+                <Text style={styles.emoji}>{item}</Text>
+              </TouchableOpacity>
+            )}
+          />
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
   );
 };
 
+const EmojiPicker: React.FC<EmojiPickerProps> = (props) => {
+  if (RnEmojiKeyboard) {
+    return (
+      <RnEmojiKeyboard
+        open={props.visible}
+        onClose={props.onClose}
+        onEmojiSelected={(e: { emoji: string }) => props.onSelect(e.emoji)}
+      />
+    );
+  }
+  return <FallbackGrid {...props} />;
+};
+
 const styles = StyleSheet.create({
-  backdrop: {
-    position: 'absolute',
-    inset: 0 as any,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
+  backdrop: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    minHeight: '35%',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
+    paddingHorizontal: 12,
+    paddingBottom: 20,
   },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 8,
+    marginBottom: 6,
+    opacity: 0.5,
   },
+  title: { fontSize: 14, fontWeight: '700', padding: 10 },
   cell: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+    flex: 1,
+    aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emoji: {
-    fontSize: 24,
-  },
+  emoji: { fontSize: 26 },
 });
 
 export default EmojiPicker;

@@ -1,104 +1,76 @@
-// src/social/components/chat/TypingIndicator.tsx
 /**
- * Animated three-dot typing indicator. Uses RN Animated API (no reanimated).
+ * TypingIndicator — three dots that pulse while the other user is typing.
+ * -----------------------------------------------------------------------------
+ * Plain react-native Animated (no reanimated), per the hard rules.
  */
+
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, View } from 'react-native';
+
 import { useSocialTheme } from '../../theme/socialTheme';
 
-interface TypingIndicatorProps {
-  name?: string;
+export interface TypingIndicatorProps {
+  visible: boolean;
 }
 
 const Dot: React.FC<{ delay: number; color: string }> = ({ delay, color }) => {
-  const translate = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
-    const loop = Animated.loop(
+    const seq = Animated.loop(
       Animated.sequence([
-        Animated.timing(translate, {
-          toValue: -3,
-          duration: 300,
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 400,
           delay,
           useNativeDriver: true,
         }),
-        Animated.timing(translate, {
-          toValue: 0,
-          duration: 300,
+        Animated.timing(opacity, {
+          toValue: 0.3,
+          duration: 400,
           useNativeDriver: true,
         }),
-        Animated.delay(300),
-      ])
+      ]),
     );
-    loop.start();
-    return () => loop.stop();
-  }, [delay, translate]);
+    seq.start();
+    return () => seq.stop();
+  }, [opacity, delay]);
 
   return (
     <Animated.View
-      style={[
-        styles.dot,
-        { backgroundColor: color, transform: [{ translateY: translate }] },
-      ]}
+      style={[styles.dot, { backgroundColor: color, opacity }]}
     />
   );
 };
 
-const TypingIndicator: React.FC<TypingIndicatorProps> = ({ name }) => {
+const TypingIndicator: React.FC<TypingIndicatorProps> = ({ visible }) => {
   const theme = useSocialTheme();
-  const dotColor = theme.muted;
+  if (!visible) return null;
 
   return (
-    <View style={styles.row}>
-      <View
-        style={[
-          styles.bubble,
-          {
-            backgroundColor: theme.card,
-            borderColor: theme.border,
-          },
-        ]}
-      >
-        <Dot delay={0} color={dotColor} />
-        <Dot delay={150} color={dotColor} />
-        <Dot delay={300} color={dotColor} />
-      </View>
-      {name ? (
-        <Text style={[styles.label, { color: theme.muted }]}>
-          {name} is typing…
-        </Text>
-      ) : null}
+    <View style={[styles.bubble, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <Dot delay={0} color={theme.muted} />
+      <Dot delay={150} color={theme.muted} />
+      <Dot delay={300} color={theme.muted} />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    gap: 8,
-  },
   bubble: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
+    alignSelf: 'flex-start',
+    marginHorizontal: 12,
+    marginVertical: 4,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 18,
-    borderTopLeftRadius: 4,
+    borderBottomLeftRadius: 4,
     borderWidth: StyleSheet.hairlineWidth,
     gap: 4,
   },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  label: {
-    fontSize: 11,
-    fontStyle: 'italic',
-  },
+  dot: { width: 6, height: 6, borderRadius: 3 },
 });
 
 export default TypingIndicator;

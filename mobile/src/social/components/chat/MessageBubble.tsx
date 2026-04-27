@@ -1,398 +1,145 @@
-// src/social/components/chat/MessageBubble.tsx
 /**
- * Mobile message bubble.
- *
- * Own messages:   right-aligned, theme.primary bg, white text, rounded
- *                 18px with 4px top-right corner ("tail").
- * Other messages: left-aligned, theme.card bg, theme.text color, rounded
- *                 18px with 4px top-left corner.
- * Deleted:        italic "Message deleted" in muted color, no bubble bg.
- *
- * Features:
- *   • Timestamp under bubble (11px muted).
- *   • Read receipts for own messages (✓ sent / ✓✓ gray / ✓✓ blue).
- *   • Optional reply preview above content.
- *   • Long-press opens `@expo/react-native-action-sheet` with Copy / Delete.
- *     - "Delete for everyone" appears only for own messages within 2h.
+ * MessageBubble — a single chat message.
+ * -----------------------------------------------------------------------------
+ * Own messages: right-aligned, primary color background.
+ * Other messages: left-aligned, card-alt background.
+ * Deleted: muted italic "Message deleted".
+ * Long-press exposes Copy/Delete via an ActionSheet provided by the parent.
  */
-import { Ionicons } from '@expo/vector-icons';
-import { useActionSheet } from '@expo/react-native-action-sheet';
-import * as Clipboard from 'expo-clipboard';
-import React, { memo, useCallback } from 'react';
+
+import React from 'react';
 import {
-  Image,
+  Pressable,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
-import Toast from 'react-native-toast-message';
+import { Ionicons } from '@expo/vector-icons';
+
 import { useSocialTheme } from '../../theme/socialTheme';
-import type { Message } from '../../services/messageService';
+import type { Message } from '../../types/chat';
 
-interface MessageBubbleProps {
+export interface MessageBubbleProps {
   message: Message;
-  isOwnMessage: boolean;
-  showAvatar?: boolean;
-  onDelete?: (messageId: string, deleteFor: 'me' | 'everyone') => void;
-  onReport?: (messageId: string) => void;
+  isOwn: boolean;
+  /** Show timestamp row under bubble. */
+  showTime?: boolean;
+  /** Show tail (tighter corner) — typically on the last in a run. */
+  showTail?: boolean;
+  onLongPress?: (m: Message) => void;
 }
 
-function formatTime(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-  } catch {
-    return '';
-  }
-}
+const formatTime = (iso: string) => {
+  const d = new Date(iso);
+  let h = d.getHours();
+  const m = d.getMinutes().toString().padStart(2, '0');
+  const am = h < 12;
+  h = h % 12 || 12;
+  return `${h}:${m} ${am ? 'AM' : 'PM'}`;
+};
 
-function getAvatarUrl(avatar: any): string | undefined {
-  if (!avatar) return undefined;
-  if (typeof avatar === 'string') return avatar;
-  return avatar.secure_url || avatar.url;
-}
+const TICKS: Record<Message['status'], { icon: 'checkmark' | 'checkmark-done'; tint: 'default' | 'active' }> = {
+  sent: { icon: 'checkmark', tint: 'default' },
+  delivered: { icon: 'checkmark-done', tint: 'default' },
+  read: { icon: 'checkmark-done', tint: 'active' },
+};
 
-const MessageBubble: React.FC<MessageBubbleProps> = memo(
-  ({ message, isOwnMessage, showAvatar = false, onDelete, onReport }) => {
-    const theme = useSocialTheme();
-    const { showActionSheetWithOptions } = useActionSheet();
+const MessageBubble: React.FC<MessageBubbleProps> = ({
+  message,
+  isOwn,
+  showTime = true,
+  showTail = true,
+  onLongPress,
+}) => {
+  const theme = useSocialTheme();
+  const isDeleted = message.type === 'deleted';
 
-    const isDeleted =
-      message.type === 'deleted' || Boolean(message.deletedAt);
+  const bubbleBg = isOwn ? theme.primary : theme.card;
+  const textColor = isOwn ? '#FFFFFF' : theme.text;
+  const mutedColor = isOwn ? 'rgba(255,255,255,0.75)' : theme.muted;
 
-    const canDeleteForEveryone = useCallback(() => {
-      if (!isOwnMessage || isDeleted) return false;
-      if (!message.canDeleteUntil) return false;
-      return Date.now() < new Date(message.canDeleteUntil).getTime();
-    }, [isOwnMessage, isDeleted, message.canDeleteUntil]);
+  const borderRadius = {
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderBottomLeftRadius: !isOwn && showTail ? 4 : 18,
+    borderBottomRightRadius: isOwn && showTail ? 4 : 18,
+  };
 
-    /* ── Long-press menu ─────────────────────────────────────────── */
-    const openMenu = useCallback(() => {
-      if (isDeleted) return;
-
-      const options: string[] = ['Copy'];
-      const destructiveIndex: number[] = [];
-
-      if (isOwnMessage) {
-        options.push('Delete for me');
-        destructiveIndex.push(options.length - 1);
-        if (canDeleteForEveryone()) {
-          options.push('Delete for everyone');
-          destructiveIndex.push(options.length - 1);
-        }
-      } else {
-        options.push('Report');
-      }
-
-      options.push('Cancel');
-      const cancelIndex = options.length - 1;
-
-      showActionSheetWithOptions(
-        {
-          options,
-          cancelButtonIndex: cancelIndex,
-          destructiveButtonIndex: destructiveIndex,
-        },
-        (buttonIndex?: number) => {
-          if (buttonIndex === undefined || buttonIndex === cancelIndex) return;
-          const label = options[buttonIndex];
-          if (label === 'Copy') {
-            if (message.content) {
-              Clipboard.setStringAsync(message.content).then(() =>
-                Toast.show({ type: 'success', text1: 'Copied' })
-              );
-            }
-          } else if (label === 'Delete for me') {
-            onDelete?.(message._id, 'me');
-          } else if (label === 'Delete for everyone') {
-            onDelete?.(message._id, 'everyone');
-          } else if (label === 'Report') {
-            onReport?.(message._id);
-          }
-        }
-      );
-    }, [
-      isDeleted,
-      isOwnMessage,
-      canDeleteForEveryone,
-      message._id,
-      message.content,
-      onDelete,
-      onReport,
-      showActionSheetWithOptions,
-    ]);
-
-    /* ── Status ticks ─────────────────────────────────────────────── */
-    const renderStatusTick = () => {
-      if (!isOwnMessage || isDeleted) return null;
-      if (message.status === 'read') {
-        return (
-          <Ionicons
-            name="checkmark-done"
-            size={14}
-            color="#60A5FA"
-            style={{ marginLeft: 2 }}
-          />
-        );
-      }
-      if (message.status === 'delivered') {
-        return (
-          <Ionicons
-            name="checkmark-done"
-            size={14}
-            color={theme.muted}
-            style={{ marginLeft: 2 }}
-          />
-        );
-      }
-      return (
-        <Ionicons
-          name="checkmark"
-          size={14}
-          color={theme.muted}
-          style={{ marginLeft: 2 }}
-        />
-      );
-    };
-
-    /* ── Deleted ──────────────────────────────────────────────────── */
-    if (isDeleted) {
-      return (
-        <View
-          style={[
-            styles.row,
-            isOwnMessage ? styles.rowEnd : styles.rowStart,
-          ]}
-        >
-          <View style={[styles.deletedPill, { borderColor: theme.border }]}>
-            <Ionicons name="ban-outline" size={12} color={theme.muted} />
-            <Text style={[styles.deletedText, { color: theme.muted }]}>
+  return (
+    <View
+      style={[
+        styles.row,
+        { justifyContent: isOwn ? 'flex-end' : 'flex-start' },
+      ]}
+    >
+      <Pressable
+        onLongPress={() => !isDeleted && onLongPress?.(message)}
+        delayLongPress={250}
+        style={({ pressed }) => [
+          styles.bubble,
+          borderRadius,
+          {
+            backgroundColor: bubbleBg,
+            opacity: pressed ? 0.85 : 1,
+            borderWidth: !isOwn ? StyleSheet.hairlineWidth : 0,
+            borderColor: theme.border,
+          },
+        ]}
+      >
+        {isDeleted ? (
+          <View style={styles.deletedRow}>
+            <Ionicons name="ban-outline" size={14} color={mutedColor} />
+            <Text style={[styles.deletedText, { color: mutedColor }]}>
               Message deleted
             </Text>
           </View>
-        </View>
-      );
-    }
+        ) : (
+          <Text style={[styles.content, { color: textColor }]}>
+            {message.content}
+          </Text>
+        )}
 
-    /* ── Normal ───────────────────────────────────────────────────── */
-    const avatarUrl = showAvatar
-      ? getAvatarUrl((message.sender as any)?.avatar)
-      : undefined;
-
-    return (
-      <View
-        style={[
-          styles.row,
-          isOwnMessage ? styles.rowEnd : styles.rowStart,
-        ]}
-      >
-        {!isOwnMessage ? (
-          showAvatar ? (
-            <View style={styles.avatarSlot}>
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-              ) : (
-                <View
-                  style={[
-                    styles.avatar,
-                    { backgroundColor: theme.cardAlt, alignItems: 'center', justifyContent: 'center' },
-                  ]}
-                >
-                  <Text style={{ color: theme.muted, fontSize: 11 }}>
-                    {(message.sender?.name?.[0] || '?').toUpperCase()}
-                  </Text>
-                </View>
-              )}
-            </View>
-          ) : (
-            <View style={styles.avatarSlot} />
-          )
-        ) : null}
-
-        <View
-          style={[
-            styles.column,
-            isOwnMessage ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' },
-          ]}
-        >
-          {/* Reply preview */}
-          {message.replyTo ? (
-            <View
-              style={[
-                styles.replyPreview,
-                isOwnMessage
-                  ? {
-                      backgroundColor: 'rgba(255,255,255,0.15)',
-                      borderLeftColor: 'rgba(255,255,255,0.6)',
-                    }
-                  : {
-                      backgroundColor: theme.cardAlt,
-                      borderLeftColor: theme.muted,
-                    },
-              ]}
-            >
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.replyAuthor,
-                  {
-                    color: isOwnMessage
-                      ? 'rgba(255,255,255,0.85)'
-                      : theme.subtext,
-                  },
-                ]}
-              >
-                {message.replyTo.sender?.name || 'Unknown'}
-              </Text>
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.replyText,
-                  {
-                    color: isOwnMessage
-                      ? 'rgba(255,255,255,0.95)'
-                      : theme.text,
-                  },
-                ]}
-              >
-                {message.replyTo.content ||
-                  (message.replyTo.type === 'deleted'
-                    ? 'Deleted message'
-                    : '')}
-              </Text>
-            </View>
-          ) : null}
-
-          {/* Bubble */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onLongPress={openMenu}
-            delayLongPress={280}
-            style={[
-              styles.bubble,
-              isOwnMessage
-                ? {
-                    backgroundColor: theme.primary,
-                    borderTopRightRadius: 4,
-                  }
-                : {
-                    backgroundColor: theme.card,
-                    borderTopLeftRadius: 4,
-                    borderColor: theme.border,
-                    borderWidth: StyleSheet.hairlineWidth,
-                  },
-            ]}
-          >
-            <Text
-              style={[
-                styles.content,
-                {
-                  color: isOwnMessage ? '#FFFFFF' : theme.text,
-                },
-              ]}
-              selectable
-            >
-              {message.content}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Meta */}
-          <View
-            style={[
-              styles.meta,
-              isOwnMessage ? { flexDirection: 'row-reverse' } : null,
-            ]}
-          >
-            <Text style={[styles.time, { color: theme.muted }]}>
+        {showTime && (
+          <View style={styles.metaRow}>
+            <Text style={[styles.time, { color: mutedColor }]}>
               {formatTime(message.createdAt)}
             </Text>
-            {renderStatusTick()}
+            {isOwn && !isDeleted && (
+              <Ionicons
+                name={TICKS[message.status].icon}
+                size={14}
+                color={
+                  TICKS[message.status].tint === 'active'
+                    ? '#38BDF8'
+                    : mutedColor
+                }
+                style={{ marginLeft: 4 }}
+              />
+            )}
           </View>
-        </View>
-      </View>
-    );
-  }
-);
-
-MessageBubble.displayName = 'MessageBubble';
-
-const AVATAR = 28;
+        )}
+      </Pressable>
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 12,
-    marginBottom: 4,
-  },
-  rowStart: { justifyContent: 'flex-start' },
-  rowEnd: { justifyContent: 'flex-end' },
-  avatarSlot: {
-    width: AVATAR,
-    height: AVATAR,
-    marginRight: 6,
-  },
-  avatar: {
-    width: AVATAR,
-    height: AVATAR,
-    borderRadius: AVATAR / 2,
-  },
-  column: {
-    maxWidth: '78%',
-  },
+  row: { paddingHorizontal: 12, marginVertical: 2, flexDirection: 'row' },
   bubble: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 18,
+    maxWidth: '78%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
-  content: {
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  meta: {
+  content: { fontSize: 15, lineHeight: 20 },
+  deletedRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  deletedText: { fontSize: 14, fontStyle: 'italic' },
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
-    paddingHorizontal: 4,
+    justifyContent: 'flex-end',
+    marginTop: 3,
   },
-  time: {
-    fontSize: 11,
-  },
-  replyPreview: {
-    borderLeftWidth: 3,
-    paddingLeft: 8,
-    paddingRight: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginBottom: 2,
-    maxWidth: '100%',
-  },
-  replyAuthor: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  replyText: {
-    fontSize: 12,
-  },
-  deletedPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderStyle: 'dashed',
-  },
-  deletedText: {
-    fontSize: 12,
-    fontStyle: 'italic',
-  },
+  time: { fontSize: 11 },
 });
 
 export default MessageBubble;

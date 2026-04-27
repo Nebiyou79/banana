@@ -1,125 +1,60 @@
-// src/social/hooks/usePresence.ts
 /**
- * Subscribe to presence updates for ONE user (e.g., the other participant in
- * a chat). Seed from props, then track live updates via socket.
- *
- * Also exports `getPresenceLabel` / `getPresenceLevel` helpers that the
- * ChatScreen header and OnlineStatusDot use for rendering.
+ * usePresence — resolves another user's presence in real time.
+ * -----------------------------------------------------------------------------
+ * Combines the initial lastSeen/isOnline from the user object with any live
+ * socket updates pushed into the presence cache by `useSocketBootstrap`.
  */
-import { useEffect, useRef, useState } from 'react';
-import { useSocket } from './useSocket';
 
-export type PresenceLevel =
-  | 'active_now'
-  | 'recently'
-  | 'older'
-  | 'inactive';
+import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
-export interface Presence {
+import { SOCIAL_KEYS } from './queryKeys';
+import {
+  formatPresenceLabel,
+  getPresenceColor,
+  getPresenceLevel,
+} from '../utils/presence';
+import type { PresenceLevel } from '../types/chat';
+
+export interface UsePresenceArgs {
+  userId?: string;
+  /** Fallback lastSeen from a user object if no live data is cached. */
+  lastSeen?: string | Date | null;
+  /** Fallback isOnline from a user object. */
+  isOnline?: boolean;
+}
+
+export interface UsePresenceResult {
+  level: PresenceLevel;
+  label: string;
+  color: string;
   isOnline: boolean;
-  lastSeen: string | Date | null;
+  lastSeen?: string;
 }
 
-export function getPresenceLevel(
-  lastSeen?: string | Date | null,
-  isOnline?: boolean
-): PresenceLevel {
-  if (isOnline) return 'active_now';
-  if (!lastSeen) return 'inactive';
-  const last =
-    typeof lastSeen === 'string' ? new Date(lastSeen) : lastSeen;
-  if (Number.isNaN(last.getTime())) return 'inactive';
-  const diffMs = Date.now() - last.getTime();
-  const diffMin = diffMs / 60_000;
-  const diffHour = diffMin / 60;
-  const diffDay = diffHour / 24;
-  if (diffMin < 5) return 'active_now';
-  if (diffHour < 24) return 'recently';
-  if (diffDay < 14) return 'older';
-  return 'inactive';
-}
-
-export function getPresenceLabel(
-  lastSeen?: string | Date | null,
-  isOnline?: boolean
-): string {
-  if (isOnline) return 'Active now';
-  if (!lastSeen) return 'Offline';
-  const last =
-    typeof lastSeen === 'string' ? new Date(lastSeen) : lastSeen;
-  if (Number.isNaN(last.getTime())) return 'Offline';
-  const diffMs = Date.now() - last.getTime();
-  const diffMin = Math.floor(diffMs / 60_000);
-  const diffHour = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHour / 24);
-  if (diffMin < 1) return 'Active now';
-  if (diffMin < 5) return 'Active now';
-  if (diffMin < 60) return `Active ${diffMin}m ago`;
-  if (diffHour < 24) return `Active ${diffHour}h ago`;
-  if (diffDay < 14) return `Active ${diffDay}d ago`;
-  return 'Active a while ago';
-}
-
-export const usePresence = (
-  userId: string | undefined,
-  seed?: Presence
-): Presence => {
-  const { socket } = useSocket();
-  const [presence, setPresence] = useState<Presence>({
-    isOnline: !!seed?.isOnline,
-    lastSeen: seed?.lastSeen ?? null,
+export const usePresence = ({
+  userId,
+  lastSeen,
+  isOnline,
+}: UsePresenceArgs): UsePresenceResult => {
+  // Read the live entry dropped into the cache by the socket layer. No
+  // network request — this is a pure cache read.
+  const { data } = useQuery<{ isOnline: boolean; lastSeen: string }>({
+    queryKey: SOCIAL_KEYS.presence(userId ?? ''),
+    enabled: false,
+    queryFn: () => Promise.resolve({ isOnline: false, lastSeen: '' }),
   });
-  const lastAskedRef = useRef<number>(0);
 
-  // Seed from prop whenever it changes (e.g., navigating into a new chat).
-  useEffect(() => {
-    if (seed) {
-      setPresence({
-        isOnline: !!seed.isOnline,
-        lastSeen: seed.lastSeen ?? null,
-      });
-    }
-  }, [seed?.isOnline, seed?.lastSeen]);
-
-  // Live updates.
-  useEffect(() => {
-    if (!socket || !userId) return;
-
-    const onUpdate = (payload: {
-      userId: string;
-      isOnline: boolean;
-      lastSeen: string;
-    }) => {
-      if (payload.userId !== userId) return;
-      setPresence({
-        isOnline: !!payload.isOnline,
-        lastSeen: payload.lastSeen,
-      });
+  return useMemo(() => {
+    const online = data?.isOnline ?? isOnline ?? false;
+    const seen = data?.lastSeen ?? (lastSeen ? new Date(lastSeen).toISOString() : undefined);
+    const level = getPresenceLevel(seen, online);
+    return {
+      level,
+      label: formatPresenceLabel(seen, online),
+      color: getPresenceColor(level),
+      isOnline: online,
+      lastSeen: seen,
     };
-
-    const onBatch = (batch: Record<string, Presence>) => {
-      const p = batch?.[userId];
-      if (!p) return;
-      setPresence({ isOnline: !!p.isOnline, lastSeen: p.lastSeen ?? null });
-    };
-
-    socket.on('presence:update', onUpdate);
-    socket.on('presence:batch', onBatch);
-
-    // Ask once on mount (handy if the other user was already online).
-    const now = Date.now();
-    if (now - lastAskedRef.current > 10_000) {
-      socket.emit('presence:query', { userIds: [userId] });
-      lastAskedRef.current = now;
-    }
-
-    return () => {
-      socket.off('presence:update', onUpdate);
-      socket.off('presence:batch', onBatch);
-    };
-  }, [socket, userId]);
-
-  return presence;
+  }, [data, isOnline, lastSeen]);
 };
-
-export default usePresence;

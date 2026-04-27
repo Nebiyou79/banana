@@ -1,3 +1,4 @@
+// src/social/components/search/TrendingHashtags.tsx
 import { Ionicons } from '@expo/vector-icons';
 import React, { memo } from 'react';
 import {
@@ -6,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+
 import { useSocialTheme } from '../../theme/socialTheme';
 import { formatCount } from '../../utils/format';
 
@@ -22,7 +24,7 @@ interface Props {
 
 /**
  * Two-column grid of trending hashtag pills with post counts.
- * Highlights `trending` entries with a flame icon.
+ * Hashtags marked `trending: true` get a flame icon and primary tint.
  */
 const TrendingHashtags: React.FC<Props> = memo(({ hashtags, onPress }) => {
   const theme = useSocialTheme();
@@ -35,19 +37,18 @@ const TrendingHashtags: React.FC<Props> = memo(({ hashtags, onPress }) => {
           key={h.name}
           onPress={() => onPress(h.name)}
           activeOpacity={0.75}
+          accessibilityRole="button"
+          accessibilityLabel={`See posts tagged #${h.name}`}
           style={[
             styles.pill,
-            {
-              backgroundColor: theme.card,
-              borderColor: theme.border,
-            },
+            { backgroundColor: theme.card, borderColor: theme.border },
           ]}
         >
           <View style={styles.topRow}>
             {h.trending ? (
               <Ionicons name="flame" size={14} color={theme.primary} />
             ) : (
-              <Ionicons name="pricetag" size={14} color={theme.muted} />
+              <Ionicons name="pricetag-outline" size={14} color={theme.muted} />
             )}
             <Text
               style={[styles.tag, { color: theme.text }]}

@@ -1,102 +1,223 @@
-// src/social/hooks/useMessages.ts
 /**
- * Message hooks for a single conversation.
+ * useMessages — messages for a single conversation.
+ * -----------------------------------------------------------------------------
+ *   - useMessages(conversationId)     → paginated history, newest-first
+ *   - useSendMessage()                → optimistic send with rollback
+ *   - useDeleteMessage()              → soft delete (for me / for everyone)
  *
- * Exports:
- *  - useMessages(conversationId)
- *  - useSendMessage(conversationId)
- *  - useDeleteMessage()
+ * NOTE on ordering: the server returns newest-first. The ChatScreen renders
+ * an inverted FlashList, so `data.list` is kept newest-first and the list
+ * component inverts visually.
  */
+
 import {
   useInfiniteQuery,
   useMutation,
   useQueryClient,
 } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
-import {
-  messageService,
-  type Message,
-  type MessageType,
-} from '../services/messageService';
 
-/* ── List (paged, newest first from backend; UI reverses) ────────── */
-export const useMessages = (conversationId: string) =>
+import { messageService } from '../services/messageService';
+import { useAuthStore } from '../../store/authStore';
+import { SOCIAL_KEYS } from './queryKeys';
+import type {
+  Message,
+  MessageListResponse,
+  SendMessagePayload,
+} from '../types/chat';
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Messages list
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const useMessages = (conversationId?: string) =>
   useInfiniteQuery({
-    queryKey: ['social', 'messages', conversationId] as const,
-    queryFn: async ({ pageParam = 1 }) => {
-      const res = await messageService.getMessages(conversationId, {
-        page: pageParam as number,
-        limit: 30,
-      });
-      return {
-        data: (res.data?.data as Message[]) ?? [],
-        pagination: res.data?.pagination,
-      };
-    },
-    initialPageParam: 1,
+    queryKey: SOCIAL_KEYS.messages(conversationId ?? ''),
+    queryFn: ({ pageParam = 1 }) =>
+      messageService
+        .getMessages(conversationId as string, { page: pageParam, limit: 30 })
+        .then((r) => r.data as MessageListResponse),
     getNextPageParam: (last) => {
-      const { page, pages } = last.pagination ?? ({} as any);
+      const { page, pages } = last?.pagination ?? {};
       return page && pages && page < pages ? page + 1 : undefined;
     },
+    initialPageParam: 1,
     enabled: Boolean(conversationId),
-    staleTime: 0,
-    // UI consumes oldest-first (scroll down = newer).
     select: (data) => ({
       ...data,
-      // Backend returns newest-first per page. Concat pages then reverse.
-      messages: [...data.pages.flatMap((p) => p.data ?? [])].reverse(),
+      // Newest-first across all pages.
+      list: data.pages.flatMap((p) => p?.data ?? []) as Message[],
     }),
+    staleTime: 10_000,
   });
 
-/* ── Send ────────────────────────────────────────────────────────── */
-export const useSendMessage = (conversationId: string) => {
-  const qc = useQueryClient();
+// ──────────────────────────────────────────────────────────────────────────────
+// Send message — optimistic
+// ──────────────────────────────────────────────────────────────────────────────
 
-  return useMutation({
-    mutationFn: (args: {
-      content: string;
-      type?: MessageType;
-      replyTo?: string | null;
-    }) =>
-      messageService.send({
-        conversationId,
-        content: args.content,
-        type: args.type ?? 'text',
-        replyTo: args.replyTo ?? null,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({
-        queryKey: ['social', 'messages', conversationId],
+interface OptimisticContext {
+  tempId: string;
+  prev: unknown;
+}
+
+export const useSendMessage = () => {
+  const qc = useQueryClient();
+  const myUser = useAuthStore((s) => s.user);
+
+  return useMutation<Message, unknown, SendMessagePayload, OptimisticContext>({
+    mutationFn: (payload) =>
+      messageService.send(payload).then((r) => r.data?.data as Message),
+
+    onMutate: async (payload) => {
+      const key = SOCIAL_KEYS.messages(payload.conversationId);
+      await qc.cancelQueries({ queryKey: key });
+      const prev = qc.getQueryData(key);
+
+      const tempId = `tmp_${Date.now()}`;
+      const optimistic: Message = {
+        _id: tempId,
+        conversationId: payload.conversationId,
+        sender: myUser?._id ?? '',
+        content: payload.content,
+        type: payload.type ?? 'text',
+        status: 'sent',
+        readBy: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Prepend to the first page (newest-first).
+      qc.setQueryData(key, (old: any) => {
+        if (!old) {
+          return {
+            pages: [{ data: [optimistic], pagination: {} }],
+            pageParams: [1],
+          };
+        }
+        const [first, ...rest] = old.pages;
+        return {
+          ...old,
+          pages: [
+            { ...first, data: [optimistic, ...(first?.data ?? [])] },
+            ...rest,
+          ],
+        };
       });
-      // Refresh inbox so the other party's last-message preview updates.
-      qc.invalidateQueries({ queryKey: ['social', 'conversations'] });
+
+      return { tempId, prev };
     },
-    onError: (err: any) => {
+
+    onError: (err: any, payload, ctx) => {
+      if (ctx?.prev) {
+        qc.setQueryData(SOCIAL_KEYS.messages(payload.conversationId), ctx.prev);
+      }
       Toast.show({
         type: 'error',
-        text1: err?.response?.data?.message ?? 'Send failed',
+        text1: err?.response?.data?.message ?? 'Message failed to send',
+      });
+    },
+
+    onSuccess: (serverMsg, payload, ctx) => {
+      // Replace the temp message with the real server-issued one.
+      const key = SOCIAL_KEYS.messages(payload.conversationId);
+      qc.setQueryData(key, (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any, i: number) => {
+            if (i !== 0) return page;
+            return {
+              ...page,
+              data: (page.data ?? []).map((m: Message) =>
+                m._id === ctx?.tempId ? serverMsg : m,
+              ),
+            };
+          }),
+        };
+      });
+    },
+
+    onSettled: (_, __, payload) => {
+      // Refresh the conversations list so last-message preview updates.
+      qc.invalidateQueries({ queryKey: ['social', 'conversations'] });
+      qc.invalidateQueries({
+        queryKey: SOCIAL_KEYS.conversation(payload.conversationId),
       });
     },
   });
 };
 
-/* ── Delete (me / everyone) ──────────────────────────────────────── */
+// ──────────────────────────────────────────────────────────────────────────────
+// Delete message
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface DeleteMessageArgs {
+  messageId: string;
+  conversationId: string;
+  forEveryone?: boolean;
+}
+
 export const useDeleteMessage = () => {
   const qc = useQueryClient();
+
   return useMutation({
-    mutationFn: (args: {
-      messageId: string;
-      deleteFor: 'me' | 'everyone';
-    }) => messageService.delete(args.messageId, args.deleteFor),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['social', 'messages'] });
-      qc.invalidateQueries({ queryKey: ['social', 'conversations'] });
+    mutationFn: ({ messageId, conversationId, forEveryone }: DeleteMessageArgs) =>
+      messageService.deleteMessage(conversationId, messageId, forEveryone),
+
+    onMutate: async ({ messageId, conversationId, forEveryone }) => {
+      const key = SOCIAL_KEYS.messages(conversationId);
+      await qc.cancelQueries({ queryKey: key });
+      const prev = qc.getQueryData(key);
+
+      qc.setQueryData(key, (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            data: (page.data ?? []).map((m: Message) => {
+              if (m._id !== messageId) return m;
+              if (forEveryone) {
+                return {
+                  ...m,
+                  type: 'deleted' as const,
+                  content: null,
+                  deletedAt: new Date().toISOString(),
+                };
+              }
+              // "Delete for me" removes from my view only.
+              return m;
+            }),
+            // Also strip out "delete for me" entries.
+            ...(forEveryone
+              ? {}
+              : {
+                  data: (page.data ?? []).filter(
+                    (m: Message) => m._id !== messageId,
+                  ),
+                }),
+          })),
+        };
+      });
+
+      return { prev };
     },
-    onError: (err: any) => {
+
+    onError: (err: any, { conversationId }, ctx: any) => {
+      if (ctx?.prev) {
+        qc.setQueryData(SOCIAL_KEYS.messages(conversationId), ctx.prev);
+      }
       Toast.show({
         type: 'error',
-        text1: err?.response?.data?.message ?? 'Delete failed',
+        text1: err?.response?.data?.message ?? 'Could not delete message',
       });
+    },
+
+    onSettled: (_, __, { conversationId }) => {
+      qc.invalidateQueries({
+        queryKey: SOCIAL_KEYS.messages(conversationId),
+      });
+      qc.invalidateQueries({ queryKey: ['social', 'conversations'] });
     },
   });
 };

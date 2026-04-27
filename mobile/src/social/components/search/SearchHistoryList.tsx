@@ -1,3 +1,4 @@
+// src/social/components/search/SearchHistoryList.tsx
 import { Ionicons } from '@expo/vector-icons';
 import React, { memo } from 'react';
 import {
@@ -6,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+
 import { useSocialTheme } from '../../theme/socialTheme';
 import type { SearchHistoryEntry } from '../../services/socialSearchService';
 import SectionHeader from '../shared/SectionHeader';
@@ -28,18 +30,18 @@ const Row: React.FC<{
       onPress={onPress}
       activeOpacity={0.7}
       style={[styles.row, { borderBottomColor: theme.border }]}
+      accessibilityRole="button"
+      accessibilityLabel={`Search again for ${entry.query}`}
     >
       <Ionicons name="time-outline" size={18} color={theme.muted} />
-      <Text
-        style={[styles.text, { color: theme.text }]}
-        numberOfLines={1}
-      >
+      <Text style={[styles.text, { color: theme.text }]} numberOfLines={1}>
         {entry.query}
       </Text>
       <TouchableOpacity
         onPress={onRemove}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         style={styles.removeBtn}
+        accessibilityRole="button"
         accessibilityLabel={`Remove ${entry.query} from history`}
       >
         <Ionicons name="close" size={18} color={theme.muted} />
@@ -52,6 +54,8 @@ Row.displayName = 'SearchHistoryRow';
 
 /**
  * List of recent search queries with inline remove + clear-all header action.
+ * Hides itself when empty so the empty state for the screen can render
+ * something appropriate.
  */
 const SearchHistoryList: React.FC<Props> = memo(
   ({ history, onPressEntry, onRemoveEntry, onClearAll }) => {
@@ -65,7 +69,7 @@ const SearchHistoryList: React.FC<Props> = memo(
         />
         {history.map((entry) => (
           <Row
-            key={`${entry.query}_${entry.timestamp}`}
+            key={`${entry.query}_${entry.createdAt}`}
             entry={entry}
             onPress={() => onPressEntry(entry)}
             onRemove={() => onRemoveEntry(entry)}
@@ -73,7 +77,7 @@ const SearchHistoryList: React.FC<Props> = memo(
         ))}
       </View>
     );
-  }
+  },
 );
 
 SearchHistoryList.displayName = 'SearchHistoryList';
@@ -85,7 +89,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 12,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     minHeight: 48,
   },
   text: { flex: 1, fontSize: 14 },

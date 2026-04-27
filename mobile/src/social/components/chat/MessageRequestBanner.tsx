@@ -1,13 +1,14 @@
 // src/social/components/chat/MessageRequestBanner.tsx
 /**
- * Shown at the top of ChatScreen when conversation.status === 'request'.
- *
- * Two visual modes:
- *  - isRequester=true  → "Request sent" passive card (no actions).
- *  - isRequester=false → "<Name> wants to message you" with Accept/Decline.
+ * MessageRequestBanner — shown at the top of ChatScreen when status === 'request'.
+ * -----------------------------------------------------------------------------
+ * Two render modes:
+ *   • mode='sender'   — viewer sent the request; show "Waiting for acceptance"
+ *   • mode='receiver' — viewer received it; show Accept / Decline buttons
  */
+
 import { Ionicons } from '@expo/vector-icons';
-import React, { memo } from 'react';
+import React from 'react';
 import {
   ActivityIndicator,
   StyleSheet,
@@ -15,147 +16,122 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+
 import { useSocialTheme } from '../../theme/socialTheme';
 
-interface MessageRequestBannerProps {
-  otherUserName: string;
-  isRequester: boolean;
-  onAccept: () => void;
-  onDecline: () => void;
-  isLoading?: boolean;
+interface BaseProps {
+  senderName: string;
 }
 
-const MessageRequestBanner: React.FC<MessageRequestBannerProps> = memo(
-  ({ otherUserName, isRequester, onAccept, onDecline, isLoading }) => {
-    const theme = useSocialTheme();
+type Props =
+  | (BaseProps & { mode: 'sender' })
+  | (BaseProps & {
+      mode: 'receiver';
+      onAccept: () => void;
+      onDecline: () => void;
+      loading?: boolean;
+    });
 
-    if (isRequester) {
-      return (
-        <View
-          style={[
-            styles.card,
-            styles.pendingCard,
-            { borderBottomColor: theme.border },
-          ]}
-        >
-          <Ionicons
-            name="time-outline"
-            size={20}
-            color="#D97706"
-            style={{ marginRight: 10, marginTop: 2 }}
-          />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.title, { color: '#78350F' }]}>
-              Message request sent
-            </Text>
-            <Text style={[styles.sub, { color: '#A16207' }]}>
-              Waiting for {otherUserName} to accept. They'll see your
-              messages once they reply.
-            </Text>
-          </View>
-        </View>
-      );
-    }
+const MessageRequestBanner: React.FC<Props> = (props) => {
+  const theme = useSocialTheme();
 
+  if (props.mode === 'sender') {
     return (
       <View
         style={[
-          styles.card,
-          styles.incomingCard,
-          { borderBottomColor: theme.border },
+          styles.wrap,
+          { backgroundColor: theme.cardAlt, borderBottomColor: theme.border },
         ]}
       >
-        <View style={{ flex: 1, paddingRight: 10 }}>
-          <Text style={[styles.title, { color: '#1E3A8A' }]}>
-            {otherUserName} wants to message you
+        <View style={styles.row}>
+          <Ionicons name="time-outline" size={18} color={theme.subtext} />
+          <Text style={[styles.text, { color: theme.text }]}>
+            <Text style={{ fontWeight: '700' }}>Request sent.</Text>{' '}
+            Waiting for {props.senderName} to accept.
           </Text>
-          <Text style={[styles.sub, { color: '#1D4ED8' }]}>
-            Accept to chat freely. Replying also accepts.
-          </Text>
-        </View>
-        <View style={styles.actions}>
-          <TouchableOpacity
-            onPress={onDecline}
-            disabled={isLoading}
-            style={[styles.btn, styles.btnOutline]}
-            accessibilityLabel="Decline request"
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#1D4ED8" size="small" />
-            ) : (
-              <Text style={styles.btnOutlineText}>Decline</Text>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={onAccept}
-            disabled={isLoading}
-            style={[styles.btn, { backgroundColor: theme.primary }]}
-            accessibilityLabel="Accept request"
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text style={styles.btnSolidText}>Accept</Text>
-            )}
-          </TouchableOpacity>
         </View>
       </View>
     );
   }
-);
 
-MessageRequestBanner.displayName = 'MessageRequestBanner';
+  // Receiver
+  return (
+    <View
+      style={[
+        styles.wrap,
+        { backgroundColor: theme.cardAlt, borderBottomColor: theme.border },
+      ]}
+    >
+      <View style={styles.row}>
+        <Ionicons
+          name="information-circle-outline"
+          size={18}
+          color={theme.subtext}
+        />
+        <Text style={[styles.text, { color: theme.text }]} numberOfLines={2}>
+          <Text style={{ fontWeight: '700' }}>{props.senderName}</Text>{' '}
+          wants to message you. Accept to reply.
+        </Text>
+      </View>
+
+      <View style={styles.actions}>
+        <TouchableOpacity
+          onPress={props.onDecline}
+          disabled={props.loading}
+          style={[
+            styles.btn,
+            { borderColor: theme.border, backgroundColor: 'transparent' },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Decline message request"
+        >
+          <Text style={[styles.btnText, { color: theme.text }]}>Decline</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={props.onAccept}
+          disabled={props.loading}
+          style={[
+            styles.btn,
+            {
+              backgroundColor: theme.primary,
+              borderColor: theme.primary,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Accept message request"
+        >
+          {props.loading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={[styles.btnText, { color: '#fff' }]}>Accept</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: 14,
+  wrap: {
+    paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 12,
   },
-  pendingCard: {
-    backgroundColor: '#FFFBEB',
-  },
-  incomingCard: {
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  sub: {
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+  row: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+  text: { fontSize: 13, flex: 1, lineHeight: 18 },
+  actions: { flexDirection: 'row', gap: 8 },
   btn: {
-    minHeight: 32,
-    paddingHorizontal: 12,
-    borderRadius: 16,
+    flex: 1,
+    borderWidth: 1.5,
+    borderRadius: 20,
+    paddingVertical: 8,
+    minHeight: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
   },
-  btnOutline: {
-    borderWidth: 1,
-    borderColor: '#1D4ED8',
-  },
-  btnOutlineText: {
-    color: '#1D4ED8',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  btnSolidText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  btnText: { fontSize: 13, fontWeight: '700' },
 });
 
 export default MessageRequestBanner;

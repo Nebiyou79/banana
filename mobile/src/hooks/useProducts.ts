@@ -30,7 +30,7 @@ import {
 } from '../services/productService';
 import { useAuthStore } from '../store/authStore';
 import { useToast } from './useToast';
-
+import { useCompanyId } from './useCompanyId';
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 /**
@@ -107,23 +107,27 @@ export const useRelatedProducts = (id: string) =>
 
 // ── Company products (owner aware) ────────────────────────────────────────────
 
+
 export const useCompanyProducts = (
   companyId?: string,
-  filters?: Omit<ProductFilters, 'page'> & { sort?: string; status?: string }
+  filters?: Omit<ProductFilters, 'page'> & { sort?: string; status?: string },
 ) => {
-  const { user } = useAuthStore();
-  const resolvedId = companyId ?? resolveCurrentCompanyId(user);
+  const fallbackId = useCompanyId();
+  const resolvedId = companyId ?? fallbackId ?? '';
 
   return useInfiniteQuery({
     queryKey: productKeys.company(resolvedId, filters),
     queryFn: ({ pageParam = 1 }) =>
-      productService.getCompanyProducts(resolvedId, { ...filters, page: pageParam as number }),
+      productService.getCompanyProducts(resolvedId, {
+        ...filters,
+        page: pageParam as number,
+      }),
     initialPageParam: 1,
-    getNextPageParam: last => {
+    getNextPageParam: (last) => {
       const { current, pages } = last.pagination;
       return current < pages ? current + 1 : undefined;
     },
-    enabled:   !!resolvedId,
+    enabled: !!resolvedId,
     staleTime: 5 * 60 * 1000,
   });
 };
