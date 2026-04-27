@@ -1,21 +1,46 @@
-import axios from "axios";
+// src/social/services/messageService.ts
+/**
+ * messageService
+ * -----------------------------------------------------------------------------
+ * Endpoints (per latest spec):
+ *
+ *   POST   /messages/conversations/:id/messages   send a message
+ *   GET    /messages/conversations/:id/messages   list messages
+ *   DELETE /messages/conversations/:id/messages/:messageId
+ */
 
-const BASE_URL = '/api/v1/messages';
+import api from '../../lib/api';
+import type { MessageType, SendMessagePayload } from '../types/chat';
+
+export interface GetMessagesParams {
+  page?: number;
+  limit?: number;
+  before?: string;
+}
 
 export const messageService = {
-  // ✅ Send message
-  sendMessage: (data: {
-    conversationId: string;
-    content: string;
-    attachments?: any[];
-  }) =>
-    axios.post(BASE_URL, data),
+  send: (payload: SendMessagePayload) =>
+    api.post(`/messages/conversations/${payload.conversationId}/messages`, {
+      content: payload.content,
+      type: payload.type ?? 'text',
+      replyTo: payload.replyTo,
+    }),
 
-  // ✅ Get messages for conversation
-  getMessages: (conversationId: string, params?: { page?: number; limit?: number }) =>
-    axios.get(`${BASE_URL}/${conversationId}`, { params }),
+  getMessages: (conversationId: string, params: GetMessagesParams = {}) =>
+    api.get(`/messages/conversations/${conversationId}/messages`, {
+      params: { page: 1, limit: 30, ...params },
+    }),
 
-  // ✅ Delete message
-  deleteMessage: (messageId: string) =>
-    axios.delete(`${BASE_URL}/${messageId}`),
+  deleteMessage: (
+    conversationId: string,
+    messageId: string,
+    forEveryone = false,
+  ) =>
+    api.delete(
+      `/messages/conversations/${conversationId}/messages/${messageId}`,
+      { params: { forEveryone: forEveryone ? 1 : 0 } },
+    ),
 };
+
+export type { MessageType };
+export default messageService;
