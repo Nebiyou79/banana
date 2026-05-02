@@ -136,8 +136,8 @@ export const PRODUCTS = {
   UPDATE_STATUS: (id: string) => `/products/${id}/status`,
   DELETE:        (id: string) => `/products/${id}`,
   // ── NEW ──
-  SAVE:          (id: string) => `/products/${id}/save`,
-  SAVED:         '/products/saved',
+  SAVE:  (id: string) => `/products/${id}/save`,
+  SAVED: '/products/saved',
 } as const;
 
 // ─── CV GENERATOR ─────────────────────────────────────────────────────────────

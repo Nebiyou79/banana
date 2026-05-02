@@ -1,6 +1,12 @@
+// src/navigation/OrganizationNavigator.tsx
 /**
- * navigation/organization/OrganizationNavigator.tsx
- * Role: Organization — 6 main tabs + full stack for all built screens.
+ * navigation/OrganizationNavigator.tsx
+ * Role: Organization — main tabs + full stack for all built screens.
+ *
+ * 🆕 The Tenders tab now mounts <TendersNavigator userRole="organization" />.
+ *    Organizations see a smaller surface than companies: the Professional
+ *    top-tabs are 2 (My / Create — no Browse), and the Bids tab is a single
+ *    Received-Bids screen with no top-tabs.
  */
 
 import React from 'react';
@@ -10,50 +16,45 @@ import { createNativeStackNavigator }    from '@react-navigation/native-stack';
 import { Ionicons }                      from '@expo/vector-icons';
 import { useThemeStore }                 from '../store/themeStore';
 
-// ─── Types ────────────────────────────────────────────────────
+// ─── Param-list types ────────────────────────────────────────
 import {
   OrganizationMainTabParamList,
   OrganizationJobsTabParamList,
-  OrganizationTendersTabParamList,
   OrganizationProfileTabParamList,
 } from './types';
 
-// ─── Social (full stack entry) ────────────────────────────────
-import SocialEntry       from '../social/navigation/SocialEntry';
+// ─── New tenders navigator (replaces the old Tenders top-tabs) ────
+import TendersNavigator from './TendersNavigator';
+
+// ─── Placeholders ─────────────────────────────────────────────
 import PlaceholderScreen from '../screens/auth/PlaceholderScreen';
 
 // ─── Organization screens ─────────────────────────────────────
-import { OrganizationDashboardScreen }      from '../screens/organization/DashboardScreen';
-import { OrganizationProfileScreen }        from '../screens/organization/ProfileScreen';
-import { OrganizationEditProfileScreen }    from '../screens/organization/EditProfileScreen';
-import { OrganizationMoreScreen }           from '../screens/organization/MoreScreen';
-
-// Jobs
-import { OrgJobsScreen }                    from '../screens/organization/OrgJobsScreen';
-import { OrgJobCreateScreen }               from '../screens/organization/OrgJobCreateScreen';
-import { OrgJobEditScreen }                 from '../screens/organization/OrgJobEditScreen';
-import { OrgJobDetail }                     from '../screens/organization/OrgJobDetail';
-import { EmployerApplicationDetailScreen }  from '../screens/company/EmployerApplicationDetailScreen';
+import { OrgJobsScreen }                      from '../screens/organization/OrgJobsScreen';
+import { OrgJobCreateScreen }                 from '../screens/organization/OrgJobCreateScreen';
 
 // Freelancer Marketplace
-import { FreelancerMarketplaceScreen }      from '../screens/freelancer/FreelancerMarketplaceScreen';
-import { FreelancerDetailScreen }           from '../screens/freelancer/FreelancerDetailScreen';
-import { FreelancerShortlistScreen }        from '../screens/freelancer/FreelancerShortlistScreen';
+import { FreelancerMarketplaceScreen }        from '../screens/freelancer/FreelancerMarketplaceScreen';
+import { FreelancerDetailScreen }             from '../screens/freelancer/FreelancerDetailScreen';
+import { FreelancerShortlistScreen }          from '../screens/freelancer/FreelancerShortlistScreen';
 
 // Shared screens
-import { VerificationStatusScreen }         from '../screens/shared/VerificationStatusScreen';
-import { RequestVerificationScreen }        from '../screens/shared/RequestVerificationScreen';
-import { ReferralScreen }                   from '../screens/shared/ReferralScreen';
+import { VerificationStatusScreen }           from '../screens/shared/VerificationStatusScreen';
+import { RequestVerificationScreen }          from '../screens/shared/RequestVerificationScreen';
+import { ReferralScreen }                     from '../screens/shared/ReferralScreen';
 
 // Products
-import { ProductMarketplaceScreen }         from '../screens/products/ProductMarketplaceScreen';
-import { ProductDetailsScreen as PublicProductDetailsScreen } from '../screens/products/ProductDetailsScreen';
-import { EmployerApplicationsScreen }       from '../screens/company/EmployerApplicationListScreen';
+import { ProductMarketplaceScreen }                                from '../screens/products/ProductMarketplaceScreen';
+import { ProductDetailsScreen as PublicProductDetailsScreen }     from '../screens/products/ProductDetailsScreen';
+import { EmployerApplicationsScreen }                              from '../screens/company/EmployerApplicationListScreen';
+import { OrganizationProfileScreen } from '../screens/organization/ProfileScreen';
 
 // ─── Param list ───────────────────────────────────────────────
+//  Tender deep-links live inside TendersNavigator's stacks — see the
+//  CompanyNavigator file header for the cross-stack navigate() pattern.
 export type OrganizationStackParamList = {
   MainTabs: undefined;
-
+OrgProfile: undefined;
   EditProfile: undefined;
 
   OrgJobList:        undefined;
@@ -79,11 +80,10 @@ export type OrganizationStackParamList = {
 };
 
 // ─── Navigators ───────────────────────────────────────────────
-const MainTab        = createBottomTabNavigator<OrganizationMainTabParamList>();
-const JobsTopTab     = createMaterialTopTabNavigator<OrganizationJobsTabParamList>();
-const TendersTopTab  = createMaterialTopTabNavigator<OrganizationTendersTabParamList>();
-const ProfileTopTab  = createMaterialTopTabNavigator<OrganizationProfileTabParamList>();
-const Stack          = createNativeStackNavigator<OrganizationStackParamList>();
+const MainTab       = createBottomTabNavigator<OrganizationMainTabParamList>();
+const JobsTopTab    = createMaterialTopTabNavigator<OrganizationJobsTabParamList>();
+const ProfileTopTab = createMaterialTopTabNavigator<OrganizationProfileTabParamList>();
+const Stack         = createNativeStackNavigator<OrganizationStackParamList>();
 
 // ─── Jobs top-tab navigator ───────────────────────────────────
 function OrganizationJobsNavigator() {
@@ -107,29 +107,13 @@ function OrganizationJobsNavigator() {
   );
 }
 
-// ─── Tenders top-tab navigator ────────────────────────────────
-function OrganizationTendersNavigator() {
-  const { theme } = useThemeStore();
-  const { colors } = theme;
-
-  return (
-    <TendersTopTab.Navigator
-      screenOptions={{
-        tabBarActiveTintColor:   colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarIndicatorStyle:    { backgroundColor: colors.primary },
-        tabBarStyle:             { backgroundColor: colors.surface },
-      }}
-    >
-      <TendersTopTab.Screen name="TendersList" component={PlaceholderScreen} options={{ title: 'Tenders' }} />
-      <TendersTopTab.Screen name="Bids"        component={PlaceholderScreen} options={{ title: 'Bids' }} />
-      <TendersTopTab.Screen name="Proposals"   component={PlaceholderScreen} options={{ title: 'Proposals' }} />
-      <TendersTopTab.Screen name="BackToHome"  component={PlaceholderScreen} options={{ title: '← Back' }} />
-    </TendersTopTab.Navigator>
-  );
+// ─── Tenders tab — NEW: mounts TendersNavigator ──────────────
+//  Replaces the old OrganizationTendersNavigator entirely.
+function OrganizationTendersTab() {
+  return <TendersNavigator userRole="organization" />;
 }
 
-// ─── Profile tab navigator ────────────────────────────────────
+// ─── Profile top-tab navigator ────────────────────────────────
 function OrganizationProfileNavigator() {
   const { theme } = useThemeStore();
   const { colors } = theme;
@@ -143,13 +127,9 @@ function OrganizationProfileNavigator() {
         tabBarStyle:             { backgroundColor: colors.surface },
       }}
     >
-      <ProfileTopTab.Screen name="OrganizationProfile" component={OrganizationProfileScreen} options={{ title: 'Profile' }} />
-      <ProfileTopTab.Screen
-        name="FreelanceMarketplace"
-        component={(props: any) => <FreelancerMarketplaceScreen {...props} />}
-        options={{ title: 'Marketplace' }}
-      />
-      <ProfileTopTab.Screen name="BackToHome" component={PlaceholderScreen} options={{ title: '← Back' }} />
+      <ProfileTopTab.Screen name="OrgProfile"           component={OrganizationProfileScreen}            options={{ title: 'Profile' }} />
+      <ProfileTopTab.Screen name="FreelanceMarketplace" component={FreelancerMarketplaceScreen}  options={{ title: 'Marketplace' }} />
+      <ProfileTopTab.Screen name="BackToHome"           component={PlaceholderScreen} />
     </ProfileTopTab.Navigator>
   );
 }
@@ -161,19 +141,20 @@ function OrganizationTabNavigator() {
 
   return (
     <MainTab.Navigator
-      screenOptions={({ route }) => ({
+      screenOptions={({ route }: { route: any }) => ({
         headerShown: false,
         tabBarActiveTintColor:   colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
+        // Tenders manages its own chrome — hide the parent tab bar to avoid
+        // showing two bottom bars at once.
         tabBarStyle:
-          route.name === 'Social'
+          route.name === 'Tenders'
             ? { display: 'none' }
             : { backgroundColor: colors.surface },
-        tabBarIcon: ({ focused, color, size }) => {
+        tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => {
           const icons: Record<string, [string, string]> = {
             Home:    ['home-outline',          'home'],
             Jobs:    ['briefcase-outline',     'briefcase'],
-            Social:  ['people-outline',        'people'],
             Tenders: ['document-text-outline', 'document-text'],
             Profile: ['business-outline',      'business'],
             More:    ['menu-outline',          'menu'],
@@ -183,12 +164,11 @@ function OrganizationTabNavigator() {
         },
       })}
     >
-      <MainTab.Screen name="Home"    component={OrganizationDashboardScreen}  />
+      <MainTab.Screen name="Home"    component={PlaceholderScreen}            />
       <MainTab.Screen name="Jobs"    component={OrganizationJobsNavigator}    />
-      <MainTab.Screen name="Social"  component={SocialEntry}                  />
-      <MainTab.Screen name="Tenders" component={OrganizationTendersNavigator} />
+      <MainTab.Screen name="Tenders" component={OrganizationTendersTab}       />
       <MainTab.Screen name="Profile" component={OrganizationProfileNavigator} />
-      <MainTab.Screen name="More"    component={OrganizationMoreScreen}        />
+      <MainTab.Screen name="More"    component={PlaceholderScreen}            />
     </MainTab.Navigator>
   );
 }
@@ -199,15 +179,15 @@ export default function OrganizationNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="MainTabs" component={OrganizationTabNavigator} />
 
-      <Stack.Screen name="EditProfile" component={OrganizationEditProfileScreen} />
+      <Stack.Screen name="EditProfile" component={PlaceholderScreen} />
 
-      <Stack.Screen name="OrgJobList"       component={OrgJobsScreen}                  />
-      <Stack.Screen name="OrgJobCreate"     component={OrgJobCreateScreen}             />
-      <Stack.Screen name="OrgJobEdit"       component={OrgJobEditScreen}               />
-      <Stack.Screen name="OrgJobDetail"     component={OrgJobDetail}                   />
-      <Stack.Screen name="OrgApplicants"    component={EmployerApplicationsScreen}     />
-      <Stack.Screen name="ApplicationList"  component={EmployerApplicationsScreen}     />
-      <Stack.Screen name="ApplicationDetail" component={EmployerApplicationDetailScreen} />
+      <Stack.Screen name="OrgJobList"        component={OrgJobsScreen}                />
+      <Stack.Screen name="OrgJobCreate"      component={OrgJobCreateScreen}            />
+      <Stack.Screen name="OrgJobEdit"        component={PlaceholderScreen}            />
+      <Stack.Screen name="OrgJobDetail"      component={PlaceholderScreen}            />
+      <Stack.Screen name="OrgApplicants"     component={PlaceholderScreen}            />
+      <Stack.Screen name="ApplicationList"   component={EmployerApplicationsScreen}   />
+      <Stack.Screen name="ApplicationDetail" component={PlaceholderScreen}            />
 
       <Stack.Screen
         name="FreelancerMarketplace"
@@ -222,8 +202,8 @@ export default function OrganizationNavigator() {
       <Stack.Screen name="Referral"    component={ReferralScreen}    />
       <Stack.Screen name="Leaderboard" component={PlaceholderScreen} />
 
-      <Stack.Screen name="ProductMarketplace" component={ProductMarketplaceScreen}   />
-      <Stack.Screen name="ProductDetails"     component={PublicProductDetailsScreen} />
+      <Stack.Screen name="ProductMarketplace" component={ProductMarketplaceScreen}        />
+      <Stack.Screen name="ProductDetails"     component={PublicProductDetailsScreen}      />
     </Stack.Navigator>
   );
 }

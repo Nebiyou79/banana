@@ -1,27 +1,29 @@
 // src/navigation/CompanyNavigator.tsx
 /**
- * navigation/company/CompanyNavigator.tsx
+ * navigation/CompanyNavigator.tsx
  * Role: Company — 6 main tabs + full stack for all built screens.
+ *
+ * 🆕 The Tenders tab now mounts the new <TendersNavigator userRole="company" />
+ *    instead of the old top-tab Dashboard/Tenders/Bids/Proposals stack.
+ *    The new flow has its own Splash → Home → 6 bottom tabs.
  */
 
 import React from 'react';
-import { TouchableOpacity } from 'react-native';
 import { createBottomTabNavigator }      from '@react-navigation/bottom-tabs';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import { createNativeStackNavigator }    from '@react-navigation/native-stack';
-import { useNavigation }                 from '@react-navigation/native';
 import { Ionicons }                      from '@expo/vector-icons';
 import { useThemeStore }                 from '../store/themeStore';
 
-// ─── Types ────────────────────────────────────────────────────
+// ─── Param-list types ────────────────────────────────────────
 import {
   CompanyMainTabParamList,
   CompanyJobsTabParamList,
-  CompanyTendersTabParamList,
-  CompanyTendersInnerStackParamList,
-  CompanyBidsInnerStackParamList,
   CompanyProfileTabParamList,
 } from './types';
+
+// ─── New tenders navigator (replaces the old Tenders top-tabs) ────
+import TendersNavigator from './TendersNavigator';
 
 // ─── Social (full stack entry) ────────────────────────────────
 import SocialEntry       from '../social/navigation/SocialEntry';
@@ -39,6 +41,7 @@ import { JobCreateScreen }                    from '../screens/company/JobCreate
 import { JobEditScreen }                      from '../screens/company/JobEditScreen';
 import { CompanyJobDetailScreen }             from '../screens/company/CompanyJobDetailsScreen';
 import { EmployerApplicationDetailScreen }    from '../screens/company/EmployerApplicationDetailScreen';
+import { EmployerApplicationsScreen }         from '../screens/company/EmployerApplicationListScreen';
 
 // Products
 import { CompanyProductListScreen }    from '../screens/company/CompanyProductListScreen';
@@ -60,9 +63,24 @@ import { ReferralScreen }                     from '../screens/shared/ReferralSc
 import { ProductMarketplaceScreen }           from '../screens/products/ProductMarketplaceScreen';
 import { ProductDetailsScreen }               from '../screens/products/ProductDetailsScreen';
 import { SavedProductsScreen }                from '../screens/products/SavedProductsScreen';
-import { EmployerApplicationsScreen }         from '../screens/company/EmployerApplicationListScreen';
 
 // ─── Param list ───────────────────────────────────────────────
+//  Note: tender-specific deep-link entries (ProfessionalTenderDetail, etc.)
+//  are NOT here — they live inside TendersNavigator's own stacks. Anywhere
+//  outside the Tenders tab that needs to jump to a tender should call:
+//    navigation.navigate('MainTabs', {
+//      screen: 'Tenders',
+//      params: {
+//        screen: 'TendersHome',
+//        params: {
+//          screen: 'ProfessionalTenders',
+//          params: {
+//            screen: 'ProfessionalTenderDetail',
+//            params: { tenderId },
+//          },
+//        },
+//      },
+//    });
 export type CompanyStackParamList = {
   MainTabs: undefined;
 
@@ -99,13 +117,10 @@ export type CompanyStackParamList = {
 };
 
 // ─── Navigators ───────────────────────────────────────────────
-const MainTab           = createBottomTabNavigator<CompanyMainTabParamList>();
-const JobsTopTab        = createMaterialTopTabNavigator<CompanyJobsTabParamList>();
-const TendersTopTab     = createMaterialTopTabNavigator<CompanyTendersTabParamList>();
-const TendersInnerStack = createNativeStackNavigator<CompanyTendersInnerStackParamList>();
-const BidsInnerStack    = createNativeStackNavigator<CompanyBidsInnerStackParamList>();
-const ProfileTopTab     = createMaterialTopTabNavigator<CompanyProfileTabParamList>();
-const Stack             = createNativeStackNavigator<CompanyStackParamList>();
+const MainTab       = createBottomTabNavigator<CompanyMainTabParamList>();
+const JobsTopTab    = createMaterialTopTabNavigator<CompanyJobsTabParamList>();
+const ProfileTopTab = createMaterialTopTabNavigator<CompanyProfileTabParamList>();
+const Stack         = createNativeStackNavigator<CompanyStackParamList>();
 
 // ─── Jobs top-tab navigator ───────────────────────────────────
 function CompanyJobsNavigator() {
@@ -121,91 +136,19 @@ function CompanyJobsNavigator() {
         tabBarStyle:             { backgroundColor: colors.surface },
       }}
     >
-      <JobsTopTab.Screen name="JobsList"        component={JobManagementScreen} options={{ title: 'My Jobs' }} />
-      <JobsTopTab.Screen name="CreateJob"       component={JobCreateScreen}     options={{ title: 'Post Job' }} />
-      <JobsTopTab.Screen name="JobApplications" component={EmployerApplicationsScreen}   options={{ title: 'Applications' }} />
+      <JobsTopTab.Screen name="JobsList"        component={JobManagementScreen}        options={{ title: 'My Jobs' }} />
+      <JobsTopTab.Screen name="CreateJob"       component={JobCreateScreen}            options={{ title: 'Post Job' }} />
+      <JobsTopTab.Screen name="JobApplications" component={EmployerApplicationsScreen} options={{ title: 'Applications' }} />
       <JobsTopTab.Screen name="BackToHome"      component={CompanyDashboardScreen} />
     </JobsTopTab.Navigator>
   );
 }
 
-// ─── Tenders inner stack ──────────────────────────────────────
-function CompanyTendersInnerNavigator() {
-  const nav = useNavigation<any>();
-  const { theme } = useThemeStore();
-  const { colors } = theme;
-
-  return (
-    <TendersInnerStack.Navigator screenOptions={{ headerShown: true }}>
-      <TendersInnerStack.Screen name="MyFreelanceTenders"  component={PlaceholderScreen} options={{ title: 'My Freelance Tenders' }} />
-      <TendersInnerStack.Screen name="ProfessionalTenders" component={PlaceholderScreen} options={{ title: 'Professional Tenders' }} />
-      <TendersInnerStack.Screen name="BrowseTenders"       component={PlaceholderScreen} options={{ title: 'Browse Tenders' }} />
-      <TendersInnerStack.Screen name="SavedTenders"        component={PlaceholderScreen} options={{ title: 'Saved Tenders' }} />
-      <TendersInnerStack.Screen name="Invitations"         component={PlaceholderScreen} options={{ title: 'Invitations' }} />
-      <TendersInnerStack.Screen
-        name="BackToTenders"
-        component={PlaceholderScreen}
-        options={{
-          title: '← Tenders',
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => nav.goBack()}>
-              <Ionicons name="arrow-back" size={22} color={colors.primary} />
-            </TouchableOpacity>
-          ),
-        }}
-      />
-    </TendersInnerStack.Navigator>
-  );
-}
-
-// ─── Bids inner stack ─────────────────────────────────────────
-function CompanyBidsInnerNavigator() {
-  const nav = useNavigation<any>();
-  const { theme } = useThemeStore();
-  const { colors } = theme;
-
-  return (
-    <BidsInnerStack.Navigator screenOptions={{ headerShown: true }}>
-      <BidsInnerStack.Screen name="MyBids"       component={PlaceholderScreen} options={{ title: 'My Bids' }} />
-      <BidsInnerStack.Screen name="ReceivedBids" component={PlaceholderScreen} options={{ title: 'Received Bids' }} />
-      <BidsInnerStack.Screen
-        name="BackToTenders"
-        component={PlaceholderScreen}
-        options={{
-          title: '← Back',
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => nav.goBack()}>
-              <Ionicons name="arrow-back" size={22} color={colors.primary} />
-            </TouchableOpacity>
-          ),
-        }}
-      />
-    </BidsInnerStack.Navigator>
-  );
-}
-
-// ─── Tenders top-level tab ────────────────────────────────────
-function CompanyTendersNavigator() {
-  const { theme } = useThemeStore();
-  const { colors } = theme;
-
-  return (
-    <TendersTopTab.Navigator
-      screenOptions={{
-        tabBarActiveTintColor:   colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarIndicatorStyle:    { backgroundColor: colors.primary },
-        tabBarStyle:             { backgroundColor: colors.surface },
-        tabBarScrollEnabled:     true,
-      }}
-    >
-      <TendersTopTab.Screen name="TenderDashboard" component={PlaceholderScreen}            options={{ title: 'Dashboard' }} />
-      <TendersTopTab.Screen name="Tenders"         component={CompanyTendersInnerNavigator} options={{ title: 'Tenders' }} />
-      <TendersTopTab.Screen name="Bids"            component={CompanyBidsInnerNavigator}    options={{ title: 'Bids' }} />
-      <TendersTopTab.Screen name="Proposals"       component={PlaceholderScreen}            options={{ title: 'Proposals' }} />
-      <TendersTopTab.Screen name="BackToHome"      component={CompanyDashboardScreen} />
-    </TendersTopTab.Navigator>
-  );
+// ─── Tenders tab — NEW: mounts TendersNavigator ──────────────
+//  Replaces the old CompanyTendersNavigator (top-tabs +
+//  CompanyTendersInnerNavigator + CompanyBidsInnerNavigator) entirely.
+function CompanyTendersTab() {
+  return <TendersNavigator userRole="company" />;
 }
 
 // ─── Profile tab navigator ────────────────────────────────────
@@ -222,10 +165,14 @@ function CompanyProfileNavigator() {
         tabBarStyle:             { backgroundColor: colors.surface },
       }}
     >
-      <ProfileTopTab.Screen name="CompanyProfile"      component={CompanyProfileScreen} options={{ title: 'Profile' }} />
-      <ProfileTopTab.Screen name="Products"             component={(props: any) => <CompanyProductListScreen {...props} />} options={{ title: 'Products' }} />
-      <ProfileTopTab.Screen name="FreelanceMarketplace" component={FreelancerMarketplaceScreen} options={{ title: 'Marketplace' }} />
-      <ProfileTopTab.Screen name="BackToHome"          component={CompanyDashboardScreen} />
+      <ProfileTopTab.Screen name="CompanyProfile"      component={CompanyProfileScreen}                  options={{ title: 'Profile' }} />
+      <ProfileTopTab.Screen
+        name="Products"
+        component={(props: any) => <CompanyProductListScreen {...props} />}
+        options={{ title: 'Products' }}
+      />
+      <ProfileTopTab.Screen name="FreelanceMarketplace" component={FreelancerMarketplaceScreen}          options={{ title: 'Marketplace' }} />
+      <ProfileTopTab.Screen name="BackToHome"           component={CompanyDashboardScreen} />
     </ProfileTopTab.Navigator>
   );
 }
@@ -237,15 +184,17 @@ function CompanyTabNavigator() {
 
   return (
     <MainTab.Navigator
-      screenOptions={({ route }) => ({
+      screenOptions={({ route }: { route: any }) => ({
         headerShown: false,
         tabBarActiveTintColor:   colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle:
-          route.name === 'Social'
+          // The Social and Tenders tabs each manage their own chrome —
+          // hide the parent tab bar to avoid double bars.
+          route.name === 'Social' || route.name === 'Tenders'
             ? { display: 'none' }
             : { backgroundColor: colors.surface },
-        tabBarIcon: ({ focused, color, size }) => {
+        tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => {
           const icons: Record<string, [string, string]> = {
             Home:    ['home-outline',          'home'],
             Jobs:    ['briefcase-outline',     'briefcase'],
@@ -262,9 +211,9 @@ function CompanyTabNavigator() {
       <MainTab.Screen name="Home"    component={CompanyDashboardScreen}  />
       <MainTab.Screen name="Jobs"    component={CompanyJobsNavigator}    />
       <MainTab.Screen name="Social"  component={SocialEntry}             />
-      <MainTab.Screen name="Tenders" component={CompanyTendersNavigator} />
+      <MainTab.Screen name="Tenders" component={CompanyTendersTab}       />
       <MainTab.Screen name="Profile" component={CompanyProfileNavigator} />
-      <MainTab.Screen name="More"    component={CompanyMoreScreen}        />
+      <MainTab.Screen name="More"    component={CompanyMoreScreen}       />
     </MainTab.Navigator>
   );
 }
@@ -277,11 +226,11 @@ export default function CompanyNavigator() {
 
       <Stack.Screen name="EditProfile" component={CompanyEditProfileScreen} />
 
-      <Stack.Screen name="CompanyJobList"    component={JobManagementScreen}          />
-      <Stack.Screen name="CreateJob"         component={JobCreateScreen}              />
-      <Stack.Screen name="JobEdit"           component={JobEditScreen}                />
-      <Stack.Screen name="JobDetail"         component={CompanyJobDetailScreen}       />
-      <Stack.Screen name="ApplicationList"   component={EmployerApplicationsScreen}   />
+      <Stack.Screen name="CompanyJobList"    component={JobManagementScreen}             />
+      <Stack.Screen name="CreateJob"         component={JobCreateScreen}                 />
+      <Stack.Screen name="JobEdit"           component={JobEditScreen}                   />
+      <Stack.Screen name="JobDetail"         component={CompanyJobDetailScreen}          />
+      <Stack.Screen name="ApplicationList"   component={EmployerApplicationsScreen}      />
       <Stack.Screen name="ApplicationDetail" component={EmployerApplicationDetailScreen} />
 
       <Stack.Screen name="CompanyProductList"    component={CompanyProductListScreen}    />

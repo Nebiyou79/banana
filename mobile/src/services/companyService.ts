@@ -54,7 +54,15 @@ export interface CompanyJob {
   location?: Record<string, string>;
   salary?: { min?: number; max?: number; currency?: string };
 }
-
+export interface CompanySearchResult {
+  _id: string;
+  name: string;
+  logo?: string;
+  industry?: string;
+  verified?: boolean;
+  /** Optional location string for disambiguating same-name companies. */
+  location?: string;
+}
 export interface CompanyApplication {
   _id: string;
   candidate: { _id: string; name: string; avatar?: string; email: string };
@@ -63,7 +71,19 @@ export interface CompanyApplication {
   appliedAt: string;
   coverLetter?: string;
 }
-
+ 
+interface ApiEnvelope<T> {
+  success: boolean;
+  message?: string;
+  data: T;
+}
+ 
+interface PaginatedEnvelope<T> {
+  success: boolean;
+  message?: string;
+  data: T[];
+  pagination?: { page: number; limit: number; total: number };
+}
 export interface CompanyStats {
   totalJobs: number;
   activeJobs: number;
@@ -80,7 +100,7 @@ interface ApiResp<T> {
   data: T;
   message?: string;
 }
-
+const BASE = '/company'
 // ─── Company Service ──────────────────────────────────────────────────────────
 
 export const companyService = {
@@ -176,8 +196,63 @@ export const companyService = {
 
   canCreate: (userRole: string, hasCompanyProfile: boolean): boolean =>
     userRole === 'company' && !hasCompanyProfile,
-};
 
+/**
+   * Prefix-search by name. Returns up to `limit` lightweight company
+   * summaries suitable for autocomplete UIs.
+   */
+  searchCompanies: async (
+    query: string,
+    limit: number = 20,
+  ): Promise<CompanySearchResult[]> => {
+    const params = new URLSearchParams();
+    if (query.trim()) params.append('search', query.trim());
+    params.append('limit', String(limit));
+    const response = await api.get<PaginatedEnvelope<CompanySearchResult>>(
+      `${BASE}?${params.toString()}`,
+    );
+    if (!response.data?.success) {
+      throw new Error(response.data?.message || 'Failed to search companies');
+    }
+    return Array.isArray(response.data.data) ? response.data.data : [];
+  },
+ 
+  /**
+   * Hydrate a single company by id. Used to convert ids → display names
+   * after the form has stored only ids in `invitedCompanies`.
+   */
+  getCompanyById: async (id: string): Promise<CompanyProfile> => {
+    const response = await api.get<ApiEnvelope<CompanyProfile>>(`${BASE}/${id}`);
+    if (!response.data?.success) {
+      throw new Error(response.data?.message || 'Failed to load company');
+    }
+    return response.data.data;
+  },
+ 
+  /**
+   * Batch-resolve a set of company ids. Falls back to N parallel requests
+   * if the backend doesn't support a batch endpoint.
+   */
+  getCompaniesByIds: async (ids: string[]): Promise<CompanyProfile[]> => {
+    if (ids.length === 0) return [];
+    try {
+      const params = new URLSearchParams();
+      ids.forEach((id) => params.append('ids[]', id));
+      const response = await api.get<PaginatedEnvelope<CompanyProfile>>(
+        `${BASE}/batch?${params.toString()}`,
+      );
+      if (response.data?.success && Array.isArray(response.data.data)) {
+        return response.data.data;
+      }
+    } catch {
+      /* fall through to per-id resolution */
+    }
+    const results = await Promise.allSettled(ids.map((id) => companyService.getCompanyById(id)));
+    return results
+      .filter((r): r is PromiseFulfilledResult<CompanyProfile> => r.status === 'fulfilled')
+      .map((r) => r.value);
+  },
+};
 // ─── Organization Types ───────────────────────────────────────────────────────
 
 export interface OrganizationProfile {

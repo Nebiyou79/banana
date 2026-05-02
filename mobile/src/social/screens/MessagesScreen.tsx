@@ -9,6 +9,10 @@
  *   - Conversations list (FlashList)
  *   - Empty state per tab
  *   - Pull-to-refresh
+ *
+ * FIX: guarded against `otherUser` being undefined (backend can return
+ * partially-populated conversation objects before the full data loads),
+ * which caused "Cannot read property '_id' of undefined".
  */
 
 import React, { useMemo, useState } from 'react';
@@ -62,22 +66,29 @@ const MessagesScreen: React.FC = () => {
     refetch,
   } = useConversations(apiFilter);
 
-  const conversations: Conversation[] = data?.list ?? [];
+  // FIX: filter out any conversations missing otherUser before rendering
+  const conversations: Conversation[] = useMemo(
+    () => (data?.list ?? []).filter((c) => c?.otherUser?._id),
+    [data?.list],
+  );
+
   const requestsCount = data?.requestsCount ?? 0;
 
-  // Client-side filter for the search box (server tab filter already applied).
+  // Client-side filter for the search box
   const filtered = useMemo(() => {
     if (!query.trim()) return conversations;
     const q = query.toLowerCase();
     return conversations.filter((c) =>
-      c.otherUser.name.toLowerCase().includes(q),
+      c.otherUser.name?.toLowerCase().includes(q),
     );
   }, [conversations, query]);
 
+  // FIX: safe map — otherUser is guaranteed defined here due to the filter above
   const userIds = useMemo(
     () => filtered.map((c) => c.otherUser._id),
     [filtered],
   );
+
   const { statusMap } = useBulkConnectionStatus(userIds);
   const { mutate: toggleFollow } = useToggleFollow();
 
@@ -87,20 +98,24 @@ const MessagesScreen: React.FC = () => {
       otherUser: conv.otherUser,
     });
 
-  const renderItem = ({ item }: { item: Conversation }) => (
-    <ContactCard
-      conversation={item}
-      status={statusMap[item.otherUser._id]}
-      onPress={() => openChat(item)}
-      onFollowPress={() =>
-        toggleFollow({
-          targetId: item.otherUser._id,
-          targetType: 'User',
-          source: 'manual',
-        })
-      }
-    />
-  );
+  // FIX: extra guard inside renderItem as a second line of defence
+  const renderItem = ({ item }: { item: Conversation }) => {
+    if (!item?.otherUser?._id) return null;
+    return (
+      <ContactCard
+        conversation={item}
+        status={statusMap[item.otherUser._id]}
+        onPress={() => openChat(item)}
+        onFollowPress={() =>
+          toggleFollow({
+            targetId: item.otherUser._id,
+            targetType: 'User',
+            source: 'manual',
+          })
+        }
+      />
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
@@ -189,7 +204,9 @@ const MessagesScreen: React.FC = () => {
           <Text style={[styles.requestsText, { color: theme.text }]}>
             Message Requests
           </Text>
-          <View style={[styles.requestsBadge, { backgroundColor: theme.primary }]}>
+          <View
+            style={[styles.requestsBadge, { backgroundColor: theme.primary }]}
+          >
             <Text style={styles.requestsBadgeText}>{requestsCount}</Text>
           </View>
           <Ionicons

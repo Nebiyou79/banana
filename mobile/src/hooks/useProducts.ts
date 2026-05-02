@@ -16,7 +16,7 @@
  *   - so user._id is a safe last-resort fallback (was `''` before → enabled:false
  *     → "No Products" empty state even though the company existed).
  */
-import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient, QueryClient } from '@tanstack/react-query';
 import { Alert } from 'react-native';
 import {
   productService,
@@ -58,6 +58,44 @@ export const productKeys = {
   related:    (id: string)             => [...productKeys.all, 'related', id]   as const,
   saved:      ()                       => [...productKeys.all, 'saved']         as const,
 };
+// mobile/src/hooks/useProducts.ts
+
+// helper — flip isSaved + savedCount in any cache shape we know about
+const toggleProductInCaches = (qc: QueryClient, id: string, nextSaved: boolean) => {
+  const updater = (p: Product): Product =>
+    p._id === id
+      ? { ...p, isSaved: nextSaved, savedCount: Math.max(0, (p.savedCount ?? 0) + (nextSaved ? 1 : -1)) }
+      : p;
+
+  // Detail
+  qc.setQueryData<Product | undefined>(productKeys.detail(id), (old) =>
+    old && old._id === id ? updater(old) : old,
+  );
+
+  // Lists / featured / company / saved — any infinite or array cache
+  const rootKeys = [
+    productKeys.all,
+    productKeys.featured(),
+    productKeys.saved(),
+  ];
+  rootKeys.forEach((rk) => {
+    qc.getQueriesData({ queryKey: rk }).forEach(([k, v]: [unknown, any]) => {
+      if (!v) return;
+      if (v.pages) {
+        qc.setQueryData(k as any, {
+          ...v,
+          pages: v.pages.map((pg: any) => ({
+            ...pg,
+            products: Array.isArray(pg?.products) ? pg.products.map(updater) : pg?.products,
+          })),
+        });
+      } else if (Array.isArray(v)) {
+        qc.setQueryData(k as any, v.map(updater));
+      }
+    });
+  });
+};
+
 
 // ── Public marketplace ─────────────────────────────────────────────────────────
 
@@ -151,29 +189,54 @@ export const useSavedProducts = (filters?: { page?: number; limit?: number }) =>
 
 export const useSaveProduct = () => {
   const qc = useQueryClient();
-  const { showSuccess, showError } = useToast();
+  const { showError } = useToast();
   return useMutation({
     mutationFn: (id: string) => productService.saveProduct(id),
-    onSuccess: (_, id) => {
-      qc.invalidateQueries({ queryKey: productKeys.detail(id) });
-      qc.invalidateQueries({ queryKey: productKeys.saved() });
-      showSuccess('Product saved!');
+    onMutate: async (id: string) => {
+      await qc.cancelQueries({ queryKey: productKeys.all });
+      const prev = qc.getQueriesData({ queryKey: productKeys.all });
+      toggleProductInCaches(qc, id, true);
+      return { prev };
     },
-    onError: (err: Error) => showError(err.message || 'Failed to save product'),
+    onError: (err: Error, _id, ctx) => {
+      ctx?.prev?.forEach(([k, v]: any) => qc.setQueryData(k, v));
+      showError(err?.message || 'Failed to save product');
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: productKeys.saved() });
+    },
   });
 };
 
 export const useUnsaveProduct = () => {
   const qc = useQueryClient();
-  const { showSuccess, showError } = useToast();
+  const { showError } = useToast();
   return useMutation({
     mutationFn: (id: string) => productService.unsaveProduct(id),
-    onSuccess: (_, id) => {
-      qc.invalidateQueries({ queryKey: productKeys.detail(id) });
-      qc.invalidateQueries({ queryKey: productKeys.saved() });
-      showSuccess('Product removed from saved');
+    onMutate: async (id: string) => {
+      await qc.cancelQueries({ queryKey: productKeys.all });
+      const prev = qc.getQueriesData({ queryKey: productKeys.all });
+      toggleProductInCaches(qc, id, false);
+      // Also drop it from the saved list immediately
+      qc.setQueriesData({ queryKey: productKeys.saved() }, (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((pg: any) => ({
+            ...pg,
+            products: (pg.products ?? []).filter((p: Product) => p._id !== id),
+          })),
+        };
+      });
+      return { prev };
     },
-    onError: (err: Error) => showError(err.message || 'Failed to unsave product'),
+    onError: (err: Error, _id, ctx) => {
+      ctx?.prev?.forEach(([k, v]: any) => qc.setQueryData(k, v));
+      showError(err?.message || 'Failed to unsave product');
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: productKeys.saved() });
+    },
   });
 };
 

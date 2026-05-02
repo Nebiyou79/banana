@@ -1,74 +1,57 @@
-// src/social/services/conversationService.ts
-/**
- * conversationService
- * -----------------------------------------------------------------------------
- * Endpoints (per latest spec):
- *
- *   POST   /messages/conversations              start or get conversation
- *   GET    /messages/conversations              list active conversations
- *   GET    /messages/conversations/:id          get one conversation
- *   GET    /messages/requests                   list message requests
- *   PUT    /messages/requests/:id/accept        accept a request
- *   PUT    /messages/requests/:id/decline       decline a request
- *   PUT    /messages/conversations/:id/read     mark as read
- *   DELETE /messages/conversations/:id          soft delete (my view)
- *   GET    /messages/contacts/online            online contacts
- *
- * Backend gating before creating a conversation:
- *   • Mutual follow → status: 'active'
- *   • One-way follow → status: 'request'
- *   • No follow → 403 Forbidden
- */
-
+// mobile/src/social/services/conversationService.ts
 import api from '../../lib/api';
 
 export interface ConversationListParams {
   page?: number;
   limit?: number;
-  filter?: string;
+  status?: 'active' | 'request' | 'declined';
+  filter?: string;       // kept for backwards compat in callers; not sent if undefined
   q?: string;
 }
 
+const cleanParams = (p: Record<string, unknown>) =>
+  Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined && v !== ''));
+
 export const conversationService = {
-  /**
-   * Start a conversation with another user, or fetch the existing one.
-   * Idempotent. Backend enforces follow-status gating.
-   *
-   * Body: { userId, initialMessage? }
-   */
+  // POST /api/v1/conversations/with/:userId
+  // Body: { initialMessage? } — userId is in the path. The backend ignores unknown body fields.
   getOrCreateWith: (userId: string, initialMessage?: string) =>
-    api.post('/messages/conversations', { userId, initialMessage }),
+    api.post(`/conversations/with/${userId}`, initialMessage ? { initialMessage } : {}),
 
-  // ── Lists ──────────────────────────────────────────────────────────────
+  // GET /api/v1/conversations?page=&limit=&status=
   getMyConversations: (params: ConversationListParams = {}) =>
-    api.get('/messages/conversations', {
-      params: { page: 1, limit: 20, ...params },
+    api.get('/conversations', {
+      params: cleanParams({ page: 1, limit: 20, status: 'active', ...params }),
     }),
 
+  // GET /api/v1/conversations/requests?page=&limit=
   getMessageRequests: (params: ConversationListParams = {}) =>
-    api.get('/messages/requests', {
-      params: { page: 1, limit: 20, ...params },
+    api.get('/conversations/requests', {
+      params: cleanParams({ page: 1, limit: 20, ...params }),
     }),
 
+  // GET /api/v1/conversations/:id
   getById: (conversationId: string) =>
-    api.get(`/messages/conversations/${conversationId}`),
+    api.get(`/conversations/${conversationId}`),
 
-  // ── Request flow ───────────────────────────────────────────────────────
+  // PUT /api/v1/conversations/:id/accept
   acceptRequest: (conversationId: string) =>
-    api.put(`/messages/requests/${conversationId}/accept`),
+    api.put(`/conversations/${conversationId}/accept`),
 
+  // PUT /api/v1/conversations/:id/decline
   declineRequest: (conversationId: string) =>
-    api.put(`/messages/requests/${conversationId}/decline`),
+    api.put(`/conversations/${conversationId}/decline`),
 
-  // ── Housekeeping ───────────────────────────────────────────────────────
+  // PUT /api/v1/conversations/:id/read   (body optional: { messageId })
   markAsRead: (conversationId: string, messageId?: string) =>
-    api.put(`/messages/conversations/${conversationId}/read`, { messageId }),
+    api.put(`/conversations/${conversationId}/read`, messageId ? { messageId } : {}),
 
-  /** Soft delete — removes the conversation from my view only. */
+  // DELETE /api/v1/conversations/:id   (soft delete for me)
   deleteConversation: (conversationId: string) =>
-    api.delete(`/messages/conversations/${conversationId}`),
+    api.delete(`/conversations/${conversationId}`),
 
-  getOnlineContacts: () => api.get('/messages/contacts/online'),
+  // GET /api/v1/conversations/contacts/online
+  getOnlineContacts: () => api.get('/conversations/contacts/online'),
 };
 
 export default conversationService;

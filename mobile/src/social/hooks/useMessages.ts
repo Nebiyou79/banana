@@ -68,74 +68,56 @@ export const useSendMessage = () => {
     mutationFn: (payload) =>
       messageService.send(payload).then((r) => r.data?.data as Message),
 
-    onMutate: async (payload) => {
-      const key = SOCIAL_KEYS.messages(payload.conversationId);
-      await qc.cancelQueries({ queryKey: key });
-      const prev = qc.getQueryData(key);
+onMutate: async (payload) => {
+  const key = SOCIAL_KEYS.messages(payload.conversationId);
+  await qc.cancelQueries({ queryKey: key });
+  const prev = qc.getQueryData(key);
 
-      const tempId = `tmp_${Date.now()}`;
-      const optimistic: Message = {
-        _id: tempId,
-        conversationId: payload.conversationId,
-        sender: myUser?._id ?? '',
-        content: payload.content,
-        type: payload.type ?? 'text',
-        status: 'sent',
-        readBy: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+  const tempId = `tmp_${Date.now()}`;
+  const optimistic: Message = {
+    _id: tempId,
+    conversationId: payload.conversationId,
+    sender: myUser?._id ?? '',
+    content: payload.content,
+    type: payload.type ?? 'text',
+    status: 'sent',
+    readBy: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
 
-      // Prepend to the first page (newest-first).
-      qc.setQueryData(key, (old: any) => {
-        if (!old) {
-          return {
-            pages: [{ data: [optimistic], pagination: {} }],
-            pageParams: [1],
-          };
-        }
-        const [first, ...rest] = old.pages;
-        return {
-          ...old,
-          pages: [
-            { ...first, data: [optimistic, ...(first?.data ?? [])] },
-            ...rest,
-          ],
-        };
-      });
+  qc.setQueryData(key, (old: any) => {
+    if (!old) return old;
+    const pages = [...old.pages];
+    if (pages[0]) {
+      pages[0] = { ...pages[0], data: [optimistic, ...(pages[0].data ?? [])] };
+    }
+    return { ...old, pages };
+  });
 
-      return { tempId, prev };
-    },
+  return { tempId, prev };
+},
 
-    onError: (err: any, payload, ctx) => {
-      if (ctx?.prev) {
-        qc.setQueryData(SOCIAL_KEYS.messages(payload.conversationId), ctx.prev);
-      }
-      Toast.show({
-        type: 'error',
-        text1: err?.response?.data?.message ?? 'Message failed to send',
-      });
-    },
+onError: (_err, payload, ctx) => {
+  if (ctx?.prev) qc.setQueryData(SOCIAL_KEYS.messages(payload.conversationId), ctx.prev);
+  Toast.show({ type: 'error', text1: 'Could not send' });
+},
 
-    onSuccess: (serverMsg, payload, ctx) => {
-      // Replace the temp message with the real server-issued one.
-      const key = SOCIAL_KEYS.messages(payload.conversationId);
-      qc.setQueryData(key, (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          pages: old.pages.map((page: any, i: number) => {
-            if (i !== 0) return page;
-            return {
-              ...page,
-              data: (page.data ?? []).map((m: Message) =>
-                m._id === ctx?.tempId ? serverMsg : m,
-              ),
-            };
-          }),
-        };
-      });
-    },
+onSuccess: (real, payload, ctx) => {
+  // Replace the temp by id; do NOT just refetch — that creates a flicker.
+  qc.setQueryData(SOCIAL_KEYS.messages(payload.conversationId), (old: any) => {
+    if (!old) return old;
+    return {
+      ...old,
+      pages: old.pages.map((p: any) => ({
+        ...p,
+        data: (p.data ?? []).map((m: Message) => (m._id === ctx?.tempId ? real : m)),
+      })),
+    };
+  });
+  // Bump conversations list so last-message + sort order update.
+  qc.invalidateQueries({ queryKey: ['social', 'conversations'] });
+},
 
     onSettled: (_, __, payload) => {
       // Refresh the conversations list so last-message preview updates.

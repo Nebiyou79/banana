@@ -33,9 +33,12 @@ export const SOCIAL_KEYS = {
   publicProfile: (userId: string) =>
     ['social', 'publicProfile', userId] as const,
   profileCompletion: ['social', 'profileCompletion'] as const,
-  popularProfiles: ['social', 'popularProfiles'] as const,
+  popularProfiles: (params?: object) =>
+    ['social', 'popularProfiles', params] as const,
+ 
+  // ── FIX: roleProfile was missing — caused "is not a function" crash ───
+  roleProfile: (role: string) => ['social', 'roleProfile', role] as const,
 
-  // ── Search ────────────────────────────────────────────────────────────
 // ── Search ────────────────────────────────────────────────────────────
 searchProfiles: (params: object) =>
   ['social', 'searchProfiles', params] as const,
