@@ -3,7 +3,7 @@
 // Usage: const { colors, isDark, type, spacing, radius, shadows } = useTheme();
 
 import { useColorScheme } from 'react-native';
-import { useThemeStore } from '../store/themeStore';
+import { useThemeStore } from '../store/themeStores';
 import { darkColors, lightColors, type AppColors } from '../constants/theme/colors';
 import { type, fonts }    from '../constants/theme/typography';
 import { spacing, radius } from '../constants/theme/spacing';

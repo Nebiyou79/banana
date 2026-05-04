@@ -1,3 +1,4 @@
+// ConfirmModal.tsx
 import React, { useEffect, useRef } from 'react';
 import {
   View,
@@ -11,9 +12,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { useTheme } from '../../hooks/useTheme';
 
 type ConfirmVariant = 'default' | 'danger' | 'warning' | 'success';
 
@@ -27,42 +26,20 @@ interface ConfirmModalProps {
   cancelLabel?: string;
   variant?: ConfirmVariant;
   loading?: boolean;
-  /** Prevent closing by tapping the backdrop */
   dismissable?: boolean;
-  /** Custom icon name from Ionicons */
   icon?: keyof typeof Ionicons.glyphMap;
   style?: ViewStyle;
 }
-
-// ─── Variant config ───────────────────────────────────────────────────────────
 
 const VARIANT_CONFIG: Record<
   ConfirmVariant,
   { icon: keyof typeof Ionicons.glyphMap; color: string; lightColor: string }
 > = {
-  default: {
-    icon: 'help-circle-outline',
-    color: '#2563EB',
-    lightColor: '#DBEAFE',
-  },
-  danger: {
-    icon: 'trash-outline',
-    color: '#DC2626',
-    lightColor: '#FEE2E2',
-  },
-  warning: {
-    icon: 'warning-outline',
-    color: '#D97706',
-    lightColor: '#FEF3C7',
-  },
-  success: {
-    icon: 'checkmark-circle-outline',
-    color: '#059669',
-    lightColor: '#D1FAE5',
-  },
+  default: { icon: 'help-circle-outline', color: '#2563EB', lightColor: '#DBEAFE' },
+  danger:  { icon: 'trash-outline', color: '#DC2626', lightColor: '#FEE2E2' },
+  warning: { icon: 'warning-outline', color: '#D97706', lightColor: '#FEF3C7' },
+  success: { icon: 'checkmark-circle-outline', color: '#059669', lightColor: '#D1FAE5' },
 };
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   visible,
@@ -78,11 +55,10 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   icon,
   style,
 }) => {
-  const { theme } = useThemeStore();
+  const { colors, shadows, radius, type, spacing } = useTheme();
   const cfg = VARIANT_CONFIG[variant];
   const resolvedIcon = icon ?? cfg.icon;
 
-  // Animations
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.88)).current;
   const translateY = useRef(new Animated.Value(24)).current;
@@ -90,41 +66,15 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.timing(backdropAnim, {
-          toValue: 1,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          useNativeDriver: true,
-          speed: 20,
-          bounciness: 8,
-        }),
-        Animated.spring(translateY, {
-          toValue: 0,
-          useNativeDriver: true,
-          speed: 20,
-          bounciness: 8,
-        }),
+        Animated.timing(backdropAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 8 }),
+        Animated.spring(translateY, { toValue: 0, useNativeDriver: true, speed: 20, bounciness: 8 }),
       ]).start();
     } else {
       Animated.parallel([
-        Animated.timing(backdropAnim, {
-          toValue: 0,
-          duration: 180,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 0.88,
-          duration: 180,
-          useNativeDriver: true,
-        }),
-        Animated.timing(translateY, {
-          toValue: 24,
-          duration: 180,
-          useNativeDriver: true,
-        }),
+        Animated.timing(backdropAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 0.88, duration: 180, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 24, duration: 180, useNativeDriver: true }),
       ]).start();
     }
   }, [visible]);
@@ -137,58 +87,41 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
       statusBarTranslucent
       onRequestClose={dismissable ? onClose : undefined}
     >
-      {/* Backdrop */}
-      <Animated.View
-        style={[
-          styles.backdrop,
-          { opacity: backdropAnim },
-        ]}
-      >
+      <Animated.View style={[styles.backdrop, { opacity: backdropAnim }]}>
         <Pressable
           style={StyleSheet.absoluteFillObject}
           onPress={dismissable && !loading ? onClose : undefined}
         />
       </Animated.View>
 
-      {/* Sheet */}
       <View style={styles.centeredView} pointerEvents="box-none">
         <Animated.View
           style={[
             styles.sheet,
             {
-              backgroundColor: theme.colors.surface,
+              backgroundColor: colors.bgCard,
+              borderRadius: radius.xl,
               transform: [{ scale: scaleAnim }, { translateY }],
+              ...shadows.md,
             },
-            theme.shadows.lg,
             style,
           ]}
         >
-          {/* Icon circle */}
-          <View
-            style={[
-              styles.iconCircle,
-              { backgroundColor: cfg.lightColor },
-            ]}
-          >
+          <View style={[styles.iconCircle, { backgroundColor: cfg.lightColor, borderRadius: radius.full }]}>
             <Ionicons name={resolvedIcon} size={28} color={cfg.color} />
           </View>
 
-          {/* Text */}
-          <Text style={[styles.title, { color: theme.colors.text }]}>
+          <Text style={[styles.title, type.h4, { color: colors.textPrimary }]}>
             {title}
           </Text>
           {message && (
-            <Text style={[styles.message, { color: theme.colors.textMuted }]}>
+            <Text style={[styles.message, type.bodySm, { color: colors.textMuted }]}>
               {message}
             </Text>
           )}
 
-          {/* Divider */}
-          <View
-            style={[styles.divider, { backgroundColor: theme.colors.border }]}
-          />
+          <View style={[styles.divider, { backgroundColor: colors.borderPrimary }]} />
 
-          {/* Buttons */}
           <View style={styles.buttons}>
             <TouchableOpacity
               onPress={onClose}
@@ -198,14 +131,13 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
                 styles.button,
                 styles.cancelButton,
                 {
-                  backgroundColor: theme.colors.borderLight,
-                  borderColor: theme.colors.border,
+                  backgroundColor: colors.bgSecondary,
+                  borderColor: colors.borderPrimary,
+                  borderRadius: radius.md,
                 },
               ]}
             >
-              <Text
-                style={[styles.cancelText, { color: theme.colors.textSecondary }]}
-              >
+              <Text style={[styles.cancelText, type.bodySm, { color: colors.textSecondary }]}>
                 {cancelLabel}
               </Text>
             </TouchableOpacity>
@@ -217,14 +149,14 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
               style={[
                 styles.button,
                 styles.confirmButton,
-                { backgroundColor: cfg.color },
+                { backgroundColor: cfg.color, borderRadius: radius.md },
                 loading && styles.buttonLoading,
               ]}
             >
               {loading ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={styles.confirmText}>{confirmLabel}</Text>
+                <Text style={[styles.confirmText, type.bodySm]}>{confirmLabel}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -233,8 +165,6 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     </Modal>
   );
 };
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   backdrop: {
@@ -250,44 +180,29 @@ const styles = StyleSheet.create({
   sheet: {
     width: '100%',
     maxWidth: 380,
-    borderRadius: 24,
     padding: 28,
     alignItems: 'center',
   },
-
-  // Icon
   iconCircle: {
     width: 72,
     height: 72,
-    borderRadius: 99,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
   },
-
-  // Text
   title: {
-    fontSize: 19,
-    fontWeight: '700',
     textAlign: 'center',
     marginBottom: 10,
-    letterSpacing: -0.3,
   },
   message: {
-    fontSize: 15,
     textAlign: 'center',
-    lineHeight: 22,
     marginBottom: 4,
   },
-
-  // Divider
   divider: {
     height: StyleSheet.hairlineWidth,
     alignSelf: 'stretch',
     marginVertical: 20,
   },
-
-  // Buttons
   buttons: {
     flexDirection: 'row',
     gap: 10,
@@ -296,7 +211,6 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
     height: 50,
-    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -308,12 +222,10 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   cancelText: {
-    fontSize: 15,
     fontWeight: '600',
   },
   confirmText: {
     color: '#fff',
-    fontSize: 15,
     fontWeight: '700',
   },
 });

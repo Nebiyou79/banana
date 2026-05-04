@@ -1,12 +1,7 @@
-/**
- * src/components/ui/FormField.tsx
- * Themed text input with label, error and optional multiline.
- */
+// FormField.tsx
 import React from 'react';
-import {
-  View, Text, TextInput, TextInputProps, StyleSheet, TouchableOpacity,
-} from 'react-native';
-import { useThemeStore } from '../../store/themeStore';
+import { View, Text, TextInput, TextInputProps, StyleSheet, TouchableOpacity } from 'react-native';
+import { useTheme } from '../../hooks/useTheme';
 
 interface FormFieldProps extends TextInputProps {
   label: string;
@@ -25,15 +20,14 @@ export const FormField: React.FC<FormFieldProps> = ({
   style,
   ...inputProps
 }) => {
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+  const { colors, radius, type, spacing } = useTheme();
 
   return (
     <View style={s.wrapper}>
       <View style={s.labelRow}>
-        <Text style={[s.label, { color: c.text }]}>
+        <Text style={[s.label, type.caption, { color: colors.textPrimary }]}>
           {label}
-          {required && <Text style={{ color: c.error }}> *</Text>}
+          {required && <Text style={{ color: colors.error }}> *</Text>}
         </Text>
         {rightElement}
       </View>
@@ -41,36 +35,30 @@ export const FormField: React.FC<FormFieldProps> = ({
         style={[
           s.inputWrapper,
           {
-            backgroundColor: c.inputBg ?? c.surface,
-            borderColor: error ? c.error : c.border,
+            backgroundColor: colors.bgCard,
+            borderColor: error ? colors.error : colors.borderPrimary,
+            borderRadius: radius.md,
           },
         ]}
       >
         <TextInput
-          style={[
-            s.input,
-            { color: c.text },
-            inputProps.multiline && { minHeight: 100, textAlignVertical: 'top' },
-            style,
-          ]}
-          placeholderTextColor={c.placeholder ?? c.textMuted}
+          style={[s.input, type.body, { color: colors.textPrimary }, inputProps.multiline && { minHeight: 100, textAlignVertical: 'top' }, style]}
+          placeholderTextColor={colors.textMuted}
           {...inputProps}
         />
       </View>
-      {hint && !error ? (
-        <Text style={[s.hint, { color: c.textMuted }]}>{hint}</Text>
-      ) : null}
-      {error ? <Text style={[s.error, { color: c.error }]}>{error}</Text> : null}
+      {hint && !error ? <Text style={[s.hint, type.caption, { color: colors.textMuted }]}>{hint}</Text> : null}
+      {error ? <Text style={[s.error, type.caption, { color: colors.error }]}>{error}</Text> : null}
     </View>
   );
 };
 
 const s = StyleSheet.create({
-  wrapper:      { marginBottom: 16 },
-  labelRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
-  label:        { fontSize: 13, fontWeight: '600' },
-  inputWrapper: { borderRadius: 12, borderWidth: 1.5, overflow: 'hidden' },
-  input:        { paddingHorizontal: 14, paddingVertical: 13, fontSize: 15 },
-  hint:         { fontSize: 11, marginTop: 4 },
-  error:        { fontSize: 12, marginTop: 4 },
+  wrapper: { marginBottom: 16 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  label: { fontWeight: '600' },
+  inputWrapper: { borderWidth: 1.5, overflow: 'hidden' },
+  input: { paddingHorizontal: 14, paddingVertical: 13 },
+  hint: { marginTop: 4 },
+  error: { marginTop: 4 },
 });

@@ -1,15 +1,8 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ViewStyle,
-} from 'react-native';
+// ErrorState.tsx
+import React, { useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { useTheme } from '../../hooks/useTheme';
 
 type ErrorStateVariant = 'error' | 'empty' | 'offline' | 'notFound' | 'restricted';
 
@@ -17,58 +10,22 @@ interface ErrorStateProps {
   variant?: ErrorStateVariant;
   title?: string;
   message?: string;
-  /** Label for the primary action button */
   actionLabel?: string;
   onAction?: () => void;
-  /** Label for an optional secondary action */
   secondaryActionLabel?: string;
   onSecondaryAction?: () => void;
   style?: ViewStyle;
-  /** Override the default emoji/icon */
   emoji?: string;
-  /** Make it compact (less vertical padding) */
   compact?: boolean;
 }
 
-// ─── Preset configs ───────────────────────────────────────────────────────────
-
-const PRESETS: Record<
-  ErrorStateVariant,
-  { emoji: string; title: string; message: string; actionLabel: string }
-> = {
-  error: {
-    emoji: '⚠️',
-    title: 'Something went wrong',
-    message: 'An unexpected error occurred. Please try again.',
-    actionLabel: 'Try Again',
-  },
-  empty: {
-    emoji: '📭',
-    title: 'Nothing here yet',
-    message: 'There is nothing to show right now.',
-    actionLabel: 'Refresh',
-  },
-  offline: {
-    emoji: '📡',
-    title: 'No internet connection',
-    message: 'Please check your network and try again.',
-    actionLabel: 'Retry',
-  },
-  notFound: {
-    emoji: '🔍',
-    title: 'Not found',
-    message: "We couldn't find what you were looking for.",
-    actionLabel: 'Go Back',
-  },
-  restricted: {
-    emoji: '🔒',
-    title: 'Access restricted',
-    message: "You don't have permission to view this content.",
-    actionLabel: 'Go Back',
-  },
+const PRESETS: Record<ErrorStateVariant, { emoji: string; title: string; message: string; actionLabel: string }> = {
+  error: { emoji: '⚠️', title: 'Something went wrong', message: 'An unexpected error occurred. Please try again.', actionLabel: 'Try Again' },
+  empty: { emoji: '📭', title: 'Nothing here yet', message: 'There is nothing to show right now.', actionLabel: 'Refresh' },
+  offline: { emoji: '📡', title: 'No internet connection', message: 'Please check your network and try again.', actionLabel: 'Retry' },
+  notFound: { emoji: '🔍', title: 'Not found', message: "We couldn't find what you were looking for.", actionLabel: 'Go Back' },
+  restricted: { emoji: '🔒', title: 'Access restricted', message: "You don't have permission to view this content.", actionLabel: 'Go Back' },
 };
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 export const ErrorState: React.FC<ErrorStateProps> = ({
   variant = 'error',
@@ -82,8 +39,17 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
   emoji,
   compact = false,
 }) => {
-  const { theme } = useThemeStore();
+  const { colors, radius, type } = useTheme();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(10)).current;
   const preset = PRESETS[variant];
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   const resolvedEmoji = emoji ?? preset.emoji;
   const resolvedTitle = title ?? preset.title;
@@ -91,179 +57,60 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
   const resolvedActionLabel = actionLabel ?? preset.actionLabel;
 
   return (
-    <View
-      style={[
-        styles.container,
-        compact && styles.compact,
-        style,
-      ]}
-    >
-      {/* Icon / Emoji */}
-      <View
-        style={[
-          styles.iconContainer,
-          compact && styles.iconContainerCompact,
-          { backgroundColor: theme.colors.borderLight },
-        ]}
-      >
-        <Text style={[styles.emoji, compact && styles.emojiCompact]}>
-          {resolvedEmoji}
-        </Text>
+    <Animated.View style={[styles.container, compact && styles.compact, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }, style]}>
+      <View style={[styles.iconContainer, compact && styles.iconContainerCompact, { backgroundColor: colors.bgSecondary, borderRadius: radius.lg }]}>
+        <Text style={[styles.emoji, compact && styles.emojiCompact]}>{resolvedEmoji}</Text>
       </View>
 
-      {/* Text */}
-      <Text
-        style={[
-          styles.title,
-          compact && styles.titleCompact,
-          { color: theme.colors.text },
-        ]}
-      >
+      <Text style={[styles.title, compact ? type.h4 : type.h3, { color: colors.textPrimary }]}>
         {resolvedTitle}
       </Text>
 
-      <Text
-        style={[
-          styles.message,
-          compact && styles.messageCompact,
-          { color: theme.colors.textMuted },
-        ]}
-      >
+      <Text style={[styles.message, compact ? type.caption : type.body, { color: colors.textMuted }]}>
         {resolvedMessage}
       </Text>
 
-      {/* Actions */}
       {onAction && (
         <View style={styles.actions}>
           <TouchableOpacity
             onPress={onAction}
             activeOpacity={0.8}
-            style={[
-              styles.primaryButton,
-              { backgroundColor: theme.colors.primary },
-            ]}
+            style={[styles.primaryButton, { backgroundColor: colors.accent, borderRadius: radius.md }]}
           >
-            <Ionicons
-              name={variant === 'error' || variant === 'offline' ? 'refresh-outline' : 'arrow-back-outline'}
-              size={16}
-              color="#fff"
-              style={styles.buttonIcon}
-            />
-            <Text style={styles.primaryButtonText}>{resolvedActionLabel}</Text>
+            <Ionicons name={variant === 'error' || variant === 'offline' ? 'refresh-outline' : 'arrow-back-outline'} size={16} color="#fff" style={styles.buttonIcon} />
+            <Text style={[styles.primaryButtonText, type.bodySm]}>{resolvedActionLabel}</Text>
           </TouchableOpacity>
 
           {secondaryActionLabel && onSecondaryAction && (
             <TouchableOpacity
               onPress={onSecondaryAction}
               activeOpacity={0.8}
-              style={[
-                styles.secondaryButton,
-                { borderColor: theme.colors.border },
-              ]}
+              style={[styles.secondaryButton, { borderColor: colors.borderPrimary, borderRadius: radius.md }]}
             >
-              <Text style={[styles.secondaryButtonText, { color: theme.colors.textSecondary }]}>
+              <Text style={[styles.secondaryButtonText, type.bodySm, { color: colors.textSecondary }]}>
                 {secondaryActionLabel}
               </Text>
             </TouchableOpacity>
           )}
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 };
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 60,
-  },
-  compact: {
-    paddingVertical: 32,
-    paddingHorizontal: 24,
-  },
-
-  // Icon
-  iconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  iconContainerCompact: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    marginBottom: 16,
-  },
-  emoji: {
-    fontSize: 48,
-  },
-  emojiCompact: {
-    fontSize: 34,
-  },
-
-  // Text
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 10,
-    letterSpacing: -0.3,
-  },
-  titleCompact: {
-    fontSize: 17,
-    marginBottom: 6,
-  },
-  message: {
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 28,
-  },
-  messageCompact: {
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 20,
-  },
-
-  // Buttons
-  actions: {
-    width: '100%',
-    gap: 10,
-  },
-  primaryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-  },
-  buttonIcon: {
-    marginRight: 8,
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    paddingVertical: 13,
-    paddingHorizontal: 24,
-    borderWidth: 1.5,
-  },
-  secondaryButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, paddingVertical: 60 },
+  compact: { paddingVertical: 32, paddingHorizontal: 24 },
+  iconContainer: { width: 100, height: 100, alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+  iconContainerCompact: { width: 72, height: 72, marginBottom: 16 },
+  emoji: { fontSize: 48 },
+  emojiCompact: { fontSize: 34 },
+  title: { textAlign: 'center', marginBottom: 10, fontWeight: '700' },
+  message: { textAlign: 'center', marginBottom: 28 },
+  actions: { width: '100%', gap: 10 },
+  primaryButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, paddingHorizontal: 24 },
+  buttonIcon: { marginRight: 8 },
+  primaryButtonText: { color: '#fff', fontWeight: '700' },
+  secondaryButton: { alignItems: 'center', justifyContent: 'center', paddingVertical: 13, paddingHorizontal: 24, borderWidth: 1.5 },
+  secondaryButtonText: { fontWeight: '600' },
 });

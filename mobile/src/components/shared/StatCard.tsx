@@ -1,59 +1,67 @@
-/**
- * mobile/src/components/common/StatCard.tsx
- */
-
-import React from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+// StatCard.tsx
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Platform, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 
 interface StatCardProps {
-  label:    string;
-  value:    string | number;
-  icon:     string;
-  color:    string;
+  label: string;
+  value: string | number;
+  icon: string;
+  color: string;
   subLabel?: string;
-  trend?:   'up' | 'down' | 'neutral';
+  trend?: 'up' | 'down' | 'neutral';
 }
 
 export const StatCard: React.FC<StatCardProps> = ({ label, value, icon, color, subLabel, trend }) => {
-  const { theme: { colors, isDark } } = useThemeStore();
-  const c = colors;
+  const { colors, radius, type, shadows } = useTheme();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(6)).current;
 
-  const cardShadow = Platform.OS === 'ios'
-    ? { shadowColor: color, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12 }
-    : { elevation: 3 };
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   return (
-    <View style={[sc.card, { backgroundColor: c.card, borderColor: c.border }, cardShadow]}>
-      <View style={[sc.iconWrap, { backgroundColor: color + '18' }]}>
+    <Animated.View style={[sc.card, {
+      backgroundColor: colors.bgCard,
+      borderColor: colors.borderPrimary,
+      borderRadius: radius.lg,
+      ...shadows.sm,
+      opacity: fadeAnim,
+      transform: [{ translateY: slideAnim }],
+    }]}>
+      <View style={[sc.iconWrap, { backgroundColor: color + '18', borderRadius: radius.md }]}>
         <Ionicons name={icon as any} size={22} color={color} />
       </View>
-      <Text style={[sc.value, { color: c.text }]}>{value}</Text>
-      <Text style={[sc.label, { color: c.textMuted }]}>{label}</Text>
+      <Text style={[sc.value, type.h2, { color: colors.textPrimary }]}>{value}</Text>
+      <Text style={[sc.label, type.caption, { color: colors.textMuted }]}>{label}</Text>
       {subLabel && (
         <View style={sc.subRow}>
           {trend && (
             <Ionicons
               name={trend === 'up' ? 'trending-up' : trend === 'down' ? 'trending-down' : 'remove'}
               size={12}
-              color={trend === 'up' ? c.success : trend === 'down' ? c.error : c.textMuted}
+              color={trend === 'up' ? colors.success : trend === 'down' ? colors.error : colors.textMuted}
             />
           )}
-          <Text style={[sc.sub, { color: trend === 'up' ? c.success : trend === 'down' ? c.error : c.textMuted }]}>
+          <Text style={[sc.sub, type.caption, { color: trend === 'up' ? colors.success : trend === 'down' ? colors.error : colors.textMuted }]}>
             {subLabel}
           </Text>
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 };
 
 const sc = StyleSheet.create({
-  card:    { borderRadius: 16, borderWidth: 1, padding: 16, flex: 1, minWidth: 140 },
-  iconWrap:{ width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  value:   { fontSize: 26, fontWeight: '800', marginBottom: 2 },
-  label:   { fontSize: 12 },
-  subRow:  { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 6 },
-  sub:     { fontSize: 11, fontWeight: '600' },
+  card: { borderWidth: 1, padding: 16, flex: 1, minWidth: 140 },
+  iconWrap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  value: { marginBottom: 2, fontWeight: '800' },
+  label: { fontWeight: '400' },
+  subRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 6 },
+  sub: { fontWeight: '600' },
 });

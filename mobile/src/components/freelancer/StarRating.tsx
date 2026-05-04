@@ -1,33 +1,22 @@
-/**
- * mobile/src/components/freelancers/StarRating.tsx
- *
- * Reusable star rating component.
- * - `interactive` mode: tappable stars for review submission
- * - `display` mode: read-only filled/half stars
- */
-
+// StarRating.tsx
 import React, { memo } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../hooks/useTheme';
 
 interface StarRatingProps {
-  value: number;           // 0–5
-  max?: number;            // default 5
-  size?: number;           // icon size, default 20
-  color?: string;          // star color, default #FBBF24
-  interactive?: boolean;   // allow tapping
+  value: number;
+  max?: number;
+  size?: number;
+  color?: string;
+  interactive?: boolean;
   onChange?: (value: number) => void;
 }
 
 export const StarRating: React.FC<StarRatingProps> = memo(
-  ({
-    value,
-    max = 5,
-    size = 20,
-    color = '#FBBF24',
-    interactive = false,
-    onChange,
-  }) => {
+  ({ value, max = 5, size = 20, color, interactive = false, onChange }) => {
+    const { colors } = useTheme();
+    const starColor = color ?? colors.accent;
     const stars = Array.from({ length: max }, (_, i) => i + 1);
 
     const getIconName = (star: number): any => {
@@ -48,7 +37,7 @@ export const StarRating: React.FC<StarRatingProps> = memo(
               <Ionicons
                 name={value >= star ? 'star' : 'star-outline'}
                 size={size}
-                color={value >= star ? color : '#D1D5DB'}
+                color={value >= star ? starColor : colors.textMuted}
               />
             </TouchableOpacity>
           ) : (
@@ -56,7 +45,7 @@ export const StarRating: React.FC<StarRatingProps> = memo(
               key={star}
               name={getIconName(star)}
               size={size}
-              color={value >= star - 0.5 ? color : '#D1D5DB'}
+              color={value >= star - 0.5 ? starColor : colors.textMuted}
             />
           ),
         )}

@@ -1,26 +1,9 @@
-/**
- * components/shared/FormComponents.tsx
- * Reusable form atoms used across all 4 role edit screens
- */
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Switch,
-  Modal,
-  Platform,
-  ViewStyle,
-  TextStyle,
-} from 'react-native';
+// FormComponents.tsx
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Switch, Modal, Platform, Animated, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { useThemeStore } from '../../store/themeStore';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { useTheme } from '../../hooks/useTheme';
 
 interface InputFieldProps {
   label: string;
@@ -39,65 +22,31 @@ interface InputFieldProps {
   leftIcon?: keyof typeof Ionicons.glyphMap;
 }
 
-interface DateFieldProps {
-  label: string;
-  value?: string; // ISO string
-  onChange: (iso: string) => void;
-  placeholder?: string;
-  minDate?: Date;
-  maxDate?: Date;
-  error?: string;
-  optional?: boolean;
-}
-
-interface TagInputProps {
-  label: string;
-  tags: string[];
-  onAdd: (tag: string) => void;
-  onRemove: (index: number) => void;
-  placeholder?: string;
-  max?: number;
-  accentColor?: string;
-}
-
-interface SelectFieldProps {
-  label: string;
-  value: string;
-  options: Array<{ value: string; label: string }>;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  error?: string;
-  optional?: boolean;
-}
-
-// ─── InputField ───────────────────────────────────────────────────────────────
-
 export const InputField: React.FC<InputFieldProps> = ({
   label, value, onChangeText, placeholder, multiline = false,
   numberOfLines = 4, keyboardType = 'default', autoCapitalize = 'sentences',
   error, optional, maxLength, style, editable = true, leftIcon,
 }) => {
-  const { theme } = useThemeStore();
-  const { colors, typography, spacing, borderRadius } = theme;
+  const { colors, radius, type, spacing } = useTheme();
   const [focused, setFocused] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+  }, []);
 
   return (
-    <View style={[{ marginBottom: spacing[4] }, style]}>
-      <Text style={[s.label, { color: colors.textSecondary, fontSize: typography.sm }]}>
+    <Animated.View style={[{ opacity: fadeAnim, marginBottom: spacing.lg }, style]}>
+      <Text style={[s.label, type.caption, { color: colors.textSecondary }]}>
         {label}
         {optional && <Text style={{ color: colors.textMuted, fontWeight: '400' }}> (optional)</Text>}
       </Text>
-      <View style={[
-        s.inputWrap,
-        {
-          borderColor: error ? colors.error : focused ? colors.primary : colors.border,
-          backgroundColor: editable ? colors.surface : colors.surface,
-          borderRadius: borderRadius.md,
-        }
-      ]}>
-        {leftIcon && (
-          <Ionicons name={leftIcon} size={16} color={colors.textMuted} style={{ marginRight: 8 }} />
-        )}
+      <View style={[s.inputWrap, {
+        borderColor: error ? colors.error : focused ? colors.accent : colors.borderPrimary,
+        backgroundColor: colors.bgCard,
+        borderRadius: radius.md,
+      }]}>
+        {leftIcon && <Ionicons name={leftIcon} size={16} color={colors.textMuted} style={{ marginRight: 8 }} />}
         <TextInput
           value={value}
           onChangeText={onChangeText}
@@ -111,36 +60,29 @@ export const InputField: React.FC<InputFieldProps> = ({
           editable={editable}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          style={[
-            s.input,
-            {
-              color: colors.text,
-              fontSize: typography.base,
-              textAlignVertical: multiline ? 'top' : 'center',
-              minHeight: multiline ? numberOfLines * 24 : 44,
-              flex: 1,
-            }
-          ]}
+          style={[s.input, type.body, { color: colors.textPrimary, minHeight: multiline ? numberOfLines * 24 : 44, flex: 1 }]}
         />
-        {maxLength && value.length > maxLength * 0.8 && (
-          <Text style={{ color: colors.textMuted, fontSize: 10, alignSelf: 'flex-end', marginLeft: 4 }}>
-            {value.length}/{maxLength}
-          </Text>
-        )}
       </View>
-      {error && (
-        <Text style={{ color: colors.error, fontSize: typography.xs, marginTop: 4 }}>{error}</Text>
-      )}
-    </View>
+      {error && <Text style={[type.caption, { color: colors.error, marginTop: spacing.xs }]}>{error}</Text>}
+    </Animated.View>
   );
 };
 
-// ─── DateField ────────────────────────────────────────────────────────────────
+interface DateFieldProps {
+  label: string;
+  value?: string;
+  onChange: (iso: string) => void;
+  placeholder?: string;
+  minDate?: Date;
+  maxDate?: Date;
+  error?: string;
+  optional?: boolean;
+}
 
 const formatDisplay = (iso?: string): string => {
   if (!iso) return '';
   const d = new Date(iso);
-  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
 const toDate = (iso?: string): Date => {
@@ -153,8 +95,7 @@ export const DateField: React.FC<DateFieldProps> = ({
   label, value, onChange, placeholder = 'Select date',
   minDate, maxDate, error, optional,
 }) => {
-  const { theme } = useThemeStore();
-  const { colors, typography, spacing, borderRadius } = theme;
+  const { colors, radius, type, spacing } = useTheme();
   const [show, setShow] = useState(false);
   const [temp, setTemp] = useState<Date>(toDate(value));
 
@@ -177,28 +118,23 @@ export const DateField: React.FC<DateFieldProps> = ({
   const display = formatDisplay(value);
 
   return (
-    <View style={{ marginBottom: spacing[4] }}>
-      <Text style={[s.label, { color: colors.textSecondary, fontSize: typography.sm }]}>
+    <View style={{ marginBottom: spacing.lg }}>
+      <Text style={[s.label, type.caption, { color: colors.textSecondary }]}>
         {label}
         {optional && <Text style={{ color: colors.textMuted, fontWeight: '400' }}> (optional)</Text>}
       </Text>
       <TouchableOpacity
         onPress={() => { setTemp(toDate(value)); setShow(true); }}
         activeOpacity={0.8}
-        style={[
-          s.inputWrap,
-          {
-            borderColor: error ? colors.error : colors.border,
-            backgroundColor: colors.surface,
-            borderRadius: borderRadius.md,
-            height: 50,
-          }
-        ]}
+        style={[s.inputWrap, {
+          borderColor: error ? colors.error : colors.borderPrimary,
+          backgroundColor: colors.bgCard,
+          borderRadius: radius.md,
+          height: 50,
+        }]}
       >
-        <Ionicons name="calendar-outline" size={18} color={display ? colors.primary : colors.textMuted} style={{ marginRight: 8 }} />
-        <Text style={{ flex: 1, fontSize: typography.base, color: display ? colors.text : colors.textMuted }}>
-          {display || placeholder}
-        </Text>
+        <Ionicons name="calendar-outline" size={18} color={display ? colors.accent : colors.textMuted} style={{ marginRight: 8 }} />
+        <Text style={[type.body, { flex: 1, color: display ? colors.textPrimary : colors.textMuted }]}>{display || placeholder}</Text>
         {value ? (
           <TouchableOpacity onPress={() => onChange('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Ionicons name="close-circle" size={16} color={colors.textMuted} />
@@ -207,7 +143,7 @@ export const DateField: React.FC<DateFieldProps> = ({
           <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
         )}
       </TouchableOpacity>
-      {error && <Text style={{ color: colors.error, fontSize: typography.xs, marginTop: 4 }}>{error}</Text>}
+      {error && <Text style={[type.caption, { color: colors.error, marginTop: spacing.xs }]}>{error}</Text>}
 
       {Platform.OS === 'android' && show && (
         <DateTimePicker value={temp} mode="date" display="default" onChange={handleChange} minimumDate={minDate} maximumDate={maxDate} />
@@ -216,14 +152,14 @@ export const DateField: React.FC<DateFieldProps> = ({
       {Platform.OS === 'ios' && (
         <Modal visible={show} transparent animationType="slide" onRequestClose={() => setShow(false)}>
           <View style={s.modalOverlay}>
-            <View style={[s.modalBox, { backgroundColor: colors.surface }]}>
-              <View style={[s.modalToolbar, { borderBottomColor: colors.border }]}>
+            <View style={[s.modalBox, { backgroundColor: colors.bgCard, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl }]}>
+              <View style={[s.modalToolbar, { borderBottomColor: colors.borderPrimary }]}>
                 <TouchableOpacity onPress={() => setShow(false)}>
-                  <Text style={{ color: colors.textMuted, fontSize: typography.base }}>Cancel</Text>
+                  <Text style={[type.body, { color: colors.textMuted }]}>Cancel</Text>
                 </TouchableOpacity>
-                <Text style={{ color: colors.text, fontWeight: '700', fontSize: typography.base }}>{label}</Text>
+                <Text style={[type.body, { fontWeight: '700', color: colors.textPrimary }]}>{label}</Text>
                 <TouchableOpacity onPress={handleIOSConfirm}>
-                  <Text style={{ color: colors.primary, fontWeight: '700', fontSize: typography.base }}>Done</Text>
+                  <Text style={[type.body, { fontWeight: '700', color: colors.accent }]}>Done</Text>
                 </TouchableOpacity>
               </View>
               <DateTimePicker value={temp} mode="date" display="spinner" onChange={handleChange} minimumDate={minDate} maximumDate={maxDate} style={{ width: '100%', height: 200 }} />
@@ -235,14 +171,19 @@ export const DateField: React.FC<DateFieldProps> = ({
   );
 };
 
-// ─── TagInput ─────────────────────────────────────────────────────────────────
+interface TagInputProps {
+  label: string;
+  tags: string[];
+  onAdd: (tag: string) => void;
+  onRemove: (index: number) => void;
+  placeholder?: string;
+  max?: number;
+  accentColor?: string;
+}
 
-export const TagInput: React.FC<TagInputProps> = ({
-  label, tags, onAdd, onRemove, placeholder, max = 20, accentColor,
-}) => {
-  const { theme } = useThemeStore();
-  const { colors, typography, spacing, borderRadius } = theme;
-  const acc = accentColor ?? colors.primary;
+export const TagInput: React.FC<TagInputProps> = ({ label, tags, onAdd, onRemove, placeholder, max = 20, accentColor }) => {
+  const { colors, radius, type, spacing } = useTheme();
+  const acc = accentColor ?? colors.accent;
   const [draft, setDraft] = useState('');
 
   const submit = () => {
@@ -254,8 +195,8 @@ export const TagInput: React.FC<TagInputProps> = ({
   };
 
   return (
-    <View style={{ marginBottom: spacing[4] }}>
-      <Text style={[s.label, { color: colors.textSecondary, fontSize: typography.sm }]}>{label}</Text>
+    <View style={{ marginBottom: spacing.lg }}>
+      <Text style={[s.label, type.caption, { color: colors.textSecondary }]}>{label}</Text>
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
         <TextInput
           value={draft}
@@ -264,11 +205,11 @@ export const TagInput: React.FC<TagInputProps> = ({
           returnKeyType="done"
           placeholder={placeholder ?? `Add ${label.toLowerCase()}…`}
           placeholderTextColor={colors.textMuted}
-          style={[s.input, { flex: 1, color: colors.text, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border, borderRadius: borderRadius.md, paddingHorizontal: 12, height: 44, fontSize: typography.base }]}
+          style={[type.body, { flex: 1, color: colors.textPrimary, backgroundColor: colors.bgCard, borderWidth: 1.5, borderColor: colors.borderPrimary, borderRadius: radius.md, paddingHorizontal: 12, height: 44 }]}
         />
         <TouchableOpacity
           onPress={submit}
-          style={{ width: 44, height: 44, borderRadius: borderRadius.md, backgroundColor: acc, alignItems: 'center', justifyContent: 'center' }}
+          style={{ width: 44, height: 44, borderRadius: radius.md, backgroundColor: acc, alignItems: 'center', justifyContent: 'center' }}
         >
           <Ionicons name="add" size={22} color="#fff" />
         </TouchableOpacity>
@@ -278,52 +219,55 @@ export const TagInput: React.FC<TagInputProps> = ({
           <TouchableOpacity
             key={i}
             onPress={() => onRemove(i)}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: `${acc}18`, borderWidth: 1, borderColor: `${acc}40`, borderRadius: 99, paddingHorizontal: 10, paddingVertical: 5 }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentBg, borderWidth: 1, borderColor: colors.accent + '40', borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 5 }}
           >
-            <Text style={{ color: acc, fontSize: typography.xs, fontWeight: '600' }}>{tag}</Text>
+            <Text style={[type.caption, { color: acc, fontWeight: '600' }]}>{tag}</Text>
             <Ionicons name="close" size={10} color={acc} />
           </TouchableOpacity>
         ))}
       </View>
-      <Text style={{ color: colors.textMuted, fontSize: typography.xs, marginTop: 4 }}>
-        {tags.length}/{max} · Tap to remove
-      </Text>
+      <Text style={[type.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>{tags.length}/{max} · Tap to remove</Text>
     </View>
   );
 };
 
-// ─── SelectField ──────────────────────────────────────────────────────────────
+interface SelectFieldProps {
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  error?: string;
+  optional?: boolean;
+}
 
-export const SelectField: React.FC<SelectFieldProps> = ({
-  label, value, options, onChange, placeholder, error, optional,
-}) => {
-  const { theme } = useThemeStore();
-  const { colors, typography, spacing, borderRadius } = theme;
+export const SelectField: React.FC<SelectFieldProps> = ({ label, value, options, onChange, placeholder, error, optional }) => {
+  const { colors, radius, type, spacing } = useTheme();
   const [open, setOpen] = useState(false);
   const selected = options.find(o => o.value === value);
 
   return (
-    <View style={{ marginBottom: spacing[4] }}>
-      <Text style={[s.label, { color: colors.textSecondary, fontSize: typography.sm }]}>
+    <View style={{ marginBottom: spacing.lg }}>
+      <Text style={[s.label, type.caption, { color: colors.textSecondary }]}>
         {label}
         {optional && <Text style={{ color: colors.textMuted, fontWeight: '400' }}> (optional)</Text>}
       </Text>
       <TouchableOpacity
         onPress={() => setOpen(true)}
-        style={[s.inputWrap, { borderColor: error ? colors.error : colors.border, backgroundColor: colors.surface, borderRadius: borderRadius.md, height: 50 }]}
+        style={[s.inputWrap, { borderColor: error ? colors.error : colors.borderPrimary, backgroundColor: colors.bgCard, borderRadius: radius.md, height: 50 }]}
       >
-        <Text style={{ flex: 1, fontSize: typography.base, color: selected ? colors.text : colors.textMuted }}>
+        <Text style={[type.body, { flex: 1, color: selected ? colors.textPrimary : colors.textMuted }]}>
           {selected?.label ?? placeholder ?? `Select ${label}`}
         </Text>
         <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
       </TouchableOpacity>
-      {error && <Text style={{ color: colors.error, fontSize: typography.xs, marginTop: 4 }}>{error}</Text>}
+      {error && <Text style={[type.caption, { color: colors.error, marginTop: spacing.xs }]}>{error}</Text>}
 
       <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
         <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setOpen(false)}>
-          <View style={[s.modalBox, { backgroundColor: colors.surface, maxHeight: '60%' }]}>
-            <View style={[s.modalToolbar, { borderBottomColor: colors.border }]}>
-              <Text style={{ color: colors.text, fontWeight: '700', fontSize: typography.base }}>{label}</Text>
+          <View style={[s.modalBox, { backgroundColor: colors.bgCard, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, maxHeight: '60%' }]}>
+            <View style={[s.modalToolbar, { borderBottomColor: colors.borderPrimary }]}>
+              <Text style={[type.body, { fontWeight: '700', color: colors.textPrimary }]}>{label}</Text>
               <TouchableOpacity onPress={() => setOpen(false)}>
                 <Ionicons name="close" size={22} color={colors.textMuted} />
               </TouchableOpacity>
@@ -333,10 +277,10 @@ export const SelectField: React.FC<SelectFieldProps> = ({
                 <TouchableOpacity
                   key={opt.value}
                   onPress={() => { onChange(opt.value); setOpen(false); }}
-                  style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}
+                  style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderPrimary }}
                 >
-                  <Text style={{ flex: 1, fontSize: typography.base, color: colors.text }}>{opt.label}</Text>
-                  {value === opt.value && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+                  <Text style={[type.body, { flex: 1, color: colors.textPrimary }]}>{opt.label}</Text>
+                  {value === opt.value && <Ionicons name="checkmark" size={18} color={colors.accent} />}
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -347,8 +291,6 @@ export const SelectField: React.FC<SelectFieldProps> = ({
   );
 };
 
-// ─── PillSelector ─────────────────────────────────────────────────────────────
-
 export const PillSelector = <T extends string>({
   label, value, options, onChange, accentColor,
 }: {
@@ -358,13 +300,12 @@ export const PillSelector = <T extends string>({
   onChange: (v: T) => void;
   accentColor?: string;
 }) => {
-  const { theme } = useThemeStore();
-  const { colors, typography, spacing, borderRadius } = theme;
-  const acc = accentColor ?? colors.primary;
+  const { colors, radius, type, spacing } = useTheme();
+  const acc = accentColor ?? colors.accent;
 
   return (
-    <View style={{ marginBottom: spacing[4] }}>
-      <Text style={[s.label, { color: colors.textSecondary, fontSize: typography.sm }]}>{label}</Text>
+    <View style={{ marginBottom: spacing.lg }}>
+      <Text style={[s.label, type.caption, { color: colors.textSecondary }]}>{label}</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {options.map(opt => {
           const active = value === opt.value;
@@ -375,15 +316,13 @@ export const PillSelector = <T extends string>({
               style={{
                 flexDirection: 'row', alignItems: 'center', gap: 4,
                 borderWidth: 1.5,
-                borderColor: active ? acc : colors.border,
-                backgroundColor: active ? `${acc}18` : colors.surface,
-                borderRadius: 99, paddingHorizontal: 14, paddingVertical: 8,
+                borderColor: active ? acc : colors.borderPrimary,
+                backgroundColor: active ? colors.accentBg : colors.bgCard,
+                borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 8,
               }}
             >
               {opt.emoji && <Text>{opt.emoji}</Text>}
-              <Text style={{ color: active ? acc : colors.textMuted, fontWeight: '600', fontSize: typography.sm }}>
-                {opt.label}
-              </Text>
+              <Text style={[type.caption, { color: active ? acc : colors.textMuted, fontWeight: '600' }]}>{opt.label}</Text>
             </TouchableOpacity>
           );
         })}
@@ -392,30 +331,25 @@ export const PillSelector = <T extends string>({
   );
 };
 
-// ─── SwitchField ──────────────────────────────────────────────────────────────
-
 export const SwitchField: React.FC<{
   label: string;
   value: boolean;
   onChange: (v: boolean) => void;
   accentColor?: string;
 }> = ({ label, value, onChange, accentColor }) => {
-  const { theme } = useThemeStore();
-  const { colors, typography, spacing } = theme;
+  const { colors, type, spacing } = useTheme();
   return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing[3] }}>
-      <Text style={{ color: colors.text, fontSize: typography.sm, flex: 1 }}>{label}</Text>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
+      <Text style={[type.bodySm, { color: colors.textPrimary, flex: 1 }]}>{label}</Text>
       <Switch
         value={value}
         onValueChange={onChange}
-        trackColor={{ false: colors.border, true: accentColor ?? colors.primary }}
+        trackColor={{ false: colors.borderPrimary, true: accentColor ?? colors.accent }}
         thumbColor="#fff"
       />
     </View>
   );
 };
-
-// ─── SectionCard ──────────────────────────────────────────────────────────────
 
 export const SectionCard: React.FC<{
   title: string;
@@ -425,40 +359,35 @@ export const SectionCard: React.FC<{
   children: React.ReactNode;
   collapsible?: boolean;
 }> = ({ title, accentColor, onAdd, addLabel = 'Add', children, collapsible = true }) => {
-  const { theme } = useThemeStore();
-  const { colors, typography, spacing, borderRadius } = theme;
+  const { colors, radius, type, spacing } = useTheme();
   const [expanded, setExpanded] = useState(true);
-  const acc = accentColor ?? colors.primary;
+  const acc = accentColor ?? colors.accent;
 
   return (
-    <View style={{ marginBottom: spacing[4] }}>
+    <View style={{ marginBottom: spacing.lg }}>
       <TouchableOpacity
         onPress={() => collapsible && setExpanded(v => !v)}
         activeOpacity={collapsible ? 0.7 : 1}
-        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing[3] }}
+        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md }}
       >
-        <Text style={{ color: colors.text, fontWeight: '700', fontSize: typography.base }}>{title}</Text>
+        <Text style={[type.bodySm, { fontWeight: '700', color: colors.textPrimary }]}>{title}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {onAdd && (
             <TouchableOpacity
               onPress={onAdd}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: `${acc}18`, borderRadius: 99, paddingHorizontal: 10, paddingVertical: 6 }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentBg, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 6 }}
             >
               <Ionicons name="add" size={14} color={acc} />
-              <Text style={{ color: acc, fontSize: typography.xs, fontWeight: '700' }}>{addLabel}</Text>
+              <Text style={[type.caption, { color: acc, fontWeight: '700' }]}>{addLabel}</Text>
             </TouchableOpacity>
           )}
-          {collapsible && (
-            <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
-          )}
+          {collapsible && <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />}
         </View>
       </TouchableOpacity>
       {expanded && children}
     </View>
   );
 };
-
-// ─── ArrayItemCard ────────────────────────────────────────────────────────────
 
 export const ArrayItemCard: React.FC<{
   title: string;
@@ -467,16 +396,15 @@ export const ArrayItemCard: React.FC<{
   accentColor?: string;
   children: React.ReactNode;
 }> = ({ title, subtitle, onRemove, accentColor, children }) => {
-  const { theme } = useThemeStore();
-  const { colors, typography, spacing, borderRadius } = theme;
-  const acc = accentColor ?? colors.primary;
+  const { colors, radius, type, spacing } = useTheme();
+  const acc = accentColor ?? colors.accent;
 
   return (
-    <View style={[s.arrayCard, { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: borderRadius.lg, marginBottom: spacing[3] }]}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing[3] }}>
+    <View style={[s.arrayCard, { backgroundColor: colors.bgCard, borderColor: colors.borderPrimary, borderRadius: radius.lg, marginBottom: spacing.md }]}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.md }}>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: colors.text, fontWeight: '700', fontSize: typography.sm }}>{title}</Text>
-          {subtitle && <Text style={{ color: colors.textMuted, fontSize: typography.xs, marginTop: 2 }}>{subtitle}</Text>}
+          <Text style={[type.bodySm, { color: colors.textPrimary, fontWeight: '700' }]}>{title}</Text>
+          {subtitle && <Text style={[type.caption, { color: colors.textMuted, marginTop: 2 }]}>{subtitle}</Text>}
         </View>
         <TouchableOpacity onPress={onRemove} style={{ padding: 4 }}>
           <Ionicons name="trash-outline" size={18} color={colors.error} />
@@ -487,8 +415,6 @@ export const ArrayItemCard: React.FC<{
   );
 };
 
-// ─── EmptyState ───────────────────────────────────────────────────────────────
-
 export const EmptyState: React.FC<{
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
@@ -497,37 +423,31 @@ export const EmptyState: React.FC<{
   actionLabel?: string;
   accentColor?: string;
 }> = ({ icon, title, subtitle, onAction, actionLabel, accentColor }) => {
-  const { theme } = useThemeStore();
-  const { colors, typography, spacing, borderRadius } = theme;
-  const acc = accentColor ?? colors.primary;
+  const { colors, radius, type, spacing } = useTheme();
+  const acc = accentColor ?? colors.accent;
 
   return (
-    <View style={{ alignItems: 'center', paddingVertical: spacing[8], gap: spacing[3] }}>
-      <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: `${acc}18`, alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ alignItems: 'center', paddingVertical: spacing.section, gap: spacing.md }}>
+      <View style={{ width: 60, height: 60, borderRadius: radius.full, backgroundColor: colors.accentBg, alignItems: 'center', justifyContent: 'center' }}>
         <Ionicons name={icon} size={28} color={acc} />
       </View>
-      <Text style={{ color: colors.text, fontWeight: '700', fontSize: typography.base }}>{title}</Text>
-      {subtitle && <Text style={{ color: colors.textMuted, fontSize: typography.sm, textAlign: 'center' }}>{subtitle}</Text>}
+      <Text style={[type.bodySm, { fontWeight: '700', color: colors.textPrimary }]}>{title}</Text>
+      {subtitle && <Text style={[type.caption, { color: colors.textMuted, textAlign: 'center' }]}>{subtitle}</Text>}
       {onAction && (
-        <TouchableOpacity
-          onPress={onAction}
-          style={{ backgroundColor: acc, borderRadius: borderRadius.md, paddingHorizontal: 20, paddingVertical: 10, marginTop: 4 }}
-        >
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: typography.sm }}>{actionLabel ?? 'Add'}</Text>
+        <TouchableOpacity onPress={onAction} style={{ backgroundColor: acc, borderRadius: radius.md, paddingHorizontal: 20, paddingVertical: 10, marginTop: spacing.xs }}>
+          <Text style={[type.bodySm, { color: '#fff', fontWeight: '700' }]}>{actionLabel ?? 'Add'}</Text>
         </TouchableOpacity>
       )}
     </View>
   );
 };
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const s = StyleSheet.create({
   label: { fontWeight: '600', marginBottom: 6 },
   inputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, paddingHorizontal: 12 },
-  input: { flex: 1 },
+  input: { textAlignVertical: 'top' },
   arrayCard: { borderWidth: 1, padding: 14 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalBox: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 32, overflow: 'hidden' },
+  modalBox: { paddingBottom: 32, overflow: 'hidden' },
   modalToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
 });

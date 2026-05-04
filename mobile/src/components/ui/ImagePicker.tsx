@@ -1,21 +1,9 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Image,
-  StyleSheet,
-  Modal,
-  Pressable,
-  ActivityIndicator,
-  ViewStyle,
-  Platform,
-} from 'react-native';
+// ImagePicker.tsx
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, Image, StyleSheet, Modal, Pressable, ActivityIndicator, Animated, ViewStyle, Platform } from 'react-native';
 import * as ExpoImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { useTheme } from '../../hooks/useTheme';
 
 export interface PickedImage {
   uri: string;
@@ -27,31 +15,21 @@ export interface PickedImage {
 }
 
 interface ImagePickerComponentProps {
-  /** Current image URI to display */
   value?: string;
   onPick: (image: PickedImage) => void;
   onRemove?: () => void;
-  /** 'avatar' = round 120px  |  'cover' = wide 16:9  |  'thumbnail' = square 80px */
   mode?: 'avatar' | 'cover' | 'thumbnail';
   loading?: boolean;
   disabled?: boolean;
-  /** Max width of picked image (default 1200) */
   maxWidth?: number;
-  /** Max height of picked image (default 1200) */
   maxHeight?: number;
-  /** JPEG quality 0–1 (default 0.85) */
   quality?: number;
   allowsEditing?: boolean;
   style?: ViewStyle;
-  /** Fallback emoji when no image */
   placeholder?: string;
-  /** Label shown below the control */
   label?: string;
-  /** Show both camera and gallery options */
   showCamera?: boolean;
 }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const requestPermission = async (type: 'camera' | 'library'): Promise<boolean> => {
   if (type === 'camera') {
@@ -62,8 +40,6 @@ const requestPermission = async (type: 'camera' | 'library'): Promise<boolean> =
     return status === 'granted';
   }
 };
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 export const ImagePickerComponent: React.FC<ImagePickerComponentProps> = ({
   value,
@@ -81,15 +57,18 @@ export const ImagePickerComponent: React.FC<ImagePickerComponentProps> = ({
   label,
   showCamera = true,
 }) => {
-  const { theme } = useThemeStore();
+  const { colors, radius, type, spacing } = useTheme();
   const [sheetVisible, setSheetVisible] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // ── Pick from library ────────────────────────────────────────────────────
+  useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+  }, []);
+
   const pickFromLibrary = async () => {
     setSheetVisible(false);
     const granted = await requestPermission('library');
     if (!granted) return;
-
     const result = await ExpoImagePicker.launchImageLibraryAsync({
       mediaTypes: ExpoImagePicker.MediaTypeOptions.Images,
       allowsEditing,
@@ -97,40 +76,24 @@ export const ImagePickerComponent: React.FC<ImagePickerComponentProps> = ({
       quality,
       base64: false,
     });
-
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
-      onPick({
-        uri: asset.uri,
-        width: asset.width,
-        height: asset.height,
-        mimeType: asset.mimeType,
-        fileSize: asset.fileSize,
-      });
+      onPick({ uri: asset.uri, width: asset.width, height: asset.height, mimeType: asset.mimeType, fileSize: asset.fileSize });
     }
   };
 
-  // ── Pick from camera ─────────────────────────────────────────────────────
   const pickFromCamera = async () => {
     setSheetVisible(false);
     const granted = await requestPermission('camera');
     if (!granted) return;
-
     const result = await ExpoImagePicker.launchCameraAsync({
       allowsEditing,
       aspect: mode === 'cover' ? [16, 9] : [1, 1],
       quality,
     });
-
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
-      onPick({
-        uri: asset.uri,
-        width: asset.width,
-        height: asset.height,
-        mimeType: asset.mimeType,
-        fileSize: asset.fileSize,
-      });
+      onPick({ uri: asset.uri, width: asset.width, height: asset.height, mimeType: asset.mimeType, fileSize: asset.fileSize });
     }
   };
 
@@ -143,61 +106,23 @@ export const ImagePickerComponent: React.FC<ImagePickerComponentProps> = ({
     }
   };
 
-  // ── Render shapes ────────────────────────────────────────────────────────
-
   const renderAvatar = () => (
-    <TouchableOpacity
-      onPress={handlePress}
-      activeOpacity={0.8}
-      style={[styles.avatarWrapper, { backgroundColor: theme.colors.borderLight }, style]}
-    >
-      {value ? (
-        <Image source={{ uri: value }} style={styles.avatarImage} />
-      ) : (
-        <Text style={styles.avatarEmoji}>{placeholder}</Text>
-      )}
-      <View style={[styles.avatarBadge, { backgroundColor: theme.colors.primary }]}>
-        {loading ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <Ionicons name="camera" size={13} color="#fff" />
-        )}
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.8} style={[styles.avatarWrapper, { backgroundColor: colors.bgSecondary, borderRadius: radius.full }, style]}>
+      {value ? <Image source={{ uri: value }} style={styles.avatarImage} /> : <Text style={styles.avatarEmoji}>{placeholder}</Text>}
+      <View style={[styles.avatarBadge, { backgroundColor: colors.accent, borderRadius: radius.full }]}>
+        {loading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="camera" size={13} color="#fff" />}
       </View>
     </TouchableOpacity>
   );
 
   const renderCover = () => (
-    <TouchableOpacity
-      onPress={handlePress}
-      activeOpacity={0.85}
-      style={[
-        styles.coverWrapper,
-        {
-          backgroundColor: theme.colors.borderLight,
-          borderColor: theme.colors.border,
-        },
-        style,
-      ]}
-    >
-      {value ? (
-        <Image source={{ uri: value }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-      ) : null}
-      <View
-        style={[
-          styles.coverOverlay,
-          { backgroundColor: value ? 'rgba(0,0,0,0.35)' : 'transparent' },
-        ]}
-      >
-        {loading ? (
-          <ActivityIndicator color={value ? '#fff' : theme.colors.primary} />
-        ) : (
-          <View style={[styles.coverButton, { backgroundColor: value ? 'rgba(0,0,0,0.5)' : theme.colors.primary + '18' }]}>
-            <Ionicons
-              name="camera-outline"
-              size={20}
-              color={value ? '#fff' : theme.colors.primary}
-            />
-            <Text style={[styles.coverButtonText, { color: value ? '#fff' : theme.colors.primary }]}>
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.85} style={[styles.coverWrapper, { backgroundColor: colors.bgSecondary, borderColor: colors.borderPrimary, borderRadius: radius.lg }, style]}>
+      {value ? <Image source={{ uri: value }} style={StyleSheet.absoluteFillObject} resizeMode="cover" /> : null}
+      <View style={[styles.coverOverlay, { backgroundColor: value ? 'rgba(0,0,0,0.35)' : 'transparent' }]}>
+        {loading ? <ActivityIndicator color={value ? '#fff' : colors.accent} /> : (
+          <View style={[styles.coverButton, { backgroundColor: value ? 'rgba(0,0,0,0.5)' : colors.accentBg, borderRadius: radius.md }]}>
+            <Ionicons name="camera-outline" size={20} color={value ? '#fff' : colors.accent} />
+            <Text style={[styles.coverButtonText, type.bodySm, { color: value ? '#fff' : colors.accent }]}>
               {value ? 'Change cover' : 'Add cover photo'}
             </Text>
           </View>
@@ -207,293 +132,97 @@ export const ImagePickerComponent: React.FC<ImagePickerComponentProps> = ({
   );
 
   const renderThumbnail = () => (
-    <TouchableOpacity
-      onPress={handlePress}
-      activeOpacity={0.8}
-      style={[
-        styles.thumbnailWrapper,
-        { backgroundColor: theme.colors.borderLight, borderColor: theme.colors.border },
-        style,
-      ]}
-    >
-      {value ? (
-        <Image source={{ uri: value }} style={styles.thumbnailImage} resizeMode="cover" />
-      ) : (
-        <Ionicons name="image-outline" size={28} color={theme.colors.textMuted} />
-      )}
-      {loading && (
-        <View style={styles.thumbnailOverlay}>
-          <ActivityIndicator color={theme.colors.primary} />
-        </View>
-      )}
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.8} style={[styles.thumbnailWrapper, { backgroundColor: colors.bgSecondary, borderColor: colors.borderPrimary, borderRadius: radius.md }, style]}>
+      {value ? <Image source={{ uri: value }} style={styles.thumbnailImage} resizeMode="cover" /> : <Ionicons name="image-outline" size={28} color={colors.textMuted} />}
+      {loading && <View style={styles.thumbnailOverlay}><ActivityIndicator color={colors.accent} /></View>}
     </TouchableOpacity>
   );
 
   return (
-    <>
+    <Animated.View style={{ opacity: fadeAnim }}>
       <View style={styles.container}>
         {mode === 'avatar' && renderAvatar()}
         {mode === 'cover' && renderCover()}
         {mode === 'thumbnail' && renderThumbnail()}
-
-        {label && (
-          <Text style={[styles.label, { color: theme.colors.textMuted }]}>{label}</Text>
-        )}
-
-        {/* Remove button */}
+        {label && <Text style={[styles.label, type.caption, { color: colors.textMuted }]}>{label}</Text>}
         {value && onRemove && mode !== 'cover' && (
-          <TouchableOpacity
-            onPress={onRemove}
-            style={[styles.removeBtn, { backgroundColor: theme.colors.errorLight }]}
-          >
-            <Ionicons name="trash-outline" size={13} color={theme.colors.error} />
-            <Text style={[styles.removeBtnText, { color: theme.colors.error }]}>Remove</Text>
+          <TouchableOpacity onPress={onRemove} style={[styles.removeBtn, { backgroundColor: colors.errorBg, borderRadius: radius.full }]}>
+            <Ionicons name="trash-outline" size={13} color={colors.error} />
+            <Text style={[styles.removeBtnText, type.caption, { color: colors.error }]}>Remove</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Source picker sheet */}
-      <Modal
-        visible={sheetVisible}
-        transparent
-        animationType="slide"
-        statusBarTranslucent
-        onRequestClose={() => setSheetVisible(false)}
-      >
-        <Pressable
-          style={styles.sheetBackdrop}
-          onPress={() => setSheetVisible(false)}
-        />
-        <View style={[styles.sheet, { backgroundColor: theme.colors.surface }]}>
-          <View style={[styles.sheetHandle, { backgroundColor: theme.colors.border }]} />
+      <Modal visible={sheetVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={() => setSheetVisible(false)}>
+        <Pressable style={styles.sheetBackdrop} onPress={() => setSheetVisible(false)} />
+        <View style={[styles.sheet, { backgroundColor: colors.bgCard, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl }]}>
+          <View style={[styles.sheetHandle, { backgroundColor: colors.borderPrimary, borderRadius: radius.full }]} />
+          <Text style={[styles.sheetTitle, type.h4, { color: colors.textPrimary }]}>Choose photo</Text>
 
-          <Text style={[styles.sheetTitle, { color: theme.colors.text }]}>
-            Choose photo
-          </Text>
-
-          <TouchableOpacity
-            onPress={pickFromCamera}
-            style={[styles.sheetOption, { borderBottomColor: theme.colors.border }]}
-          >
-            <View style={[styles.sheetOptionIcon, { backgroundColor: theme.colors.primaryLight }]}>
-              <Ionicons name="camera-outline" size={22} color={theme.colors.primary} />
+          <TouchableOpacity onPress={pickFromCamera} style={[styles.sheetOption, { borderBottomColor: colors.borderPrimary }]}>
+            <View style={[styles.sheetOptionIcon, { backgroundColor: colors.accentBg, borderRadius: radius.md }]}>
+              <Ionicons name="camera-outline" size={22} color={colors.accent} />
             </View>
             <View>
-              <Text style={[styles.sheetOptionLabel, { color: theme.colors.text }]}>
-                Take a photo
-              </Text>
-              <Text style={[styles.sheetOptionSub, { color: theme.colors.textMuted }]}>
-                Use your camera
-              </Text>
+              <Text style={[styles.sheetOptionLabel, type.bodySm, { color: colors.textPrimary }]}>Take a photo</Text>
+              <Text style={[styles.sheetOptionSub, type.caption, { color: colors.textMuted }]}>Use your camera</Text>
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={pickFromLibrary}
-            style={styles.sheetOption}
-          >
-            <View style={[styles.sheetOptionIcon, { backgroundColor: theme.colors.infoLight }]}>
-              <Ionicons name="images-outline" size={22} color={theme.colors.info} />
+          <TouchableOpacity onPress={pickFromLibrary} style={styles.sheetOption}>
+            <View style={[styles.sheetOptionIcon, { backgroundColor: colors.infoBg, borderRadius: radius.md }]}>
+              <Ionicons name="images-outline" size={22} color={colors.info} />
             </View>
             <View>
-              <Text style={[styles.sheetOptionLabel, { color: theme.colors.text }]}>
-                Choose from library
-              </Text>
-              <Text style={[styles.sheetOptionSub, { color: theme.colors.textMuted }]}>
-                Browse your photos
-              </Text>
+              <Text style={[styles.sheetOptionLabel, type.bodySm, { color: colors.textPrimary }]}>Choose from library</Text>
+              <Text style={[styles.sheetOptionSub, type.caption, { color: colors.textMuted }]}>Browse your photos</Text>
             </View>
           </TouchableOpacity>
 
           {value && onRemove && (
-            <TouchableOpacity
-              onPress={() => { setSheetVisible(false); onRemove(); }}
-              style={[styles.sheetOption, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E2E8F0', marginTop: 8 }]}
-            >
-              <View style={[styles.sheetOptionIcon, { backgroundColor: theme.colors.errorLight }]}>
-                <Ionicons name="trash-outline" size={22} color={theme.colors.error} />
+            <TouchableOpacity onPress={() => { setSheetVisible(false); onRemove(); }} style={[styles.sheetOption, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.borderPrimary, marginTop: spacing.sm }]}>
+              <View style={[styles.sheetOptionIcon, { backgroundColor: colors.errorBg, borderRadius: radius.md }]}>
+                <Ionicons name="trash-outline" size={22} color={colors.error} />
               </View>
               <View>
-                <Text style={[styles.sheetOptionLabel, { color: theme.colors.error }]}>
-                  Remove photo
-                </Text>
+                <Text style={[styles.sheetOptionLabel, type.bodySm, { color: colors.error }]}>Remove photo</Text>
               </View>
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity
-            onPress={() => setSheetVisible(false)}
-            style={[styles.cancelSheet, { backgroundColor: theme.colors.borderLight }]}
-          >
-            <Text style={[styles.cancelSheetText, { color: theme.colors.textSecondary }]}>
-              Cancel
-            </Text>
+          <TouchableOpacity onPress={() => setSheetVisible(false)} style={[styles.cancelSheet, { backgroundColor: colors.bgSecondary, borderRadius: radius.md }]}>
+            <Text style={[styles.cancelSheetText, type.bodySm, { color: colors.textSecondary }]}>Cancel</Text>
           </TouchableOpacity>
         </View>
       </Modal>
-    </>
+    </Animated.View>
   );
 };
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    gap: 10,
-  },
-
-  // Avatar mode
-  avatarWrapper: {
-    width: 100,
-    height: 100,
-    borderRadius: 99,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    overflow: 'visible',
-  },
-  avatarImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 99,
-  },
-  avatarEmoji: {
-    fontSize: 40,
-  },
-  avatarBadge: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 28,
-    height: 28,
-    borderRadius: 99,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-
-  // Cover mode
-  coverWrapper: {
-    width: '100%',
-    height: 140,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-  },
-  coverOverlay: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  coverButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-  },
-  coverButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  // Thumbnail mode
-  thumbnailWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    overflow: 'hidden',
-    borderStyle: 'dashed',
-  },
-  thumbnailImage: {
-    width: 80,
-    height: 80,
-  },
-  thumbnailOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // Label & remove
-  label: {
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  removeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 5,
-    paddingHorizontal: 12,
-    borderRadius: 99,
-  },
-  removeBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  // Sheet
-  sheetBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
-  },
-  sheetHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 99,
-    alignSelf: 'center',
-    marginBottom: 20,
-  },
-  sheetTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  sheetOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  sheetOptionIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sheetOptionLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  sheetOptionSub: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  cancelSheet: {
-    marginTop: 16,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  cancelSheetText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
+  container: { alignItems: 'center', gap: 10 },
+  avatarWrapper: { width: 100, height: 100, alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'visible' },
+  avatarImage: { width: 100, height: 100, borderRadius: 99 },
+  avatarEmoji: { fontSize: 40 },
+  avatarBadge: { position: 'absolute', bottom: 2, right: 2, width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
+  coverWrapper: { width: '100%', height: 140, overflow: 'hidden', borderWidth: 1.5, borderStyle: 'dashed' },
+  coverOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  coverButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 20 },
+  coverButtonText: { fontWeight: '600' },
+  thumbnailWrapper: { width: 80, height: 80, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, overflow: 'hidden', borderStyle: 'dashed' },
+  thumbnailImage: { width: 80, height: 80 },
+  thumbnailOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.6)', alignItems: 'center', justifyContent: 'center' },
+  label: { textAlign: 'center' },
+  removeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 5, paddingHorizontal: 12 },
+  removeBtnText: { fontWeight: '600' },
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+  sheet: { padding: 20, paddingBottom: Platform.OS === 'ios' ? 36 : 24 },
+  sheetHandle: { width: 36, height: 4, alignSelf: 'center', marginBottom: 20 },
+  sheetTitle: { fontWeight: '700', marginBottom: 16 },
+  sheetOption: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  sheetOptionIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  sheetOptionLabel: { fontWeight: '600' },
+  sheetOptionSub: { marginTop: 2 },
+  cancelSheet: { marginTop: 16, paddingVertical: 14, alignItems: 'center' },
+  cancelSheetText: { fontWeight: '600' },
 });

@@ -1,30 +1,9 @@
-/**
- * ImagePickerGrid.tsx
- *
- * FIX: Stale closure bug — when multiple images are uploading concurrently,
- * each async callback closes over the SAME stale `value` prop, so each one
- * replaces the array instead of appending. Fix: pass a callback to onChange
- * that receives the previous array, OR collect all results before calling onChange.
- *
- * Strategy: Upload all images sequentially (one at a time, matching backend
- * behaviour of media count: 1 per request), then append each URL to a local
- * ref-tracked accumulator so we never lose earlier uploads.
- */
-
-import React, { useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Image,
-  ScrollView,
-  ActivityIndicator,
-  StyleSheet,
-  Alert,
-} from 'react-native';
+// ImagePickerGrid.tsx
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, Image, ScrollView, ActivityIndicator, StyleSheet, Alert, Animated } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 import { uploadToCloudinary, optimizeCloudinaryUrl } from '../../utils/cloudinaryUpload';
 
 interface UploadingItem {
@@ -43,21 +22,17 @@ interface ImagePickerGridProps {
 }
 
 export const ImagePickerGrid: React.FC<ImagePickerGridProps> = ({
-  value,
-  onChange,
-  maxImages = 8,
-  error,
-  label = 'Project Images *',
+  value, onChange, maxImages = 8, error, label = 'Project Images *',
 }) => {
-  const { theme } = useThemeStore();
-  const { colors, borderRadius, typography, spacing } = theme;
-
+  const { colors, radius, type, spacing } = useTheme();
   const [queue, setQueue] = useState<UploadingItem[]>([]);
-
-  // FIX: Use a ref to track the "live" accumulated URLs so concurrent async
-  // callbacks always append to the latest array, not a stale closure snapshot.
+  const fadeAnim = useRef(new Animated.Value(0)).current;
   const accumulatedRef = useRef<string[]>(value);
-  // Keep ref in sync with prop whenever it changes externally (e.g. on reset)
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+  }, []);
+
   accumulatedRef.current = value;
 
   const requestPermissions = async (source: 'library' | 'camera') => {
@@ -108,49 +83,24 @@ export const ImagePickerGrid: React.FC<ImagePickerGridProps> = ({
     if (result.canceled || !result.assets?.length) return;
 
     const assets = result.assets;
-
-    // Add all picked images to the upload queue as "uploading"
-    const newQueueItems: UploadingItem[] = assets.map(a => ({
-      localUri: a.uri,
-      uploading: true,
-      error: false,
-    }));
+    const newQueueItems: UploadingItem[] = assets.map(a => ({ localUri: a.uri, uploading: true, error: false }));
     setQueue(prev => [...prev, ...newQueueItems]);
 
-    // FIX: Upload SEQUENTIALLY (backend processes 1 file per request).
-    // Append each result to accumulatedRef immediately so the next upload
-    // can read the updated array.
     for (const asset of assets) {
       try {
         const uploaded = await uploadToCloudinary([asset.uri], 'portfolio');
         const cloudUrl = uploaded[0].url;
-
-        // FIX: Mutate the ref immediately, then call onChange with the full array
         accumulatedRef.current = [...accumulatedRef.current, cloudUrl];
         onChange(accumulatedRef.current);
-
-        setQueue(prev =>
-          prev.map(q => q.localUri === asset.uri
-            ? { ...q, uploading: false, cloudUrl }
-            : q
-          )
-        );
+        setQueue(prev => prev.map(q => q.localUri === asset.uri ? { ...q, uploading: false, cloudUrl } : q));
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Upload failed';
-        setQueue(prev =>
-          prev.map(q => q.localUri === asset.uri
-            ? { ...q, uploading: false, error: true }
-            : q
-          )
-        );
+        setQueue(prev => prev.map(q => q.localUri === asset.uri ? { ...q, uploading: false, error: true } : q));
         Alert.alert('Upload failed', message);
       }
     }
 
-    // Clean up finished non-error queue items after a short delay
-    setTimeout(() => {
-      setQueue(prev => prev.filter(q => q.uploading || q.error));
-    }, 600);
+    setTimeout(() => { setQueue(prev => prev.filter(q => q.uploading || q.error)); }, 600);
   };
 
   const removeCloudUrl = (url: string) => {
@@ -160,12 +110,7 @@ export const ImagePickerGrid: React.FC<ImagePickerGridProps> = ({
   };
 
   const retryItem = async (item: UploadingItem) => {
-    setQueue(prev =>
-      prev.map(q => q.localUri === item.localUri
-        ? { ...q, uploading: true, error: false }
-        : q
-      )
-    );
+    setQueue(prev => prev.map(q => q.localUri === item.localUri ? { ...q, uploading: true, error: false } : q));
     try {
       const uploaded = await uploadToCloudinary([item.localUri], 'portfolio');
       const cloudUrl = uploaded[0].url;
@@ -173,12 +118,7 @@ export const ImagePickerGrid: React.FC<ImagePickerGridProps> = ({
       accumulatedRef.current = [...accumulatedRef.current, cloudUrl];
       onChange(accumulatedRef.current);
     } catch {
-      setQueue(prev =>
-        prev.map(q => q.localUri === item.localUri
-          ? { ...q, uploading: false, error: true }
-          : q
-        )
-      );
+      setQueue(prev => prev.map(q => q.localUri === item.localUri ? { ...q, uploading: false, error: true } : q));
     }
   };
 
@@ -188,9 +128,9 @@ export const ImagePickerGrid: React.FC<ImagePickerGridProps> = ({
 
   const showSourcePicker = () => {
     Alert.alert('Add Photo', 'Choose image source', [
-      { text: 'Camera',        onPress: () => pickImages('camera') },
+      { text: 'Camera', onPress: () => pickImages('camera') },
       { text: 'Photo Library', onPress: () => pickImages('library') },
-      { text: 'Cancel',        style: 'cancel' },
+      { text: 'Cancel', style: 'cancel' },
     ]);
   };
 
@@ -198,56 +138,33 @@ export const ImagePickerGrid: React.FC<ImagePickerGridProps> = ({
   const canAdd = totalCount < maxImages;
 
   return (
-    <View style={{ marginBottom: spacing[4] }}>
-      <Text style={{ fontSize: typography.sm, fontWeight: '600', color: colors.textSecondary, marginBottom: 8 }}>
-        {label}
-      </Text>
+    <Animated.View style={{ opacity: fadeAnim, marginBottom: spacing.lg }}>
+      <Text style={[type.caption, { fontWeight: '600', color: colors.textSecondary, marginBottom: spacing.sm }]}>{label}</Text>
 
-      {/* Info banner */}
-      <View style={[styles.infoBanner, { backgroundColor: colors.primaryLight, borderRadius: borderRadius.lg }]}>
-        <Ionicons name="cloud-upload-outline" size={15} color={colors.primary} />
-        <Text style={{ fontSize: typography.xs, color: colors.primary, marginLeft: 6, flex: 1 }}>
+      <View style={[styles.infoBanner, { backgroundColor: colors.accentBg, borderRadius: radius.lg }]}>
+        <Ionicons name="cloud-upload-outline" size={15} color={colors.accent} />
+        <Text style={[type.caption, { color: colors.accent, marginLeft: spacing.xs, flex: 1 }]}>
           Images upload one at a time to Cloudinary CDN. Max {maxImages} images.
         </Text>
       </View>
 
-      {/* Image grid */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
         <View style={styles.grid}>
-          {/* Saved Cloudinary images */}
           {value.map((url, i) => (
-            <View key={url + i} style={[styles.thumb, { borderRadius: borderRadius.md, borderColor: colors.border }]}>
-              <Image
-                source={{ uri: optimizeCloudinaryUrl(url, 200, 200) }}
-                style={[StyleSheet.absoluteFillObject, { borderRadius: borderRadius.md }]}
-                resizeMode="cover"
-              />
-              <TouchableOpacity
-                onPress={() => removeCloudUrl(url)}
-                style={[styles.removeBtn, { backgroundColor: colors.error }]}
-              >
+            <View key={url + i} style={[styles.thumb, { borderRadius: radius.md, borderColor: colors.borderPrimary }]}>
+              <Image source={{ uri: optimizeCloudinaryUrl(url, 200, 200) }} style={[StyleSheet.absoluteFillObject, { borderRadius: radius.md }]} resizeMode="cover" />
+              <TouchableOpacity onPress={() => removeCloudUrl(url)} style={[styles.removeBtn, { backgroundColor: colors.error, borderRadius: radius.full }]}>
                 <Ionicons name="close" size={10} color="#fff" />
               </TouchableOpacity>
-              <View style={[styles.cloudBadge, { backgroundColor: 'rgba(0,0,0,0.55)' }]}>
+              <View style={[styles.cloudBadge, { backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: radius.sm }]}>
                 <Ionicons name="cloud-done-outline" size={9} color="#fff" />
               </View>
             </View>
           ))}
 
-          {/* Uploading queue */}
           {queue.map(item => (
-            <View
-              key={item.localUri}
-              style={[
-                styles.thumb,
-                { borderRadius: borderRadius.md, borderColor: item.error ? colors.error : colors.border },
-              ]}
-            >
-              <Image
-                source={{ uri: item.localUri }}
-                style={[StyleSheet.absoluteFillObject, { borderRadius: borderRadius.md, opacity: 0.4 }]}
-                resizeMode="cover"
-              />
+            <View key={item.localUri} style={[styles.thumb, { borderRadius: radius.md, borderColor: item.error ? colors.error : colors.borderPrimary }]}>
+              <Image source={{ uri: item.localUri }} style={[StyleSheet.absoluteFillObject, { borderRadius: radius.md, opacity: 0.4 }]} resizeMode="cover" />
               {item.uploading && (
                 <View style={styles.uploadOverlay}>
                   <ActivityIndicator size="small" color="#fff" />
@@ -262,55 +179,39 @@ export const ImagePickerGrid: React.FC<ImagePickerGridProps> = ({
                   </TouchableOpacity>
                 </View>
               )}
-              <TouchableOpacity
-                onPress={() => removeQueueItem(item.localUri)}
-                style={[styles.removeBtn, { backgroundColor: item.error ? colors.error : 'rgba(0,0,0,0.6)' }]}
-              >
+              <TouchableOpacity onPress={() => removeQueueItem(item.localUri)} style={[styles.removeBtn, { backgroundColor: item.error ? colors.error : 'rgba(0,0,0,0.6)', borderRadius: radius.full }]}>
                 <Ionicons name="close" size={10} color="#fff" />
               </TouchableOpacity>
             </View>
           ))}
 
-          {/* Add button */}
           {canAdd && (
             <TouchableOpacity
               onPress={showSourcePicker}
-              style={[
-                styles.addBtn,
-                {
-                  borderRadius: borderRadius.md,
-                  borderColor: error && !value.length ? colors.error : colors.border,
-                  backgroundColor: colors.surface,
-                },
-              ]}
+              style={[styles.addBtn, { borderRadius: radius.md, borderColor: error && !value.length ? colors.error : colors.borderPrimary, backgroundColor: colors.bgCard }]}
               activeOpacity={0.7}
             >
-              <Ionicons name="add" size={28} color={colors.primary} />
-              <Text style={{ fontSize: 9, color: colors.textMuted, marginTop: 4 }}>Add Photo</Text>
+              <Ionicons name="add" size={28} color={colors.accent} />
+              <Text style={[type.caption, { color: colors.textMuted, marginTop: 4 }]}>Add Photo</Text>
             </TouchableOpacity>
           )}
         </View>
       </ScrollView>
 
-      <Text style={{ fontSize: typography.xs, color: colors.textMuted }}>
-        {value.length}/{maxImages} images uploaded
-      </Text>
-
-      {error && !value.length && (
-        <Text style={{ color: colors.error, fontSize: typography.xs, marginTop: 4 }}>{error}</Text>
-      )}
-    </View>
+      <Text style={[type.caption, { color: colors.textMuted }]}>{value.length}/{maxImages} images uploaded</Text>
+      {error && !value.length && <Text style={[type.caption, { color: colors.error, marginTop: spacing.xs }]}>{error}</Text>}
+    </Animated.View>
   );
 };
 
 const THUMB_SIZE = 90;
 
 const styles = StyleSheet.create({
-  infoBanner:    { flexDirection: 'row', alignItems: 'flex-start', padding: 10, marginBottom: 12 },
-  grid:          { flexDirection: 'row', gap: 8, paddingBottom: 4 },
-  thumb:         { width: THUMB_SIZE, height: THUMB_SIZE, borderWidth: 1, overflow: 'hidden', position: 'relative' },
-  addBtn:        { width: THUMB_SIZE, height: THUMB_SIZE, borderWidth: 1.5, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
-  removeBtn:     { position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', zIndex: 10 },
-  cloudBadge:    { position: 'absolute', bottom: 3, left: 3, borderRadius: 4, padding: 2 },
+  infoBanner: { flexDirection: 'row', alignItems: 'flex-start', padding: 10, marginBottom: 12 },
+  grid: { flexDirection: 'row', gap: 8, paddingBottom: 4 },
+  thumb: { width: THUMB_SIZE, height: THUMB_SIZE, borderWidth: 1, overflow: 'hidden', position: 'relative' },
+  addBtn: { width: THUMB_SIZE, height: THUMB_SIZE, borderWidth: 1.5, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  removeBtn: { position: 'absolute', top: 3, right: 3, width: 18, height: 18, alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  cloudBadge: { position: 'absolute', bottom: 3, left: 3, padding: 2 },
   uploadOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
 });

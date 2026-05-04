@@ -1,12 +1,7 @@
-import React from 'react';
-import {
-  View,
-  ActivityIndicator,
-  Text,
-  StyleSheet,
-  Modal,
-} from 'react-native';
-import { useThemeStore } from '../../store/themeStore';
+// LoadingSpinner.tsx
+import React, { useEffect, useRef } from 'react';
+import { View, ActivityIndicator, Text, StyleSheet, Modal, Animated } from 'react-native';
+import { useTheme } from '../../hooks/useTheme';
 
 interface LoadingSpinnerProps {
   message?: string;
@@ -21,37 +16,27 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   fullScreen = false,
   overlay = false,
 }) => {
-  const { theme } = useThemeStore();
-  const { colors } = theme;
+  const { colors, radius } = useTheme();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+  }, []);
 
   const content = (
-    <View
-      style={[
-        styles.container,
-        fullScreen && styles.fullScreen,
-        { backgroundColor: fullScreen ? colors.background : 'transparent' },
-      ]}
-    >
-      <ActivityIndicator size={size} color={colors.primary} />
-      {message && (
-        <Text style={[styles.message, { color: colors.textSecondary }]}>
-          {message}
-        </Text>
-      )}
-    </View>
+    <Animated.View style={[styles.container, fullScreen && styles.fullScreen, { opacity: fadeAnim }]}>
+      <ActivityIndicator size={size} color={colors.accent} />
+      {message && <Text style={[styles.message, { color: colors.textSecondary }]}>{message}</Text>}
+    </Animated.View>
   );
 
   if (overlay) {
     return (
       <Modal transparent animationType="fade">
         <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
-          <View style={[styles.overlayCard, { backgroundColor: colors.card, borderRadius: 16 }]}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            {message && (
-              <Text style={[styles.message, { color: colors.textSecondary }]}>
-                {message}
-              </Text>
-            )}
+          <View style={[styles.overlayCard, { backgroundColor: colors.bgCard, borderRadius: radius.lg }]}>
+            <ActivityIndicator size="large" color={colors.accent} />
+            {message && <Text style={[styles.message, { color: colors.textSecondary }]}>{message}</Text>}
           </View>
         </View>
       </Modal>
@@ -62,27 +47,9 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  fullScreen: {
-    flex: 1,
-  },
-  message: {
-    marginTop: 12,
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  overlay: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  overlayCard: {
-    padding: 32,
-    alignItems: 'center',
-    minWidth: 140,
-  },
+  container: { alignItems: 'center', justifyContent: 'center', padding: 24 },
+  fullScreen: { flex: 1, backgroundColor: 'transparent' },
+  message: { marginTop: 12, fontSize: 14, textAlign: 'center' },
+  overlay: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  overlayCard: { padding: 32, alignItems: 'center', minWidth: 140 },
 });

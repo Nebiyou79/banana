@@ -1,30 +1,38 @@
 /**
  * src/components/jobs/CandidateJobCard.tsx
  * ─────────────────────────────────────────────────────────────────────────────
- * Job card for the Candidate browse/saved screens.
- * Shows company/org logo prominently.
- * Uses React Native built-in Animated API (no react-native-reanimated).
+ * Candidate job card — redesigned with:
+ * - Universal Avatar component (no more broken logos)
+ * - Modern LinkedIn/Uber-inspired design
+ * - Soft shadows, rounded corners, proper hierarchy
+ * - Animated press feedback
  * ─────────────────────────────────────────────────────────────────────────────
  */
 import React, { memo, useRef, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Image,
+  View, Text, TouchableOpacity, StyleSheet,
   Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/themeStore';
 import { Job } from '../../services/jobService';
+import { Avatar, jobOwnerToEntity } from '../shared/Avatar';
 import { formatLocation } from '../../utils/jobHelpers';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-const formatDeadline = (d?: string): string => {
-  if (!d) return '';
+
+const formatDeadline = (d?: string): { label: string; urgent: boolean } => {
+  if (!d) return { label: '', urgent: false };
   const diff = Math.ceil((new Date(d).getTime() - Date.now()) / 86400000);
-  if (diff < 0) return 'Expired';
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Tomorrow';
-  if (diff <= 7) return `${diff}d left`;
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  if (diff < 0)  return { label: 'Expired', urgent: true };
+  if (diff === 0) return { label: 'Today!', urgent: true };
+  if (diff === 1) return { label: '1d left', urgent: true };
+  if (diff <= 3)  return { label: `${diff}d left`, urgent: true };
+  if (diff <= 7)  return { label: `${diff}d left`, urgent: false };
+  return {
+    label: new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    urgent: false,
+  };
 };
 
 const formatPostedDate = (d?: string): string => {
@@ -32,54 +40,11 @@ const formatPostedDate = (d?: string): string => {
   const diff = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
   if (diff === 0) return 'Today';
   if (diff === 1) return '1d ago';
-  if (diff < 7) return `${diff}d ago`;
-  if (diff < 30) return `${Math.floor(diff / 7)}w ago`;
+  if (diff < 7)   return `${diff}d ago`;
+  if (diff < 30)  return `${Math.floor(diff / 7)}w ago`;
   return `${Math.floor(diff / 30)}mo ago`;
 };
 
-const getInitials = (name?: string): string =>
-  (name ?? 'C').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-
-const getOwnerColor = (jobType?: string): string =>
-  jobType === 'organization' ? '#8B5CF6' : '#10B981';
-
-// ─── CompanyLogo ─────────────────────────────────────────────────────────────
-interface LogoProps {
-  job: Job;
-  size?: number;
-}
-
-const CompanyLogo: React.FC<LogoProps> = ({ job, size = 52 }) => {
-  const owner = job.jobType === 'organization' ? job.organization : job.company;
-  const logoUrl = (owner as any)?.logoUrl ?? (owner as any)?.logo;
-  const name = owner?.name ?? 'Co';
-  const bgColor = getOwnerColor(job.jobType);
-  const initials = getInitials(name);
-
-  if (logoUrl) {
-    return (
-      <Image
-        source={{ uri: logoUrl }}
-        style={[logo.img, { width: size, height: size, borderRadius: size * 0.25 }]}
-        defaultSource={{ uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=${bgColor.replace('#', '')}&color=fff&size=${size * 2}` }}
-      />
-    );
-  }
-
-  return (
-    <View style={[logo.fallback, { width: size, height: size, borderRadius: size * 0.25, backgroundColor: bgColor }]}>
-      <Text style={[logo.initials, { fontSize: size * 0.3 }]}>{initials}</Text>
-    </View>
-  );
-};
-
-const logo = StyleSheet.create({
-  img:      { resizeMode: 'cover' },
-  fallback: { alignItems: 'center', justifyContent: 'center' },
-  initials: { color: '#fff', fontWeight: '700' },
-});
-
-// ─── Salary helper ────────────────────────────────────────────────────────────
 const formatSalary = (job: Job): string | null => {
   if (job.salaryDisplay) return job.salaryDisplay;
   if (job.salaryMode === 'hidden') return null;
@@ -92,7 +57,30 @@ const formatSalary = (job: Job): string | null => {
   return null;
 };
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+const MetaTag = ({ icon, label, highlight, c }: {
+  icon: string; label: string; highlight?: boolean; c: any;
+}) => {
+  if (!label) return null;
+  return (
+    <View style={[
+      cs.metaTag,
+      {
+        backgroundColor: highlight ? `${c.primary}18` : (c.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'),
+        borderColor: highlight ? `${c.primary}40` : 'transparent',
+      },
+    ]}>
+      <Ionicons name={icon as any} size={10} color={highlight ? c.primary : c.textMuted} />
+      <Text style={[cs.metaTagText, { color: highlight ? c.primary : c.textMuted }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+};
+
 // ─── Props ────────────────────────────────────────────────────────────────────
+
 interface CandidateJobCardProps {
   job: Job;
   onPress: () => void;
@@ -101,62 +89,55 @@ interface CandidateJobCardProps {
   compact?: boolean;
 }
 
-// ─── Card Component ───────────────────────────────────────────────────────────
+// ─── Main Card ────────────────────────────────────────────────────────────────
+
 export const CandidateJobCard = memo<CandidateJobCardProps>(({
   job, onPress, onSave, isSaved = false, compact = false,
 }) => {
   const { theme } = useThemeStore();
   const c = theme.colors;
+  const isDark = theme.isDark;
 
-  // Built-in RN Animated for press scale effect
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const onPressIn = useCallback(() => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.97,
-      useNativeDriver: true,
-      speed: 40,
-      bounciness: 4,
-    }).start();
+    Animated.spring(scaleAnim, { toValue: 0.975, useNativeDriver: true, speed: 50, bounciness: 3 }).start();
   }, [scaleAnim]);
 
   const onPressOut = useCallback(() => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      speed: 40,
-      bounciness: 4,
-    }).start();
+    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 50, bounciness: 3 }).start();
   }, [scaleAnim]);
 
+  const ownerEntity = jobOwnerToEntity(job);
   const owner = job.jobType === 'organization' ? job.organization : job.company;
-  const isUrgent = job.urgent;
-  const isFeatured = job.featured;
   const salary = formatSalary(job);
   const deadline = formatDeadline(job.applicationDeadline);
-  const isExpiring = (() => {
-    if (!job.applicationDeadline) return false;
-    const diff = Math.ceil((new Date(job.applicationDeadline).getTime() - Date.now()) / 86400000);
-    return diff >= 0 && diff <= 3;
-  })();
 
+  // ── Compact variant ──────────────────────────────────────────────────────
   if (compact) {
     return (
       <TouchableOpacity
         onPress={onPress}
-        style={[cs.compact, { backgroundColor: c.card ?? c.surface, borderColor: c.border }]}
-        activeOpacity={0.75}
+        activeOpacity={0.78}
+        style={[
+          cs.compactCard,
+          {
+            backgroundColor: isDark ? c.card : '#fff',
+            borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+          },
+        ]}
       >
-        <CompanyLogo job={job} size={40} />
-        <View style={{ flex: 1, marginLeft: 10 }}>
+        <Avatar entity={ownerEntity} size={40} />
+        <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={[cs.compactTitle, { color: c.text }]} numberOfLines={1}>{job.title}</Text>
-          <Text style={[cs.compactOwner, { color: c.textMuted }]} numberOfLines={1}>{owner?.name ?? ''}</Text>
+          <Text style={[cs.compactOwner, { color: c.textSecondary }]} numberOfLines={1}>{owner?.name ?? ''}</Text>
         </View>
-        {isExpiring && <View style={[cs.urgentDot, { backgroundColor: c.error }]} />}
+        {deadline.urgent && <View style={[cs.urgentDot, { backgroundColor: '#EF4444' }]} />}
       </TouchableOpacity>
     );
   }
 
+  // ── Full card ──────────────────────────────────────────────────────────────
   return (
     <TouchableOpacity
       onPressIn={onPressIn}
@@ -167,80 +148,107 @@ export const CandidateJobCard = memo<CandidateJobCardProps>(({
       <Animated.View
         style={[
           cs.card,
-          { backgroundColor: c.card ?? c.surface, borderColor: c.border },
+          {
+            backgroundColor: isDark ? c.card : '#fff',
+            borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+            shadowColor: isDark ? '#000' : '#0A2540',
+            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: isDark ? 0.35 : 0.08,
+            shadowRadius: 12,
+            elevation: 4,
+          },
           { transform: [{ scale: scaleAnim }] },
         ]}
       >
         {/* Urgent / Featured banners */}
-        {(isUrgent || isFeatured) && (
+        {(job.urgent || job.featured) && (
           <View style={cs.bannerRow}>
-            {isUrgent && (
-              <View style={[cs.banner, { backgroundColor: '#FEE2E2' }]}>
-                <Ionicons name="flash" size={10} color="#DC2626" />
-                <Text style={[cs.bannerText, { color: '#DC2626' }]}>URGENT</Text>
+            {job.urgent && (
+              <View style={cs.bannerUrgent}>
+                <Text style={cs.bannerTextUrgent}>⚡ URGENT</Text>
               </View>
             )}
-            {isFeatured && (
-              <View style={[cs.banner, { backgroundColor: '#FEF3C7' }]}>
-                <Ionicons name="star" size={10} color="#D97706" />
-                <Text style={[cs.bannerText, { color: '#D97706' }]}>FEATURED</Text>
+            {job.featured && (
+              <View style={cs.bannerFeatured}>
+                <Text style={cs.bannerTextFeatured}>★ FEATURED</Text>
               </View>
             )}
           </View>
         )}
 
-        {/* Row 1: Logo + Title + Save */}
-        <View style={cs.row1}>
-          <CompanyLogo job={job} size={52} />
+        {/* Header: Avatar + Title + Save */}
+        <View style={cs.header}>
+          <Avatar
+            entity={ownerEntity}
+            size={52}
+            borderRadius={14}
+          />
+
           <View style={[cs.titleBlock, { marginLeft: 12 }]}>
-            <Text style={[cs.title, { color: c.text }]} numberOfLines={2}>{job.title}</Text>
+            <Text style={[cs.jobTitle, { color: c.text }]} numberOfLines={2}>
+              {job.title}
+            </Text>
             <View style={cs.ownerRow}>
-              <Text style={[cs.owner, { color: c.primary }]} numberOfLines={1}>
+              <Text style={[cs.ownerName, { color: c.primary ?? '#1A73E8' }]} numberOfLines={1}>
                 {owner?.name ?? ''}
               </Text>
-              {(owner as any)?.verified && (
-                <Ionicons name="checkmark-circle" size={13} color={c.primary} style={{ marginLeft: 3 }} />
+              {owner?.verified && (
+                <Ionicons name="checkmark-circle" size={13} color={c.primary ?? '#1A73E8'} style={{ marginLeft: 4 }} />
               )}
             </View>
           </View>
+
           {onSave && (
-            <TouchableOpacity onPress={onSave} style={cs.saveBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity
+              onPress={onSave}
+              style={cs.saveBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <Ionicons
                 name={isSaved ? 'bookmark' : 'bookmark-outline'}
                 size={22}
-                color={isSaved ? c.primary : c.textMuted}
+                color={isSaved ? (c.primary ?? '#1A73E8') : c.textMuted}
               />
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Meta chips */}
+        {/* Meta tags row */}
         <View style={cs.metaRow}>
-          <MetaChip icon="location-outline" label={formatLocation(job.location)} c={c} />
-          <MetaChip icon="briefcase-outline" label={job.type ?? ''} c={c} />
-          <MetaChip icon="trending-up-outline" label={job.experienceLevel ?? ''} c={c} />
+          <MetaTag icon="location-outline" label={formatLocation(job.location)} c={c} />
+          <MetaTag icon="briefcase-outline" label={job.type ?? ''} c={c} />
+          <MetaTag icon="trending-up-outline" label={job.experienceLevel ?? ''} c={c} />
           {job.remote && job.remote !== 'on-site' && (
-            <MetaChip icon="globe-outline" label={job.remote} c={c} highlight />
+            <MetaTag icon="globe-outline" label={job.remote} c={c} highlight />
           )}
         </View>
 
-        {/* Salary + Deadline */}
-        <View style={cs.row3}>
+        {/* Salary + Deadline + Type */}
+        <View style={cs.bottomRow}>
           {salary && (
-            <View style={[cs.salaryBadge, { backgroundColor: `${c.success ?? '#10B981'}15` }]}>
-              <Ionicons name="cash-outline" size={12} color={c.success ?? '#10B981'} />
-              <Text style={[cs.salaryText, { color: c.success ?? '#10B981' }]}>{salary}</Text>
+            <View style={[cs.salaryBadge, { backgroundColor: 'rgba(16,185,129,0.1)' }]}>
+              <Text style={[cs.salaryText, { color: '#059669' }]}>{salary}</Text>
             </View>
           )}
-          {deadline && (
-            <View style={[cs.deadlineBadge, { backgroundColor: isExpiring ? `${c.error}15` : `${c.border}50` }]}>
-              <Ionicons name="calendar-outline" size={12} color={isExpiring ? c.error : c.textMuted} />
-              <Text style={[cs.deadlineText, { color: isExpiring ? c.error : c.textMuted }]}>{deadline}</Text>
-            </View>
-          )}
-          {job.type && (
-            <View style={[cs.typePill, { backgroundColor: `${c.primary}15` }]}>
-              <Text style={[cs.typePillText, { color: c.primary }]}>{job.type}</Text>
+
+          {deadline.label && (
+            <View style={[
+              cs.deadlineBadge,
+              {
+                backgroundColor: deadline.urgent ? 'rgba(239,68,68,0.1)' : 'rgba(0,0,0,0.04)',
+              },
+            ]}>
+              <Ionicons
+                name="time-outline"
+                size={11}
+                color={deadline.urgent ? '#EF4444' : c.textMuted}
+              />
+              <Text style={[
+                cs.deadlineText,
+                { color: deadline.urgent ? '#EF4444' : c.textMuted },
+              ]}>
+                {deadline.label}
+              </Text>
             </View>
           )}
         </View>
@@ -248,22 +256,34 @@ export const CandidateJobCard = memo<CandidateJobCardProps>(({
         {/* Skills */}
         {(job.skills ?? []).length > 0 && (
           <View style={cs.skillsRow}>
-            {(job.skills ?? []).slice(0, 3).map((sk, i) => (
-              <View key={i} style={[cs.skillTag, { backgroundColor: c.inputBg ?? `${c.border}60` }]}>
-                <Text style={[cs.skillTagText, { color: c.textMuted }]}>{sk}</Text>
+            {job.skills!.slice(0, 3).map((sk, i) => (
+              <View
+                key={i}
+                style={[
+                  cs.skillTag,
+                  {
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                  },
+                ]}
+              >
+                <Text style={[cs.skillTagText, { color: c.textSecondary }]}>{sk}</Text>
               </View>
             ))}
-            {(job.skills ?? []).length > 3 && (
-              <Text style={[cs.skillMore, { color: c.textMuted }]}>+{(job.skills ?? []).length - 3}</Text>
+            {job.skills!.length > 3 && (
+              <Text style={[cs.skillMore, { color: c.textMuted }]}>
+                +{job.skills!.length - 3}
+              </Text>
             )}
           </View>
         )}
 
         {/* Footer */}
-        <View style={[cs.footer, { borderTopColor: c.border }]}>
-          <Text style={[cs.posted, { color: c.textMuted }]}>{formatPostedDate(job.createdAt)}</Text>
+        <View style={[cs.footer, { borderTopColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}>
+          <Text style={[cs.postedText, { color: c.textMuted }]}>
+            {formatPostedDate(job.createdAt)}
+          </Text>
           {(job.applicationCount ?? 0) > 0 && (
-            <View style={cs.appCount}>
+            <View style={cs.appCountRow}>
               <Ionicons name="people-outline" size={12} color={c.textMuted} />
               <Text style={[cs.appCountText, { color: c.textMuted }]}>
                 {job.applicationCount} applicant{job.applicationCount !== 1 ? 's' : ''}
@@ -278,51 +298,92 @@ export const CandidateJobCard = memo<CandidateJobCardProps>(({
 
 CandidateJobCard.displayName = 'CandidateJobCard';
 
-// ─── MetaChip ─────────────────────────────────────────────────────────────────
-const MetaChip = ({ icon, label, c, highlight = false }: any) => {
-  if (!label) return null;
-  return (
-    <View style={[cs.metaChip, { backgroundColor: highlight ? `${c.primary}15` : `${c.border}50` }]}>
-      <Ionicons name={icon} size={11} color={highlight ? c.primary : c.textMuted} />
-      <Text style={[cs.metaText, { color: highlight ? c.primary : c.textMuted }]} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  );
-};
-
 // ─── Styles ───────────────────────────────────────────────────────────────────
+
 const cs = StyleSheet.create({
-  card:          { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 12 },
-  compact:       { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, padding: 12, marginBottom: 8 },
+  card: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 12,
+  },
+  compactCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 8,
+  },
   compactTitle:  { fontSize: 14, fontWeight: '600' },
   compactOwner:  { fontSize: 12, marginTop: 2 },
   urgentDot:     { width: 8, height: 8, borderRadius: 4 },
-  bannerRow:     { flexDirection: 'row', gap: 6, marginBottom: 10 },
-  banner:        { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, gap: 3 },
-  bannerText:    { fontSize: 10, fontWeight: '700' },
-  row1:          { flexDirection: 'row', alignItems: 'flex-start' },
-  titleBlock:    { flex: 1 },
-  title:         { fontSize: 16, fontWeight: '700', lineHeight: 22 },
-  ownerRow:      { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  owner:         { fontSize: 13, fontWeight: '600' },
-  saveBtn:       { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  metaRow:       { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },
-  metaChip:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7, gap: 3 },
-  metaText:      { fontSize: 11, fontWeight: '500' },
-  row3:          { flexDirection: 'row', alignItems: 'center', marginTop: 10, flexWrap: 'wrap', gap: 6 },
-  salaryBadge:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, gap: 4 },
-  salaryText:    { fontSize: 12, fontWeight: '600' },
-  deadlineBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, gap: 4 },
-  deadlineText:  { fontSize: 12, fontWeight: '600' },
-  typePill:      { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
-  typePillText:  { fontSize: 11, fontWeight: '700' },
-  skillsRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
-  skillTag:      { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  skillTagText:  { fontSize: 11 },
-  skillMore:     { fontSize: 11, alignSelf: 'center' },
-  footer:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 10, borderTopWidth: 1 },
-  posted:        { fontSize: 11 },
-  appCount:      { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  appCountText:  { fontSize: 11 },
+
+  bannerRow:     { flexDirection: 'row', gap: 6, marginBottom: 12 },
+  bannerUrgent:  {
+    backgroundColor: 'rgba(220,38,38,0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  bannerFeatured: {
+    backgroundColor: 'rgba(245,158,11,0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  bannerTextUrgent:   { fontSize: 10, fontWeight: '700', color: '#DC2626' },
+  bannerTextFeatured: { fontSize: 10, fontWeight: '700', color: '#D97706' },
+
+  header:     { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
+  titleBlock: { flex: 1 },
+  jobTitle:   { fontSize: 16, fontWeight: '700', lineHeight: 22, marginBottom: 4 },
+  ownerRow:   { flexDirection: 'row', alignItems: 'center' },
+  ownerName:  { fontSize: 13, fontWeight: '600' },
+  saveBtn:    { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+
+  metaRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
+  metaTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 3,
+  },
+  metaTagText: { fontSize: 11, fontWeight: '500' },
+
+  bottomRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  salaryBadge:  {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  salaryText:   { fontSize: 12, fontWeight: '700' },
+  deadlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  deadlineText: { fontSize: 11, fontWeight: '600' },
+
+  skillsRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
+  skillTag:     { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  skillTagText: { fontSize: 11, fontWeight: '500' },
+  skillMore:    { fontSize: 11, alignSelf: 'center' },
+
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  postedText:  { fontSize: 11 },
+  appCountRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  appCountText: { fontSize: 11 },
 });

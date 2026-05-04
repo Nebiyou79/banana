@@ -1,6 +1,7 @@
-import React from 'react';
-import { View, Text, Image, StyleSheet, ViewStyle } from 'react-native';
-import { useThemeStore } from '../../store/themeStore';
+// Avatar.tsx
+import React, { useRef, useEffect } from 'react';
+import { View, Text, Image, StyleSheet, Animated, ViewStyle } from 'react-native';
+import { useTheme } from '../../hooks/useTheme';
 
 type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
@@ -35,10 +36,18 @@ export const Avatar: React.FC<AvatarProps> = ({
   badge = false,
   style,
 }) => {
-  const { theme } = useThemeStore();
-  const { colors } = theme;
+  const { colors, radius } = useTheme();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
   const dim = SIZE_MAP[size];
   const fontSize = FONT_MAP[size];
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [uri]);
 
   const initials = name
     ? name
@@ -49,7 +58,7 @@ export const Avatar: React.FC<AvatarProps> = ({
     : '?';
 
   return (
-    <View style={[{ width: dim, height: dim }, style]}>
+    <Animated.View style={[{ width: dim, height: dim, opacity: fadeAnim }, style]}>
       {uri ? (
         <Image
           source={{ uri }}
@@ -64,11 +73,11 @@ export const Avatar: React.FC<AvatarProps> = ({
               width: dim,
               height: dim,
               borderRadius: dim / 2,
-              backgroundColor: colors.primaryLight,
+              backgroundColor: colors.accentBg,
             },
           ]}
         >
-          <Text style={[styles.initials, { fontSize, color: colors.primary }]}>
+          <Text style={[styles.initials, { fontSize, color: colors.accent }]}>
             {initials}
           </Text>
         </View>
@@ -77,12 +86,12 @@ export const Avatar: React.FC<AvatarProps> = ({
         <View
           style={[
             styles.badge,
-            { backgroundColor: colors.success, borderColor: colors.card },
+            { backgroundColor: colors.success, borderColor: colors.bgCard },
             badgeSize(size),
           ]}
         />
       )}
-    </View>
+    </Animated.View>
   );
 };
 

@@ -19,7 +19,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStores';
+import { useThemeStore } from '../../store/themeStore';
 import { useProductCategories } from '../../hooks/useProducts';
 import { CreateProductData, ImageAsset, ProductImage, CategoryItem } from '../../services/productService';
 import useTheme from '../../hooks/useThemes';

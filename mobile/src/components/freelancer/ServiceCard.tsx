@@ -1,10 +1,8 @@
-/**
- * components/freelancer/ServiceCard.tsx
- */
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+// ServiceCard.tsx
+import React, { useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 import type { FreelancerServiceItem } from '../../types/freelancer';
 
 interface ServiceCardProps {
@@ -33,125 +31,108 @@ const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 export const ServiceCard: React.FC<ServiceCardProps> = ({
   service, onEdit, onDelete, isOwner = false,
 }) => {
-  const { theme } = useThemeStore();
-  const { colors, borderRadius, typography, shadows, spacing } = theme;
+  const { colors, radius, type, shadows, spacing } = useTheme();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(6)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   const catKey  = service.category?.toLowerCase() ?? 'default';
   const iconName = CATEGORY_ICONS[catKey] ?? CATEGORY_ICONS.default;
 
   return (
-    <View style={[
-      styles.card,
-      {
-        backgroundColor: colors.card,
-        borderRadius: borderRadius.xl,
-        borderColor: service.isActive !== false ? colors.primary + '30' : colors.border,
-        ...shadows.sm,
-      },
-    ]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={[styles.iconBox, { backgroundColor: colors.primaryLight, borderRadius: borderRadius.md }]}>
-          <Ionicons name={iconName} size={22} color={colors.primary} />
-        </View>
-        <View style={{ flex: 1, marginLeft: spacing[3] }}>
-          <Text style={{ fontSize: typography.base, fontWeight: '700', color: colors.text }} numberOfLines={2}>
-            {service.title}
-          </Text>
-          {service.category && (
-            <Text style={{ fontSize: typography.xs, color: colors.textMuted, marginTop: 2 }}>
-              {service.category}
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+      <View style={[
+        styles.card,
+        {
+          backgroundColor: colors.bgCard,
+          borderRadius: radius.xl,
+          borderColor: service.isActive !== false ? colors.accent + '30' : colors.borderPrimary,
+          ...shadows.sm,
+        },
+      ]}>
+        <View style={styles.header}>
+          <View style={[styles.iconBox, { backgroundColor: colors.accentBg, borderRadius: radius.md }]}>
+            <Ionicons name={iconName} size={22} color={colors.accent} />
+          </View>
+          <View style={{ flex: 1, marginLeft: spacing.md }}>
+            <Text style={[type.h4, { color: colors.textPrimary }]} numberOfLines={2}>
+              {service.title}
             </Text>
-          )}
-        </View>
-
-        <View style={[
-          styles.statusBadge,
-          {
-            backgroundColor: service.isActive !== false ? colors.successLight : colors.errorLight,
-            borderRadius: 20,
-          },
-        ]}>
-          <View style={[styles.statusDot, {
-            backgroundColor: service.isActive !== false ? colors.success : colors.error,
-          }]} />
-          <Text style={{
-            fontSize: 9, fontWeight: '700',
-            color: service.isActive !== false ? colors.success : colors.error,
-          }}>
-            {service.isActive !== false ? 'Active' : 'Inactive'}
-          </Text>
-        </View>
-      </View>
-
-      {/* Description */}
-      {service.description && (
-        <Text style={[styles.desc, { color: colors.textMuted, fontSize: typography.sm }]} numberOfLines={2}>
-          {service.description}
-        </Text>
-      )}
-
-      {/* Meta */}
-      <View style={[styles.metaRow, {
-        borderTopColor: colors.border,
-        paddingTop: spacing[3],
-        marginTop: spacing[3],
-      }]}>
-        {service.price != null && (
-          <View style={styles.metaItem}>
-            <Ionicons name="pricetag-outline" size={13} color={colors.primary} />
-            <Text style={{ fontSize: typography.sm, color: colors.primary, fontWeight: '700', marginLeft: 4 }}>
-              ${service.price.toLocaleString()}
-            </Text>
-            {service.priceType && (
-              <Text style={{ fontSize: 10, color: colors.textMuted, marginLeft: 4 }}>
-                · {PRICE_TYPE_LABELS[service.priceType] ?? service.priceType}
+            {service.category && (
+              <Text style={[type.caption, { color: colors.textMuted, marginTop: 2 }]}>
+                {service.category}
               </Text>
             )}
           </View>
-        )}
-        {service.deliveryTime && (
-          <View style={styles.metaItem}>
-            <Ionicons name="time-outline" size={13} color={colors.textMuted} />
-            <Text style={{ fontSize: typography.xs, color: colors.textMuted, marginLeft: 4 }}>
-              {service.deliveryTime}
+
+          <View style={[styles.statusBadge, { backgroundColor: service.isActive !== false ? colors.successBg : colors.errorBg, borderRadius: radius.full }]}>
+            <View style={[styles.statusDot, { backgroundColor: service.isActive !== false ? colors.success : colors.error }]} />
+            <Text style={[type.caption, { fontWeight: '700', color: service.isActive !== false ? colors.success : colors.error }]}>
+              {service.isActive !== false ? 'Active' : 'Inactive'}
             </Text>
+          </View>
+        </View>
+
+        {service.description && (
+          <Text style={[styles.desc, type.bodySm, { color: colors.textMuted }]} numberOfLines={2}>
+            {service.description}
+          </Text>
+        )}
+
+        <View style={[styles.metaRow, { borderTopColor: colors.borderPrimary, paddingTop: spacing.md, marginTop: spacing.md }]}>
+          {service.price != null && (
+            <View style={styles.metaItem}>
+              <Ionicons name="pricetag-outline" size={13} color={colors.accent} />
+              <Text style={[type.bodySm, { color: colors.accent, fontWeight: '700', marginLeft: spacing.xs }]}>
+                ${service.price.toLocaleString()}
+              </Text>
+              {service.priceType && (
+                <Text style={[type.caption, { color: colors.textMuted, marginLeft: spacing.xs }]}>
+                  · {PRICE_TYPE_LABELS[service.priceType] ?? service.priceType}
+                </Text>
+              )}
+            </View>
+          )}
+          {service.deliveryTime && (
+            <View style={styles.metaItem}>
+              <Ionicons name="time-outline" size={13} color={colors.textMuted} />
+              <Text style={[type.caption, { color: colors.textMuted, marginLeft: spacing.xs }]}>
+                {service.deliveryTime}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {isOwner && (onEdit || onDelete) && (
+          <View style={[styles.actions, { borderTopColor: colors.borderPrimary, paddingTop: spacing.md, marginTop: spacing.sm }]}>
+            {onEdit && (
+              <TouchableOpacity
+                onPress={() => onEdit(service)}
+                style={[styles.actionBtn, { backgroundColor: colors.accentBg, borderRadius: radius.md }]}
+              >
+                <Ionicons name="pencil-outline" size={14} color={colors.accent} />
+                <Text style={[type.caption, { color: colors.accent, fontWeight: '700', marginLeft: spacing.xs }]}>Edit</Text>
+              </TouchableOpacity>
+            )}
+            {onDelete && (
+              <TouchableOpacity
+                onPress={() => onDelete(service._id)}
+                style={[styles.actionBtn, { backgroundColor: colors.errorBg, borderRadius: radius.md }]}
+              >
+                <Ionicons name="trash-outline" size={14} color={colors.error} />
+                <Text style={[type.caption, { color: colors.error, fontWeight: '700', marginLeft: spacing.xs }]}>Delete</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </View>
-
-      {/* Owner actions */}
-      {isOwner && (onEdit || onDelete) && (
-        <View style={[styles.actions, {
-          borderTopColor: colors.border,
-          paddingTop: spacing[3],
-          marginTop: spacing[2],
-        }]}>
-          {onEdit && (
-            <TouchableOpacity
-              onPress={() => onEdit(service)}
-              style={[styles.actionBtn, { backgroundColor: colors.primaryLight, borderRadius: borderRadius.md }]}
-            >
-              <Ionicons name="pencil-outline" size={14} color={colors.primary} />
-              <Text style={{ fontSize: typography.xs, color: colors.primary, fontWeight: '700', marginLeft: 4 }}>
-                Edit
-              </Text>
-            </TouchableOpacity>
-          )}
-          {onDelete && (
-            <TouchableOpacity
-              onPress={() => onDelete(service._id)}
-              style={[styles.actionBtn, { backgroundColor: colors.errorLight, borderRadius: borderRadius.md }]}
-            >
-              <Ionicons name="trash-outline" size={14} color={colors.error} />
-              <Text style={{ fontSize: typography.xs, color: colors.error, fontWeight: '700', marginLeft: 4 }}>
-                Delete
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-    </View>
+    </Animated.View>
   );
 };
 

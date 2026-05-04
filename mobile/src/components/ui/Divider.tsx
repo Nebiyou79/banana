@@ -1,38 +1,21 @@
+// Divider.tsx
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ViewStyle,
-  DimensionValue,
-} from 'react-native';
-import { useThemeStore } from '../../store/themeStore';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { View, Text, StyleSheet, ViewStyle, DimensionValue } from 'react-native';
+import { useTheme } from '../../hooks/useTheme';
+import { type } from '../../constants/theme/theme';
 
 interface DividerProps {
-  /** Content to display in the centre of the divider */
   label?: string | React.ReactNode;
-  /** 'horizontal' (default) or 'vertical' */
   orientation?: 'horizontal' | 'vertical';
-  /** Line thickness in px (default hairline) */
   thickness?: number;
-  /** Override the line colour */
   color?: string;
-  /** Indent from left edge — only for horizontal */
   insetLeft?: number;
-  /** Indent from right edge — only for horizontal */
   insetRight?: number;
-  /** Extra vertical margin around horizontal divider */
   spacing?: number;
-  /** Full height of the vertical divider */
   height?: DimensionValue;
   style?: ViewStyle;
-  /** Dashed line style */
   dashed?: boolean;
 }
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 export const Divider: React.FC<DividerProps> = ({
   label,
@@ -46,11 +29,10 @@ export const Divider: React.FC<DividerProps> = ({
   style,
   dashed = false,
 }) => {
-  const { theme } = useThemeStore();
-  const lineColor = color ?? theme.colors.border;
+  const { colors } = useTheme();
+  const lineColor = color ?? colors.borderPrimary;
   const lineThickness = thickness ?? StyleSheet.hairlineWidth;
 
-  // ── Vertical ──────────────────────────────────────────────────────────────
   if (orientation === 'vertical') {
     return (
       <View
@@ -68,16 +50,9 @@ export const Divider: React.FC<DividerProps> = ({
     );
   }
 
-  // ── Horizontal — no label ─────────────────────────────────────────────────
   if (!label) {
     return (
-      <View
-        style={[
-          styles.horizontal,
-          { marginVertical: spacing },
-          style,
-        ]}
-      >
+      <View style={[styles.horizontal, { marginVertical: spacing }, style]}>
         <View
           style={[
             styles.line,
@@ -99,17 +74,10 @@ export const Divider: React.FC<DividerProps> = ({
     );
   }
 
-  // ── Horizontal — with label ───────────────────────────────────────────────
   const isStringLabel = typeof label === 'string';
 
   return (
-    <View
-      style={[
-        styles.labelRow,
-        { marginVertical: spacing },
-        style,
-      ]}
-    >
+    <View style={[styles.labelRow, { marginVertical: spacing }, style]}>
       <View
         style={[
           styles.lineFlex,
@@ -124,9 +92,7 @@ export const Divider: React.FC<DividerProps> = ({
 
       <View style={styles.labelWrapper}>
         {isStringLabel ? (
-          <Text style={[styles.labelText, { color: theme.colors.textMuted }]}>
-            {label}
-          </Text>
+          <Text style={[styles.labelText, type.caption, { color: colors.textMuted }]}>{label}</Text>
         ) : (
           label
         )}
@@ -147,37 +113,22 @@ export const Divider: React.FC<DividerProps> = ({
   );
 };
 
-// ─── Section divider (labelled group separator used in lists) ─────────────────
-
 interface SectionDividerProps {
   label: string;
   action?: { label: string; onPress: () => void };
   style?: ViewStyle;
 }
 
-export const SectionDivider: React.FC<SectionDividerProps> = ({
-  label,
-  action,
-  style,
-}) => {
-  const { theme } = useThemeStore();
+export const SectionDivider: React.FC<SectionDividerProps> = ({ label, action, style }) => {
+  const { colors, type } = useTheme();
 
   return (
-    <View
-      style={[
-        sectionStyles.container,
-        { backgroundColor: theme.colors.borderLight },
-        style,
-      ]}
-    >
-      <Text style={[sectionStyles.label, { color: theme.colors.textMuted }]}>
+    <View style={[sectionStyles.container, { backgroundColor: colors.bgSecondary }, style]}>
+      <Text style={[sectionStyles.label, type.caption, { color: colors.textMuted }]}>
         {label.toUpperCase()}
       </Text>
       {action && (
-        <Text
-          onPress={action.onPress}
-          style={[sectionStyles.action, { color: theme.colors.primary }]}
-        >
+        <Text onPress={action.onPress} style={[sectionStyles.action, type.bodySm, { color: colors.accent }]}>
           {action.label}
         </Text>
       )}
@@ -185,48 +136,18 @@ export const SectionDivider: React.FC<SectionDividerProps> = ({
   );
 };
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   vertical: {},
-  horizontal: {
-    alignSelf: 'stretch',
-  },
-  line: {
-    alignSelf: 'stretch',
-  },
-  lineFlex: {
-    flex: 1,
-  },
-  labelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  labelWrapper: {
-    paddingHorizontal: 4,
-  },
-  labelText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
+  horizontal: { alignSelf: 'stretch' },
+  line: { alignSelf: 'stretch' },
+  lineFlex: { flex: 1 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  labelWrapper: { paddingHorizontal: 4 },
+  labelText: { fontWeight: '500' },
 });
 
 const sectionStyles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  label: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-  },
-  action: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  container: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 },
+  label: { fontWeight: '700', letterSpacing: 0.8 },
+  action: { fontWeight: '600' },
 });

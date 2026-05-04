@@ -1,143 +1,97 @@
 // src/social/navigation/SocialNavigator.tsx
 /**
- * BananaLink Social v2.0 — Bottom tabs inside SocialTabs.
- *
- * Phase 5: "Messages" replaces the Home splash tab. Home was purely an exit
- * shortcut back to the role root navigator; the app menu header already has
- * a back/close button, so a Messages tab is a better use of that slot.
+ * BananaLink Social v2.0 — Bottom tabs.
+ * Uses shared PillTabBar — zero react-native-reanimated.
  *
  * Tab order: Posts · Network · Messages · Search · Profile
- *
- * Messages tab shows an unread-count badge (sum of unreadCounts across
- * all active conversations) using a lightweight periodic count query.
  */
-import { Ionicons } from '@expo/vector-icons';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useQuery } from '@tanstack/react-query';
+
 import React from 'react';
-import MessagesScreen from '../screens/MessagesScreen';
-import NetworkScreen from '../screens/NetworkScreen';
-import ProfileScreen from '../screens/ProfileScreen';
-import SearchScreen from '../screens/SearchScreen';
-import { conversationService } from '../services/conversationService';
-import { useSocialTheme } from '../theme/socialTheme';
-import PostsNavigator from './PostsNavigator';
-import type { SocialTabParamList } from './types';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useQuery }                 from '@tanstack/react-query';
+
+import MessagesScreen               from '../screens/MessagesScreen';
+import NetworkScreen                from '../screens/NetworkScreen';
+import ProfileScreen                from '../screens/ProfileScreen';
+import SearchScreen                 from '../screens/SearchScreen';
+import { conversationService }      from '../services/conversationService';
+import { useSocialTheme }           from '../theme/socialTheme';
+import { PillTabBar, PillTabMeta }  from '../../navigation/PillTabBar';
+import PostsNavigator               from './PostsNavigator';
+import type { SocialTabParamList }  from './types';
 
 const Tab = createBottomTabNavigator<SocialTabParamList>();
 
-const ICONS: Record<
-  keyof SocialTabParamList,
-  {
-    active: keyof typeof Ionicons.glyphMap;
-    inactive: keyof typeof Ionicons.glyphMap;
-  }
-> = {
-  Home: { active: 'home', inactive: 'home-outline' },
-  Posts: { active: 'newspaper', inactive: 'newspaper-outline' },
-  Network: { active: 'people', inactive: 'people-outline' },
-  Messages: {
-    active: 'chatbubble-ellipses',
-    inactive: 'chatbubble-ellipses-outline',
-  },
-  Search: { active: 'search', inactive: 'search-outline' },
-  Profile: { active: 'person-circle', inactive: 'person-circle-outline' },
-};
-
-/**
- * Cheap unread-total for the tab badge.
- * We reuse the inbox list endpoint with limit=50 and sum unreadCount locally,
- * refreshed every 30s or when the app regains focus.
- */
+// ─── Unread count ─────────────────────────────────────────────────────────────
 const useTotalUnread = () =>
   useQuery({
     queryKey: ['social', 'conversations', 'totalUnread'] as const,
     queryFn: async () => {
-      const res = await conversationService.getMyConversations({
-        page: 1,
-        limit: 50,
-      });
+      const res  = await conversationService.getMyConversations({ page: 1, limit: 50 });
       const list = (res.data?.data as any[]) ?? [];
-      return list.reduce(
-        (acc: number, c: any) => acc + (c.unreadCount || 0),
-        0
-      );
+      return list.reduce((acc: number, c: any) => acc + (c.unreadCount || 0), 0);
     },
-    staleTime: 1000 * 30,
-    refetchInterval: 1000 * 60, // poll every minute
+    staleTime:       1000 * 30,
+    refetchInterval: 1000 * 60,
   });
 
+// ─── Tab metadata ─────────────────────────────────────────────────────────────
+const SOCIAL_META: Record<string, PillTabMeta> = {
+  Posts: {
+    icon: 'newspaper-outline', iconActive: 'newspaper', label: 'Posts',
+    accentDark: '#34D399', accentLight: '#059669',
+  },
+  Network: {
+    icon: 'people-outline', iconActive: 'people', label: 'Network',
+    accentDark: '#F1BB03', accentLight: '#B45309',
+  },
+  Messages: {
+    icon: 'chatbubble-ellipses-outline', iconActive: 'chatbubble-ellipses', label: 'Messages',
+    accentDark: '#D8B4FE', accentLight: '#7C3AED',
+  },
+  Search: {
+    icon: 'search-outline', iconActive: 'search', label: 'Search',
+    accentDark: '#FDBA74', accentLight: '#EA580C',
+  },
+  Profile: {
+    icon: 'person-circle-outline', iconActive: 'person-circle', label: 'Profile',
+    accentDark: '#94A3B8', accentLight: '#64748B',
+  },
+};
+
+// ─── Navigator ────────────────────────────────────────────────────────────────
 const SocialNavigator: React.FC = () => {
-  const theme = useSocialTheme();
-  const totalUnread = useTotalUnread();
+  const theme                = useSocialTheme();
+  const { data: unread = 0 } = useTotalUnread();
+  const isDark               = theme.dark;
+
+  const badges = {
+    Messages: unread,
+  };
 
   return (
     <Tab.Navigator
       initialRouteName="Posts"
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: theme.tabBg,
-          borderTopColor: theme.border,
-          borderTopWidth: 0.5,
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 6,
-        },
-        tabBarActiveTintColor: theme.primary,
-        tabBarInactiveTintColor: theme.muted,
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
-        tabBarIcon: ({ focused, color }) => {
-          const icon = ICONS[route.name as keyof SocialTabParamList];
-          return (
-            <Ionicons
-              name={focused ? icon.active : icon.inactive}
-              size={22}
-              color={color}
-            />
-          );
-        },
-      })}
+      tabBar={({ state, navigation }) => (
+        <PillTabBar
+          routes={state.routes}
+          activeIndex={state.index}
+          isDark={isDark}
+          meta={SOCIAL_META}
+          badges={badges}
+          onPress={(name, key, focused) => {
+            const event = navigation.emit({ type: 'tabPress', target: key, canPreventDefault: true });
+            if (!focused && !event.defaultPrevented) navigation.navigate(name);
+          }}
+        />
+      )}
+      screenOptions={{ headerShown: false }}
     >
-      <Tab.Screen
-        name="Posts"
-        component={PostsNavigator}
-        options={{ tabBarLabel: 'Posts' }}
-      />
-      <Tab.Screen
-        name="Network"
-        component={NetworkScreen}
-        options={{ tabBarLabel: 'Network' }}
-      />
-      <Tab.Screen
-        name="Messages"
-        component={MessagesScreen}
-        options={{
-          tabBarLabel: 'Messages',
-          tabBarBadge:
-            totalUnread.data && totalUnread.data > 0
-              ? totalUnread.data > 99
-                ? '99+'
-                : totalUnread.data
-              : undefined,
-          tabBarBadgeStyle: {
-            backgroundColor: theme.primary,
-            color: '#FFFFFF',
-            fontSize: 10,
-            fontWeight: '700',
-          },
-        }}
-      />
-      <Tab.Screen
-        name="Search"
-        component={SearchScreen}
-        options={{ tabBarLabel: 'Search' }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{ tabBarLabel: 'Profile' }}
-      />
+      <Tab.Screen name="Posts"    component={PostsNavigator} />
+      <Tab.Screen name="Network"  component={NetworkScreen}  />
+      <Tab.Screen name="Messages" component={MessagesScreen} />
+      <Tab.Screen name="Search"   component={SearchScreen}   />
+      <Tab.Screen name="Profile"  component={ProfileScreen}  />
     </Tab.Navigator>
   );
 };

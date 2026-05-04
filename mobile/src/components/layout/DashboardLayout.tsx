@@ -1,13 +1,8 @@
+// DashboardLayout.tsx
 import React from 'react';
-import {
-  View,
-  ScrollView,
-  StyleSheet,
-  ViewStyle,
-  RefreshControl,
-} from 'react-native';
+import { View, ScrollView, StyleSheet, ViewStyle, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -19,32 +14,20 @@ interface DashboardLayoutProps {
 }
 
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
-  children,
-  scrollable = true,
-  refreshing = false,
-  onRefresh,
-  style,
-  contentStyle,
+  children, scrollable = true, refreshing = false, onRefresh, style, contentStyle,
 }) => {
-  const { theme } = useThemeStore();
-  const { colors } = theme;
+  const { colors } = useTheme();
 
   if (!scrollable) {
     return (
-      <SafeAreaView
-        style={[styles.safeArea, { backgroundColor: colors.background }, style]}
-        edges={['top']}
-      >
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgPrimary }, style]} edges={['top']}>
         <View style={[styles.container, contentStyle]}>{children}</View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView
-      style={[styles.safeArea, { backgroundColor: colors.background }, style]}
-      edges={['top']}
-    >
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgPrimary }, style]} edges={['top']}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, contentStyle]}
@@ -55,8 +38,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={colors.primary}
-              colors={[colors.primary]}
+              tintColor={colors.accent}
+              colors={[colors.accent]}
             />
           ) : undefined
         }

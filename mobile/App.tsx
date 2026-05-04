@@ -9,7 +9,7 @@ import { darkTheme, lightTheme } from './src/constants/theme';
 import { queryClient } from './src/lib/queryClient';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { useAuthStore } from './src/store/authStore';
-import { useThemeStore } from './src/store/themeStore';
+import { useThemeStore } from './src/store/themeStores';
 import { SplashScreen } from './src/screens/auth/SplashScreen';
 
 

@@ -1,15 +1,17 @@
-import React from 'react';
+// Button.tsx
+import React, { useRef } from 'react';
 import {
   TouchableOpacity,
   Text,
   ActivityIndicator,
   View,
   StyleSheet,
+  Animated,
   TouchableOpacityProps,
   StyleProp,
   ViewStyle,
 } from 'react-native';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 
 type Variant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
@@ -39,10 +41,27 @@ export const Button: React.FC<ButtonProps> = ({
   style,
   ...rest
 }) => {
-  const { theme } = useThemeStore();
-  const { colors } = theme;
-
+  const { colors, radius, type } = useTheme();
+  const scaleAnim = useRef(new Animated.Value(1)).current;
   const isDisabled = disabled || loading;
+
+  const onPressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.96,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const onPressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
 
   const containerStyles = [
     styles.base,
@@ -50,71 +69,75 @@ export const Button: React.FC<ButtonProps> = ({
     getVariantStyle(variant, colors),
     fullWidth && styles.fullWidth,
     isDisabled && styles.disabled,
-    style
+    { borderRadius: radius.lg },
+    style,
   ];
 
   const textColor = getTextColor(variant, colors);
 
   return (
-    <TouchableOpacity
-      style={containerStyles}
-      onPress={onPress}
-      disabled={isDisabled}
-      activeOpacity={0.75}
-      {...rest}
-    >
-      {loading ? (
-        <ActivityIndicator
-          size="small"
-          color={variant === 'outline' || variant === 'ghost' ? colors.primary : colors.white}
-        />
-      ) : (
-        <View style={styles.inner}>
-          {leftIcon && <View style={styles.leftIcon}>{leftIcon}</View>}
-          <Text style={[styles.text, textSizeStyles[size], { color: textColor }]}>
-            {title}
-          </Text>
-          {rightIcon && <View style={styles.rightIcon}>{rightIcon}</View>}
-        </View>
-      )}
-    </TouchableOpacity>
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        style={containerStyles}
+        onPress={onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        disabled={isDisabled}
+        activeOpacity={1}
+        {...rest}
+      >
+        {loading ? (
+          <ActivityIndicator
+            size="small"
+            color={variant === 'outline' || variant === 'ghost' ? colors.accent : colors.textInverse}
+          />
+        ) : (
+          <View style={styles.inner}>
+            {leftIcon && <View style={styles.leftIcon}>{leftIcon}</View>}
+            <Text style={[styles.text, textSizeStyles[size], { color: textColor }]}>
+              {title}
+            </Text>
+            {rightIcon && <View style={styles.rightIcon}>{rightIcon}</View>}
+          </View>
+        )}
+      </TouchableOpacity>
+    </Animated.View>
   );
 };
 
 const getVariantStyle = (variant: Variant, colors: any) => {
   switch (variant) {
     case 'primary':
-      return { backgroundColor: colors.primary };
+      return { backgroundColor: colors.accent };
     case 'secondary':
-      return { backgroundColor: colors.banana };
+      return { backgroundColor: colors.bgSecondary };
     case 'outline':
-      return { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.primary };
+      return { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.accent };
     case 'ghost':
       return { backgroundColor: 'transparent' };
     case 'danger':
       return { backgroundColor: colors.error };
     default:
-      return { backgroundColor: colors.primary };
+      return { backgroundColor: colors.accent };
   }
 };
 
 const getTextColor = (variant: Variant, colors: any): string => {
   switch (variant) {
     case 'outline':
-      return colors.primary;
     case 'ghost':
-      return colors.primary;
+      return colors.accent;
     case 'secondary':
-      return colors.black;
+      return colors.textPrimary;
     default:
-      return colors.white;
+      return colors.textInverse;
   }
 };
 
 const sizeStyles: Record<Size, object> = {
-  sm: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 },
-  md: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10 },
-  lg: { paddingVertical: 16, paddingHorizontal: 28, borderRadius: 12 },
+  sm: { paddingVertical: 8, paddingHorizontal: 14 },
+  md: { paddingVertical: 12, paddingHorizontal: 20 },
+  lg: { paddingVertical: 16, paddingHorizontal: 28 },
 };
 
 const textSizeStyles: Record<Size, object> = {

@@ -1,12 +1,8 @@
-/**
- * src/components/promo/LeaderboardRow.tsx
- * Single row in the referral leaderboard list.
- */
-
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+// LeaderboardRow.tsx
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Animated } from 'react-native';
 import { LeaderboardEntry } from '../../services/promoCodeService';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 
 interface Props {
   entry: LeaderboardEntry;
@@ -15,127 +11,79 @@ interface Props {
 }
 
 const RANK_EMOJIS: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
-const RANK_COLORS: Record<number, string>  = {
-  1: '#F59E0B',
-  2: '#9CA3AF',
-  3: '#CD7F32',
-};
+const RANK_COLORS: Record<number, string> = { 1: '#F59E0B', 2: '#9CA3AF', 3: '#CD7F32' };
 
-export const LeaderboardRow: React.FC<Props> = ({
-  entry,
-  rank,
-  isCurrentUser = false,
-}) => {
-  const { theme } = useThemeStore();
-  const { colors, borderRadius, typography } = theme;
+export const LeaderboardRow: React.FC<Props> = ({ entry, rank, isCurrentUser = false }) => {
+  const { colors, radius, type, shadows } = useTheme();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(6)).current;
 
-  const rankColor  = RANK_COLORS[rank] ?? colors.textMuted;
-  const rankLabel  = RANK_EMOJIS[rank] ?? `#${rank}`;
-  const initials   = entry.name
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  const rankColor = RANK_COLORS[rank] ?? colors.textMuted;
+  const rankLabel = RANK_EMOJIS[rank] ?? `#${rank}`;
+  const initials = entry.name
     .split(' ')
     .slice(0, 2)
     .map(w => w.charAt(0).toUpperCase())
     .join('');
 
   return (
-    <View
+    <Animated.View
       style={[
         styles.row,
         {
-          backgroundColor: isCurrentUser ? colors.primaryLight : colors.card,
-          borderRadius:    borderRadius.md,
-          borderColor:     isCurrentUser ? colors.primary : colors.border,
-          borderWidth:     isCurrentUser ? 1.5 : 1,
+          backgroundColor: isCurrentUser ? colors.accentBg : colors.bgCard,
+          borderRadius: radius.md,
+          borderColor: isCurrentUser ? colors.accent : colors.borderPrimary,
+          borderWidth: isCurrentUser ? 1.5 : 1,
+          ...shadows.sm,
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
         },
       ]}
     >
-      {/* Rank badge */}
-      <View
-        style={[
-          styles.rankBox,
-          { backgroundColor: rankColor + '22', borderRadius: 20 },
-        ]}
-      >
+      <View style={[styles.rankBox, { backgroundColor: rankColor + '22', borderRadius: radius.full }]}>
         <Text style={{ fontSize: rank <= 3 ? 18 : 13, fontWeight: '800', color: rankColor }}>
           {rankLabel}
         </Text>
       </View>
 
-      {/* Avatar */}
-      <View
-        style={[
-          styles.avatar,
-          {
-            backgroundColor: isCurrentUser ? colors.primary : colors.border,
-            borderRadius:    20,
-          },
-        ]}
-      >
-        <Text
-          style={{
-            fontSize:   13,
-            fontWeight: '700',
-            color:      isCurrentUser ? '#fff' : colors.text,
-          }}
-        >
+      <View style={[styles.avatar, { backgroundColor: isCurrentUser ? colors.accent : colors.bgSecondary, borderRadius: radius.full }]}>
+        <Text style={[type.caption, { fontWeight: '700', color: isCurrentUser ? colors.textInverse : colors.textPrimary }]}>
           {initials}
         </Text>
       </View>
 
-      {/* Name */}
       <View style={{ flex: 1, gap: 2 }}>
-        <Text
-          style={{ fontSize: typography.sm, fontWeight: '700', color: colors.text }}
-          numberOfLines={1}
-        >
+        <Text style={[type.bodySm, { fontWeight: '700', color: colors.textPrimary }]} numberOfLines={1}>
           {entry.name}
           {isCurrentUser ? ' (You)' : ''}
         </Text>
         {entry.rewardPoints ? (
-          <Text style={{ fontSize: typography.xs, color: colors.textMuted }}>
+          <Text style={[type.caption, { color: colors.textMuted }]}>
             {entry.rewardPoints.toLocaleString()} pts
           </Text>
         ) : null}
       </View>
 
-      {/* Count */}
       <View style={{ alignItems: 'flex-end' }}>
-        <Text
-          style={{
-            fontSize:   typography.lg,
-            fontWeight: '900',
-            color:      rankColor,
-          }}
-        >
+        <Text style={[type.h3, { fontWeight: '900', color: rankColor }]}>
           {entry.totalReferrals}
         </Text>
-        <Text style={{ fontSize: 10, color: colors.textMuted }}>referrals</Text>
+        <Text style={[type.caption, { color: colors.textMuted }]}>referrals</Text>
       </View>
-    </View>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection:    'row',
-    alignItems:       'center',
-    padding:          12,
-    marginHorizontal: 16,
-    marginVertical:   4,
-    gap:              10,
-  },
-  rankBox: {
-    width:          40,
-    height:         40,
-    alignItems:     'center',
-    justifyContent: 'center',
-    flexShrink:     0,
-  },
-  avatar: {
-    width:          38,
-    height:         38,
-    alignItems:     'center',
-    justifyContent: 'center',
-    flexShrink:     0,
-  },
+  row: { flexDirection: 'row', alignItems: 'center', padding: 12, marginHorizontal: 16, marginVertical: 4, gap: 10 },
+  rankBox: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  avatar: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
 });
