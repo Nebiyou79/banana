@@ -1,6 +1,8 @@
 // server/src/controllers/organizationController.js
+
 const Organization = require('../models/Organization');
 const User = require('../models/User');
+const mongoose = require('mongoose'); // ← ADD THIS LINE
 const asyncHandler = require('../middleware/async');
 const fs = require('fs').promises;
 const path = require('path');
@@ -13,8 +15,7 @@ exports.getMyOrganization = asyncHandler(async (req, res, next) => {
     console.log('🔍 Getting organization for user:', req.user.userId);
     
     // Find organization by user ID
-    const organization = await Organization.findOne({ user: req.user.userId })
-      .populate('user', 'name email role');
+    const organization = await Organization.findOne({ user: req.user.userId });
 
     if (!organization) {
       return res.status(200).json({
@@ -44,7 +45,11 @@ exports.getMyOrganization = asyncHandler(async (req, res, next) => {
 // @access  Private (Organization role only)
 exports.createOrganization = asyncHandler(async (req, res, next) => {
   try {
-    console.log('👤 User making request:', req.user);
+    console.log('👤 User making request:', {
+      userId: req.user.userId,
+      name: req.user.name,
+      role: req.user.role
+    });
     console.log('📦 Request body:', req.body);
 
     // Check if user has organization role
@@ -55,34 +60,78 @@ exports.createOrganization = asyncHandler(async (req, res, next) => {
       });
     }
 
-    // Check if user already has an organization
-    const existingOrganization = await Organization.findOne({ user: req.user.userId });
-    if (existingOrganization) {
-      return res.status(400).json({
-        success: false,
-        message: 'Organization profile already exists for this user'
+    // Check if user already has an organization - use native query to avoid middleware
+    const db = mongoose.connection.db;
+    const organizationsCollection = db.collection('organizations');
+    
+    const existingOrg = await organizationsCollection.findOne({ 
+      user: new mongoose.Types.ObjectId(req.user.userId) 
+    });
+    
+    if (existingOrg) {
+      console.log('⚠️ Organization already exists:', existingOrg._id);
+      
+      // Update user reference if needed
+      await User.findByIdAndUpdate(req.user.userId, { 
+        hasOrganizationProfile: true,
+        profileCompleted: true,
+        organization: existingOrg._id
+      });
+      
+      // Fetch the org through Mongoose to get virtuals
+      const org = await Organization.findById(existingOrg._id);
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Organization profile already exists',
+        data: org
       });
     }
 
-    // Create organization data
-    const organizationData = {
-      ...req.body,
-      user: req.user.userId
+    // Create organization document manually to avoid middleware
+    const now = new Date();
+    const orgDoc = {
+      name: req.body.name || 'My Organization',
+      organizationType: req.body.organizationType || 'non-profit',
+      user: new mongoose.Types.ObjectId(req.user.userId),
+      verified: false,
+      verificationStatus: 'pending',
+      isActive: true,
+      settings: {
+        allowMessages: true,
+        showContactInfo: true,
+        jobAlerts: true
+      },
+      createdAt: now,
+      updatedAt: now
     };
 
-    console.log('🏢 Creating organization with data:', organizationData);
+    // Add optional fields only if they have values
+    if (req.body.description) orgDoc.description = req.body.description;
+    if (req.body.industry) orgDoc.industry = req.body.industry;
+    if (req.body.mission) orgDoc.mission = req.body.mission;
+    if (req.body.website) orgDoc.website = req.body.website;
+    if (req.body.phone) orgDoc.phone = req.body.phone;
+    if (req.body.secondaryPhone) orgDoc.secondaryPhone = req.body.secondaryPhone;
+    if (req.body.registrationNumber) orgDoc.registrationNumber = req.body.registrationNumber;
+    if (req.body.email) orgDoc.email = req.body.email;
 
-    // Create organization
-    const organization = await Organization.create(organizationData);
+    console.log('🏢 Creating organization with data:', orgDoc);
+
+    // Insert directly into MongoDB - bypass all Mongoose middleware
+    const result = await organizationsCollection.insertOne(orgDoc);
+    
+    console.log('✅ Organization created successfully:', result.insertedId);
 
     // Update user with organization reference
     await User.findByIdAndUpdate(req.user.userId, { 
       hasOrganizationProfile: true,
       profileCompleted: true,
-      organization: organization._id
+      organization: result.insertedId
     });
 
-    console.log('✅ Organization created successfully:', organization._id);
+    // Fetch the created organization through Mongoose to get proper formatting
+    const organization = await Organization.findById(result.insertedId);
 
     res.status(201).json({
       success: true,
@@ -102,19 +151,10 @@ exports.createOrganization = asyncHandler(async (req, res, next) => {
       });
     }
     
-    // Handle validation errors
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map(val => val.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: messages
-      });
-    }
-    
+    console.error('Full error:', error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error: ' + error.message
     });
   }
 });
@@ -124,23 +164,50 @@ exports.createOrganization = asyncHandler(async (req, res, next) => {
 // @access  Private
 exports.updateMyOrganization = asyncHandler(async (req, res, next) => {
   try {
-    const organization = await Organization.findOne({ user: req.user.userId });
+    // First check if organization exists using native query
+    const db = mongoose.connection.db;
+    const organizationsCollection = db.collection('organizations');
+    
+    const existingOrg = await organizationsCollection.findOne({ 
+      user: new mongoose.Types.ObjectId(req.user.userId) 
+    });
 
-    if (!organization) {
+    if (!existingOrg) {
       return res.status(404).json({
         success: false,
         message: 'Organization profile not found'
       });
     }
 
-    const updatedOrganization = await Organization.findByIdAndUpdate(
-      organization._id, 
-      req.body, 
-      {
-        new: true,
-        runValidators: true
+    // Build update data - only include allowed fields
+    const updateData = {};
+    const allowedFields = [
+      'name', 'description', 'industry', 'organizationType', 
+      'mission', 'website', 'phone', 'secondaryPhone', 
+      'registrationNumber', 'email', 'size', 'foundedYear',
+      'socialMedia', 'settings', 'address'
+    ];
+    
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updateData[field] = req.body[field];
       }
-    ).populate('user', 'name email');
+    }
+
+    updateData.updatedAt = new Date();
+
+    console.log('🔄 Updating organization with data:', updateData);
+
+    // Update directly in MongoDB - bypass middleware
+    await organizationsCollection.updateOne(
+      { _id: existingOrg._id },
+      { $set: updateData }
+    );
+
+    console.log('✅ Organization updated successfully');
+
+    // Fetch updated organization through Mongoose
+    const updatedOrganization = await Organization.findById(existingOrg._id);
 
     res.status(200).json({
       success: true,
@@ -161,7 +228,7 @@ exports.updateMyOrganization = asyncHandler(async (req, res, next) => {
     
     res.status(500).json({
       success: false,
-      message: 'Failed to update organization profile'
+      message: 'Failed to update organization profile: ' + error.message
     });
   }
 });
@@ -171,8 +238,7 @@ exports.updateMyOrganization = asyncHandler(async (req, res, next) => {
 // @access  Public
 exports.getOrganization = asyncHandler(async (req, res, next) => {
   try {
-    const organization = await Organization.findById(req.params.id)
-      .populate('user', 'name email');
+    const organization = await Organization.findById(req.params.id);
 
     if (!organization) {
       return res.status(404).json({
@@ -223,7 +289,7 @@ exports.updateOrganization = asyncHandler(async (req, res, next) => {
         new: true,
         runValidators: true
       }
-    ).populate('user', 'name email');
+    );
 
     res.status(200).json({
       success: true,
@@ -444,7 +510,6 @@ exports.deleteBanner = asyncHandler(async (req, res, next) => {
     });
   }
 });
-// Add this new method (around line 170)
 
 /**
  * @desc    Get public organization profile (NO AUTH REQUIRED)
@@ -453,9 +518,7 @@ exports.deleteBanner = asyncHandler(async (req, res, next) => {
  */
 exports.getPublicOrganization = asyncHandler(async (req, res) => {
   try {
-    const organization = await Organization.findById(req.params.id)
-      .populate('user', 'name email avatar')
-      .lean();
+    const organization = await Organization.findById(req.params.id).lean();
 
     if (!organization) {
       return res.status(404).json({

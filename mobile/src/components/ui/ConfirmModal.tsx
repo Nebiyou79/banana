@@ -1,20 +1,17 @@
-// ConfirmModal.tsx
+// src/components/ui/ConfirmModal.tsx
+// Usage: <ConfirmModal visible={show} onClose={close} onConfirm={del} title="Delete post?" destructive />
+
 import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   Modal,
+  Pressable,
   StyleSheet,
   Animated,
-  Pressable,
-  ActivityIndicator,
-  ViewStyle,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
-
-type ConfirmVariant = 'default' | 'danger' | 'warning' | 'success';
+import { Button } from './Button';
 
 interface ConfirmModalProps {
   visible: boolean;
@@ -24,22 +21,9 @@ interface ConfirmModalProps {
   message?: string;
   confirmLabel?: string;
   cancelLabel?: string;
-  variant?: ConfirmVariant;
+  destructive?: boolean;
   loading?: boolean;
-  dismissable?: boolean;
-  icon?: keyof typeof Ionicons.glyphMap;
-  style?: ViewStyle;
 }
-
-const VARIANT_CONFIG: Record<
-  ConfirmVariant,
-  { icon: keyof typeof Ionicons.glyphMap; color: string; lightColor: string }
-> = {
-  default: { icon: 'help-circle-outline', color: '#2563EB', lightColor: '#DBEAFE' },
-  danger:  { icon: 'trash-outline', color: '#DC2626', lightColor: '#FEE2E2' },
-  warning: { icon: 'warning-outline', color: '#D97706', lightColor: '#FEF3C7' },
-  success: { icon: 'checkmark-circle-outline', color: '#059669', lightColor: '#D1FAE5' },
-};
 
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   visible,
@@ -49,19 +33,13 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   message,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
-  variant = 'default',
+  destructive = false,
   loading = false,
-  dismissable = true,
-  icon,
-  style,
 }) => {
-  const { colors, shadows, radius, type, spacing } = useTheme();
-  const cfg = VARIANT_CONFIG[variant];
-  const resolvedIcon = icon ?? cfg.icon;
-
+  const { colors: c, radius, spacing, type, shadows } = useTheme();
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.88)).current;
-  const translateY = useRef(new Animated.Value(24)).current;
+  const translateY = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
     if (visible) {
@@ -74,7 +52,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
       Animated.parallel([
         Animated.timing(backdropAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
         Animated.timing(scaleAnim, { toValue: 0.88, duration: 180, useNativeDriver: true }),
-        Animated.timing(translateY, { toValue: 24, duration: 180, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 20, duration: 180, useNativeDriver: true }),
       ]).start();
     }
   }, [visible]);
@@ -85,80 +63,56 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
       transparent
       animationType="none"
       statusBarTranslucent
-      onRequestClose={dismissable ? onClose : undefined}
+      onRequestClose={!loading ? onClose : undefined}
     >
+      {/* Backdrop */}
       <Animated.View style={[styles.backdrop, { opacity: backdropAnim }]}>
         <Pressable
           style={StyleSheet.absoluteFillObject}
-          onPress={dismissable && !loading ? onClose : undefined}
+          onPress={!loading ? onClose : undefined}
         />
       </Animated.View>
 
+      {/* Sheet */}
       <View style={styles.centeredView} pointerEvents="box-none">
         <Animated.View
           style={[
             styles.sheet,
             {
-              backgroundColor: colors.bgCard,
+              backgroundColor: c.bgElevated,
               borderRadius: radius.xl,
+              padding: spacing.xl,
               transform: [{ scale: scaleAnim }, { translateY }],
               ...shadows.md,
             },
-            style,
           ]}
         >
-          <View style={[styles.iconCircle, { backgroundColor: cfg.lightColor, borderRadius: radius.full }]}>
-            <Ionicons name={resolvedIcon} size={28} color={cfg.color} />
-          </View>
-
-          <Text style={[styles.title, type.h4, { color: colors.textPrimary }]}>
+          <Text style={[type.h2, { color: c.text, marginBottom: 8 }]}>
             {title}
           </Text>
           {message && (
-            <Text style={[styles.message, type.bodySm, { color: colors.textMuted }]}>
+            <Text style={[type.body, { color: c.textSecondary, marginBottom: 20 }]}>
               {message}
             </Text>
           )}
 
-          <View style={[styles.divider, { backgroundColor: colors.borderPrimary }]} />
-
           <View style={styles.buttons}>
-            <TouchableOpacity
+            <Button
+              label={cancelLabel}
               onPress={onClose}
+              variant="outline"
+              size="md"
               disabled={loading}
-              activeOpacity={0.75}
-              style={[
-                styles.button,
-                styles.cancelButton,
-                {
-                  backgroundColor: colors.bgSecondary,
-                  borderColor: colors.borderPrimary,
-                  borderRadius: radius.md,
-                },
-              ]}
-            >
-              <Text style={[styles.cancelText, type.bodySm, { color: colors.textSecondary }]}>
-                {cancelLabel}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
+              style={styles.btn}
+            />
+            <Button
+              label={confirmLabel}
               onPress={onConfirm}
-              disabled={loading}
-              activeOpacity={0.8}
-              style={[
-                styles.button,
-                styles.confirmButton,
-                { backgroundColor: cfg.color, borderRadius: radius.md },
-                loading && styles.buttonLoading,
-              ]}
-            >
-              {loading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={[styles.confirmText, type.bodySm]}>{confirmLabel}</Text>
-              )}
-            </TouchableOpacity>
+              variant={destructive ? 'danger' : 'filled'}
+              size="md"
+              loading={loading}
+              style={styles.btn}
+            />
           </View>
         </Animated.View>
       </View>
@@ -180,52 +134,14 @@ const styles = StyleSheet.create({
   sheet: {
     width: '100%',
     maxWidth: 380,
-    padding: 28,
-    alignItems: 'center',
-  },
-  iconCircle: {
-    width: 72,
-    height: 72,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  title: {
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  message: {
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    alignSelf: 'stretch',
-    marginVertical: 20,
   },
   buttons: {
     flexDirection: 'row',
-    gap: 10,
-    alignSelf: 'stretch',
+    gap: 12,
   },
-  button: {
+  btn: {
     flex: 1,
-    height: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cancelButton: {
-    borderWidth: 1,
-  },
-  confirmButton: {},
-  buttonLoading: {
-    opacity: 0.8,
-  },
-  cancelText: {
-    fontWeight: '600',
-  },
-  confirmText: {
-    color: '#fff',
-    fontWeight: '700',
   },
 });
+
+export default ConfirmModal;

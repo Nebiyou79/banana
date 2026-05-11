@@ -1,5 +1,7 @@
 // src/social/screens/MyPostsScreen.tsx
+// ✅ role-theme-migrated
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useState } from 'react';
 import { Share, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -99,56 +101,63 @@ const MyPostsScreen: React.FC = () => {
   );
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.bg }]}
-      edges={[]}
+    <LinearGradient
+      colors={theme.bgGradient}
+      style={{ flex: 1 }}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0.3, y: 1 }}
     >
-      <FeedList
-        posts={posts}
-        loading={myPostsQ.isLoading}
-        refreshing={myPostsQ.isRefetching}
-        onRefresh={myPostsQ.refetch}
-        onEndReached={() => myPostsQ.fetchNextPage()}
-        hasNextPage={myPostsQ.hasNextPage}
-        isFetchingNextPage={myPostsQ.isFetchingNextPage}
-        onReact={handleReact}
-        onRemoveReact={removeReact}
-        onDislike={handleDislike}
-        onComment={(p) => {
-          setSelectedPost(p);
-          setSheetVisible(true);
-        }}
-        onShare={handleShare}
-        onSave={(id, isSaved) => toggleSave({ id, isSaved })}
-        onAuthorPress={(userId) =>
-          navigation.navigate('PublicProfile', { userId })
-        }
-        onEditPost={handleEdit}
-        onDeletePost={handleDelete}
-        onPinPost={handlePin}
-        onAdPress={handleAdPress}
-        adPlacement="myPosts"
-        cardMode="myPosts"
-        emptyTitle="You haven't posted yet"
-        emptySubtitle="Share your first update and start building your presence."
-        emptyIcon="create-outline"
-        emptyAction={{
-          label: 'Create post',
-          onPress: () => navigation.navigate('CreatePost'),
-        }}
-      />
+      <SafeAreaView
+        style={[styles.container]}
+        edges={[]}
+      >
+        <FeedList
+          posts={posts}
+          loading={myPostsQ.isLoading}
+          refreshing={myPostsQ.isRefetching}
+          onRefresh={myPostsQ.refetch}
+          onEndReached={() => myPostsQ.fetchNextPage()}
+          hasNextPage={myPostsQ.hasNextPage}
+          isFetchingNextPage={myPostsQ.isFetchingNextPage}
+          onReact={handleReact}
+          onRemoveReact={removeReact}
+          onDislike={handleDislike}
+          onComment={(p) => {
+            setSelectedPost(p);
+            setSheetVisible(true);
+          }}
+          onShare={handleShare}
+          onSave={(id, isSaved) => toggleSave({ id, isSaved })}
+          onAuthorPress={(userId) =>
+            navigation.navigate('PublicProfile', { userId })
+          }
+          onEditPost={handleEdit}
+          onDeletePost={handleDelete}
+          onPinPost={handlePin}
+          onAdPress={handleAdPress}
+          adPlacement="myPosts"
+          cardMode="myPosts"
+          emptyTitle="You haven't posted yet"
+          emptySubtitle="Share your first update and start building your presence."
+          emptyIcon="create-outline"
+          emptyAction={{
+            label: 'Create post',
+            onPress: () => navigation.navigate('CreatePost'),
+          }}
+        />
 
-      <CreatePostFAB onPress={() => navigation.navigate('CreatePost')} />
+        <CreatePostFAB onPress={() => navigation.navigate('CreatePost')} />
 
-      <CommentsSheet
-        visible={sheetVisible}
-        post={selectedPost}
-        onClose={() => setSheetVisible(false)}
-        onAuthorPress={(userId) =>
-          navigation.navigate('PublicProfile', { userId })
-        }
-      />
-    </SafeAreaView>
+        <CommentsSheet
+          visible={sheetVisible}
+          post={selectedPost}
+          onClose={() => setSheetVisible(false)}
+          onAuthorPress={(userId) =>
+            navigation.navigate('PublicProfile', { userId })
+          }
+        />
+      </SafeAreaView>
+    </LinearGradient>
   );
 };
 

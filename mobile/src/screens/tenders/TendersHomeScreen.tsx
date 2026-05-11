@@ -1,22 +1,12 @@
-// ─────────────────────────────────────────────────────────────────────────────
-//  src/screens/tenders/TendersHomeScreen.tsx
-// ─────────────────────────────────────────────────────────────────────────────
-//  Tab-1 Home / Dashboard for the new Tenders flow.
-//
-//  Role-aware: a 'company' or 'organization' header label.
-//  Pulls stats from the My Tenders hook (free at this stage — already cached
-//  by the My-Tenders screen, no extra round-trip for typical navigation).
-//
-//  Sections:
-//    • Greeting + role badge
-//    • Tender stats (4 tiles)
-//    • Bid activity (small strip)
-//    • Quick-action grid (jump to all 6 tabs)
-// ─────────────────────────────────────────────────────────────────────────────
+// src/screens/tenders/TendersHomeScreen.tsx
+// FIXED: Pulls stats from all 4 tender services (professional, freelance, bids, proposals)
+// FIXED: All navigation links corrected to real route names
+// FIXED: Sections show live data with proper loading states
 
 import React, { useMemo } from 'react';
 import {
   ActivityIndicator,
+  FlatList,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -24,277 +14,520 @@ import {
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
+import { AppHeader } from '../../components/ui/AppHeader';
 
-import { useThemeStore } from '../../store/themeStore';
+// ── All 4 tender data sources ──────────────────────────────────────────────
 import { useMyPostedProfessionalTenders } from '../../hooks/useProfessionalTender';
+import { useMyPostedFreelanceTenders } from '../../hooks/useFreelanceTender';
+import { useGetMyAllBids } from '../../hooks/useBid';
+import { useMyProposals } from '../../hooks/useProposal';
+
 import type {
   ProfessionalTenderListItem,
   ProfessionalTenderStatus,
 } from '../../types/professionalTender';
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  PROPS — userRole drives copy + role badge
-// ═════════════════════════════════════════════════════════════════════════════
-
 export type TendersHomeRole = 'company' | 'organization';
+interface TendersHomeScreenProps { userRole: TendersHomeRole }
 
-interface TendersHomeScreenProps {
-  userRole: TendersHomeRole;
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  STAT TILE
-// ═════════════════════════════════════════════════════════════════════════════
-
+// ─── Stat tile ────────────────────────────────────────────────────────────────
 const StatTile: React.FC<{
   label: string;
   value: number | string;
-  icon: string;
-  tone: 'blue' | 'green' | 'amber' | 'purple';
+  icon: keyof typeof Ionicons.glyphMap;
+  tone: 'blue' | 'green' | 'amber' | 'purple' | 'rose' | 'teal';
   loading?: boolean;
-}> = ({ label, value, icon, tone, loading }) => {
-  const isDark = useThemeStore((s) => s.theme.isDark);
+  onPress?: () => void;
+}> = ({ label, value, icon, tone, loading, onPress }) => {
+  const { colors: c, radius, type } = useTheme();
 
-  const toneColor = (() => {
-    if (isDark) {
-      switch (tone) {
-        case 'blue':   return { fg: '#60A5FA', bg: 'rgba(59,130,246,0.12)' };
-        case 'green':  return { fg: '#34D399', bg: 'rgba(34,197,94,0.12)' };
-        case 'amber':  return { fg: '#FCD34D', bg: 'rgba(245,158,11,0.12)' };
-        case 'purple': return { fg: '#D8B4FE', bg: 'rgba(168,85,247,0.12)' };
-      }
-    }
-    switch (tone) {
-      case 'blue':   return { fg: '#2563EB', bg: '#DBEAFE' };
-      case 'green':  return { fg: '#16A34A', bg: '#D1FAE5' };
-      case 'amber':  return { fg: '#B45309', bg: '#FEF3C7' };
-      case 'purple': return { fg: '#7C3AED', bg: '#EDE9FE' };
-    }
-  })();
-
-  const palette = isDark
-    ? { surface: '#1E293B', border: '#334155', text: '#F1F5F9', muted: '#94A3B8' }
-    : { surface: '#FFFFFF', border: '#E2E8F0', text: '#0F172A', muted: '#64748B' };
+  const toneColor = useMemo(() => {
+    const map: Record<string, { fg: string; bg: string }> = {
+      blue:   { fg: c.candidate ?? c.primary,      bg: withAlpha(c.candidate ?? c.primary, 0.12) },
+      green:  { fg: c.success,                     bg: withAlpha(c.success, 0.12)                },
+      amber:  { fg: c.warning,                     bg: withAlpha(c.warning, 0.12)                },
+      purple: { fg: c.organization ?? c.secondary, bg: withAlpha(c.organization ?? c.secondary, 0.12) },
+      rose:   { fg: c.danger,                      bg: withAlpha(c.danger, 0.12)                 },
+      teal:   { fg: c.primary,                     bg: withAlpha(c.primary, 0.08)                },
+    };
+    return map[tone] ?? map.blue;
+  }, [c, tone]);
 
   return (
-    <View style={[tileStyles.root, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-      <View style={tileStyles.head}>
-        <View style={[tileStyles.iconWrap, { backgroundColor: toneColor.bg }]}>
-          <Ionicons name={icon as any} size={16} color={toneColor.fg} />
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={({ pressed }) => [
+        tile.root,
+        {
+          backgroundColor: c.surface,
+          borderColor: c.border,
+          borderRadius: radius.lg,
+          opacity: onPress && pressed ? 0.88 : 1,
+        },
+      ]}
+      accessibilityRole={onPress ? 'button' : 'text'}
+      accessibilityLabel={`${label}: ${value}`}
+    >
+      <View style={tile.head}>
+        <View style={[tile.iconWrap, { backgroundColor: toneColor.bg, borderRadius: radius.sm }]}>
+          <Ionicons name={icon} size={16} color={toneColor.fg} />
         </View>
-        <Text style={[tileStyles.label, { color: palette.muted }]}>{label}</Text>
+        <Text
+          style={[type.caption, { color: c.textMuted, fontWeight: '700', letterSpacing: 0.4, flex: 1 }]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+        {!!onPress && (
+          <Ionicons name="chevron-forward" size={12} color={c.textMuted} style={{ marginLeft: 2 }} />
+        )}
       </View>
       {loading ? (
-        <View style={[tileStyles.skel, { backgroundColor: palette.border }]} />
+        <View style={[tile.skel, { backgroundColor: c.border, borderRadius: radius.sm }]} />
       ) : (
-        <Text style={[tileStyles.value, { color: palette.text }]}>{value}</Text>
+        <Text style={{ fontSize: 22, fontWeight: '800', color: c.text }}>{value}</Text>
+      )}
+    </Pressable>
+  );
+};
+
+const tile = StyleSheet.create({
+  root:     { flexBasis: '48%', flexGrow: 1, padding: 12, borderWidth: 1, gap: 8, minHeight: 80 },
+  head:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  iconWrap: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  skel:     { width: 50, height: 22 },
+});
+
+// ─── Section divider with label + optional action ─────────────────────────────
+const SectionHeader: React.FC<{
+  label: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}> = ({ label, actionLabel, onAction }) => {
+  const { colors: c, type } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Text
+        style={[type.caption, { color: c.textMuted, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase', paddingHorizontal: 4 }]}
+      >
+        {label}
+      </Text>
+      {actionLabel && onAction && (
+        <Pressable onPress={onAction} hitSlop={8}>
+          <Text style={[type.caption, { color: c.primary, fontWeight: '700' }]}>{actionLabel}</Text>
+        </Pressable>
       )}
     </View>
   );
 };
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  QUICK-ACTION CARD
-// ═════════════════════════════════════════════════════════════════════════════
-
-const ActionCard: React.FC<{
-  title: string;
-  description: string;
-  icon: string;
+// ─── Quick-action pill ────────────────────────────────────────────────────────
+interface QuickActionItem {
+  title:   string;
+  icon:    keyof typeof Ionicons.glyphMap;
   onPress: () => void;
-  badge?: number;
-}> = ({ title, description, icon, onPress, badge }) => {
-  const isDark = useThemeStore((s) => s.theme.isDark);
-  const palette = isDark
-    ? { surface: '#1E293B', border: '#334155', text: '#F1F5F9', muted: '#94A3B8', accent: '#60A5FA', badgeBg: '#60A5FA', badgeFg: '#0F172A' }
-    : { surface: '#FFFFFF', border: '#E2E8F0', text: '#0F172A', muted: '#64748B', accent: '#2563EB', badgeBg: '#2563EB', badgeFg: '#FFFFFF' };
+  badge?:  number;
+}
 
+const QuickActionPill: React.FC<QuickActionItem> = ({ title, icon, onPress, badge }) => {
+  const { colors: c, spacing, radius, type } = useTheme();
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }: { pressed: boolean }) => [
-        actionStyles.root,
-        { backgroundColor: palette.surface, borderColor: palette.border, opacity: pressed ? 0.92 : 1 },
+      style={({ pressed }) => [
+        qa.pill,
+        {
+          backgroundColor: c.surface,
+          borderColor:     c.border,
+          borderRadius:    radius.lg,
+          opacity:         pressed ? 0.85 : 1,
+          paddingHorizontal: spacing.md,
+          paddingVertical:   spacing.sm,
+        },
       ]}
       accessibilityRole="button"
       accessibilityLabel={title}
     >
-      <View style={actionStyles.head}>
-        <Ionicons name={icon as any} size={22} color={palette.accent} />
+      <View style={qa.iconWrap}>
+        <Ionicons name={icon} size={20} color={c.primary} />
         {badge !== undefined && badge > 0 && (
-          <View style={[actionStyles.badge, { backgroundColor: palette.badgeBg }]}>
-            <Text style={[actionStyles.badgeText, { color: palette.badgeFg }]}>
+          <View style={[qa.badge, { backgroundColor: c.primary }]}>
+            <Text style={[type.caption, { color: c.bg, fontSize: 9, fontWeight: '800' }]}>
               {badge > 99 ? '99+' : badge}
             </Text>
           </View>
         )}
       </View>
-      <Text style={[actionStyles.title, { color: palette.text }]} numberOfLines={1}>
+      <Text
+        style={[type.caption, { color: c.text, fontWeight: '600', marginTop: 4 }]}
+        numberOfLines={2}
+      >
         {title}
-      </Text>
-      <Text style={[actionStyles.desc, { color: palette.muted }]} numberOfLines={2}>
-        {description}
       </Text>
     </Pressable>
   );
 };
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  RECENT ACTIVITY ROW
-// ═════════════════════════════════════════════════════════════════════════════
+const qa = StyleSheet.create({
+  pill:    { width: 100, borderWidth: 1, alignItems: 'center', gap: 2, minHeight: 76 },
+  iconWrap:{ position: 'relative' },
+  badge:   { position: 'absolute', top: -4, right: -6, minWidth: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+});
 
-const RecentRow: React.FC<{
-  item: ProfessionalTenderListItem;
-  onPress: () => void;
-}> = ({ item, onPress }) => {
-  const isDark = useThemeStore((s) => s.theme.isDark);
-  const palette = isDark
-    ? { surface: '#1E293B', border: '#334155', text: '#F1F5F9', muted: '#94A3B8' }
-    : { surface: '#FFFFFF', border: '#E2E8F0', text: '#0F172A', muted: '#64748B' };
+// ─── Recent tender row ────────────────────────────────────────────────────────
+const RecentRow: React.FC<{ item: ProfessionalTenderListItem; onPress: () => void }> = ({ item, onPress }) => {
+  const { colors: c, radius, spacing, type } = useTheme();
 
   const statusColor: Record<ProfessionalTenderStatus, string> = {
-    draft:            isDark ? '#94A3B8' : '#64748B',
-    published:        isDark ? '#34D399' : '#16A34A',
-    locked:           isDark ? '#FCD34D' : '#B45309',
-    deadline_reached: isDark ? '#FDBA74' : '#C2410C',
-    revealed:         isDark ? '#60A5FA' : '#2563EB',
-    closed:           isDark ? '#F87171' : '#DC2626',
-    cancelled:        isDark ? '#94A3B8' : '#64748B',
+    draft:            c.textMuted,
+    published:        c.success,
+    locked:           c.warning,
+    deadline_reached: c.warning,
+    revealed:         c.primary,
+    closed:           c.danger,
+    cancelled:        c.textMuted,
+    awarded:          c.secondary,
   };
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }: { pressed: boolean }) => [
-        recentStyles.row,
-        { backgroundColor: palette.surface, borderColor: palette.border, opacity: pressed ? 0.92 : 1 },
+      style={({ pressed }) => [
+        recent.row,
+        { backgroundColor: c.surface, borderColor: c.border, borderRadius: radius.md, opacity: pressed ? 0.9 : 1 },
       ]}
     >
-      <View style={[recentStyles.dot, { backgroundColor: statusColor[item.status] }]} />
-      <View style={recentStyles.content}>
-        <Text style={[recentStyles.title, { color: palette.text }]} numberOfLines={1}>
+      <View style={[recent.dot, { backgroundColor: statusColor[item.status] ?? c.textMuted }]} />
+      <View style={recent.content}>
+        <Text style={[type.bodySm, { color: c.text, fontWeight: '600' }]} numberOfLines={1}>
           {item.title}
         </Text>
-        <Text style={[recentStyles.meta, { color: palette.muted }]} numberOfLines={1}>
+        <Text style={[type.caption, { color: c.textMuted, marginTop: 2, textTransform: 'capitalize' }]} numberOfLines={1}>
           {item.bidCount ?? 0} bid{(item.bidCount ?? 0) === 1 ? '' : 's'} · {item.status.replace(/_/g, ' ')}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={16} color={palette.muted} />
+      <Ionicons name="chevron-forward" size={16} color={c.textMuted} />
     </Pressable>
   );
 };
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  MAIN
-// ═════════════════════════════════════════════════════════════════════════════
+const recent = StyleSheet.create({
+  row:     { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderWidth: 1 },
+  dot:     { width: 8, height: 8, borderRadius: 999, flexShrink: 0 },
+  content: { flex: 1, minWidth: 0 },
+});
 
+// ─── Summary row for freelance tenders / bids / proposals ─────────────────────
+const SummaryCard: React.FC<{
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string | number;
+  sub?: string;
+  tone?: string;
+  onPress?: () => void;
+  loading?: boolean;
+}> = ({ icon, label, value, sub, tone, onPress, loading }) => {
+  const { colors: c, radius, type } = useTheme();
+  const fg = tone === 'green' ? c.success
+    : tone === 'amber' ? c.warning
+    : tone === 'red' ? c.danger
+    : c.primary;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={({ pressed }) => [
+        sum.card,
+        {
+          backgroundColor: c.surface,
+          borderColor: c.border,
+          borderRadius: radius.md,
+          opacity: onPress && pressed ? 0.88 : 1,
+        },
+      ]}
+    >
+      <View style={[sum.iconBox, { backgroundColor: withAlpha(fg, 0.12), borderRadius: radius.sm }]}>
+        <Ionicons name={icon} size={18} color={fg} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[type.caption, { color: c.textMuted, fontWeight: '600' }]} numberOfLines={1}>{label}</Text>
+        {loading ? (
+          <View style={[sum.skel, { backgroundColor: c.border, borderRadius: 4 }]} />
+        ) : (
+          <Text style={{ fontSize: 18, fontWeight: '800', color: c.text }}>{value}</Text>
+        )}
+        {!!sub && !loading && (
+          <Text style={[type.caption, { color: c.textMuted, marginTop: 1 }]} numberOfLines={1}>{sub}</Text>
+        )}
+      </View>
+      {!!onPress && <Ionicons name="chevron-forward" size={14} color={c.textMuted} />}
+    </Pressable>
+  );
+};
+
+const sum = StyleSheet.create({
+  card:    { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderWidth: 1, minHeight: 64 },
+  iconBox: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  skel:    { width: 40, height: 18, marginTop: 2 },
+});
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
 export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }) => {
   const navigation = useNavigation<any>();
-  const isDark = useThemeStore((s) => s.theme.isDark);
-
-  const palette = useMemo(
-    () => isDark
-      ? { bg: '#0F172A', surface: '#1E293B', border: '#334155', text: '#F1F5F9', muted: '#94A3B8', primary: '#60A5FA', primaryFg: '#0F172A', sectionLabel: '#94A3B8', roleChipBg: '#1E3A5F', roleChipFg: '#93C5FD' }
-      : { bg: '#F8FAFC', surface: '#FFFFFF', border: '#E2E8F0', text: '#0F172A', muted: '#64748B', primary: '#2563EB', primaryFg: '#FFFFFF', sectionLabel: '#475569', roleChipBg: '#DBEAFE', roleChipFg: '#1D4ED8' },
-    [isDark],
-  );
-
-  // Pull a small page of tenders for the stats + recent activity
-  const { data, isLoading, refetch, isFetching } = useMyPostedProfessionalTenders({
-    page: 1, limit: 5,
-  });
-
-  // ─── Derive stats ───────────────────────────────────────────────────────
-  const stats = useMemo(() => {
-    const tenders = data?.tenders ?? [];
-    return {
-      total:     data?.pagination?.total ?? tenders.length,
-      draft:     tenders.filter((t) => t.status === 'draft').length,
-      published: tenders.filter((t) => t.status === 'published' || t.status === 'locked').length,
-      bids:      tenders.reduce((sum, t) => sum + (t.bidCount ?? 0), 0),
-    };
-  }, [data]);
-
-  const recent = data?.tenders.slice(0, 3) ?? [];
-
-  // ─── Tab navigation handler ─────────────────────────────────────────────
-  // The bottom tab navigator is the parent; navigate to each tab by name.
-  const goToTab = (tabName: string, params?: any) => {
-    navigation.navigate(tabName, params);
-  };
+  const { colors: c, spacing, radius, type } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const isCompany = userRole === 'company';
 
+  // ── 1. Professional tenders (owner-posted) ─────────────────────────────
+  const {
+    data: profData,
+    isLoading: profLoading,
+    refetch: refetchProf,
+    isFetching: profFetching,
+  } = useMyPostedProfessionalTenders({ page: 1, limit: 10 });
+
+  // ── 2. Freelance tenders (owner-posted) ───────────────────────────────
+  const {
+    data: freelanceData,
+    isLoading: freelanceLoading,
+    refetch: refetchFreelance,
+  } = useMyPostedFreelanceTenders({ page: 1, limit: 5 });
+
+  // ── 3. Bids received across all my tenders ────────────────────────────
+  const {
+    data: bidsData,
+    isLoading: bidsLoading,
+    refetch: refetchBids,
+  } = useGetMyAllBids({ page: 1, limit: 1 }); // we only need total
+
+  // ── 4. Proposals submitted by this user (freelancer role) ──────────────
+  const {
+    data: proposalsData,
+    isLoading: proposalsLoading,
+    refetch: refetchProposals,
+  } = useMyProposals({ page: 1, limit: 1 });
+
+  const isRefreshing = profFetching && !profLoading;
+
+  const onRefresh = async () => {
+    await Promise.all([refetchProf(), refetchFreelance(), refetchBids(), refetchProposals()]);
+  };
+
+  // ── Professional tender stats ──────────────────────────────────────────
+  const profStats = useMemo(() => {
+    const tenders = profData?.tenders ?? [];
+    const total   = profData?.pagination?.total ?? tenders.length;
+    return {
+      total,
+      draft:     tenders.filter(t => t.status === 'draft').length,
+      published: tenders.filter(t => t.status === 'published' || t.status === 'locked').length,
+      awarded:   tenders.filter(t => t.status === 'awarded').length,
+      bids:      tenders.reduce((s, t) => s + (t.bidCount ?? 0), 0),
+    };
+  }, [profData]);
+
+  // ── Freelance tender stats ─────────────────────────────────────────────
+  const freelanceStats = useMemo(() => {
+    const tenders = (freelanceData as any)?.tenders ?? [];
+    const total   = (freelanceData as any)?.pagination?.total ?? tenders.length;
+    return { total, active: tenders.filter((t: any) => t.status === 'published').length };
+  }, [freelanceData]);
+
+  // ── Bids stats (from paginated total) ─────────────────────────────────
+  const totalBidsReceived = (bidsData as any)?.pagination?.total ?? (bidsData as any)?.totalBids ?? 0;
+
+  // ── Proposals stats ────────────────────────────────────────────────────
+  const totalProposals = (proposalsData as any)?.pagination?.total ?? 0;
+
+  const recentTenders = profData?.tenders.slice(0, 3) ?? [];
+
+  // ── Quick actions ──────────────────────────────────────────────────────
+  const quickActions: QuickActionItem[] = useMemo(() => [
+    {
+      title:   'New Prof. Tender',
+      icon:    'add-circle-outline',
+      onPress: () => navigation.navigate('ProfessionalTenders', { screen: 'CreateProfessionalTender' }),
+    },
+    {
+      title:   'New Freelance Tender',
+      icon:    'people-outline',
+      onPress: () => navigation.navigate('FreelanceTenders', { screen: 'CreateFreelanceTender' }),
+    },
+    ...(isCompany ? [{
+      title:   'Browse Tenders',
+      icon:    'search-outline' as keyof typeof Ionicons.glyphMap,
+      onPress: () => navigation.navigate('ProfessionalTenders', { screen: 'BrowseProfessionalTenders' }),
+    }] : []),
+    {
+      title:   'My Invitations',
+      icon:    'mail-outline',
+      onPress: () => navigation.navigate('ProfessionalTenders', { screen: 'MyInvitations' }),
+    },
+    {
+      title:   'Received Bids',
+      icon:    'mail-open-outline',
+      badge:   profStats.bids,
+      onPress: () => navigation.navigate('Bids'),
+    },
+    {
+      title:   'Proposals',
+      icon:    'documents-outline',
+      badge:   totalProposals > 0 ? totalProposals : undefined,
+      onPress: () => navigation.navigate('Proposals'),
+    },
+  ], [isCompany, profStats.bids, totalProposals, navigation]);
+
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: palette.bg }]} edges={['top']}>
+    <SafeAreaView style={[S.root, { backgroundColor: c.bg }]} edges={['top']}>
+      <AppHeader
+        title="Tender Center"
+        subtitle="Your procurement dashboard"
+        centerTitle={false}
+        rightAction={
+          <View style={[S.roleChip, { backgroundColor: withAlpha(c.primary, 0.15), borderRadius: radius.full }]}>
+            <Ionicons
+              name={isCompany ? 'business-outline' : 'people-outline'}
+              size={12}
+              color={c.primary}
+            />
+            <Text style={[type.caption, { color: c.primary, fontWeight: '700', letterSpacing: 0.4 }]}>
+              {isCompany ? 'Company' : 'Organization'}
+            </Text>
+          </View>
+        }
+      />
+
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[S.scrollContent, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} tintColor={palette.primary} />
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={c.primary}
+          />
         }
       >
-        {/* ─── Header ─────────────────────────────────────────────────── */}
-        <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <View>
-              <Text style={[styles.greeting, { color: palette.muted }]}>Welcome back</Text>
-              <Text style={[styles.title, { color: palette.text }]}>Tender Center</Text>
-            </View>
-            <View style={[styles.roleChip, { backgroundColor: palette.roleChipBg }]}>
-              <Ionicons
-                name={isCompany ? 'business-outline' : 'people-outline'}
-                size={12}
-                color={palette.roleChipFg}
-              />
-              <Text style={[styles.roleChipText, { color: palette.roleChipFg }]}>
-                {isCompany ? 'Company' : 'Organization'}
-              </Text>
-            </View>
+        {/* ── Professional Tender Stats ──────────────────────────────── */}
+        <View style={[S.section, { marginTop: spacing.md }]}>
+          <SectionHeader
+            label="Professional Tenders"
+            actionLabel={profStats.total > 0 ? 'View all' : undefined}
+            onAction={() => navigation.navigate('ProfessionalTenders', { screen: 'MyProfessionalTenders' })}
+          />
+          <View style={S.statsRow}>
+            <StatTile
+              label="Total Posted"
+              value={profStats.total}
+              icon="document-text-outline"
+              tone="blue"
+              loading={profLoading}
+              onPress={() => navigation.navigate('ProfessionalTenders', { screen: 'MyProfessionalTenders' })}
+            />
+            <StatTile
+              label="Live"
+              value={profStats.published}
+              icon="radio-outline"
+              tone="green"
+              loading={profLoading}
+              onPress={() => navigation.navigate('ProfessionalTenders', { screen: 'MyProfessionalTenders' })}
+            />
+            <StatTile
+              label="Drafts"
+              value={profStats.draft}
+              icon="create-outline"
+              tone="amber"
+              loading={profLoading}
+              onPress={() => navigation.navigate('ProfessionalTenders', { screen: 'MyProfessionalTenders' })}
+            />
+            <StatTile
+              label="Bids Received"
+              value={profStats.bids}
+              icon="people-outline"
+              tone="purple"
+              loading={profLoading || bidsLoading}
+              onPress={() => navigation.navigate('Bids')}
+            />
           </View>
         </View>
 
-        {/* ─── Tender Stats ───────────────────────────────────────────── */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: palette.sectionLabel }]}>
-            TENDER PROPOSALS
-          </Text>
-          <View style={styles.statsRow}>
-            <StatTile label="Total"     value={stats.total}     icon="document-text-outline" tone="blue"   loading={isLoading} />
-            <StatTile label="Live"      value={stats.published} icon="radio-outline"          tone="green"  loading={isLoading} />
-            <StatTile label="Drafts"    value={stats.draft}     icon="create-outline"         tone="amber"  loading={isLoading} />
-            <StatTile label="Total Bids" value={stats.bids}     icon="people-outline"         tone="purple" loading={isLoading} />
+        {/* ── Other Services Summary ─────────────────────────────────── */}
+        <View style={[S.section, { marginTop: spacing.lg }]}>
+          <SectionHeader label="Activity Overview" />
+          <View style={{ gap: 8 }}>
+            <SummaryCard
+              icon="people-circle-outline"
+              label="Freelance Tenders"
+              value={freelanceStats.total}
+              sub={`${freelanceStats.active} active`}
+              tone="green"
+              loading={freelanceLoading}
+              onPress={() => navigation.navigate('FreelanceTenders', { screen: 'MyFreelanceTenders' })}
+            />
+            <SummaryCard
+              icon="mail-open-outline"
+              label="Total Bids Received"
+              value={totalBidsReceived}
+              sub="Across all tenders"
+              tone="amber"
+              loading={bidsLoading}
+              onPress={() => navigation.navigate('Bids')}
+            />
+            <SummaryCard
+              icon="documents-outline"
+              label="My Proposals"
+              value={totalProposals}
+              sub="Submitted proposals"
+              loading={proposalsLoading}
+              onPress={() => navigation.navigate('Proposals')}
+            />
           </View>
         </View>
 
-        {/* ─── Recent Activity ────────────────────────────────────────── */}
-        <View style={styles.section}>
-          <View style={styles.sectionHead}>
-            <Text style={[styles.sectionLabel, { color: palette.sectionLabel }]}>RECENT TENDERS</Text>
-            {recent.length > 0 && (
-              <Pressable onPress={() => goToTab('ProfessionalTenders')} hitSlop={8}>
-                <Text style={[styles.viewAllLink, { color: palette.primary }]}>View all →</Text>
-              </Pressable>
-            )}
-          </View>
-          {isLoading ? (
-            <View style={styles.recentLoading}>
-              <ActivityIndicator size="small" color={palette.primary} />
+        {/* ── Quick Actions (horizontal FlatList) ──────────────────────── */}
+        <View style={[S.section, { marginTop: spacing.lg }]}>
+          <SectionHeader label="Quick Actions" />
+          <FlatList
+            horizontal
+            data={quickActions}
+            keyExtractor={item => item.title}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: spacing.sm, paddingVertical: spacing.xs }}
+            renderItem={({ item }) => <QuickActionPill {...item} />}
+          />
+        </View>
+
+        {/* ── Recent Professional Tenders ───────────────────────────────── */}
+        <View style={[S.section, { marginTop: spacing.lg }]}>
+          <SectionHeader
+            label="Recent Tenders"
+            actionLabel={recentTenders.length > 0 ? 'View all' : undefined}
+            onAction={() => navigation.navigate('ProfessionalTenders', { screen: 'MyProfessionalTenders' })}
+          />
+
+          {profLoading ? (
+            <View style={S.recentLoading}>
+              <ActivityIndicator size="small" color={c.primary} />
             </View>
-          ) : recent.length === 0 ? (
-            <View style={[styles.emptyRecent, { borderColor: palette.border, backgroundColor: palette.surface }]}>
-              <Ionicons name="albums-outline" size={28} color={palette.muted} />
-              <Text style={[styles.emptyTitle, { color: palette.text }]}>No tenders yet</Text>
-              <Text style={[styles.emptyDesc, { color: palette.muted }]}>
+          ) : recentTenders.length === 0 ? (
+            <View style={[S.emptyRecent, { borderColor: c.border, backgroundColor: c.surface, borderRadius: radius.lg }]}>
+              <Ionicons name="albums-outline" size={28} color={c.textMuted} />
+              <Text style={[type.bodySm, { color: c.text, fontWeight: '700' }]}>No tenders yet</Text>
+              <Text style={[type.caption, { color: c.textMuted, textAlign: 'center', maxWidth: 260 }]}>
                 Create your first tender from the Professional or Freelance tabs.
               </Text>
             </View>
           ) : (
-            <View style={styles.recentList}>
-              {recent.map((item) => (
+            <View style={{ gap: spacing.sm }}>
+              {recentTenders.map(item => (
                 <RecentRow
                   key={item._id}
                   item={item}
@@ -310,187 +543,45 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
           )}
         </View>
 
-        {/* ─── Quick Actions ──────────────────────────────────────────── */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: palette.sectionLabel }]}>
-            QUICK ACTIONS
-          </Text>
-          <View style={styles.actionGrid}>
-            <ActionCard
-              title="New Professional Tender"
-              description="Open the 7-step form."
-              icon="add-circle-outline"
-              onPress={() =>
-                navigation.navigate('ProfessionalTenders', {
-                  screen: 'CreateProfessionalTender',
-                })
-              }
-            />
-            <ActionCard
-              title="New Freelance Tender"
-              description="Quick post for freelance gigs."
-              icon="people-outline"
-              onPress={() =>
-                navigation.navigate('FreelanceTenders', {
-                  screen: 'CreateFreelanceTender',
-                })
-              }
-            />
-            {isCompany && (
-              <ActionCard
-                title="Browse Tenders"
-                description="See open tenders from others."
-                icon="search-outline"
-                onPress={() =>
-                  navigation.navigate('ProfessionalTenders', {
-                    screen: 'BrowseProfessionalTenders',
-                  })
-                }
-              />
-            )}
-            <ActionCard
-              title="Received Bids"
-              description="Bids on your tenders."
-              icon="inbox-outline"
-              badge={stats.bids}
-              onPress={() => goToTab('Bids')}
-            />
-            <ActionCard
-              title="Proposals"
-              description="Freelance applicants."
-              icon="documents-outline"
-              onPress={() => goToTab('Proposals')}
-            />
+        {/* ── Browse CTA (company only) ─────────────────────────────────── */}
+        {isCompany && (
+          <View style={[S.section, { marginTop: spacing.lg }]}>
+            <Pressable
+              onPress={() => navigation.navigate('ProfessionalTenders', { screen: 'BrowseProfessionalTenders' })}
+              style={({ pressed }) => [
+                S.browseCta,
+                {
+                  backgroundColor: withAlpha(c.primary, 0.1),
+                  borderColor: withAlpha(c.primary, 0.3),
+                  borderRadius: radius.lg,
+                  opacity: pressed ? 0.88 : 1,
+                },
+              ]}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[type.bodySm, { color: c.primary, fontWeight: '800' }]}>Browse Open Tenders</Text>
+                <Text style={[type.caption, { color: c.textMuted, marginTop: 3 }]}>
+                  Discover and bid on tenders from other organizations
+                </Text>
+              </View>
+              <Ionicons name="arrow-forward-circle" size={24} color={c.primary} />
+            </Pressable>
           </View>
-        </View>
-
-        <View style={{ height: 16 }} />
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 };
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  STYLES
-// ═════════════════════════════════════════════════════════════════════════════
-
-const styles = StyleSheet.create({
-  root: { flex: 1 },
+const S = StyleSheet.create({
+  root:          { flex: 1 },
   scrollContent: { paddingBottom: 24 },
-
-  header: {
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 14,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  greeting: { fontSize: 12 },
-  title:    { fontSize: 26, fontWeight: '800', letterSpacing: -0.4 },
-
-  roleChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 10, paddingVertical: 4,
-    borderRadius: 999,
-  },
-  roleChipText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.4 },
-
-  section: { paddingHorizontal: 14, marginTop: 14, gap: 8 },
-  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, paddingHorizontal: 4 },
-  viewAllLink:  { fontSize: 12, fontWeight: '700' },
-
-  statsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-
-  recentList: { gap: 8 },
+  roleChip:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4 },
+  section:       { paddingHorizontal: 14, gap: 10 },
+  statsRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   recentLoading: { padding: 18, alignItems: 'center' },
-  emptyRecent: {
-    alignItems: 'center',
-    padding: 18,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    gap: 6,
-  },
-  emptyTitle: { fontSize: 13, fontWeight: '700' },
-  emptyDesc:  { fontSize: 11, textAlign: 'center', lineHeight: 16, maxWidth: 260 },
-
-  actionGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-});
-
-const tileStyles = StyleSheet.create({
-  root: {
-    flexBasis: '48%',
-    flexGrow: 1,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 8,
-    minHeight: 80,
-  },
-  head: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  iconWrap: {
-    width: 24, height: 24,
-    borderRadius: 8,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  label: { fontSize: 10, fontWeight: '700', letterSpacing: 0.4 },
-  value: { fontSize: 22, fontWeight: '800' },
-  skel:  { width: 50, height: 22, borderRadius: 6 },
-});
-
-const actionStyles = StyleSheet.create({
-  root: {
-    flexBasis: '48%',
-    flexGrow: 1,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 6,
-    minHeight: 96,
-  },
-  head: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  badge: {
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 6,
-    borderRadius: 999,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  badgeText: { fontSize: 10, fontWeight: '800' },
-  title: { fontSize: 13, fontWeight: '700' },
-  desc:  { fontSize: 11, lineHeight: 15 },
-});
-
-const recentStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    padding: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  dot: { width: 8, height: 8, borderRadius: 999 },
-  content: { flex: 1, minWidth: 0 },
-  title: { fontSize: 13, fontWeight: '600' },
-  meta:  { fontSize: 11, marginTop: 1, textTransform: 'capitalize' },
+  emptyRecent:   { alignItems: 'center', padding: 18, borderWidth: 1, borderStyle: 'dashed', gap: 6 },
+  browseCta:     { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderWidth: 1 },
 });
 
 export default TendersHomeScreen;

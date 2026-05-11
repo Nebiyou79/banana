@@ -16,6 +16,7 @@ import PostSkeleton from '../post/PostSkeleton';
 import EmptyState from '../shared/EmptyState';
 import type { ComponentProps } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+
 type ListItem =
   | (Post & { __kind?: 'post' })
   | { __kind: 'ad'; id: string; ad: AdConfig };
@@ -46,8 +47,8 @@ interface Props {
   cardMode?: PostCardMode;
   emptyTitle?: string;
   emptySubtitle?: string;
- emptyIcon?: ComponentProps<typeof Ionicons>['name'];  
- emptyAction?: { label: string; onPress: () => void };
+  emptyIcon?: ComponentProps<typeof Ionicons>['name'];
+  emptyAction?: { label: string; onPress: () => void };
   ListHeaderComponent?: React.ComponentType<any> | React.ReactElement;
 }
 
@@ -215,3 +216,4 @@ const styles = StyleSheet.create({
 });
 
 export default FeedList;
+// ✅ theme-migrated

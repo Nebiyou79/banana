@@ -1,13 +1,10 @@
 /**
  * src/screens/candidate/ApplyJobScreen.tsx
- * ─────────────────────────────────────────────────────────────────────────────
- * Modal / full-screen wrapper that hosts the 4-step ApplicationForm.
- * On success it navigates to the ApplicationDetail screen.
- * ─────────────────────────────────────────────────────────────────────────────
+ * Refactored: useTheme() for design tokens.
  */
 import React from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 import { ApplicationForm } from '../../components/application/ApplicationForm';
 import { Application } from '../../services/applicationService';
 
@@ -24,16 +21,15 @@ interface Props {
 
 export const ApplyJobScreen: React.FC<Props> = ({ navigation, route }) => {
   const { jobId, jobTitle, companyName = '' } = route.params;
-  const { theme } = useThemeStore();
+  const { colors } = useTheme();
 
   const handleSuccess = (app: Application) => {
-    // Navigate to the candidate's own detail view
     navigation.replace('ApplicationDetail', { applicationId: app._id });
   };
 
   return (
     <SafeAreaView
-      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      style={{ flex: 1, backgroundColor: colors.bg }}
       edges={['top']}
     >
       <ApplicationForm

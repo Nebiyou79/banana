@@ -1,12 +1,8 @@
 /**
- * mobile/src/screens/company/MoreScreen.tsx
- *
- * Fixes:
- *  - Company own products → 'CompanyProductList' (not 'Products' or 'ProductList')
- *  - Public marketplace   → 'ProductMarketplace'
- *  - Saved products       → 'SavedProducts'
- *  - All other existing menu items preserved
+ * src/screens/company/MoreScreen.tsx
+ * Updated with proper verification integration
  */
+
 import React from 'react';
 import {
   View,
@@ -16,378 +12,428 @@ import {
   StyleSheet,
   Image,
   Alert,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useThemeStore }                from '../../store/themeStore';
-import { useAuthStore }                 from '../../store/authStore';
-import { useProfile, useVerificationStatus } from '../../hooks/useProfile';
-import { useLogout }                    from '../../hooks/useAuth';
-import type { CompanyStackParamList }   from '../../navigation/CompanyNavigator';
+
+import { useTheme } from '../../hooks/useTheme';
+import { useAuthStore } from '../../store/authStore';
+import { useProfile } from '../../hooks/useProfile';
+import { useLogout } from '../../hooks/useAuth';
+import type { CompanyStackParamList } from '../../navigation/CompanyNavigator';
+import { FONT_SIZE } from '../../theme/tokens';
+import { useMyVerificationStatus } from '../../hooks/useVerification';
+import { verificationService } from '../../services/verificationService';
 
 type Nav = NativeStackNavigationProp<CompanyStackParamList>;
 
-const ACCENT = '#3B82F6';
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface MenuItem {
-  icon:       keyof typeof Ionicons.glyphMap;
-  label:      string;
-  sublabel?:  string;
-  color:      string;
-  screen?:    keyof CompanyStackParamList;
-  badge?:     string;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  sublabel?: string;
+  iconColor: string;
+  iconBg: string;
+  screen?: keyof CompanyStackParamList;
+  badge?: string;
   badgeColor?: string;
+  danger?: boolean;
 }
 
-// ── Section component ──────────────────────────────────────────────────────────
+// ── Menu row ──────────────────────────────────────────────────────────────────
+
+const MenuRow: React.FC<{
+  item: MenuItem;
+  isLast: boolean;
+  onPress: () => void;
+  colors: any;
+}> = ({ item, isLast, onPress, colors }) => (
+  <TouchableOpacity
+    onPress={onPress}
+    activeOpacity={0.7}
+    style={[
+      mr.row,
+      !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+    ]}
+  >
+    <View style={[mr.iconBubble, { backgroundColor: item.iconBg }]}>
+      <Ionicons name={item.icon} size={18} color={item.iconColor} />
+    </View>
+
+    <View style={{ flex: 1 }}>
+      <Text style={[mr.label, { color: item.danger ? colors.danger : colors.text }]}>
+        {item.label}
+      </Text>
+      {item.sublabel ? (
+        <Text style={[mr.sublabel, { color: colors.textMuted }]}>
+          {item.sublabel}
+        </Text>
+      ) : null}
+    </View>
+
+    {item.badge ? (
+      <View style={[mr.badge, { backgroundColor: item.badgeColor ?? colors.primary }]}>
+        <Text style={[mr.badgeText, { color: colors.textInverse }]}>{item.badge}</Text>
+      </View>
+    ) : null}
+
+    <Ionicons name="chevron-forward" size={15} color={colors.textMuted} />
+  </TouchableOpacity>
+);
+
+const mr = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  iconBubble: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: { fontSize: FONT_SIZE.base ?? 14, fontWeight: '500' },
+  sublabel: { fontSize: 12, marginTop: 1 },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    marginRight: 4,
+  },
+  badgeText: { fontSize: 10, fontWeight: '800' },
+});
+
+// ── Section wrapper ───────────────────────────────────────────────────────────
 
 const MenuSection: React.FC<{
-  title:      string;
-  items:      MenuItem[];
+  title: string;
+  items: MenuItem[];
   navigation: Nav;
-}> = ({ title, items, navigation }) => {
-  const { theme } = useThemeStore();
-  const { colors, typography } = theme;
-
-  return (
-    <View style={{ marginBottom: 24 }}>
-      <Text
-        style={[
-          ms.secLabel,
-          { color: colors.textMuted, fontSize: typography.xs },
-        ]}
-      >
-        {title.toUpperCase()}
-      </Text>
-      <View
-        style={[
-          ms.list,
-          { backgroundColor: colors.surface, borderColor: colors.border },
-        ]}
-      >
-        {items.map((item, i) => (
-          <TouchableOpacity
-            key={item.label}
-            style={[
-              ms.item,
-              i < items.length - 1 && {
-                borderBottomWidth: StyleSheet.hairlineWidth,
-                borderBottomColor: colors.border,
-              },
-            ]}
-            onPress={() => item.screen && navigation.navigate(item.screen as any)}
-            activeOpacity={0.7}
-          >
-            <View
-              style={[ms.icon, { backgroundColor: item.color + '18' }]}
-            >
-              <Ionicons name={item.icon} size={18} color={item.color} />
-            </View>
-
-            <View style={{ flex: 1 }}>
-              <Text
-                style={{
-                  color: colors.text,
-                  fontSize: typography.base,
-                  fontWeight: '500',
-                }}
-              >
-                {item.label}
-              </Text>
-              {item.sublabel ? (
-                <Text
-                  style={{
-                    color: colors.textMuted,
-                    fontSize: typography.xs,
-                    marginTop: 1,
-                  }}
-                >
-                  {item.sublabel}
-                </Text>
-              ) : null}
-            </View>
-
-            {item.badge ? (
-              <View
-                style={[
-                  ms.badge,
-                  { backgroundColor: item.badgeColor ?? ACCENT },
-                ]}
-              >
-                <Text style={ms.badgeTxt}>{item.badge}</Text>
-              </View>
-            ) : null}
-
-            <Ionicons
-              name="chevron-forward"
-              size={16}
-              color={colors.textMuted}
-            />
-          </TouchableOpacity>
-        ))}
-      </View>
+  colors: any;
+}> = ({ title, items, navigation, colors }) => (
+  <View style={{ marginBottom: 20 }}>
+    <Text style={[ms.sectionLabel, { color: colors.textMuted }]}>{title}</Text>
+    <View style={[ms.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+      {items.map((item, i) => (
+        <MenuRow
+          key={item.label}
+          item={item}
+          isLast={i === items.length - 1}
+          onPress={() => item.screen && navigation.navigate(item.screen as any)}
+          colors={colors}
+        />
+      ))}
     </View>
-  );
-};
+  </View>
+);
 
-// ── Screen ─────────────────────────────────────────────────────────────────────
+const ms = StyleSheet.create({
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  card: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+});
+
+// ── Screen ────────────────────────────────────────────────────────────────────
 
 export const CompanyMoreScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
-  const { theme }  = useThemeStore();
-  const { colors, typography } = theme;
-  const { user }   = useAuthStore();
-  const logout     = useLogout();
+  const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { user } = useAuthStore();
+  const logout = useLogout();
 
-  const { data: profile }      = useProfile();
-  const { data: verification } = useVerificationStatus();
+  const { data: profile } = useProfile();
+  const { data: verificationData } = useMyVerificationStatus();
 
-  const verificationBadge =
-    verification === 'verified'
-      ? undefined
-      : verification === 'pending'
-      ? 'Pending'
-      : 'Verify';
+  const vStatus = verificationData?.verificationStatus ?? 'none';
+  const isVerified = vStatus === 'full';
+  const isPartial = vStatus === 'partial';
+  const badgeConfig = verificationService.getBadgeConfig(vStatus);
 
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: () => logout.mutate(),
-      },
+      { text: 'Sign Out', style: 'destructive', onPress: () => logout.mutate() },
     ]);
   };
 
-  // ── Menu data ────────────────────────────────────────────────────────────────
+  // ── Menu config ─────────────────────────────────────────────────────────────
 
   const talentItems: MenuItem[] = [
     {
-      icon:     'people-outline',
-      label:    'Hire Freelancers',
+      icon: 'people-outline',
+      label: 'Hire Freelancers',
       sublabel: 'Browse the freelancer marketplace',
-      color:    '#8B5CF6',
-      screen:   'FreelancerMarketplace',
+      iconColor: colors.organization ?? '#7C3AED',
+      iconBg: `${colors.organization ?? '#7C3AED'}18`,
+      screen: 'FreelancerMarketplace',
     },
     {
-      icon:     'bookmark-outline',
-      label:    'Shortlist',
+      icon: 'bookmark-outline',
+      label: 'Shortlist',
       sublabel: 'Your saved freelancers',
-      color:    '#EC4899',
-      screen:   'FreelancerShortlist',
+      iconColor: colors.freelancer ?? '#0D9488',
+      iconBg: `${colors.freelancer ?? '#0D9488'}18`,
+      screen: 'FreelancerShortlist',
     },
   ];
 
-  // ── Product items — fixed route names ────────────────────────────────────────
   const productItems: MenuItem[] = [
     {
-      icon:     'cube-outline',
-      label:    'My Products',
+      icon: 'cube-outline',
+      label: 'My Products',
       sublabel: 'Manage your product catalogue',
-      color:    '#F59E0B',
-      // ← Fixed: was 'Products' or 'ProductList' — now the correct registered route
-      screen:   'CompanyProductList',
+      iconColor: colors.warning ?? '#F59E0B',
+      iconBg: `${colors.warning ?? '#F59E0B'}18`,
+      screen: 'CompanyProductList',
     },
     {
-      icon:     'storefront-outline',
-      label:    'Product Marketplace',
+      icon: 'storefront-outline',
+      label: 'Product Marketplace',
       sublabel: 'Browse all available products',
-      color:    '#10B981',
-      // ← Correct registered route for public marketplace
-      screen:   'ProductMarketplace',
+      iconColor: colors.success ?? '#10B981',
+      iconBg: `${colors.success ?? '#10B981'}18`,
+      screen: 'ProductMarketplace',
     },
     {
-      icon:     'bookmark-outline',
-      label:    'Saved Products',
+      icon: 'bookmark-outline',
+      label: 'Saved Products',
       sublabel: 'Products you bookmarked',
-      color:    '#3B82F6',
-      // ← Correct registered route
-      screen:   'SavedProducts',
+      iconColor: colors.info ?? '#3B82F6',
+      iconBg: `${colors.info ?? '#3B82F6'}18`,
+      screen: 'SavedProducts',
     },
   ];
 
   const verificationItems: MenuItem[] = [
     {
-      icon:      'shield-checkmark-outline',
-      label:     'Verification',
-      sublabel:  'View your verification status',
-      color:     '#22C55E',
-      screen:    'VerificationStatus',
-      badge:     verificationBadge,
-      badgeColor: '#F59E0B',
+      icon: 'shield-checkmark-outline',
+      label: 'Verification Status',
+      sublabel: isVerified
+        ? 'Your company is fully verified ✓'
+        : isPartial
+        ? 'Partially verified — complete remaining steps'
+        : 'Get verified to build trust with freelancers',
+      iconColor: isVerified ? (colors.success ?? '#10B981') : (colors.warning ?? '#F59E0B'),
+      iconBg: isVerified ? `${colors.success ?? '#10B981'}18` : `${colors.warning ?? '#F59E0B'}18`,
+      screen: 'RoleVerification',
+      badge: isVerified ? 'Verified' : isPartial ? 'Partial' : 'Verify',
+      badgeColor: isVerified ? colors.success : colors.warning,
     },
-    ...(verification !== 'approved'
+    ...(!isVerified
       ? [{
-          icon:    'document-text-outline' as keyof typeof Ionicons.glyphMap,
-          label:   'Request Verification',
-          color:   '#6366F1',
-          screen:  'RequestVerification' as keyof CompanyStackParamList,
+          icon: 'document-text-outline' as keyof typeof Ionicons.glyphMap,
+          label: 'Request Verification',
+          sublabel: 'Submit your verification documents',
+          iconColor: colors.primary,
+          iconBg: `${colors.primary}18`,
+          screen: 'RequestVerification' as keyof CompanyStackParamList,
         }]
       : []),
   ];
 
   const rewardsItems: MenuItem[] = [
     {
-      icon:   'gift-outline',
-      label:  'Referrals & Rewards',
-      color:  '#F97316',
+      icon: 'gift-outline',
+      label: 'Referrals & Rewards',
+      sublabel: 'Invite others and earn rewards',
+      iconColor: colors.danger ?? '#EF4444',
+      iconBg: `${colors.danger ?? '#EF4444'}18`,
       screen: 'Referral',
     },
     {
-      icon:   'trophy-outline',
-      label:  'Leaderboard',
-      color:  '#EAB308',
+      icon: 'trophy-outline',
+      label: 'Leaderboard',
+      sublabel: 'See where your company ranks',
+      iconColor: colors.warning ?? '#F59E0B',
+      iconBg: `${colors.warning ?? '#F59E0B'}18`,
       screen: 'Leaderboard',
     },
   ];
 
+  const avatarUri = profile?.avatar?.secure_url;
+
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Profile card */}
-      <TouchableOpacity
-        onPress={() => navigation.navigate('EditProfile')}
-        style={[
-          ms.profileCard,
-          { backgroundColor: colors.surface, borderColor: colors.border },
-        ]}
-        activeOpacity={0.8}
+    <SafeAreaView style={[s.safe, { backgroundColor: colors.bg }]} edges={['top']}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+
+      <View style={[s.topHeader, { backgroundColor: colors.bgCard, borderBottomColor: colors.border }]}>
+        <Text style={[s.topHeaderTitle, { color: colors.text }]}>More</Text>
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          padding: 16,
+          paddingBottom: insets.bottom + 32,
+        }}
       >
-        <View
-          style={[ms.avatar, { backgroundColor: ACCENT + '20' }]}
+        {/* ── Profile card ──────────────────────────────────────────────── */}
+        <TouchableOpacity
+          onPress={() => navigation.navigate('EditProfile')}
+          style={[s.profileCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+          activeOpacity={0.8}
         >
-          {profile?.avatar?.secure_url ? (
-            <Image
-              source={{ uri: profile.avatar.secure_url }}
-              style={ms.avatarImg}
-            />
-          ) : (
-            <Ionicons name="business" size={24} color={ACCENT} />
-          )}
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text
-            style={{
-              color: colors.text,
-              fontSize: typography.lg,
-              fontWeight: '700',
-            }}
+          <View style={[s.avatar, { backgroundColor: `${colors.primary}20` }]}>
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={s.avatarImg} />
+            ) : (
+              <Ionicons name="business" size={22} color={colors.primary} />
+            )}
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Text style={[s.profileName, { color: colors.text }]} numberOfLines={1}>
+              {user?.name ?? 'Company'}
+            </Text>
+            <Text style={[s.profileEmail, { color: colors.textMuted }]} numberOfLines={1}>
+              {user?.email ?? ''}
+            </Text>
+          </View>
+
+          <View style={[s.editPill, { backgroundColor: `${colors.primary}15`, borderColor: `${colors.primary}30` }]}>
+            <Text style={[s.editPillText, { color: colors.primary }]}>Edit</Text>
+          </View>
+        </TouchableOpacity>
+
+        <View style={{ height: 16 }} />
+
+        {/* ── Verification Banner ───────────────────────────────────────── */}
+        {!isVerified && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('RoleVerification')}
+            style={[styles.verifyBanner, { backgroundColor: badgeConfig.bgColor, borderColor: badgeConfig.color, marginBottom: 20 }]}
           >
-            {user?.name ?? 'Company'}
-          </Text>
-          <Text
-            style={{ color: colors.textMuted, fontSize: typography.sm }}
-          >
-            {user?.email ?? ''}
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-      </TouchableOpacity>
+            <Ionicons name={badgeConfig.icon} size={24} color={badgeConfig.color} />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={{ fontWeight: '700', color: badgeConfig.color }}>
+                {badgeConfig.label}
+              </Text>
+              <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
+                Complete verification to access premium features
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={badgeConfig.color} />
+          </TouchableOpacity>
+        )}
 
-      <View style={{ height: 20 }} />
+        {/* ── Sections ──────────────────────────────────────────────────── */}
+        <MenuSection title="Talent" items={talentItems} navigation={navigation} colors={colors} />
+        <MenuSection title="Products" items={productItems} navigation={navigation} colors={colors} />
+        <MenuSection title="Verification" items={verificationItems} navigation={navigation} colors={colors} />
+        <MenuSection title="Rewards" items={rewardsItems} navigation={navigation} colors={colors} />
 
-      <MenuSection
-        title="Talent"
-        items={talentItems}
-        navigation={navigation}
-      />
-      <MenuSection
-        title="Products"
-        items={productItems}
-        navigation={navigation}
-      />
-      <MenuSection
-        title="Verification"
-        items={verificationItems}
-        navigation={navigation}
-      />
-      <MenuSection
-        title="Rewards"
-        items={rewardsItems}
-        navigation={navigation}
-      />
+        {/* ── Sign out ──────────────────────────────────────────────────── */}
+        <TouchableOpacity
+          onPress={handleLogout}
+          style={[s.signOutBtn, { backgroundColor: colors.bgCard, borderColor: `${colors.danger}40` }]}
+          activeOpacity={0.75}
+        >
+          <View style={[s.signOutIcon, { backgroundColor: `${colors.danger}15` }]}>
+            <Ionicons name="log-out-outline" size={18} color={colors.danger} />
+          </View>
+          <Text style={[s.signOutText, { color: colors.danger }]}>Sign Out</Text>
+        </TouchableOpacity>
 
-      {/* Sign out */}
-      <TouchableOpacity
-        onPress={handleLogout}
-        style={[
-          ms.signOutBtn,
-          { backgroundColor: colors.surface, borderColor: colors.border },
-        ]}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="log-out-outline" size={18} color="#EF4444" />
-        <Text style={{ color: '#EF4444', fontSize: typography.base, fontWeight: '600' }}>
-          Sign Out
-        </Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <Text style={[s.version, { color: colors.textMuted }]}>v1.0.0</Text>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
-const ms = StyleSheet.create({
+const s = StyleSheet.create({
+  safe: { flex: 1 },
+  topHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    minHeight: 56,
+    justifyContent: 'center',
+  },
+  topHeaderTitle: {
+    fontSize: FONT_SIZE.lg ?? 18,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 13,
     padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 50,
+    height: 50,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
   avatarImg: { width: '100%', height: '100%' },
-  secLabel: {
-    fontWeight: '600',
-    letterSpacing: 0.8,
-    marginBottom: 8,
-    marginLeft: 4,
-  },
-  list: {
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-  },
-  icon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+  profileName: { fontSize: FONT_SIZE.md ?? 16, fontWeight: '700' },
+  profileEmail: { fontSize: 13, marginTop: 1 },
+  editPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: 999,
-    marginRight: 4,
+    borderWidth: 1,
   },
-  badgeTxt: { fontSize: 10, fontWeight: '700', color: '#fff' },
+  editPillText: { fontSize: 13, fontWeight: '700' },
   signOutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+    gap: 12,
     padding: 14,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     marginTop: 4,
   },
+  signOutIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signOutText: {
+    fontSize: FONT_SIZE.base ?? 14,
+    fontWeight: '700',
+  },
+  version: {
+    textAlign: 'center',
+    fontSize: 12,
+    marginTop: 20,
+  },
 });
+
+const styles = StyleSheet.create({
+  verifyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+});
+
+export default CompanyMoreScreen;

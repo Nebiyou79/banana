@@ -1,3 +1,13 @@
+// src/social/components/post/CommentsSheet.tsx
+/**
+ * CommentsSheet — smooth spring bottom-sheet for post comments (core Animated)
+ *
+ * Theme migration:
+ * - theme.overlay → theme.colors.overlay  (authoritative colors object)
+ * - theme.border  → theme.colors.border   (authoritative)
+ * - theme.primary → unchanged (flat alias valid)
+ * - RADIUS.xl, RADIUS.pill, SPACING.* → from socialTheme tokens
+ */
 import { Ionicons } from '@expo/vector-icons';
 import React, {
   memo,
@@ -10,6 +20,7 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Easing,
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
@@ -26,14 +37,15 @@ import {
   useComments,
   useToggleCommentLike,
 } from '../../hooks/useComments';
-import { useSocialTheme } from '../../theme/socialTheme';
+import { RADIUS, SPACING, useSocialTheme } from '../../theme/socialTheme';
 import type { Comment, Post } from '../../types';
 import { formatCount } from '../../utils/format';
+import Avatar from '../shared/Avatar';
 import EmptyState from '../shared/EmptyState';
 import CommentItem from './CommentItem';
 
 const { height: SCREEN_H } = Dimensions.get('window');
-const SHEET_HEIGHT = Math.min(SCREEN_H * 0.78, 640);
+const SHEET_H = Math.min(SCREEN_H * 0.80, 660);
 
 interface Props {
   visible: boolean;
@@ -42,56 +54,57 @@ interface Props {
   onAuthorPress?: (userId: string) => void;
 }
 
-/**
- * Bottom-sheet comments. Slides up from the bottom using Animated.spring,
- * with a backdrop tap to dismiss. Uses the `useComments` + `useAddComment`
- * hooks directly — no service calls in UI.
- */
 const CommentsSheet: React.FC<Props> = memo(
   ({ visible, post, onClose, onAuthorPress }) => {
-    const theme = useSocialTheme();
-    const translateY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
-    const backdropOpacity = useRef(new Animated.Value(0)).current;
+    const theme    = useSocialTheme();
     const [text, setText] = useState('');
+    const inputRef = useRef<TextInput>(null);
 
-    const postId = post?._id ?? '';
-    const commentsQ = useComments(postId);
+    // Core Animated values
+    const translateY       = useRef(new Animated.Value(SHEET_H)).current;
+    const backdropOpacity  = useRef(new Animated.Value(0)).current;
+
+    const postId      = post?._id ?? '';
+    const commentsQ   = useComments(postId);
     const { mutate: addComment, isPending } = useAddComment(postId);
-    const { mutate: toggleLike } = useToggleCommentLike();
+    const { mutate: toggleLike }            = useToggleCommentLike();
 
     const comments: Comment[] = commentsQ.data?.comments ?? [];
-    const hasNext = commentsQ.hasNextPage;
 
+    // ── Open / close sheet ──
     useEffect(() => {
       if (visible) {
         Animated.parallel([
           Animated.spring(translateY, {
             toValue: 0,
             friction: 9,
-            tension: 70,
+            tension: 65,
             useNativeDriver: true,
           }),
           Animated.timing(backdropOpacity, {
             toValue: 1,
-            duration: 200,
+            duration: 220,
+            easing: Easing.out(Easing.ease),
             useNativeDriver: true,
           }),
         ]).start();
       } else {
         Animated.parallel([
-          Animated.timing(translateY, {
-            toValue: SHEET_HEIGHT,
-            duration: 220,
+          Animated.spring(translateY, {
+            toValue: SHEET_H,
+            friction: 10,
+            tension: 80,
             useNativeDriver: true,
           }),
           Animated.timing(backdropOpacity, {
             toValue: 0,
             duration: 180,
+            easing: Easing.in(Easing.ease),
             useNativeDriver: true,
           }),
         ]).start();
       }
-    }, [visible, translateY, backdropOpacity]);
+    }, [visible]);
 
     const handleSend = useCallback(() => {
       const trimmed = text.trim();
@@ -102,23 +115,32 @@ const CommentsSheet: React.FC<Props> = memo(
     }, [text, postId, addComment]);
 
     const handleEndReached = useCallback(() => {
-      if (hasNext && !commentsQ.isFetchingNextPage) {
+      if (commentsQ.hasNextPage && !commentsQ.isFetchingNextPage) {
         commentsQ.fetchNextPage();
       }
-    }, [hasNext, commentsQ]);
+    }, [commentsQ]);
 
     const renderItem = useCallback(
-      ({ item }: { item: Comment }) => (
+      ({ item, index }: { item: Comment; index: number }) => (
         <CommentItem
           comment={item}
+          index={index}
           onAuthorPress={onAuthorPress}
           onLikePress={toggleLike}
+          onReplyPress={() => {}}
         />
       ),
       [onAuthorPress, toggleLike]
     );
 
     const keyExtractor = useCallback((c: Comment) => c._id, []);
+
+    // Send button scale
+    const sendScale    = useRef(new Animated.Value(1)).current;
+    const onSendPressIn  = () =>
+      Animated.spring(sendScale, { toValue: 0.9, friction: 6, tension: 300, useNativeDriver: true }).start();
+    const onSendPressOut = () =>
+      Animated.spring(sendScale, { toValue: 1,   friction: 5, tension: 200, useNativeDriver: true }).start();
 
     return (
       <Modal
@@ -128,11 +150,13 @@ const CommentsSheet: React.FC<Props> = memo(
         onRequestClose={onClose}
         statusBarTranslucent
       >
+        {/* Backdrop */}
         <Animated.View
           style={[
             styles.backdrop,
-            { backgroundColor: theme.overlay, opacity: backdropOpacity },
+            { backgroundColor: theme.colors.overlay, opacity: backdropOpacity },
           ]}
+          pointerEvents={visible ? 'auto' : 'none'}
         >
           <TouchableOpacity
             style={StyleSheet.absoluteFill}
@@ -141,49 +165,43 @@ const CommentsSheet: React.FC<Props> = memo(
           />
         </Animated.View>
 
+        {/* Sheet */}
         <Animated.View
           style={[
             styles.sheet,
             {
               backgroundColor: theme.card,
+              height: SHEET_H,
               transform: [{ translateY }],
-              height: SHEET_HEIGHT,
             },
           ]}
         >
           {/* Drag handle */}
           <View style={styles.handleWrap}>
-            <View
-              style={[styles.handle, { backgroundColor: theme.muted }]}
-            />
+            <View style={[styles.handle, { backgroundColor: theme.colors.borderAccent }]} />
           </View>
 
           {/* Header */}
-          <View
-            style={[
-              styles.header,
-              { borderBottomColor: theme.border },
-            ]}
-          >
+          <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
             <Text style={[styles.title, { color: theme.text }]}>
-              {post ? `${formatCount(post.stats.comments)} Comments` : 'Comments'}
+              {post
+                ? `${formatCount(post.stats.comments)} Comments`
+                : 'Comments'}
             </Text>
             <TouchableOpacity
               onPress={onClose}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              style={[styles.closeBtn, { backgroundColor: theme.cardAlt }]}
               accessibilityLabel="Close comments"
             >
-              <Ionicons name="close" size={24} color={theme.subtext} />
+              <Ionicons name="close" size={17} color={theme.subtext} />
             </TouchableOpacity>
           </View>
 
-          {/* List */}
+          {/* Comment list */}
           <View style={{ flex: 1 }}>
             {commentsQ.isLoading ? (
-              <ActivityIndicator
-                color={theme.primary}
-                style={{ marginTop: 32 }}
-              />
+              <ActivityIndicator color={theme.primary} style={{ marginTop: 40 }} />
             ) : comments.length === 0 ? (
               <EmptyState
                 icon="chatbubbles-outline"
@@ -195,16 +213,14 @@ const CommentsSheet: React.FC<Props> = memo(
                 data={comments}
                 keyExtractor={keyExtractor}
                 renderItem={renderItem}
-                contentContainerStyle={{ paddingBottom: 12 }}
+                contentContainerStyle={styles.listContent}
                 onEndReached={handleEndReached}
                 onEndReachedThreshold={0.4}
                 keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
                 ListFooterComponent={
                   commentsQ.isFetchingNextPage ? (
-                    <ActivityIndicator
-                      color={theme.primary}
-                      style={{ padding: 16 }}
-                    />
+                    <ActivityIndicator color={theme.primary} style={{ padding: 16 }} />
                   ) : null
                 }
               />
@@ -217,11 +233,17 @@ const CommentsSheet: React.FC<Props> = memo(
           >
             <View
               style={[
-                styles.inputRow,
-                { borderTopColor: theme.border, backgroundColor: theme.card },
+                styles.composer,
+                {
+                  borderTopColor:  theme.colors.border,
+                  backgroundColor: theme.card,
+                },
               ]}
             >
+              <Avatar size={34} name="Me" />
+
               <TextInput
+                ref={inputRef}
                 value={text}
                 onChangeText={setText}
                 placeholder="Add a comment…"
@@ -229,32 +251,37 @@ const CommentsSheet: React.FC<Props> = memo(
                 style={[
                   styles.input,
                   {
-                    backgroundColor: theme.inputBg,
-                    color: theme.text,
-                    borderColor: theme.border,
+                    backgroundColor: theme.cardAlt,
+                    color:           theme.text,
+                    borderColor:     text.length > 0 ? theme.primary : theme.border,
                   },
                 ]}
                 multiline
                 maxLength={1000}
               />
-              <TouchableOpacity
-                onPress={handleSend}
-                disabled={!text.trim() || isPending}
-                style={[
-                  styles.sendBtn,
-                  {
-                    backgroundColor: theme.primary,
-                    opacity: text.trim() && !isPending ? 1 : 0.4,
-                  },
-                ]}
-                accessibilityLabel="Post comment"
-              >
-                {isPending ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Ionicons name="send" size={18} color="#fff" />
-                )}
-              </TouchableOpacity>
+
+              <Animated.View style={{ transform: [{ scale: sendScale }] }}>
+                <TouchableOpacity
+                  onPress={handleSend}
+                  onPressIn={onSendPressIn}
+                  onPressOut={onSendPressOut}
+                  disabled={!text.trim() || isPending}
+                  style={[
+                    styles.sendBtn,
+                    {
+                      backgroundColor: theme.primary,
+                      opacity: text.trim() && !isPending ? 1 : 0.35,
+                    },
+                  ]}
+                  accessibilityLabel="Post comment"
+                >
+                  {isPending ? (
+                    <ActivityIndicator size="small" color={theme.colors.white} />
+                  ) : (
+                    <Ionicons name="send" size={17} color={theme.colors.white} style={{ marginLeft: 1 }} />
+                  )}
+                </TouchableOpacity>
+              </Animated.View>
             </View>
           </KeyboardAvoidingView>
         </Animated.View>
@@ -272,38 +299,56 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius:  RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
     overflow: 'hidden',
   },
-  handleWrap: { alignItems: 'center', paddingTop: 8, paddingBottom: 4 },
-  handle: { width: 44, height: 4, borderRadius: 2, opacity: 0.5 },
+  handleWrap: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    opacity: 0.5,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm + 2,
     borderBottomWidth: 0.5,
   },
-  title: { fontSize: 15, fontWeight: '700' },
-  inputRow: {
+  title: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
+  closeBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listContent: { paddingBottom: SPACING.sm },
+  composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
     borderTopWidth: 0.5,
   },
   input: {
     flex: 1,
-    borderWidth: 1,
-    borderRadius: 22,
-    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: SPACING.md,
     paddingVertical: Platform.OS === 'ios' ? 10 : 8,
     fontSize: 14,
     maxHeight: 120,
     minHeight: 44,
+    lineHeight: 20,
   },
   sendBtn: {
     width: 44,
@@ -315,3 +360,5 @@ const styles = StyleSheet.create({
 });
 
 export default CommentsSheet;
+export { CommentsSheet };
+// ✅ theme-migrated

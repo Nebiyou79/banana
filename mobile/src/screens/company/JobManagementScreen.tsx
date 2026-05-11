@@ -1,57 +1,54 @@
 /**
  * src/screens/company/JobManagementScreen.tsx
- * ─────────────────────────────────────────────────────────────────────────────
- * Company job list with status tabs, search, and FlashList.
- * Uses CompanyJobCard with logo support.
- * ─────────────────────────────────────────────────────────────────────────────
  */
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, TextInput, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 import { useCompanyJobs, useDeleteJob, useUpdateJob } from '../../hooks/useJobs';
 import { Job, JobStatus } from '../../services/jobService';
 import { CompanyJobCard } from '../../components/jobs/CompanyJobCard';
 import { ListSkeleton } from '../../components/skeletons';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { FONT_SIZE } from '../../theme/tokens';
 
 interface Props { navigation: any }
 
 type TabStatus = Exclude<JobStatus, undefined>;
-const STATUS_TABS: ReadonlyArray<{ key: TabStatus | undefined; label: string; color?: string }> = [
-  { key: undefined,   label: 'All' },
-  { key: 'active',    label: 'Active',   color: '#10B981' },
-  { key: 'draft',     label: 'Draft',    color: '#94A3B8' },
-  { key: 'paused',    label: 'Paused',   color: '#F59E0B' },
-  { key: 'closed',    label: 'Closed',   color: '#EF4444' },
-];
 
 export const JobManagementScreen: React.FC<Props> = ({ navigation }) => {
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+  const { colors, spacing } = useTheme();
+  const insets = useSafeAreaInsets();
   const [activeStatus, setActiveStatus] = useState<TabStatus | undefined>(undefined);
   const [search, setSearch] = useState('');
+
+  // STATUS_TABS built with theme tokens
+  const STATUS_TABS = useMemo(() => [
+    { key: undefined,  label: 'All',    color: colors.textMuted },
+    { key: 'active',   label: 'Active', color: colors.success },
+    { key: 'draft',    label: 'Draft',  color: colors.textMuted },
+    { key: 'paused',   label: 'Paused', color: colors.warning },
+    { key: 'closed',   label: 'Closed', color: colors.danger },
+  ], [colors]);
 
   const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage, refetch } =
     useCompanyJobs({ status: activeStatus, limit: 15 });
 
   const deleteMut = useDeleteJob();
   const updateMut = useUpdateJob();
-  const allJobs: Job[] = useMemo(
-    () => (data?.pages ?? []).flatMap(p => p.jobs),
-    [data],
-  );
+
+  const allJobs: Job[] = useMemo(() => (data?.pages ?? []).flatMap(p => p.jobs), [data]);
 
   const jobs = useMemo(() => {
     if (!search.trim()) return allJobs;
     const q = search.toLowerCase();
     return allJobs.filter(j =>
-      j.title.toLowerCase().includes(q) ||
-      (j.category ?? '').toLowerCase().includes(q),
+      j.title.toLowerCase().includes(q) || (j.category ?? '').toLowerCase().includes(q),
     );
   }, [allJobs, search]);
 
@@ -68,10 +65,9 @@ export const JobManagementScreen: React.FC<Props> = ({ navigation }) => {
     );
   }, [deleteMut]);
 
-// JobManagementScreen.tsx  AND  OrgJobsScreen.tsx
-const handleStatusToggle = useCallback((job: Job, newStatus: 'active' | 'paused' | 'closed') => {
-  updateMut.mutate({ id: job._id, data: { status: newStatus } });
-}, [updateMut]);
+  const handleStatusToggle = useCallback((job: Job, newStatus: 'active' | 'paused' | 'closed') => {
+    updateMut.mutate({ id: job._id, data: { status: newStatus } });
+  }, [updateMut]);
 
   const renderItem = useCallback(({ item }: { item: Job }) => (
     <CompanyJobCard
@@ -85,64 +81,66 @@ const handleStatusToggle = useCallback((job: Job, newStatus: 'active' | 'paused'
   ), [navigation, handleDelete, handleStatusToggle]);
 
   return (
-    <SafeAreaView style={[s.root, { backgroundColor: c.background }]} edges={['top']}>
+    <SafeAreaView style={[s.root, { backgroundColor: colors.bg }]} edges={['top']}>
       {/* Header */}
-      <View style={s.header}>
+      <View style={[s.header, { paddingHorizontal: spacing.lg }]}>
         <View>
-          <Text style={[s.title, { color: c.text }]}>Job Postings</Text>
-          <Text style={[s.subtitle, { color: c.textMuted }]}>{totalJobs} total job{totalJobs !== 1 ? 's' : ''}</Text>
+          <Text style={[s.title, { color: colors.text }]}>Job Postings</Text>
+          <Text style={[s.subtitle, { color: colors.textMuted }]}>
+            {totalJobs} total job{totalJobs !== 1 ? 's' : ''}
+          </Text>
         </View>
         <TouchableOpacity
           onPress={() => navigation.navigate('JobCreate')}
-          style={[s.createBtn, { backgroundColor: c.primary }]}
+          style={[s.createBtn, { backgroundColor: colors.primary }]}
         >
-          <Ionicons name="add" size={20} color="#fff" />
-          <Text style={s.createBtnText}>Post Job</Text>
+          <Ionicons name="add" size={20} color={colors.textInverse} />
+          <Text style={[s.createBtnText, { color: colors.textInverse }]}>Post Job</Text>
         </TouchableOpacity>
       </View>
 
       {/* Search */}
-      <View style={[s.searchRow, { backgroundColor: c.surface, borderColor: c.border }]}>
-        <Ionicons name="search-outline" size={16} color={c.textMuted} />
+      <View style={[s.searchRow, { backgroundColor: colors.bgCard, borderColor: colors.border, marginHorizontal: spacing.lg }]}>
+        <Ionicons name="search-outline" size={16} color={colors.textMuted} />
         <TextInput
-          style={[s.searchInput, { color: c.text }]}
+          style={[s.searchInput, { color: colors.text }]}
           value={search}
           onChangeText={setSearch}
           placeholder="Search jobs..."
-          placeholderTextColor={c.placeholder ?? c.textMuted}
+          placeholderTextColor={colors.inputPlaceholder}
         />
         {search.length > 0 && (
           <TouchableOpacity onPress={() => setSearch('')}>
-            <Ionicons name="close-circle" size={16} color={c.textMuted} />
+            <Ionicons name="close-circle" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         )}
       </View>
 
       {/* Status tabs */}
-      <View style={[s.tabsWrapper, { borderBottomColor: c.border }]}>
+      <View style={[s.tabsWrapper, { borderBottomColor: colors.border }]}>
         <FlashList
-          data={STATUS_TABS as any[]}
+          data={STATUS_TABS}
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 12 }}
+          contentContainerStyle={{ paddingHorizontal: spacing.md }}
           renderItem={({ item: tab }) => {
             const active = activeStatus === tab.key;
             return (
               <TouchableOpacity
-                onPress={() => setActiveStatus(tab.key)}
+                onPress={() => setActiveStatus(tab.key as TabStatus | undefined)}
                 style={[
                   s.tab,
                   active && {
-                    backgroundColor: tab.color ? `${tab.color}18` : `${c.primary}15`,
-                    borderBottomColor: tab.color ?? c.primary,
+                    backgroundColor: `${tab.color}18`,
+                    borderBottomColor: tab.color,
                     borderBottomWidth: 2,
                   },
                 ]}
               >
-                {tab.color && <View style={[s.tabDot, { backgroundColor: tab.color }]} />}
+                {tab.key && <View style={[s.tabDot, { backgroundColor: tab.color }]} />}
                 <Text style={[
                   s.tabText,
-                  { color: active ? (tab.color ?? c.primary) : c.textMuted },
+                  { color: active ? tab.color : colors.textMuted },
                   active && { fontWeight: '700' },
                 ]}>
                   {tab.label}
@@ -162,7 +160,7 @@ const handleStatusToggle = useCallback((job: Job, newStatus: 'active' | 'paused'
           data={jobs}
           renderItem={renderItem}
           keyExtractor={item => item._id}
-          contentContainerStyle={s.list}
+          contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing.xxl }}
           onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage(); }}
           onEndReachedThreshold={0.4}
           onRefresh={refetch}
@@ -183,19 +181,17 @@ const handleStatusToggle = useCallback((job: Job, newStatus: 'active' | 'paused'
   );
 };
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   root:          { flex: 1 },
-  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10 },
-  title:         { fontSize: 24, fontWeight: '800' },
-  subtitle:      { fontSize: 13, marginTop: 2 },
+  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, paddingBottom: 10 },
+  title:         { fontSize: FONT_SIZE.xxl, fontWeight: '800' },
+  subtitle:      { fontSize: FONT_SIZE.sm, marginTop: 2 },
   createBtn:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 },
-  createBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  searchRow:     { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginBottom: 4, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, gap: 8 },
-  searchInput:   { flex: 1, fontSize: 14 },
+  createBtnText: { fontSize: FONT_SIZE.base, fontWeight: '700' },
+  searchRow:     { flexDirection: 'row', alignItems: 'center', marginBottom: 4, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, gap: 8 },
+  searchInput:   { flex: 1, fontSize: FONT_SIZE.base },
   tabsWrapper:   { borderBottomWidth: StyleSheet.hairlineWidth, marginBottom: 4 },
   tab:           { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 6 },
   tabDot:        { width: 6, height: 6, borderRadius: 3 },
-  tabText:       { fontSize: 13 },
-  list:          { padding: 16 },
+  tabText:       { fontSize: FONT_SIZE.sm },
 });

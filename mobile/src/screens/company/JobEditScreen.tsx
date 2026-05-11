@@ -1,17 +1,15 @@
 /**
- * mobile/src/screens/company/JobEditScreen.tsx
- * Wraps the master JobForm in EDIT mode — pre-populates with existing job data.
- * Master-Form-Architect: uses initialData prop to call reset(toFormValues(job)).
+ * src/screens/company/JobEditScreen.tsx
  */
-
 import React from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 import { useJob, useUpdateJob } from '../../hooks/useJobs';
 import { JobForm } from '../../components/jobs/JobForm';
 import { ScreenHeader } from '../../components/shared/ScreenHeader';
 import { CreateJobData } from '../../services/jobService';
+import { AppHeader } from '../../components/shared';
 
 interface Props {
   navigation: any;
@@ -20,10 +18,9 @@ interface Props {
 
 export const JobEditScreen: React.FC<Props> = ({ navigation, route }) => {
   const { jobId } = route.params;
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+  const { colors } = useTheme();
 
-  const jobQ     = useJob(jobId);
+  const jobQ      = useJob(jobId);
   const updateMut = useUpdateJob();
 
   const handleSubmit = async (data: CreateJobData, isDraft: boolean) => {
@@ -34,18 +31,18 @@ export const JobEditScreen: React.FC<Props> = ({ navigation, route }) => {
 
   if (jobQ.isLoading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: c.background }} edges={['top']}>
-        <ScreenHeader title="Edit Job" onBack={() => navigation.goBack()} />
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+        <AppHeader title="Edit Job" onBack={() => navigation.goBack()} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color={c.primary} />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: c.background }} edges={['top']}>
-      <ScreenHeader title="Edit Job" subtitle={jobQ.data?.title} onBack={() => navigation.goBack()} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+      <AppHeader title="Edit Job" subtitle={jobQ.data?.title} onBack={() => navigation.goBack()} />
       <JobForm
         initialData={jobQ.data}
         onSubmit={handleSubmit}

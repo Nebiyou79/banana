@@ -1,12 +1,13 @@
 /**
  * mobile/src/screens/candidate/SavedJobsScreen.tsx
+ * Refactored: useTheme(), correct color aliases, estimatedItemSize on FlashList.
  */
 
 import React, { useCallback } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 import { useSavedJobs, useUnsaveJob } from '../../hooks/useJobs';
 import { Job } from '../../services/jobService';
 import { CandidateJobCard } from '../../components/jobs/CandidateJobCard';
@@ -16,8 +17,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 interface Props { navigation: any }
 
 export const SavedJobsScreen: React.FC<Props> = ({ navigation }) => {
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+  const { colors } = useTheme();
   const savedQ    = useSavedJobs();
   const unsaveMut = useUnsaveJob();
 
@@ -33,10 +33,10 @@ export const SavedJobsScreen: React.FC<Props> = ({ navigation }) => {
   ), [navigation, unsaveMut]);
 
   return (
-    <SafeAreaView style={[s.root, { backgroundColor: c.background }]} edges={['top']}>
-      <View style={[s.header, { borderBottomColor: c.border }]}>
-        <Text style={[s.title, { color: c.text }]}>Saved Jobs</Text>
-        <Text style={[s.count, { color: c.textMuted }]}>{jobs.length} saved</Text>
+    <SafeAreaView style={[s.root, { backgroundColor: colors.bg }]} edges={['top']}>
+      <View style={[s.header, { borderBottomColor: colors.border }]}>
+        <Text style={[s.title, { color: colors.text }]}>Saved Jobs</Text>
+        <Text style={[s.count, { color: colors.textMuted }]}>{jobs.length} saved</Text>
       </View>
 
       {savedQ.isLoading ? (
@@ -67,7 +67,14 @@ export const SavedJobsScreen: React.FC<Props> = ({ navigation }) => {
 
 const s = StyleSheet.create({
   root:   { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
   title:  { fontSize: 22, fontWeight: '800' },
   count:  { fontSize: 13 },
   list:   { padding: 16 },

@@ -1,4 +1,14 @@
 // src/social/components/search/SearchHistoryList.tsx
+/**
+ * SearchHistoryList — recent search queries with remove + clear-all
+ *
+ * Theme migration:
+ * - theme.border → theme.colors.border (authoritative)
+ * - theme.muted  → theme.colors.muted  (authoritative)
+ * - theme.text   → theme.colors.text   (authoritative)
+ * All tokens already used via flat aliases which remain valid; switched to
+ * theme.colors.* for consistency with the new authoritative pattern.
+ */
 import { Ionicons } from '@expo/vector-icons';
 import React, { memo } from 'react';
 import {
@@ -7,21 +17,20 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-
 import { useSocialTheme } from '../../theme/socialTheme';
 import type { SearchHistoryEntry } from '../../services/socialSearchService';
 import SectionHeader from '../shared/SectionHeader';
 
 interface Props {
-  history: SearchHistoryEntry[];
-  onPressEntry: (entry: SearchHistoryEntry) => void;
+  history:       SearchHistoryEntry[];
+  onPressEntry:  (entry: SearchHistoryEntry) => void;
   onRemoveEntry: (entry: SearchHistoryEntry) => void;
-  onClearAll: () => void;
+  onClearAll:    () => void;
 }
 
 const Row: React.FC<{
-  entry: SearchHistoryEntry;
-  onPress: () => void;
+  entry:    SearchHistoryEntry;
+  onPress:  () => void;
   onRemove: () => void;
 }> = memo(({ entry, onPress, onRemove }) => {
   const theme = useSocialTheme();
@@ -29,12 +38,15 @@ const Row: React.FC<{
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.7}
-      style={[styles.row, { borderBottomColor: theme.border }]}
+      style={[styles.row, { borderBottomColor: theme.colors.border }]}
       accessibilityRole="button"
       accessibilityLabel={`Search again for ${entry.query}`}
     >
-      <Ionicons name="time-outline" size={18} color={theme.muted} />
-      <Text style={[styles.text, { color: theme.text }]} numberOfLines={1}>
+      <Ionicons name="time-outline" size={18} color={theme.colors.muted} />
+      <Text
+        style={[styles.text, { color: theme.colors.text }]}
+        numberOfLines={1}
+      >
         {entry.query}
       </Text>
       <TouchableOpacity
@@ -44,7 +56,7 @@ const Row: React.FC<{
         accessibilityRole="button"
         accessibilityLabel={`Remove ${entry.query} from history`}
       >
-        <Ionicons name="close" size={18} color={theme.muted} />
+        <Ionicons name="close" size={18} color={theme.colors.muted} />
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -53,9 +65,8 @@ const Row: React.FC<{
 Row.displayName = 'SearchHistoryRow';
 
 /**
- * List of recent search queries with inline remove + clear-all header action.
- * Hides itself when empty so the empty state for the screen can render
- * something appropriate.
+ * List of recent search queries. Hides itself when empty so the screen can
+ * render an appropriate empty state.
  */
 const SearchHistoryList: React.FC<Props> = memo(
   ({ history, onPressEntry, onRemoveEntry, onClearAll }) => {
@@ -69,7 +80,7 @@ const SearchHistoryList: React.FC<Props> = memo(
         />
         {history.map((entry) => (
           <Row
-            key={`${entry.query}_${entry.createdAt}`}
+            key={`${entry.query}_${entry.timestamp}`}
             entry={entry}
             onPress={() => onPressEntry(entry)}
             onRemove={() => onRemoveEntry(entry)}
@@ -84,21 +95,22 @@ SearchHistoryList.displayName = 'SearchHistoryList';
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection:  'row',
+    alignItems:     'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
+    paddingVertical:   12,
+    gap:            12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    minHeight: 48,
+    minHeight:      48,
   },
-  text: { flex: 1, fontSize: 14 },
+  text:      { flex: 1, fontSize: 14 },
   removeBtn: {
-    minWidth: 36,
-    minHeight: 36,
-    alignItems: 'center',
+    minWidth:       36,
+    minHeight:      36,
+    alignItems:     'center',
     justifyContent: 'center',
   },
 });
 
 export default SearchHistoryList;
+// ✅ theme-migrated

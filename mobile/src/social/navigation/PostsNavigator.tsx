@@ -1,6 +1,16 @@
+/**
+ * src/social/navigation/PostsNavigator.tsx
+ * Three-tab swipe navigator: Feed · My Posts · Saved
+ *
+ * Uses createMaterialTopTabNavigator (unchanged — was already a top tab).
+ * Safe-area top inset applied via tabBarStyle.paddingTop so it renders
+ * correctly when nested inside SocialNavigator (also a top tab).
+ */
+
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import React from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import FeedScreen from '../screens/FeedScreen';
 import MyPostsScreen from '../screens/MyPostsScreen';
 import SavedPostsScreen from '../screens/SavedPostsScreen';
@@ -9,13 +19,10 @@ import type { PostsTabParamList } from './types';
 
 const TopTab = createMaterialTopTabNavigator<PostsTabParamList>();
 
-/**
- * Three-tab swipe navigator between Feed / My Posts / Saved.
- * Indicator colour follows the role primary.
- */
 const PostsNavigator: React.FC = () => {
   const theme = useSocialTheme();
   const insets = useSafeAreaInsets();
+
   return (
     <TopTab.Navigator
       initialRouteName="Feed"
@@ -26,6 +33,8 @@ const PostsNavigator: React.FC = () => {
           shadowOpacity: 0,
           borderBottomWidth: 0.5,
           borderBottomColor: theme.border,
+          // Only apply top inset when PostsNavigator is the outermost surface
+          // (i.e. when not nested inside another top-tab that already handles it).
           paddingTop: insets.top,
         },
         tabBarActiveTintColor: theme.primary,

@@ -1,470 +1,442 @@
-// ─────────────────────────────────────────────────────────────────────────────
-//  src/screens/company/professionalTenders/MyProfessionalTendersScreen.tsx
-// ─────────────────────────────────────────────────────────────────────────────
-//  Owner-side list of own posted professional tenders.
-//
-//  • Hook: useMyPostedProfessionalTenders
-//  • Status filter chips (All / Draft / Published / Locked / Deadline / Closed)
-//  • Pull-to-refresh, infinite scroll (page-based)
-//  • FAB → CreateProfessionalTenderScreen
-//  • Tap card → ProfessionalTenderDetailScreen
-//
-//  All sealed-bid contents are obscured at this level — list endpoints
-//  intentionally don't carry bid amounts. The card just shows count.
-// ─────────────────────────────────────────────────────────────────────────────
+// src/screens/professional/tenders/MyProfessionalTendersScreen.tsx
 
+import { FlashList } from '@shopify/flash-list';
+import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
+  Alert,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useThemeStore } from '../../../store/themeStore';
-import { useMyPostedProfessionalTenders } from '../../../hooks/useProfessionalTender';
-import ProfessionalTenderStatusBadge, {
-  getStatusTone,
-} from '../../../components/professionalTenders/ProfessionalTenderStatusBadge';
-import ProfessionalTenderWorkflowBadge from '../../../components/professionalTenders/ProfessionalTenderWorkflowBadge';
+import { useTheme } from '../../../hooks/useTheme';
+import { withAlpha } from '../../../theme/utils';
+import {
+  useDeleteProfessionalTender,
+  useMyPostedProfessionalTenders,
+  usePublishProfessionalTender,
+} from '../../../hooks/useProfessionalTender';
 import type {
-  MyProfessionalTendersFilters,
   ProfessionalTenderListItem,
   ProfessionalTenderStatus,
 } from '../../../types/professionalTender';
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  FILTER CHIPS
-// ═════════════════════════════════════════════════════════════════════════════
+// ─── Filter tabs ──────────────────────────────────────────────────────────────
 
-type StatusFilter = 'all' | ProfessionalTenderStatus;
+type TabKey = ProfessionalTenderStatus | 'all';
 
-const STATUS_FILTERS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
-  { value: 'all',              label: 'All' },
-  { value: 'draft',            label: 'Drafts' },
-  { value: 'published',        label: 'Live' },
-  { value: 'locked',           label: 'Locked' },
-  { value: 'deadline_reached', label: 'Closed Window' },
-  { value: 'revealed',         label: 'Revealed' },
-  { value: 'closed',           label: 'Concluded' },
+const TABS: Array<{ key: TabKey; label: string }> = [
+  { key: 'all',       label: 'All' },
+  { key: 'draft',     label: 'Draft' },
+  { key: 'published', label: 'Published' },
+  { key: 'closed',    label: 'Closed' },
+  { key: 'awarded',   label: 'Awarded' },
 ];
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  CARD
-// ═════════════════════════════════════════════════════════════════════════════
+// ─── Status badge ─────────────────────────────────────────────────────────────
 
-const TenderCard: React.FC<{
-  item: ProfessionalTenderListItem;
-  onPress: () => void;
-}> = ({ item, onPress }) => {
-  const isDark = useThemeStore((s) => s.theme.isDark);
-  const palette = isDark
-    ? { surface: '#1E293B', border: '#334155', text: '#F1F5F9', muted: '#94A3B8', subtle: '#64748B' }
-    : { surface: '#FFFFFF', border: '#E2E8F0', text: '#0F172A', muted: '#64748B', subtle: '#94A3B8' };
+type ColorFn = (colors: ReturnType<typeof useTheme>['colors']) => { bg: string; fg: string };
 
-  const deadline = new Date(item.deadline);
-  const isPast = deadline.getTime() < Date.now();
-  const daysLeft = Math.ceil((deadline.getTime() - Date.now()) / 86_400_000);
-
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }: { pressed: boolean }) => [
-        cardStyles.root,
-        { backgroundColor: palette.surface, borderColor: palette.border, opacity: pressed ? 0.92 : 1 },
-      ]}
-      accessibilityRole="button"
-      accessibilityLabel={`Open tender ${item.title}`}
-    >
-      {/* Header — badges */}
-      <View style={cardStyles.headerRow}>
-        <ProfessionalTenderStatusBadge status={item.status} />
-        <ProfessionalTenderWorkflowBadge workflowType={item.workflowType} size="sm" />
-      </View>
-
-      {/* Title */}
-      <Text style={[cardStyles.title, { color: palette.text }]} numberOfLines={2}>
-        {item.title}
-      </Text>
-
-      {/* Brief */}
-      {!!item.briefDescription && (
-        <Text style={[cardStyles.brief, { color: palette.muted }]} numberOfLines={2}>
-          {item.briefDescription}
-        </Text>
-      )}
-
-      {/* Meta */}
-      <View style={cardStyles.metaRow}>
-        <View style={cardStyles.metaItem}>
-          <Ionicons name="pricetag-outline" size={11} color={palette.subtle} />
-          <Text style={[cardStyles.metaText, { color: palette.subtle }]} numberOfLines={1}>
-            {item.procurementCategory || '—'}
-          </Text>
-        </View>
-        {!!item.referenceNumber && (
-          <View style={cardStyles.metaItem}>
-            <Ionicons name="barcode-outline" size={11} color={palette.subtle} />
-            <Text
-              style={[cardStyles.metaText, { color: palette.subtle, fontFamily: 'monospace' }]}
-              numberOfLines={1}
-            >
-              {item.referenceNumber}
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* Footer row — deadline + bid count */}
-      <View style={cardStyles.footerRow}>
-        <View style={cardStyles.metaItem}>
-          <Ionicons
-            name={isPast ? 'time' : 'calendar-outline'}
-            size={12}
-            color={isPast ? '#DC2626' : palette.muted}
-          />
-          <Text
-            style={[
-              cardStyles.metaTextStrong,
-              { color: isPast ? '#DC2626' : palette.text },
-            ]}
-            numberOfLines={1}
-          >
-            {isPast
-              ? 'Deadline passed'
-              : daysLeft <= 1
-                ? 'Closes today'
-                : `${daysLeft} days left`}
-          </Text>
-        </View>
-        <View style={cardStyles.metaItem}>
-          <Ionicons name="people-outline" size={12} color={palette.muted} />
-          <Text style={[cardStyles.metaTextStrong, { color: palette.text }]}>
-            {item.bidCount ?? 0} bid{(item.bidCount ?? 0) === 1 ? '' : 's'}
-          </Text>
-        </View>
-      </View>
-    </Pressable>
-  );
+const STATUS_META: Record<ProfessionalTenderStatus, { label: string; getColors: ColorFn }> = {
+  draft:            { label: 'Draft',            getColors: (c) => ({ bg: withAlpha(c.textMuted, 0.15),   fg: c.textMuted }) },
+  published:        { label: 'Published',        getColors: (c) => ({ bg: c.successBg,                   fg: c.success }) },
+  closed:           { label: 'Closed',           getColors: (c) => ({ bg: c.dangerBg,                    fg: c.danger }) },
+  awarded:          { label: 'Awarded',          getColors: (c) => ({ bg: c.successBg,                   fg: c.success }) },
+  revealed:         { label: 'Revealed',         getColors: (c) => ({ bg: c.infoBg,                      fg: c.info }) },
+  cancelled:        { label: 'Cancelled',        getColors: (c) => ({ bg: c.dangerBg,                    fg: c.danger }) },
+  locked:           { label: 'Locked',           getColors: (c) => ({ bg: withAlpha(c.warning, 0.15),    fg: c.warning }) },
+  deadline_reached: { label: 'Deadline Reached', getColors: (c) => ({ bg: withAlpha(c.warning, 0.15),    fg: c.warning }) },
 };
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  EMPTY STATE
-// ═════════════════════════════════════════════════════════════════════════════
-
-const EmptyState: React.FC<{ onCreate: () => void; filterLabel: string }> = ({
-  onCreate,
-  filterLabel,
-}) => {
-  const isDark = useThemeStore((s) => s.theme.isDark);
-  const palette = isDark
-    ? { text: '#F1F5F9', muted: '#94A3B8', primary: '#60A5FA', primaryFg: '#0F172A' }
-    : { text: '#0F172A', muted: '#64748B', primary: '#2563EB', primaryFg: '#FFFFFF' };
-  const isFiltered = filterLabel !== 'All';
-
+const StatusBadge: React.FC<{ status: ProfessionalTenderStatus }> = ({ status }) => {
+  const { colors } = useTheme();
+  const meta = STATUS_META[status] ?? {
+    label: status,
+    getColors: (c: ReturnType<typeof useTheme>['colors']) => ({ bg: withAlpha(c.textMuted, 0.15), fg: c.textMuted }),
+  };
+  const { bg, fg } = meta.getColors(colors);
   return (
-    <View style={emptyStyles.root}>
-      <View style={[emptyStyles.iconWrap, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
-        <Ionicons
-          name={isFiltered ? 'funnel-outline' : 'document-text-outline'}
-          size={36}
-          color={palette.muted}
-        />
-      </View>
-      <Text style={[emptyStyles.title, { color: palette.text }]}>
-        {isFiltered ? `No ${filterLabel.toLowerCase()} tenders` : 'No tenders yet'}
-      </Text>
-      <Text style={[emptyStyles.desc, { color: palette.muted }]}>
-        {isFiltered
-          ? 'Try clearing the filter or creating a new tender.'
-          : 'Create your first professional tender to start receiving bids.'}
-      </Text>
-      <Pressable
-        onPress={onCreate}
-        style={[emptyStyles.cta, { backgroundColor: palette.primary }]}
-        accessibilityRole="button"
-        accessibilityLabel="Create new tender"
-      >
-        <Ionicons name="add" size={16} color={palette.primaryFg} />
-        <Text style={[emptyStyles.ctaLabel, { color: palette.primaryFg }]}>
-          New Tender
-        </Text>
-      </Pressable>
+    <View style={[sb.root, { backgroundColor: bg }]}>
+      <Text style={[sb.label, { color: fg }]}>{meta.label.toUpperCase()}</Text>
     </View>
   );
 };
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  SCREEN
-// ═════════════════════════════════════════════════════════════════════════════
+// ─── Tender card ──────────────────────────────────────────────────────────────
 
-const PAGE_SIZE = 20;
+interface TenderCardProps {
+  item: ProfessionalTenderListItem;
+  onPress: () => void;
+  onEdit: () => void;
+  onViewBids: () => void;
+  onPublish: () => void;
+  onDelete: () => void;
+}
 
-export const MyProfessionalTendersScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
-  const isDark = useThemeStore((s) => s.theme.isDark);
+const TenderCard = React.memo<TenderCardProps>(({
+  item, onPress, onEdit, onViewBids, onPublish, onDelete,
+}) => {
+  const { colors } = useTheme();
+  const bidsCount = item.metadata?.totalBids ?? item.bidCount ?? 0;
 
-  const palette = useMemo(
-    () => isDark
-      ? { background: '#0F172A', surface: '#1E293B', border: '#334155', text: '#F1F5F9', muted: '#94A3B8', primary: '#60A5FA', primaryFg: '#0F172A', chipBg: '#1E293B', chipBgActive: '#1E3A5F', chipFg: '#94A3B8', chipFgActive: '#93C5FD' }
-      : { background: '#F8FAFC', surface: '#FFFFFF', border: '#E2E8F0', text: '#0F172A', muted: '#64748B', primary: '#2563EB', primaryFg: '#FFFFFF', chipBg: '#FFFFFF',  chipBgActive: '#DBEAFE', chipFg: '#475569', chipFgActive: '#1D4ED8' },
-    [isDark],
-  );
-
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [page, setPage] = useState(1);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const filters: MyProfessionalTendersFilters = useMemo(
-    () => ({
-      status: statusFilter,
-      page,
-      limit: PAGE_SIZE,
-    }),
-    [statusFilter, page],
-  );
-
-  const { data, isLoading, isError, error, refetch, isFetching } =
-    useMyPostedProfessionalTenders(filters);
-
-  const tenders = data?.tenders ?? [];
-  const pagination = data?.pagination;
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    setPage(1);
-    await refetch();
-    setRefreshing(false);
-  }, [refetch]);
-
-  const onLoadMore = useCallback(() => {
-    if (!pagination) return;
-    if (pagination.page >= pagination.totalPages) return;
-    if (isFetching) return;
-    setPage((p) => p + 1);
-  }, [pagination, isFetching]);
-
-  const goToCreate = useCallback(() => {
-    navigation.navigate('CreateProfessionalTender');
-  }, [navigation]);
-
-  const goToDetail = useCallback(
-    (id: string) => navigation.navigate('ProfessionalTenderDetail', { tenderId: id }),
-    [navigation],
-  );
-
-  const activeFilterLabel = STATUS_FILTERS.find((f) => f.value === statusFilter)?.label ?? 'All';
-
-  // ─── Render ───────────────────────────────────────────────────────────
   return (
-    <View style={[styles.root, { backgroundColor: palette.background }]}>
-      {/* Filter chips */}
-      <View style={[styles.filterBar, { backgroundColor: palette.background, borderColor: palette.border }]}>
-        <ScrollView
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.8}
+      accessibilityRole="button"
+      style={[tc.root, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+    >
+      {/* Title + badge */}
+      <View style={tc.topRow}>
+        <Text style={[tc.title, { color: colors.text }]} numberOfLines={2}>
+          {item.title}
+        </Text>
+        <StatusBadge status={item.status} />
+      </View>
+
+      {/* Meta */}
+      <Text style={[tc.meta, { color: colors.textMuted }]} numberOfLines={1}>
+        {item.referenceNumber ?? '—'}
+        {item.procurementCategory ? `  ·  ${item.procurementCategory}` : ''}
+      </Text>
+
+      {/* Deadline */}
+      {item.deadline && (
+        <View style={tc.deadlineRow}>
+          <Ionicons name="time-outline" size={13} color={colors.textMuted} />
+          <Text style={[tc.deadlineText, { color: colors.textMuted }]}>
+            {new Date(item.deadline).toLocaleDateString('en-US', {
+              month: 'short', day: 'numeric', year: 'numeric',
+            })}
+          </Text>
+        </View>
+      )}
+
+      {/* Stats */}
+      <View style={[tc.statsRow, { borderTopColor: colors.border }]}>
+        <Text style={[tc.statText, { color: colors.textMuted }]}>
+          {bidsCount} bid{bidsCount !== 1 ? 's' : ''}
+        </Text>
+        <Text style={[tc.statText, { color: colors.textMuted }]}>
+          {item.metadata?.views ?? 0} views
+        </Text>
+      </View>
+
+      {/* Action buttons */}
+      <View style={tc.actionsRow}>
+        <ActionButton label={`Bids (${bidsCount})`} onPress={onViewBids} variant="primary" />
+        <ActionButton label="Edit"                  onPress={onEdit}     variant="neutral" />
+        {item.status === 'draft' && (
+          <ActionButton label="Publish" onPress={onPublish} variant="success" />
+        )}
+        {item.status === 'draft' && (
+          <ActionButton label="Delete" onPress={onDelete} variant="danger" />
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+});
+
+type Variant = 'primary' | 'neutral' | 'success' | 'danger';
+
+const ActionButton: React.FC<{ label: string; onPress: () => void; variant: Variant }> = ({
+  label, onPress, variant,
+}) => {
+  const { colors } = useTheme();
+
+  const getStyle = (): { bg: string; border: string; text: string } => {
+    switch (variant) {
+      case 'primary': return {
+        bg: withAlpha(colors.primary, 0.10), border: withAlpha(colors.primary, 0.30), text: colors.primary,
+      };
+      case 'success': return {
+        bg: withAlpha(colors.success, 0.10), border: withAlpha(colors.success, 0.30), text: colors.success,
+      };
+      case 'danger': return {
+        bg: withAlpha(colors.danger, 0.08), border: withAlpha(colors.danger, 0.25), text: colors.danger,
+      };
+      default: return {
+        bg: colors.bgCard, border: colors.border, text: colors.text,
+      };
+    }
+  };
+
+  const s = getStyle();
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      style={[ab.btn, { backgroundColor: s.bg, borderColor: s.border }]}
+    >
+      <Text style={[ab.text, { color: s.text }]}>{label}</Text>
+    </TouchableOpacity>
+  );
+};
+
+// ─── Empty state ──────────────────────────────────────────────────────────────
+
+const EmptyState: React.FC<{ tab: TabKey; onCreate: () => void }> = ({ tab, onCreate }) => {
+  const { colors } = useTheme();
+  return (
+    <View style={es.root}>
+      <View style={[es.iconWrap, { backgroundColor: withAlpha(colors.primary, 0.10) }]}>
+        <Ionicons name="document-text-outline" size={36} color={colors.primary} />
+      </View>
+      <Text style={[es.title, { color: colors.text }]}>
+        {tab === 'all' ? 'No tenders yet' : `No ${tab} tenders`}
+      </Text>
+      <Text style={[es.sub, { color: colors.textMuted }]}>
+        {tab === 'all'
+          ? 'Create your first professional tender to invite sealed bids.'
+          : `You have no tenders with status "${tab}".`}
+      </Text>
+      {tab === 'all' && (
+        <TouchableOpacity
+          onPress={onCreate}
+          accessibilityRole="button"
+          style={[es.btn, { backgroundColor: colors.primary }]}
+        >
+          <Text style={[es.btnText, { color: colors.textInverse }]}>Create Tender</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+};
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
+
+const MyProfessionalTendersScreen: React.FC = () => {
+  const navigation     = useNavigation<any>();
+  const { colors, spacing } = useTheme();
+  const insets         = useSafeAreaInsets();
+
+  const [activeTab, setActiveTab] = useState<TabKey>('all');
+
+  const { data, isLoading, refetch, isRefetching } = useMyPostedProfessionalTenders({
+    status: activeTab === 'all' ? undefined : activeTab,
+    limit: 20,
+  });
+
+  const deleteMutation  = useDeleteProfessionalTender();
+  const publishMutation = usePublishProfessionalTender();
+
+  const tenders: ProfessionalTenderListItem[] = useMemo(
+    () => data?.tenders ?? [],
+    [data],
+  );
+
+  const totalCount = data?.pagination?.total ?? tenders.length;
+
+  const handleDelete = useCallback(
+    (item: ProfessionalTenderListItem) => {
+      Alert.alert('Delete Tender', `Delete "${item.title}"? This cannot be undone.`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteMutation.mutate(item._id),
+        },
+      ]);
+    },
+    [deleteMutation],
+  );
+
+  const handlePublish = useCallback(
+    (item: ProfessionalTenderListItem) => {
+      Alert.alert('Publish Tender', `Publish "${item.title}"?`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Publish', onPress: () => publishMutation.mutate(item._id) },
+      ]);
+    },
+    [publishMutation],
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: ProfessionalTenderListItem }) => (
+      <TenderCard
+        item={item}
+        onPress={() => navigation.navigate('ProfessionalTenderDetail', { tenderId: item._id })}
+        onEdit={() => navigation.navigate('EditProfessionalTender', { tenderId: item._id })}
+        onViewBids={() => navigation.navigate('IncomingBids', { tenderId: item._id })}
+        onPublish={() => handlePublish(item)}
+        onDelete={() => handleDelete(item)}
+      />
+    ),
+    [navigation, handlePublish, handleDelete],
+  );
+
+  return (
+    <SafeAreaView style={[styles.root, { backgroundColor: colors.bg }]} edges={['top']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View>
+          <Text style={[styles.title, { color: colors.text }]}>My Tenders</Text>
+          <Text style={[styles.subtitle, { color: colors.textMuted }]}>
+            {totalCount} tender{totalCount !== 1 ? 's' : ''}
+          </Text>
+        </View>
+      </View>
+
+      {/* Tabs */}
+      <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
+        <FlashList
+          data={TABS}
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
-        >
-          {STATUS_FILTERS.map((f) => {
-            const active = statusFilter === f.value;
+          contentContainerStyle={{ paddingHorizontal: 16 }}
+          keyExtractor={(t) => t.key}
+          renderItem={({ item: tab }) => {
+            const active = activeTab === tab.key;
             return (
               <Pressable
-                key={f.value}
-                onPress={() => { setStatusFilter(f.value); setPage(1); }}
-                style={[
-                  styles.chip,
-                  {
-                    backgroundColor: active ? palette.chipBgActive : palette.chipBg,
-                    borderColor: active ? palette.chipFgActive : palette.border,
-                  },
-                ]}
-                accessibilityRole="button"
+                onPress={() => setActiveTab(tab.key)}
+                accessibilityRole="tab"
                 accessibilityState={{ selected: active }}
+                style={[
+                  styles.tab,
+                  active && { borderBottomWidth: 2, borderBottomColor: colors.primary },
+                ]}
               >
                 <Text
                   style={[
-                    styles.chipText,
-                    { color: active ? palette.chipFgActive : palette.chipFg },
+                    styles.tabText,
+                    { color: active ? colors.primary : colors.textMuted, fontWeight: active ? '700' : '400' },
                   ]}
                 >
-                  {f.label}
+                  {tab.label}
                 </Text>
               </Pressable>
             );
-          })}
-        </ScrollView>
+          }}
+        />
       </View>
 
-      {/* Body */}
-      {isLoading && tenders.length === 0 ? (
-        <View style={styles.fullCenter}>
-          <ActivityIndicator size="large" color={palette.primary} />
-        </View>
-      ) : isError ? (
-        <View style={styles.fullCenter}>
-          <Ionicons name="alert-circle-outline" size={36} color={palette.muted} />
-          <Text style={[styles.errorText, { color: palette.text }]}>
-            {(error as any)?.message ?? 'Couldn\'t load your tenders.'}
-          </Text>
-          <Pressable onPress={onRefresh} style={[styles.retryBtn, { backgroundColor: palette.primary }]}>
-            <Text style={[styles.retryLabel, { color: palette.primaryFg }]}>Try again</Text>
-          </Pressable>
-        </View>
-      ) : tenders.length === 0 ? (
-        <EmptyState onCreate={goToCreate} filterLabel={activeFilterLabel} />
+      {/* List */}
+      {isLoading ? (
+        <ActivityIndicator size="large" color={colors.primary} style={{ flex: 1 }} />
       ) : (
-        <FlatList
+        <FlashList
           data={tenders}
           keyExtractor={(item) => item._id}
-          renderItem={({ item }: { item: ProfessionalTenderListItem }) => (
-            <TenderCard item={item} onPress={() => goToDetail(item._id)} />
-          )}
-          contentContainerStyle={styles.listContent}
+          renderItem={renderItem}
+          contentContainerStyle={{
+            padding: 16,
+            paddingBottom: insets.bottom + spacing.xxl + 72,
+          }}
           refreshControl={
             <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={palette.primary}
+              refreshing={isRefetching}
+              onRefresh={refetch}
+              tintColor={colors.primary}
             />
           }
-          onEndReached={onLoadMore}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={
-            isFetching && tenders.length > 0 ? (
-              <View style={styles.footer}>
-                <ActivityIndicator color={palette.primary} />
-              </View>
-            ) : null
+          ListEmptyComponent={
+            <EmptyState
+              tab={activeTab}
+              onCreate={() => navigation.navigate('CreateProfessionalTender')}
+            />
           }
+          ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         />
       )}
 
       {/* FAB */}
-      {tenders.length > 0 && (
-        <Pressable
-          onPress={goToCreate}
-          style={[styles.fab, { backgroundColor: palette.primary }]}
-          accessibilityRole="button"
-          accessibilityLabel="Create new tender"
-        >
-          <Ionicons name="add" size={24} color={palette.primaryFg} />
-        </Pressable>
-      )}
-    </View>
+      <TouchableOpacity
+        onPress={() => navigation.navigate('CreateProfessionalTender')}
+        accessibilityRole="button"
+        accessibilityLabel="Create tender"
+        style={[
+          styles.fab,
+          {
+            backgroundColor: colors.primary,
+            bottom: insets.bottom + spacing.lg,
+            shadowColor: colors.shadowColor,
+          },
+        ]}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="add" size={28} color={colors.textInverse} />
+      </TouchableOpacity>
+    </SafeAreaView>
   );
 };
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  STYLES
-// ═════════════════════════════════════════════════════════════════════════════
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  filterBar: {
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  filterRow: {
-    paddingHorizontal: 12,
-    gap: 8,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    minHeight: 32,
-    justifyContent: 'center',
-  },
-  chipText: { fontSize: 12, fontWeight: '600' },
-
-  fullCenter: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    padding: 24, gap: 12,
-  },
-  errorText: { fontSize: 14, textAlign: 'center', maxWidth: 280 },
-  retryBtn:  { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
-  retryLabel:{ fontSize: 13, fontWeight: '700' },
-
-  listContent: { padding: 14, gap: 10, paddingBottom: 96 },
-  footer:      { padding: 16, alignItems: 'center' },
-
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 24,
-    width: 52, height: 52,
-    borderRadius: 999,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-});
-
-const cardStyles = StyleSheet.create({
-  root: {
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 10,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  title:  { fontSize: 15, fontWeight: '700', lineHeight: 20 },
-  brief:  { fontSize: 12, lineHeight: 17 },
-  metaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  footerRow: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(148,163,184,0.15)',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
   },
-  metaItem:    { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: 200 },
-  metaText:    { fontSize: 11 },
-  metaTextStrong: { fontSize: 12, fontWeight: '600' },
+  title:    { fontSize: 24, fontWeight: '800' },
+  subtitle: { fontSize: 13, marginTop: 2 },
+  tabBar:   { borderBottomWidth: StyleSheet.hairlineWidth },
+  tab: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 44,
+    justifyContent: 'center',
+    marginRight: 4,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabText: { fontSize: 14 },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+  },
 });
 
-const emptyStyles = StyleSheet.create({
-  root: {
-    flex: 1,
-    alignItems: 'center', justifyContent: 'center',
-    padding: 24, gap: 12,
-  },
-  iconWrap: {
-    width: 80, height: 80,
-    borderRadius: 999,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 4,
-  },
-  title: { fontSize: 16, fontWeight: '700' },
-  desc:  { fontSize: 13, lineHeight: 18, textAlign: 'center', maxWidth: 280 },
-  cta: {
-    flexDirection: 'row', alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 20, paddingVertical: 12,
-    borderRadius: 12, minHeight: 44,
-    marginTop: 8,
-  },
-  ctaLabel: { fontSize: 14, fontWeight: '700' },
+const tc = StyleSheet.create({
+  root:        { borderWidth: 1, borderRadius: 16, padding: 16 },
+  topRow:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 4 },
+  title:       { flex: 1, fontSize: 16, fontWeight: '700', lineHeight: 22 },
+  meta:        { fontSize: 12, marginBottom: 6 },
+  deadlineRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
+  deadlineText:{ fontSize: 12 },
+  statsRow:    { flexDirection: 'row', gap: 16, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, marginBottom: 12 },
+  statText:    { fontSize: 12 },
+  actionsRow:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+});
+
+const ab = StyleSheet.create({
+  btn:  { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, minHeight: 44, justifyContent: 'center' },
+  text: { fontSize: 13, fontWeight: '600' },
+});
+
+const sb = StyleSheet.create({
+  root:  { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  label: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+});
+
+const es = StyleSheet.create({
+  root:     { alignItems: 'center', paddingVertical: 48, paddingHorizontal: 24, gap: 10 },
+  iconWrap: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  title:    { fontSize: 17, fontWeight: '700' },
+  sub:      { fontSize: 13, textAlign: 'center', lineHeight: 18, maxWidth: 280 },
+  btn:      { marginTop: 8, paddingHorizontal: 22, paddingVertical: 13, borderRadius: 12, minHeight: 44 },
+  btnText:  { fontSize: 14, fontWeight: '700' },
 });
 
 export default MyProfessionalTendersScreen;

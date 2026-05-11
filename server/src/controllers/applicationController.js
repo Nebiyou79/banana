@@ -7,96 +7,92 @@ const { validationResult } = require('express-validator');
 const fs = require('fs');
 const path = require('path');
 
-// Helper to detect Windows absolute paths
-const isWindowsPath = (p) => Boolean(p && typeof p === 'string' && /^[A-Za-z]:\\/.test(p));
+const {
+  COMPANY_POPULATE_SELECT,
+  ORGANIZATION_POPULATE_SELECT,
+  enrichApplicationsWithOwnerPreview,
+  buildOwnerPreviewFromJob,
+} = require('../utils/resolveOwnerPreview');
 
+const JOB_POPULATE_OPTIONS = [
+  { path: 'company',      select: COMPANY_POPULATE_SELECT,      model: 'Company' },
+  { path: 'organization', select: ORGANIZATION_POPULATE_SELECT, model: 'Organization' },
+];
+ 
+// Helper to detect Windows absolute paths
+ 
 // Universal file formatter (handles local file uploads)
 const formatFileDataUniversal = (file, folder = 'applications') => {
   if (!file) return null;
-
-  // Handle MongoDB documents
+ 
   let fileObj;
-  if (file.toObject) {
-    fileObj = file.toObject();
-  } else if (file._doc) {
-    fileObj = { ...file._doc };
-  } else {
-    fileObj = { ...file };
-  }
-
-  // Get the backend URL (should be localhost:4000 in dev, getbananalink.com in prod)
-  const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000';
+  if (file.toObject)   { fileObj = file.toObject(); }
+  else if (file._doc)  { fileObj = { ...file._doc }; }
+  else                 { fileObj = { ...file }; }
+ 
+  const backendUrl      = process.env.BACKEND_URL || 'http://localhost:4000';
   const cleanBackendUrl = backendUrl.replace(/\/+$/, '');
-
-  // Include cvId in the ID lookup
-  const fileId = fileObj._id || fileObj.cvId || fileObj.fileId || fileObj.id;
-
+  const fileId          = fileObj._id || fileObj.cvId || fileObj.fileId || fileObj.id;
+ 
   if (fileId) {
-    // Generate URLs that use the authenticated API
     return {
-      _id: (fileObj._id || fileObj.cvId)?.toString() || undefined,
-      cvId: fileObj.cvId?.toString() || undefined,
-      filename: fileObj.fileName || fileObj.filename,
+      _id:          (fileObj._id || fileObj.cvId)?.toString() || undefined,
+      cvId:         fileObj.cvId?.toString() || undefined,
+      filename:     fileObj.fileName || fileObj.filename,
       originalName: fileObj.originalName || fileObj.originalname || fileObj.fileName,
-      path: fileObj.path || fileObj.filePath,
-      size: fileObj.size || 0,
-      mimetype: fileObj.mimetype || 'application/octet-stream',
-      uploadedAt: fileObj.uploadedAt || fileObj.createdAt || new Date(),
-      url: `${cleanBackendUrl}/api/v1/uploads/view/${folder}/${fileObj.fileName || fileObj.filename}`,
-      downloadUrl: `${cleanBackendUrl}/api/v1/uploads/download/${folder}/${fileObj.fileName || fileObj.filename}`,
-      viewUrl: `${cleanBackendUrl}/api/v1/uploads/view/${folder}/${fileObj.fileName || fileObj.filename}`
+      path:         fileObj.path || fileObj.filePath,
+      size:         fileObj.size || 0,
+      mimetype:     fileObj.mimetype || 'application/octet-stream',
+      uploadedAt:   fileObj.uploadedAt || fileObj.createdAt || new Date(),
+      url:          `${cleanBackendUrl}/api/v1/uploads/view/${folder}/${fileObj.fileName || fileObj.filename}`,
+      downloadUrl:  `${cleanBackendUrl}/api/v1/uploads/download/${folder}/${fileObj.fileName || fileObj.filename}`,
+      viewUrl:      `${cleanBackendUrl}/api/v1/uploads/view/${folder}/${fileObj.fileName || fileObj.filename}`,
     };
   }
-
-  // Fallback to direct URL if no fileId
+ 
   if (fileObj.fileName) {
     return {
-      _id: (fileObj._id || fileObj.cvId)?.toString() || undefined,
-      cvId: fileObj.cvId?.toString() || undefined,
-      filename: fileObj.fileName || fileObj.filename,
+      _id:          (fileObj._id || fileObj.cvId)?.toString() || undefined,
+      cvId:         fileObj.cvId?.toString() || undefined,
+      filename:     fileObj.fileName || fileObj.filename,
       originalName: fileObj.originalName || fileObj.originalname || fileObj.fileName,
-      path: fileObj.path || fileObj.filePath,
-      size: fileObj.size || 0,
-      mimetype: fileObj.mimetype || 'application/octet-stream',
-      uploadedAt: fileObj.uploadedAt || fileObj.createdAt || new Date(),
-      url: `${cleanBackendUrl}/api/v1/uploads/view/${folder}/${fileObj.fileName}`,
-      downloadUrl: `${cleanBackendUrl}/api/v1/uploads/download/${folder}/${fileObj.fileName}`,
-      viewUrl: `${cleanBackendUrl}/api/v1/uploads/view/${folder}/${fileObj.fileName}`
+      path:         fileObj.path || fileObj.filePath,
+      size:         fileObj.size || 0,
+      mimetype:     fileObj.mimetype || 'application/octet-stream',
+      uploadedAt:   fileObj.uploadedAt || fileObj.createdAt || new Date(),
+      url:          `${cleanBackendUrl}/api/v1/uploads/view/${folder}/${fileObj.fileName}`,
+      downloadUrl:  `${cleanBackendUrl}/api/v1/uploads/download/${folder}/${fileObj.fileName}`,
+      viewUrl:      `${cleanBackendUrl}/api/v1/uploads/view/${folder}/${fileObj.fileName}`,
     };
   }
-
-  // Legacy format
-  if (!fileObj.filename && fileObj.originalName) {
-    fileObj.filename = fileObj.originalName;
-  }
-
+ 
+  if (!fileObj.filename && fileObj.originalName) fileObj.filename = fileObj.originalName;
+ 
   if (!fileObj.filename) {
     console.warn('⚠️ File missing filename:', fileObj);
     return null;
   }
-
+ 
   return {
-    _id: (fileObj._id || fileObj.cvId)?.toString() || undefined,
-    cvId: fileObj.cvId?.toString() || undefined,
-    filename: fileObj.filename,
+    _id:          (fileObj._id || fileObj.cvId)?.toString() || undefined,
+    cvId:         fileObj.cvId?.toString() || undefined,
+    filename:     fileObj.filename,
     originalName: fileObj.originalName || fileObj.filename,
-    path: fileObj.path || fileObj.filePath,
-    size: fileObj.size || 0,
-    mimetype: fileObj.mimetype || 'application/octet-stream',
-    uploadedAt: fileObj.uploadedAt || fileObj.createdAt || new Date(),
-    url: `${cleanBackendUrl}/api/v1/uploads/view/${folder}/${fileObj.filename}`,
-    downloadUrl: `${cleanBackendUrl}/api/v1/uploads/download/${folder}/${fileObj.filename}`,
-    viewUrl: `${cleanBackendUrl}/api/v1/uploads/view/${folder}/${fileObj.filename}`
+    path:         fileObj.path || fileObj.filePath,
+    size:         fileObj.size || 0,
+    mimetype:     fileObj.mimetype || 'application/octet-stream',
+    uploadedAt:   fileObj.uploadedAt || fileObj.createdAt || new Date(),
+    url:          `${cleanBackendUrl}/api/v1/uploads/view/${folder}/${fileObj.filename}`,
+    downloadUrl:  `${cleanBackendUrl}/api/v1/uploads/download/${folder}/${fileObj.filename}`,
+    viewUrl:      `${cleanBackendUrl}/api/v1/uploads/view/${folder}/${fileObj.filename}`,
   };
 };
-
+ 
 // Cleanup function for uploaded files on error
 const cleanupUploadedFiles = async (uploadedFiles) => {
   try {
     if (!uploadedFiles || !uploadedFiles.success) return;
-
     const fs = require('fs').promises;
-
     if (uploadedFiles.files && Array.isArray(uploadedFiles.files)) {
       for (const file of uploadedFiles.files) {
         if (file.path && file.path.startsWith('/')) {
@@ -114,482 +110,263 @@ const cleanupUploadedFiles = async (uploadedFiles) => {
   }
 };
 
+// Helper to detect Windows absolute paths
+const isWindowsPath = (p) => Boolean(p && typeof p === 'string' && /^[A-Za-z]:\\/.test(p));
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// applyForJob (unchanged logic, updated populate)
+// ─────────────────────────────────────────────────────────────────────────────
 exports.applyForJob = async (req, res) => {
   try {
     console.log('🔍 [Backend] ===== APPLICATION SUBMISSION STARTED =====');
-
-    // Debug ALL request body fields
     console.log('📦 [Backend] ALL request body fields:', Object.keys(req.body));
     Object.keys(req.body).forEach(key => {
       if (key.includes('tempId') || key.includes('referencePdfs') || key.includes('experiencePdfs')) {
         console.log(`  ${key}: ${typeof req.body[key]} = ${req.body[key]}`);
       }
     });
-
-    // Parse JSON fields
+ 
     const parsedBody = { ...req.body };
     const parseField = (fieldName) => {
       if (parsedBody[fieldName] && typeof parsedBody[fieldName] === 'string') {
-        try {
-          parsedBody[fieldName] = JSON.parse(parsedBody[fieldName]);
-        } catch (error) {
-          console.log(`⚠️ Failed to parse ${fieldName}:`, error.message);
-        }
+        try { parsedBody[fieldName] = JSON.parse(parsedBody[fieldName]); }
+        catch (error) { console.log(`⚠️ Failed to parse ${fieldName}:`, error.message); }
       }
     };
-
     ['selectedCVs', 'contactInfo', 'skills', 'references', 'workExperience', 'userInfo'].forEach(parseField);
     req.body = parsedBody;
-
-    // Validation
+ 
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       console.log('❌ [Backend] VALIDATION ERRORS:', errors.array());
       await cleanupUploadedFiles(req.uploadedFiles);
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
+      return res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
     }
-
+ 
     const { jobId } = req.params;
-    const userId = req.user.userId;
-
-    console.log(`👤 [Backend] User ${userId} applying for job ${jobId}`);
-
-    // Check if user is a candidate
+    const userId    = req.user.userId;
+ 
     if (req.user.role !== 'candidate') {
-      console.log('❌ [Backend] User is not a candidate');
       await cleanupUploadedFiles(req.uploadedFiles);
-      return res.status(403).json({
-        success: false,
-        message: 'Only candidates can apply for jobs'
-      });
+      return res.status(403).json({ success: false, message: 'Only candidates can apply for jobs' });
     }
-
-    // Check if job exists
-    const job = await Job.findOne({
-      _id: jobId,
-      status: 'active'
-    }).populate('company organization');
-
+ 
+    // ── FIXED: populate uses extended field list ──────────────────────────────
+    const job = await Job.findOne({ _id: jobId, status: 'active' })
+      .populate('company',      COMPANY_POPULATE_SELECT)
+      .populate('organization', ORGANIZATION_POPULATE_SELECT);
+ 
     if (!job) {
-      console.log('❌ [Backend] Job not found:', jobId);
       await cleanupUploadedFiles(req.uploadedFiles);
-      return res.status(404).json({
-        success: false,
-        message: 'Job not found'
-      });
+      return res.status(404).json({ success: false, message: 'Job not found' });
     }
-
-    console.log('✅ [Backend] Job found:', job.title);
-
-    // Check deadline
+ 
     if (job.applicationDeadline && new Date(job.applicationDeadline) < new Date()) {
-      console.log('❌ [Backend] Job deadline passed');
       await cleanupUploadedFiles(req.uploadedFiles);
-      return res.status(400).json({
-        success: false,
-        message: 'This job is no longer accepting applications'
-      });
+      return res.status(400).json({ success: false, message: 'This job is no longer accepting applications' });
     }
-
-    // Check duplicate application
-    const existingApplication = await Application.findOne({
-      job: jobId,
-      candidate: userId
-    });
-
+ 
+    const existingApplication = await Application.findOne({ job: jobId, candidate: userId });
     if (existingApplication) {
-      console.log('❌ [Backend] User already applied');
       await cleanupUploadedFiles(req.uploadedFiles);
-      return res.status(400).json({
-        success: false,
-        message: 'You have already applied for this job'
-      });
+      return res.status(400).json({ success: false, message: 'You have already applied for this job' });
     }
-
-    // Get candidate profile
+ 
     const candidate = await User.findById(userId)
       .select('name email phone location avatar bio website socialLinks skills education experience certifications cvs')
       .lean();
-
+ 
     if (!candidate) {
-      console.log('❌ [Backend] Candidate profile not found');
       await cleanupUploadedFiles(req.uploadedFiles);
-      return res.status(404).json({
-        success: false,
-        message: 'Candidate profile not found'
-      });
+      return res.status(404).json({ success: false, message: 'Candidate profile not found' });
     }
-
-    console.log('✅ [Backend] Candidate profile found');
-
-    // ===== SIMPLIFIED: Process uploaded files =====
-    const uploadedFiles = {
-      referenceFiles: {},
-      experienceFiles: {}
-    };
-
-    console.log('📁 [Backend] Uploaded files by field:', Object.keys(req.uploadedFilesByField || {}));
-
+ 
+    const uploadedFiles = { referenceFiles: {}, experienceFiles: {} };
+ 
     if (req.uploadedFilesByField) {
       Object.entries(req.uploadedFilesByField).forEach(([field, data]) => {
-        console.log(`📁 [Backend] Processing ${field}: ${data.count} file(s)`);
-
         data.files.forEach((file, fileIndex) => {
-          console.log(`  File ${fileIndex}: ${file.fileName}`);
-
-          // SIMPLE METADATA PARSING
           let _tempId = null;
-
-          // Try multiple metadata formats
           const possibleKeys = [
-            `${field}_${fileIndex}_tempId`,  // referencePdfs_0_tempId
-            `referencePdfs_${fileIndex}_tempId`,
-            `experiencePdfs_${fileIndex}_tempId`,
-            `${field}_metadata_${fileIndex}`, // JSON metadata
+            `${field}_${fileIndex}_tempId`, `referencePdfs_${fileIndex}_tempId`,
+            `experiencePdfs_${fileIndex}_tempId`, `${field}_metadata_${fileIndex}`,
           ];
-
           for (const key of possibleKeys) {
             if (req.body[key]) {
-              console.log(`  Found metadata at ${key}: ${req.body[key]}`);
-
               const value = req.body[key];
               if (typeof value === 'string') {
                 if (value.startsWith('{')) {
-                  try {
-                    const parsed = JSON.parse(value);
-                    _tempId = parsed._tempId || parsed.tempId;
-                  } catch (error) {
-                    _tempId = value;
-                  }
-                } else {
-                  _tempId = value;
-                }
+                  try { const p = JSON.parse(value); _tempId = p._tempId || p.tempId; } catch { _tempId = value; }
+                } else { _tempId = value; }
               }
               break;
             }
           }
-
           if (!_tempId) {
-            // Try to extract from references/workExperience data
             const parsedData = parsedBody[field === 'referencePdfs' ? 'references' : 'workExperience'];
-            if (parsedData && parsedData[fileIndex]) {
-              _tempId = parsedData[fileIndex]._tempId;
-            }
+            if (parsedData && parsedData[fileIndex]) _tempId = parsedData[fileIndex]._tempId;
           }
-
           if (_tempId) {
-            if (field === 'referencePdfs') {
-              uploadedFiles.referenceFiles[_tempId] = { ...file, _tempId };
-              console.log(`✅ [Backend] Matched reference file to tempId: ${_tempId}`);
-            } else if (field === 'experiencePdfs') {
-              uploadedFiles.experienceFiles[_tempId] = { ...file, _tempId };
-              console.log(`✅ [Backend] Matched experience file to tempId: ${_tempId}`);
-            }
-          } else {
-            console.log(`❌ [Backend] No metadata for ${field}[${fileIndex}]`);
+            if (field === 'referencePdfs') uploadedFiles.referenceFiles[_tempId] = { ...file, _tempId };
+            else if (field === 'experiencePdfs') uploadedFiles.experienceFiles[_tempId] = { ...file, _tempId };
           }
         });
       });
     }
-
-    console.log('📊 [Backend] Uploaded files:', {
-      referenceFiles: Object.keys(uploadedFiles.referenceFiles),
-      experienceFiles: Object.keys(uploadedFiles.experienceFiles)
-    });
-
-    // Get form data
+ 
     const {
-      coverLetter,
-      skills: applicationSkills = [],
-      references = [],
-      workExperience = [],
-      contactInfo = {},
-      selectedCVs = [],
-      userInfo = {}
+      coverLetter, skills: applicationSkills = [], references = [],
+      workExperience = [], contactInfo = {}, selectedCVs = [], userInfo = {}
     } = parsedBody;
-
-    console.log('📝 [Backend] Data counts:', {
-      coverLetter: coverLetter?.length,
-      skills: applicationSkills.length,
-      references: references.length,
-      workExperience: workExperience.length,
-      selectedCVs: selectedCVs.length
-    });
-
-    // Validate cover letter
+ 
     if (!coverLetter || coverLetter.trim().length === 0) {
-      console.log('❌ [Backend] Cover letter missing');
       await cleanupUploadedFiles(req.uploadedFiles);
-      return res.status(400).json({
-        success: false,
-        message: 'Cover letter is required'
-      });
+      return res.status(400).json({ success: false, message: 'Cover letter is required' });
     }
-
     if (coverLetter.length > 5000) {
-      console.log('❌ [Backend] Cover letter too long');
       await cleanupUploadedFiles(req.uploadedFiles);
-      return res.status(400).json({
-        success: false,
-        message: 'Cover letter cannot exceed 5000 characters'
-      });
+      return res.status(400).json({ success: false, message: 'Cover letter cannot exceed 5000 characters' });
     }
-
-    // Validate CVs
     if (!selectedCVs || selectedCVs.length === 0) {
-      console.log('❌ [Backend] No CVs selected');
       await cleanupUploadedFiles(req.uploadedFiles);
-      return res.status(400).json({
-        success: false,
-        message: 'At least one CV must be selected'
-      });
+      return res.status(400).json({ success: false, message: 'At least one CV must be selected' });
     }
-
-    const userCVIds = candidate.cvs ? candidate.cvs.map(cv => cv._id.toString()) : [];
-    const invalidCVs = selectedCVs.filter(cv => !userCVIds.includes(cv.cvId));
-
+ 
+    const userCVIds    = candidate.cvs ? candidate.cvs.map(cv => cv._id.toString()) : [];
+    const invalidCVs   = selectedCVs.filter(cv => !userCVIds.includes(cv.cvId));
     if (invalidCVs.length > 0) {
-      console.log('❌ [Backend] Invalid CV selection');
       await cleanupUploadedFiles(req.uploadedFiles);
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid CV selection - CV does not belong to user'
-      });
+      return res.status(400).json({ success: false, message: 'Invalid CV selection - CV does not belong to user' });
     }
-
-    console.log('✅ [Backend] All validations passed');
-
-    // Combine skills
-    const profileSkills = candidate.skills || [];
-    const skills = [...new Set([...profileSkills, ...applicationSkills])];
-
-    // FIX 1: Prepare CVs with correct field names from User model
-    const selectedCVsData = selectedCVs.map(cvData => {
+ 
+    const profileSkills    = candidate.skills || [];
+    const skills           = [...new Set([...profileSkills, ...applicationSkills])];
+    const selectedCVsData  = selectedCVs.map(cvData => {
       const userCV = candidate.cvs.find(cv => cv._id.toString() === cvData.cvId);
       if (!userCV) throw new Error(`CV not found: ${cvData.cvId}`);
-
-      // User model stores: fileName, filePath, fileUrl, downloadUrl
       return {
-        cvId: userCV._id,
-        filename: userCV.fileName || userCV.filename,  // Check both field names
+        cvId:         userCV._id,
+        filename:     userCV.fileName || userCV.filename,
         originalName: userCV.originalName || userCV.fileName || userCV.filename,
-        path: userCV.filePath || userCV.path || "",    // Check both field names
-        size: userCV.size || 0,
-        mimetype: userCV.mimetype || 'application/octet-stream',
-        url: userCV.fileUrl || userCV.url || `/api/v1/uploads/cv/${userCV.fileName || userCV.filename}`,
-        downloadUrl: userCV.downloadUrl || `/api/v1/uploads/cv/${userCV.fileName || userCV.filename}`,
-        uploadedAt: userCV.uploadedAt || new Date()
+        path:         userCV.filePath || userCV.path || '',
+        size:         userCV.size || 0,
+        mimetype:     userCV.mimetype || 'application/octet-stream',
+        url:          userCV.fileUrl || userCV.url || `/api/v1/uploads/cv/${userCV.fileName || userCV.filename}`,
+        downloadUrl:  userCV.downloadUrl || `/api/v1/uploads/cv/${userCV.fileName || userCV.filename}`,
+        uploadedAt:   userCV.uploadedAt || new Date(),
       };
     });
-
-    // Process references with files
-    const processedReferences = references.map((ref, index) => {
-      console.log(`🔍 [Backend] Processing reference ${index + 1}:`, {
-        _tempId: ref._tempId,
-        providedAsDocument: ref.providedAsDocument
-      });
-
+ 
+    const processedReferences = references.map((ref) => {
       let document = null;
-
       if (ref._tempId && uploadedFiles.referenceFiles[ref._tempId]) {
-        const uploadedFile = uploadedFiles.referenceFiles[ref._tempId];
-        console.log(`✅ [Backend] Attaching document to reference:`, uploadedFile.fileName);
-
-        document = {
-          filename: uploadedFile.fileName,
-          originalName: uploadedFile.originalName,
-          path: uploadedFile.path,
-          size: uploadedFile.size,
-          mimetype: uploadedFile.mimetype,
-          url: uploadedFile.url,
-          downloadUrl: uploadedFile.downloadUrl,
-          uploadedAt: new Date()
-        };
-
+        const f = uploadedFiles.referenceFiles[ref._tempId];
+        document = { filename: f.fileName, originalName: f.originalName, path: f.path, size: f.size, mimetype: f.mimetype, url: f.url, downloadUrl: f.downloadUrl, uploadedAt: new Date() };
         delete uploadedFiles.referenceFiles[ref._tempId];
       }
-
       const { _tempId, ...refData } = ref;
-
-      return {
-        ...refData,
-        document,
-        providedAsDocument: !!document
-      };
+      return { ...refData, document, providedAsDocument: !!document };
     });
-
-    // Process work experience with files
-    const processedWorkExperience = workExperience.map((exp, index) => {
-      console.log(`🔍 [Backend] Processing work experience ${index + 1}:`, {
-        _tempId: exp._tempId,
-        providedAsDocument: exp.providedAsDocument
-      });
-
+ 
+    const processedWorkExperience = workExperience.map((exp) => {
       let document = null;
-
       if (exp._tempId && uploadedFiles.experienceFiles[exp._tempId]) {
-        const uploadedFile = uploadedFiles.experienceFiles[exp._tempId];
-        console.log(`✅ [Backend] Attaching document to experience:`, uploadedFile.fileName);
-
-        document = {
-          filename: uploadedFile.fileName,
-          originalName: uploadedFile.originalName,
-          path: uploadedFile.path,
-          size: uploadedFile.size,
-          mimetype: uploadedFile.mimetype,
-          url: uploadedFile.url,
-          downloadUrl: uploadedFile.downloadUrl,
-          uploadedAt: new Date()
-        };
-
+        const f = uploadedFiles.experienceFiles[exp._tempId];
+        document = { filename: f.fileName, originalName: f.originalName, path: f.path, size: f.size, mimetype: f.mimetype, url: f.url, downloadUrl: f.downloadUrl, uploadedAt: new Date() };
         delete uploadedFiles.experienceFiles[exp._tempId];
       }
-
       const { _tempId, ...expData } = exp;
-
-      return {
-        ...expData,
-        document,
-        providedAsDocument: !!document
-      };
+      return { ...expData, document, providedAsDocument: !!document };
     });
-
-    // Create application
+ 
     const applicationData = {
       job: jobId,
       candidate: userId,
       userInfo: userInfo || {
-        name: candidate.name,
-        email: candidate.email,
-        phone: candidate.phone,
-        location: candidate.location,
-        avatar: candidate.avatar,
-        bio: candidate.bio,
-        website: candidate.website,
-        socialLinks: candidate.socialLinks
+        name: candidate.name, email: candidate.email, phone: candidate.phone,
+        location: candidate.location, avatar: candidate.avatar,
+        bio: candidate.bio, website: candidate.website, socialLinks: candidate.socialLinks,
       },
       selectedCVs: selectedCVsData,
       coverLetter: coverLetter.trim(),
-      skills: skills,
+      skills,
       references: processedReferences,
       workExperience: processedWorkExperience,
       contactInfo: {
-        email: contactInfo?.email || candidate.email,
-        phone: contactInfo?.phone || candidate.phone,
+        email:    contactInfo?.email    || candidate.email,
+        phone:    contactInfo?.phone    || candidate.phone,
         telegram: contactInfo?.telegram || '',
-        location: contactInfo?.location || candidate.location
+        location: contactInfo?.location || candidate.location,
       },
-      attachments: {
-        referenceDocuments: [],
-        experienceDocuments: [],
-        portfolioFiles: [],
-        otherDocuments: []
-      },
-      statusHistory: [{
-        status: 'applied',
-        changedBy: userId,
-        changedAt: new Date(),
-        message: 'Application submitted'
-      }]
+      attachments: { referenceDocuments: [], experienceDocuments: [], portfolioFiles: [], otherDocuments: [] },
+      statusHistory: [{ status: 'applied', changedBy: userId, changedAt: new Date(), message: 'Application submitted' }],
     };
-
-    console.log('📝 [Backend] Creating application with:', {
-      referencesWithDocs: processedReferences.filter(ref => ref.document).length,
-      experienceWithDocs: processedWorkExperience.filter(exp => exp.document).length
-    });
-
+ 
     const application = await Application.create(applicationData);
     await Job.findByIdAndUpdate(jobId, { $inc: { applicationCount: 1 } });
-
+ 
+    // ── FIXED: Extended populate on creation response ─────────────────────────
     const populatedApplication = await Application.findById(application._id)
-      .populate('job', 'title company organization jobType')
+      .populate({ path: 'job', populate: JOB_POPULATE_OPTIONS })
       .populate('candidate', 'name email')
       .lean();
-
-    console.log('🎉 [Backend] Application created:', application._id);
-    console.log('📊 [Backend] Final stats:', {
-      referencesWithDocs: populatedApplication.references?.filter(ref => ref.document)?.length,
-      experienceWithDocs: populatedApplication.workExperience?.filter(exp => exp.document)?.length
-    });
-
+ 
+    // Attach ownerPreview
+    if (populatedApplication?.job) {
+      populatedApplication.job.ownerPreview = await buildOwnerPreviewFromJob(populatedApplication.job);
+    }
+ 
     res.status(201).json({
       success: true,
       message: 'Application submitted successfully',
-      data: { application: populatedApplication }
+      data: { application: populatedApplication },
     });
-
+ 
   } catch (error) {
     await cleanupUploadedFiles(req.uploadedFiles);
     console.error('❌ [Backend] Apply for job error:', error);
-
+ 
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(val => val.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: messages
-      });
+      return res.status(400).json({ success: false, message: 'Validation failed', errors: messages });
     }
-
     res.status(500).json({
       success: false,
       message: 'Error submitting application',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
 
-// @desc    Get candidate's applications
-// @route   GET /api/v1/applications/my-applications
-// @access  Private (Candidate)
+ 
+// ─────────────────────────────────────────────────────────────────────────────
+// getMyApplications — candidate's list
+// ─────────────────────────────────────────────────────────────────────────────
 exports.getMyApplications = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const {
-      page = 1,
-      limit = 10,
-      status,
-      sortBy = 'createdAt',
-      sortOrder = 'desc'
-    } = req.query;
-
-    console.log(`📋 Getting applications for user: ${userId}`);
-
+    const { page = 1, limit = 10, status, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+ 
     const filter = { candidate: userId };
     if (status) filter.status = status;
-
+ 
     const sortOptions = {};
     sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
-
+ 
+    // ── FIXED: Extended populate ──────────────────────────────────────────────
     const applications = await Application.find(filter)
-      .populate({
-        path: 'job',
-        populate: [
-          {
-            path: 'company',
-            select: 'name logoUrl verified industry',
-            model: 'Company'
-          },
-          {
-            path: 'organization',
-            select: 'name logoUrl verified industry organizationType',
-            model: 'Organization'
-          }
-        ]
-      })
+      .populate({ path: 'job', populate: JOB_POPULATE_OPTIONS })
       .sort(sortOptions)
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .lean();
-
+ 
     const total = await Application.countDocuments(filter);
-
-    console.log(`✅ Found ${applications.length} applications for user ${userId}`);
-
+ 
+    // Attach ownerPreview to each job
+    await enrichApplicationsWithOwnerPreview(applications);
+ 
     res.status(200).json({
       success: true,
       data: applications,
@@ -597,17 +374,12 @@ exports.getMyApplications = async (req, res) => {
         current: parseInt(page),
         totalPages: Math.ceil(total / limit),
         totalResults: total,
-        resultsPerPage: parseInt(limit)
-      }
+        resultsPerPage: parseInt(limit),
+      },
     });
-
   } catch (error) {
     console.error('❌ Get my applications error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching applications',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    res.status(500).json({ success: false, message: 'Error fetching applications', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -681,235 +453,118 @@ exports.getMyCVs = async (req, res) => {
   }
 };
 
-// @desc    Get application details
-// @route   GET /api/v1/applications/:applicationId
-// @access  Private (Candidate, Company, Organization, Admin)
+// ─────────────────────────────────────────────────────────────────────────────
+// getApplicationDetails — single application detail
+// ─────────────────────────────────────────────────────────────────────────────
 exports.getApplicationDetails = async (req, res) => {
   try {
     const { applicationId } = req.params;
-    const userId = req.user.userId;
+    const userId   = req.user.userId;
     const userRole = req.user.role;
-
-    console.log(`🔍 Getting application details for: ${applicationId}`);
-    console.log(`👤 User: ${userId}, Role: ${userRole}`);
-
-    // Validate if applicationId is a valid MongoDB ObjectId
+ 
     if (!applicationId || !applicationId.match(/^[0-9a-fA-F]{24}$/)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid application ID format'
-      });
+      return res.status(400).json({ success: false, message: 'Invalid application ID format' });
     }
-
+ 
+    // ── FIXED: Extended populate ──────────────────────────────────────────────
     const application = await Application.findById(applicationId)
-      .populate({
-        path: 'job',
-        populate: [
-          {
-            path: 'company',
-            model: 'Company',
-            select: 'name logoUrl verified industry user'
-          },
-          {
-            path: 'organization',
-            model: 'Organization',
-            select: 'name logoUrl verified industry organizationType user'
-          }
-        ]
-      })
+      .populate({ path: 'job', populate: JOB_POPULATE_OPTIONS })
       .populate('candidate', 'name email avatar phone location')
       .populate('statusHistory.changedBy', 'name email')
       .populate('companyResponse.respondedBy', 'name email')
       .lean();
-
+ 
     if (!application) {
-      return res.status(404).json({
-        success: false,
-        message: 'Application not found'
-      });
+      return res.status(404).json({ success: false, message: 'Application not found' });
     }
-
-    console.log(`📄 Application found for job:`, application.job?._id);
-    console.log(`👥 Candidate:`, application.candidate);
-    console.log(`🏢 Job Type: ${application.job?.jobType}`);
-
-    // Check permissions - COMPLETE AUTHORIZATION LOGIC
+ 
+    // ── Authorization (unchanged) ─────────────────────────────────────────────
     let hasPermission = false;
-
+ 
     if (userRole === 'candidate') {
-      const candidateId = application.candidate._id ?
-        application.candidate._id.toString() :
-        application.candidate?.toString();
-
+      const candidateId  = application.candidate._id ? application.candidate._id.toString() : application.candidate?.toString();
       const userIdString = userId.toString ? userId.toString() : userId;
-
       hasPermission = candidateId === userIdString;
-
-      console.log(`👤 Candidate permission check:`, {
-        candidateId,
-        userId: userIdString,
-        hasPermission
-      });
     } else if (userRole === 'company') {
       const company = await Company.findOne({ user: userId });
       if (company && application.job && application.job.jobType === 'company') {
-        const jobCompanyId = application.job.company?._id ?
-          application.job.company._id.toString() :
-          application.job.company?.toString();
+        const jobCompanyId = application.job.company?._id ? application.job.company._id.toString() : application.job.company?.toString();
         hasPermission = jobCompanyId === company._id.toString();
-
-        console.log(`🏢 Company permission check:`, {
-          jobCompanyId,
-          companyId: company._id.toString(),
-          hasPermission
-        });
       }
     } else if (userRole === 'organization') {
       const organization = await Organization.findOne({ user: userId });
       if (organization && application.job && application.job.jobType === 'organization') {
-        const jobOrganizationId = application.job.organization?._id ?
-          application.job.organization._id.toString() :
-          application.job.organization?.toString();
+        const jobOrganizationId = application.job.organization?._id ? application.job.organization._id.toString() : application.job.organization?.toString();
         hasPermission = jobOrganizationId === organization._id.toString();
-
-        console.log(`🏛️ Organization permission check:`, {
-          jobOrganizationId,
-          organizationId: organization._id.toString(),
-          hasPermission
-        });
       }
     } else if (userRole === 'admin') {
       hasPermission = true;
     }
-
+ 
     if (!hasPermission) {
-      console.log('❌ Authorization failed:', {
-        userRole,
-        userId: userId.toString ? userId.toString() : userId,
-        applicationId,
-        candidateId: application.candidate._id?.toString() || application.candidate?.toString(),
-        jobOwner: application.job?.company?._id || application.job?.organization?._id,
-        jobType: application.job?.jobType
-      });
-
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to view this application'
-      });
+      return res.status(403).json({ success: false, message: 'Not authorized to view this application' });
     }
-
-    console.log('✅ Authorization granted for application');
-
-    // Format the response with properly structured file data using universal formatter
+ 
+    // ── Attach ownerPreview ───────────────────────────────────────────────────
+    if (application.job) {
+      application.job.ownerPreview = await buildOwnerPreviewFromJob(application.job);
+    }
+ 
+    // ── File formatting (unchanged) ───────────────────────────────────────────
     const applicationResponse = {
       ...application,
-
       selectedCVs: (application.selectedCVs || []).map(cv => {
         if (!cv) return null;
-        const formatted = formatFileDataUniversal(cv, 'cv');
+        const formatted  = formatFileDataUniversal(cv, 'cv');
         if (!formatted) return null;
         const resolvedId = cv.cvId?.toString() || cv._id?.toString();
-        return {
-          ...formatted,
-          cvId: resolvedId || formatted.cvId,
-          _id:  resolvedId || formatted._id,
-        };
+        return { ...formatted, cvId: resolvedId || formatted.cvId, _id: resolvedId || formatted._id };
       }).filter(cv => cv !== null),
-
+ 
       attachments: {
-        referenceDocuments: (application.attachments?.referenceDocuments || []).map(doc => formatFileDataUniversal(doc, 'applications')),
-        experienceDocuments: (application.attachments?.experienceDocuments || []).map(doc => formatFileDataUniversal(doc, 'applications')),
-        portfolioFiles: (application.attachments?.portfolioFiles || []).map(doc => formatFileDataUniversal(doc, 'applications')),
-        otherDocuments: (application.attachments?.otherDocuments || []).map(doc => formatFileDataUniversal(doc, 'applications'))
+        referenceDocuments:  (application.attachments?.referenceDocuments  || []).map(d => formatFileDataUniversal(d, 'applications')),
+        experienceDocuments: (application.attachments?.experienceDocuments || []).map(d => formatFileDataUniversal(d, 'applications')),
+        portfolioFiles:      (application.attachments?.portfolioFiles      || []).map(d => formatFileDataUniversal(d, 'applications')),
+        otherDocuments:      (application.attachments?.otherDocuments      || []).map(d => formatFileDataUniversal(d, 'applications')),
       },
-
+ 
       references: (application.references || []).map(ref => {
         if (!ref) return null;
-        if (ref.document) {
-          return {
-            ...ref,
-            document: formatFileDataUniversal(ref.document, 'applications')
-          };
-        }
-        return ref;
-      }).filter(ref => ref !== null),
-
+        return ref.document ? { ...ref, document: formatFileDataUniversal(ref.document, 'applications') } : ref;
+      }).filter(Boolean),
+ 
       workExperience: (application.workExperience || []).map(exp => {
         if (!exp) return null;
-        if (exp.document) {
-          return {
-            ...exp,
-            document: formatFileDataUniversal(exp.document, 'applications')
-          };
-        }
-        return exp;
-      }).filter(exp => exp !== null)
+        return exp.document ? { ...exp, document: formatFileDataUniversal(exp.document, 'applications') } : exp;
+      }).filter(Boolean),
     };
-
-    console.log('✅ Application formatted with proper file URLs');
-    console.log('📊 Final file counts:', {
-      selectedCVs: applicationResponse.selectedCVs.length,
-      cvIds: applicationResponse.selectedCVs.map(cv => ({ id: cv._id, cvId: cv.cvId, filename: cv.filename })),
-      references: applicationResponse.references.length,
-      referenceDocuments: applicationResponse.references.filter(ref => ref.document).length,
-      workExperience: applicationResponse.workExperience.length,
-      experienceDocuments: applicationResponse.workExperience.filter(exp => exp.document).length
-    });
-
-    res.status(200).json({
-      success: true,
-      data: { application: applicationResponse }
-    });
-
+ 
+    res.status(200).json({ success: true, data: { application: applicationResponse } });
   } catch (error) {
     console.error('❌ Get application details error:', error);
-
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid application ID format'
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching application details',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    if (error.name === 'CastError') return res.status(400).json({ success: false, message: 'Invalid application ID format' });
+    res.status(500).json({ success: false, message: 'Error fetching application details', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
-// @desc    Get applications for a job (Company/Organization)
-// @route   GET /api/v1/applications/job/:jobId
-// @access  Private (Company, Organization, Admin)
+// ─────────────────────────────────────────────────────────────────────────────
+// getJobApplications — applications for a single job (employer view)
+// ─────────────────────────────────────────────────────────────────────────────
 exports.getJobApplications = async (req, res) => {
   try {
     const { jobId } = req.params;
-    const userId = req.user.userId;
-    const userRole = req.user.role;
-
-    const {
-      page = 1,
-      limit = 10,
-      status,
-      sortBy = 'createdAt',
-      sortOrder = 'desc'
-    } = req.query;
-
-    // Verify job exists and user has permission
+    const userId    = req.user.userId;
+    const userRole  = req.user.role;
+    const { page = 1, limit = 10, status, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+ 
     const job = await Job.findById(jobId)
-      .populate('company organization')
+      .populate('company',      COMPANY_POPULATE_SELECT)
+      .populate('organization', ORGANIZATION_POPULATE_SELECT)
       .lean();
-
-    if (!job) {
-      return res.status(404).json({
-        success: false,
-        message: 'Job not found'
-      });
-    }
-
+ 
+    if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
+ 
     let hasPermission = false;
-
     if (userRole === 'company') {
       const company = await Company.findOne({ user: userId });
       if (company && job.jobType === 'company') {
@@ -925,208 +580,122 @@ exports.getJobApplications = async (req, res) => {
     } else if (userRole === 'admin') {
       hasPermission = true;
     }
-
-    if (!hasPermission) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to view applications for this job'
-      });
-    }
-
+ 
+    if (!hasPermission) return res.status(403).json({ success: false, message: 'Not authorized to view applications for this job' });
+ 
     const filter = { job: jobId };
     if (status) filter.status = status;
-
+ 
     const sortOptions = {};
     sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
-
+ 
     const applications = await Application.find(filter)
       .populate('candidate', 'name email avatar location phone skills education experience certifications')
       .sort(sortOptions)
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .lean();
-
+ 
     const total = await Application.countDocuments(filter);
-
+ 
     res.status(200).json({
       success: true,
       data: applications,
-      pagination: {
-        current: parseInt(page),
-        totalPages: Math.ceil(total / limit),
-        totalResults: total,
-        resultsPerPage: parseInt(limit)
-      }
+      pagination: { current: parseInt(page), totalPages: Math.ceil(total / limit), totalResults: total, resultsPerPage: parseInt(limit) },
     });
-
   } catch (error) {
     console.error('Get job applications error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching job applications'
-    });
+    res.status(500).json({ success: false, message: 'Error fetching job applications' });
   }
 };
-
-// @desc    Get all company applications (across all jobs)
-// @route   GET /api/v1/applications/company/applications
-// @access  Private (Company, Admin)
+ 
+// ─────────────────────────────────────────────────────────────────────────────
+// getCompanyApplications — all applications across company's jobs
+// ─────────────────────────────────────────────────────────────────────────────
 exports.getCompanyApplications = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const {
-      page = 1,
-      limit = 10,
-      status,
-      sortBy = 'createdAt',
-      sortOrder = 'desc'
-    } = req.query;
-
-    console.log(`🏢 Getting all applications for company user: ${userId}`);
-
-    // Find company
+    const { page = 1, limit = 10, status, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+ 
     const company = await Company.findOne({ user: userId });
-    if (!company) {
-      return res.status(404).json({
-        success: false,
-        message: 'Company not found'
-      });
-    }
-
-    // Find all jobs for this company
-    const companyJobs = await Job.find({
-      company: company._id,
-      jobType: 'company'
-    }).select('_id');
-
-    const jobIds = companyJobs.map(job => job._id);
-
+    if (!company) return res.status(404).json({ success: false, message: 'Company not found' });
+ 
+    const companyJobs = await Job.find({ company: company._id, jobType: 'company' }).select('_id');
+    const jobIds      = companyJobs.map(job => job._id);
+ 
     const filter = { job: { $in: jobIds } };
     if (status) filter.status = status;
-
+ 
     const sortOptions = {};
     sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
-
+ 
+    // ── FIXED: Extended populate ──────────────────────────────────────────────
     const applications = await Application.find(filter)
-      .populate({
-        path: 'job',
-        populate: [
-          {
-            path: 'company',
-            select: 'name logoUrl verified industry',
-            model: 'Company'
-          }
-        ]
-      })
+      .populate({ path: 'job', populate: JOB_POPULATE_OPTIONS })
       .populate('candidate', 'name email avatar location phone')
       .sort(sortOptions)
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .lean();
-
+ 
     const total = await Application.countDocuments(filter);
-
-    console.log(`✅ Found ${applications.length} applications across ${jobIds.length} jobs for company ${company.name}`);
-
+ 
+    // Attach ownerPreview
+    await enrichApplicationsWithOwnerPreview(applications);
+ 
     res.status(200).json({
       success: true,
       data: applications,
-      pagination: {
-        current: parseInt(page),
-        totalPages: Math.ceil(total / limit),
-        totalResults: total,
-        resultsPerPage: parseInt(limit)
-      }
+      pagination: { current: parseInt(page), totalPages: Math.ceil(total / limit), totalResults: total, resultsPerPage: parseInt(limit) },
     });
-
   } catch (error) {
     console.error('❌ Get company applications error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching company applications',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    res.status(500).json({ success: false, message: 'Error fetching company applications', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
-
-// @desc    Get all organization applications (across all jobs)
-// @route   GET /api/v1/applications/organization/applications
-// @access  Private (Organization, Admin)
+ 
+// ─────────────────────────────────────────────────────────────────────────────
+// getOrganizationApplications
+// ─────────────────────────────────────────────────────────────────────────────
 exports.getOrganizationApplications = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const {
-      page = 1,
-      limit = 10,
-      status,
-      sortBy = 'createdAt',
-      sortOrder = 'desc'
-    } = req.query;
-
-    console.log(`🏛️ Getting all applications for organization user: ${userId}`);
-
-    // Find organization
+    const { page = 1, limit = 10, status, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+ 
     const organization = await Organization.findOne({ user: userId });
-    if (!organization) {
-      return res.status(404).json({
-        success: false,
-        message: 'Organization not found'
-      });
-    }
-
-    // Find all jobs for this organization
-    const organizationJobs = await Job.find({
-      organization: organization._id,
-      jobType: 'organization'
-    }).select('_id');
-
-    const jobIds = organizationJobs.map(job => job._id);
-
+    if (!organization) return res.status(404).json({ success: false, message: 'Organization not found' });
+ 
+    const organizationJobs = await Job.find({ organization: organization._id, jobType: 'organization' }).select('_id');
+    const jobIds           = organizationJobs.map(job => job._id);
+ 
     const filter = { job: { $in: jobIds } };
     if (status) filter.status = status;
-
+ 
     const sortOptions = {};
     sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
-
+ 
+    // ── FIXED: Extended populate ──────────────────────────────────────────────
     const applications = await Application.find(filter)
-      .populate({
-        path: 'job',
-        populate: [
-          {
-            path: 'organization',
-            select: 'name logoUrl verified industry organizationType',
-            model: 'Organization'
-          }
-        ]
-      })
+      .populate({ path: 'job', populate: JOB_POPULATE_OPTIONS })
       .populate('candidate', 'name email avatar location phone')
       .sort(sortOptions)
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .lean();
-
+ 
     const total = await Application.countDocuments(filter);
-
-    console.log(`✅ Found ${applications.length} applications across ${jobIds.length} opportunities for organization ${organization.name}`);
-
+ 
+    // Attach ownerPreview
+    await enrichApplicationsWithOwnerPreview(applications);
+ 
     res.status(200).json({
       success: true,
       data: applications,
-      pagination: {
-        current: parseInt(page),
-        totalPages: Math.ceil(total / limit),
-        totalResults: total,
-        resultsPerPage: parseInt(limit)
-      }
+      pagination: { current: parseInt(page), totalPages: Math.ceil(total / limit), totalResults: total, resultsPerPage: parseInt(limit) },
     });
-
   } catch (error) {
     console.error('❌ Get organization applications error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching organization applications',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    res.status(500).json({ success: false, message: 'Error fetching organization applications', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 

@@ -74,6 +74,8 @@ export const lightColors = {
   successLight: palette.green50,
   error:        palette.red600,
   errorLight:   palette.red50,
+    danger:        palette.red600,
+  dangerLight:   palette.red50,
   warning:      palette.amber600,
   warningLight: palette.amber50,
   info:         palette.blue500,

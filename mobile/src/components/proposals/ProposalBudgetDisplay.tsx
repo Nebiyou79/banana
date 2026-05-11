@@ -1,10 +1,13 @@
 // src/components/proposals/ProposalBudgetDisplay.tsx
 // Banana Mobile App — Module 6B: Proposals
 // Displays proposal bid amount, type, delivery time, and availability.
+// REFACTORED: All colors via useTheme() + withAlpha(). No hardcoded hex.
 
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { useThemeStore } from '../../store/themeStore';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
 import type { Proposal, ProposalListItem } from '../../types/proposal';
 
 interface ProposalBudgetDisplayProps {
@@ -14,94 +17,68 @@ interface ProposalBudgetDisplayProps {
 }
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
-  ETB: 'ETB',
-  USD: '$',
-  EUR: '€',
-  GBP: '£',
+  ETB: 'ETB', USD: '$', EUR: '€', GBP: '£',
 };
 
 const AVAILABILITY_LABELS: Record<string, string> = {
   'full-time': 'Full-time',
   'part-time': 'Part-time',
-  flexible: 'Flexible',
+  flexible:    'Flexible',
 };
 
 function formatAmount(amount: number, currency: string): string {
   const symbol = CURRENCY_SYMBOLS[currency] ?? currency;
-  if (amount >= 1_000_000) {
-    return `${symbol} ${(amount / 1_000_000).toFixed(1)}M`;
-  }
-  if (amount >= 1_000) {
-    return `${symbol} ${(amount / 1_000).toFixed(0)}K`;
-  }
+  if (amount >= 1_000_000) return `${symbol} ${(amount / 1_000_000).toFixed(1)}M`;
+  if (amount >= 1_000)     return `${symbol} ${(amount / 1_000).toFixed(0)}K`;
   return `${symbol} ${amount.toLocaleString()}`;
 }
 
-export const ProposalBudgetDisplay: React.FC<ProposalBudgetDisplayProps> = ({
-  proposal,
-  layout = 'row',
-  style,
+const ProposalBudgetDisplay: React.FC<ProposalBudgetDisplayProps> = memo(({
+  proposal, layout = 'row', style,
 }) => {
-  const { theme } = useThemeStore();
-  const { colors, typography, spacing } = theme;
+  const { colors: c, radius, spacing, type } = useTheme();
 
-  const bidLabel =
-    proposal.bidType === 'hourly'
-      ? `${formatAmount(proposal.hourlyRate ?? proposal.proposedAmount, proposal.currency)}/hr`
-      : formatAmount(proposal.proposedAmount, proposal.currency);
+  const styles = useMemo(() => makeStyles(c, radius, spacing), [c, radius, spacing]);
 
-  const bidTypeLabel = proposal.bidType === 'hourly' ? 'Hourly Rate' : 'Fixed Price';
+  const bidLabel = proposal.bidType === 'hourly'
+    ? `${formatAmount(proposal.hourlyRate ?? proposal.proposedAmount, proposal.currency)}/hr`
+    : formatAmount(proposal.proposedAmount, proposal.currency);
 
-  const deliveryLabel = proposal.deliveryTime
+  const bidTypeLabel   = proposal.bidType === 'hourly' ? 'Hourly Rate' : 'Fixed Price';
+  const deliveryLabel  = proposal.deliveryTime
     ? `${proposal.deliveryTime.value} ${proposal.deliveryTime.unit}`
     : null;
-
-  const availLabel = AVAILABILITY_LABELS[proposal.availability] ?? proposal.availability;
+  const availLabel     = AVAILABILITY_LABELS[proposal.availability] ?? proposal.availability;
 
   if (layout === 'compact') {
     return (
       <View style={[styles.row, style]}>
-        <Text style={[styles.amountCompact, { color: '#F1BB03' }]}>{bidLabel}</Text>
+        <Text style={[type.body, { color: c.primary, fontWeight: '700' }]}>{bidLabel}</Text>
         {deliveryLabel && (
-          <Text style={[styles.metaText, { color: colors.textMuted }]}>
-            {' · '}
-            {deliveryLabel}
-          </Text>
+          <Text style={[type.bodySm, { color: c.textMuted }]}>{' · '}{deliveryLabel}</Text>
         )}
-        <Text style={[styles.metaText, { color: colors.textMuted }]}>
-          {' · '}
-          {availLabel}
-        </Text>
+        <Text style={[type.bodySm, { color: c.textMuted }]}>{' · '}{availLabel}</Text>
       </View>
     );
   }
 
   if (layout === 'card') {
     return (
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-          },
-          style,
-        ]}
-      >
+      <View style={[styles.card, style]}>
         <View style={styles.cardItem}>
-          <Text style={[styles.cardLabel, { color: colors.textMuted }]}>Bid</Text>
-          <Text style={[styles.cardValue, { color: '#F1BB03' }]}>{bidLabel}</Text>
-          <Text style={[styles.cardSub, { color: colors.textMuted }]}>{bidTypeLabel}</Text>
+          <Text style={[type.caption, styles.cardLabel, { color: c.textMuted }]}>Bid</Text>
+          <Text style={[type.bodySm, { color: c.primary, fontWeight: '700' }]}>{bidLabel}</Text>
+          <Text style={[type.caption, { color: c.textMuted }]}>{bidTypeLabel}</Text>
         </View>
         {deliveryLabel && (
-          <View style={[styles.cardItem, styles.cardItemBordered, { borderColor: colors.border }]}>
-            <Text style={[styles.cardLabel, { color: colors.textMuted }]}>Delivery</Text>
-            <Text style={[styles.cardValue, { color: colors.text }]}>{deliveryLabel}</Text>
+          <View style={[styles.cardItem, styles.cardItemBordered, { borderColor: c.border }]}>
+            <Text style={[type.caption, styles.cardLabel, { color: c.textMuted }]}>Delivery</Text>
+            <Text style={[type.bodySm, { color: c.text, fontWeight: '700' }]}>{deliveryLabel}</Text>
           </View>
         )}
-        <View style={[styles.cardItem, styles.cardItemBordered, { borderColor: colors.border }]}>
-          <Text style={[styles.cardLabel, { color: colors.textMuted }]}>Availability</Text>
-          <Text style={[styles.cardValue, { color: colors.text }]}>{availLabel}</Text>
+        <View style={[styles.cardItem, styles.cardItemBordered, { borderColor: c.border }]}>
+          <Text style={[type.caption, styles.cardLabel, { color: c.textMuted }]}>Availability</Text>
+          <Text style={[type.bodySm, { color: c.text, fontWeight: '700' }]}>{availLabel}</Text>
         </View>
       </View>
     );
@@ -111,96 +88,61 @@ export const ProposalBudgetDisplay: React.FC<ProposalBudgetDisplayProps> = ({
   return (
     <View style={[styles.rowLayout, style]}>
       <View style={styles.mainBid}>
-        <Text style={[styles.amountLarge, { color: '#F1BB03' }]}>{bidLabel}</Text>
-        <Text style={[styles.bidType, { color: colors.textMuted }]}>{bidTypeLabel}</Text>
+        <Text style={[styles.amountLarge, { color: c.primary }]}>{bidLabel}</Text>
+        <Text style={[type.caption, { color: c.textMuted }]}>{bidTypeLabel}</Text>
       </View>
       <View style={styles.metaPills}>
         {deliveryLabel && (
-          <View style={[styles.pill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.pillText, { color: colors.textSecondary }]}>⏱ {deliveryLabel}</Text>
+          <View style={[styles.pill, { backgroundColor: withAlpha(c.text, 0.06), borderColor: c.border }]}>
+            <Ionicons name="time-outline" size={11} color={c.textMuted} />
+            <Text style={[type.caption, { color: c.textSecondary, fontWeight: '500', marginLeft: 4 }]}>
+              {deliveryLabel}
+            </Text>
           </View>
         )}
-        <View style={[styles.pill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.pillText, { color: colors.textSecondary }]}>📅 {availLabel}</Text>
+        <View style={[styles.pill, { backgroundColor: withAlpha(c.text, 0.06), borderColor: c.border }]}>
+          <Ionicons name="calendar-outline" size={11} color={c.textMuted} />
+          <Text style={[type.caption, { color: c.textSecondary, fontWeight: '500', marginLeft: 4 }]}>
+            {availLabel}
+          </Text>
         </View>
       </View>
     </View>
   );
-};
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  rowLayout: {
-    gap: 8,
-  },
-  mainBid: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
-  },
-  amountLarge: {
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
-  amountCompact: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  bidType: {
-    fontSize: 12,
-  },
-  metaPills: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  pill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  pillText: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  metaText: {
-    fontSize: 13,
-  },
-  // Card layout
-  card: {
-    flexDirection: 'row',
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  cardItem: {
-    flex: 1,
-    padding: 12,
-    gap: 2,
-  },
-  cardItemBordered: {
-    borderLeftWidth: 1,
-  },
-  cardLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 2,
-  },
-  cardValue: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  cardSub: {
-    fontSize: 10,
-  },
 });
 
+ProposalBudgetDisplay.displayName = 'ProposalBudgetDisplay';
+
+const makeStyles = (c: any, radius: any, spacing: any) =>
+  StyleSheet.create({
+    row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
+    rowLayout: { gap: spacing.sm },
+    mainBid: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+    amountLarge: { fontSize: 22, fontWeight: '700', letterSpacing: -0.5 },
+    metaPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    pill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 10, paddingVertical: 4,
+      borderRadius: radius.full, borderWidth: 1,
+    },
+    card: {
+      flexDirection: 'row',
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surface ?? c.bgCard,
+      overflow: 'hidden',
+    },
+    cardItem: { flex: 1, padding: spacing.md, gap: 2 },
+    cardItemBordered: { borderLeftWidth: StyleSheet.hairlineWidth },
+    cardLabel: {
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+      marginBottom: 2,
+    },
+  });
+
+export { ProposalBudgetDisplay };
 export default ProposalBudgetDisplay;

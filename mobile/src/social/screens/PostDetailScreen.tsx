@@ -143,8 +143,7 @@ const PostDetailScreen: React.FC = () => {
                   /* already here — focus input? */
                 }}
                 onShare={handleShare}
-                onSave={(id, isSaved) => toggleSave({ id, isSaved })}
-                onAuthorPress={goToProfile}
+onSave={() => toggleSave({ id: post._id, isSaved: !post.isSaved })}                onAuthorPress={goToProfile}
               />
               <Text
                 style={[

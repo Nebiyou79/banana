@@ -1,39 +1,35 @@
 /**
  * screens/freelancer/PortfolioFormScreens.tsx
- *
- * FIXES:
- * 1. Multi-image upload: ImagePickerGrid now uses a ref to accumulate URLs,
- *    so selecting 5 images saves all 5 (not just the last one).
- * 2. Currency chooser on budget field.
- * 3. Expanded categories covering all common freelance niches.
- * 4. Edit mode pre-fills all existing images and fields correctly.
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
+  StyleSheet, KeyboardAvoidingView, Platform,
+  ActivityIndicator, Alert,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useTheme }        from '../../hooks/useTheme';
+import { useTheme }          from '../../hooks/useTheme';
+import { withAlpha }         from '../../theme/utils';
+import { FONT_SIZE }         from '../../theme/tokens';
 import { freelancerService } from '../../services/freelancerService';
-import { FREELANCER_KEYS }  from '../../hooks/useFreelancer';
-import { AppInput, SelectInput, AppButton, TagInput, SwitchField } from '../../components/freelancer/FormComponents';
-import { ImagePickerGrid }  from '../../components/shared/ImagePickerGrid';
-import toast                from '../../lib/toast';
-import api                  from '../../lib/api';
+import { FREELANCER_KEYS }   from '../../hooks/useFreelancer';
+import {
+  AppInput, SelectInput, AppButton, TagInput, SwitchField,
+} from '../../components/freelancer/FormComponents';
+import { ImagePickerGrid }   from '../../components/shared/ImagePickerGrid';
+import toast                 from '../../lib/toast';
+import api                   from '../../lib/api';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ACCENT = '#8B5CF6';
-
 const PORTFOLIO_CATEGORIES = [
-  // Tech
-  { label: 'Web Development',         value: 'Web Development' },
-  { label: 'Mobile App',              value: 'Mobile App' },
-  { label: 'Full Stack',              value: 'Full Stack' },
+  { label: 'Web Development',        value: 'Web Development' },
+  { label: 'Mobile App',             value: 'Mobile App' },
+  { label: 'Full Stack',             value: 'Full Stack' },
   { label: 'Frontend',               value: 'Frontend' },
   { label: 'Backend',                value: 'Backend' },
   { label: 'WordPress / CMS',        value: 'WordPress' },
@@ -41,7 +37,6 @@ const PORTFOLIO_CATEGORIES = [
   { label: 'API & Integrations',     value: 'API' },
   { label: 'DevOps / Cloud',         value: 'DevOps' },
   { label: 'Cybersecurity',          value: 'Cybersecurity' },
-  // Design
   { label: 'UI/UX Design',           value: 'UI/UX' },
   { label: 'Graphic Design',         value: 'Graphic Design' },
   { label: 'Logo & Branding',        value: 'Branding' },
@@ -52,20 +47,17 @@ const PORTFOLIO_CATEGORIES = [
   { label: 'Photography',            value: 'Photography' },
   { label: 'Architecture',           value: 'Architecture' },
   { label: 'Interior Design',        value: 'Interior Design' },
-  // Media
   { label: 'Film / Documentary',     value: 'Film' },
   { label: 'Podcast Production',     value: 'Podcast' },
   { label: 'Music Production',       value: 'Music' },
   { label: 'Voice Over',             value: 'Voice Over' },
-  // Marketing & Content
   { label: 'Digital Marketing',      value: 'Digital Marketing' },
   { label: 'Social Media',           value: 'Social Media' },
-  { label: 'SEO / SEM',             value: 'SEO' },
+  { label: 'SEO / SEM',              value: 'SEO' },
   { label: 'Content Strategy',       value: 'Content Strategy' },
   { label: 'Copywriting',            value: 'Copywriting' },
   { label: 'Blog & Articles',        value: 'Blog Writing' },
   { label: 'Translation',            value: 'Translation' },
-  // Business
   { label: 'Business Consulting',    value: 'Consulting' },
   { label: 'Financial Analysis',     value: 'Finance' },
   { label: 'Legal',                  value: 'Legal' },
@@ -93,6 +85,7 @@ const CURRENCIES = [
   { label: 'TRY — Turkish Lira',       value: 'TRY' },
   { label: 'MAD — Moroccan Dirham',    value: 'MAD' },
   { label: 'GHS — Ghanaian Cedi',      value: 'GHS' },
+  { label: 'ETB — Ethiopian Birr',     value: 'ETB' },
 ];
 
 const BUDGET_TYPES = [
@@ -107,13 +100,13 @@ const VISIBILITY_OPTIONS = [
   { label: 'Private', value: 'private' },
 ];
 
-// ─── Form State ───────────────────────────────────────────────────────────────
+// ─── Form state ───────────────────────────────────────────────────────────────
 
-interface PortfolioForm {
+interface PortfolioFormData {
   title: string;
   description: string;
   category: string;
-  mediaUrls: string[];       // Cloudinary URLs accumulated
+  mediaUrls: string[];
   projectUrl: string;
   client: string;
   technologies: string[];
@@ -131,36 +124,36 @@ interface FormErrors {
   mediaUrls?: string;
 }
 
-const EMPTY_FORM: PortfolioForm = {
+const EMPTY_FORM: PortfolioFormData = {
   title: '', description: '', category: '', mediaUrls: [],
   projectUrl: '', client: '', technologies: [],
   budget: '', currency: 'USD', budgetType: 'fixed',
   duration: '', completionDate: '', featured: false, visibility: 'public',
 };
 
-// ─── Shared Form Component ────────────────────────────────────────────────────
+// ─── Shared inner form ────────────────────────────────────────────────────────
 
-const PortfolioForm: React.FC<{
-  initialForm?: Partial<PortfolioForm>;
-  onSubmit: (form: PortfolioForm) => Promise<void>;
+const PortfolioFormBody: React.FC<{
+  initialForm?: Partial<PortfolioFormData>;
+  onSubmit: (form: PortfolioFormData) => Promise<void>;
   submitLabel: string;
   isLoading: boolean;
-}> = ({ initialForm, onSubmit, submitLabel, isLoading }) => {
-  const { colors, type: typo, spacing } = useTheme();
-  const [form, setForm]     = useState<PortfolioForm>({ ...EMPTY_FORM, ...initialForm });
+  accentColor: string;
+}> = ({ initialForm, onSubmit, submitLabel, isLoading, accentColor }) => {
+  const [form, setForm] = useState<PortfolioFormData>({ ...EMPTY_FORM, ...initialForm });
   const [errors, setErrors] = useState<FormErrors>({});
 
-  // Sync when initialForm changes (edit mode loads async)
   useEffect(() => {
     if (initialForm) setForm(prev => ({ ...prev, ...initialForm }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(initialForm)]);
 
-  const set = <K extends keyof PortfolioForm>(key: K, value: PortfolioForm[K]) =>
+  const set = <K extends keyof PortfolioFormData>(key: K, value: PortfolioFormData[K]) =>
     setForm(p => ({ ...p, [key]: value }));
 
   const validate = (): boolean => {
     const e: FormErrors = {};
-    if (!form.title.trim())       e.title     = 'Project title is required';
+    if (!form.title.trim())        e.title     = 'Project title is required';
     if (form.mediaUrls.length < 1) e.mediaUrls = 'At least one image is required';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -177,7 +170,6 @@ const PortfolioForm: React.FC<{
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      {/* Images — FIX: ImagePickerGrid now accumulates all URLs correctly */}
       <ImagePickerGrid
         label="Project Images *"
         value={form.mediaUrls}
@@ -186,7 +178,6 @@ const PortfolioForm: React.FC<{
         error={errors.mediaUrls}
       />
 
-      {/* Title */}
       <AppInput
         label="Project Title *"
         value={form.title}
@@ -196,7 +187,6 @@ const PortfolioForm: React.FC<{
         leftIcon="briefcase-outline"
       />
 
-      {/* Category */}
       <SelectInput
         label="Category"
         value={form.category}
@@ -205,7 +195,6 @@ const PortfolioForm: React.FC<{
         placeholder="Select category"
       />
 
-      {/* Description */}
       <AppInput
         label="Description"
         value={form.description}
@@ -216,17 +205,15 @@ const PortfolioForm: React.FC<{
         leftIcon="document-text-outline"
       />
 
-      {/* Technologies */}
       <TagInput
         label="Technologies Used"
         tags={form.technologies}
-        onAdd={t => set('technologies', [...form.technologies, t])}
-        onRemove={i => set('technologies', form.technologies.filter((_, idx) => idx !== i))}
+        onAdd={(t: string) => set('technologies', [...form.technologies, t])}
+        onRemove={(i: number) => set('technologies', form.technologies.filter((_, idx) => idx !== i))}
         placeholder="E.g. React, Node.js, MongoDB…"
-        accentColor={ACCENT}
+        accentColor={accentColor}
       />
 
-      {/* Client */}
       <AppInput
         label="Client"
         value={form.client}
@@ -235,7 +222,6 @@ const PortfolioForm: React.FC<{
         leftIcon="person-outline"
       />
 
-      {/* Budget + Currency + Type */}
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <AppInput
           label="Budget"
@@ -253,6 +239,7 @@ const PortfolioForm: React.FC<{
           onSelect={(v: string) => set('currency', v)}
         />
       </View>
+
       <SelectInput
         label="Budget Type"
         value={form.budgetType}
@@ -260,7 +247,6 @@ const PortfolioForm: React.FC<{
         onSelect={(v: string) => set('budgetType', v)}
       />
 
-      {/* Project URL */}
       <AppInput
         label="Project URL"
         value={form.projectUrl}
@@ -270,7 +256,6 @@ const PortfolioForm: React.FC<{
         leftIcon="globe-outline"
       />
 
-      {/* Duration */}
       <AppInput
         label="Duration"
         value={form.duration}
@@ -279,7 +264,6 @@ const PortfolioForm: React.FC<{
         leftIcon="time-outline"
       />
 
-      {/* Completion Date */}
       <AppInput
         label="Completion Date"
         value={form.completionDate}
@@ -288,7 +272,6 @@ const PortfolioForm: React.FC<{
         leftIcon="calendar-outline"
       />
 
-      {/* Visibility */}
       <SelectInput
         label="Visibility"
         value={form.visibility}
@@ -296,12 +279,11 @@ const PortfolioForm: React.FC<{
         onSelect={(v: string) => set('visibility', v)}
       />
 
-      {/* Featured */}
       <SwitchField
         label="Featured Project"
         value={form.featured}
-        onChange={v => set('featured', v)}
-        accentColor={ACCENT}
+        onChange={(v: boolean) => set('featured', v)}
+        accentColor={accentColor}
       />
 
       <AppButton
@@ -309,7 +291,7 @@ const PortfolioForm: React.FC<{
         onPress={handleSubmit}
         loading={isLoading}
         disabled={isLoading}
-        color={ACCENT}
+        color={accentColor}
         icon="checkmark-circle-outline"
         style={{ marginTop: 8 }}
       />
@@ -317,31 +299,58 @@ const PortfolioForm: React.FC<{
   );
 };
 
-// ─── Header ───────────────────────────────────────────────────────────────────
+// ─── Shared header ────────────────────────────────────────────────────────────
 
-const Header: React.FC<{ title: string; onBack: () => void; colors: any }> = ({ title, onBack, colors }) => (
-  <View style={[sh.wrap, { backgroundColor: colors.bgCard, borderBottomColor: colors.borderPrimary }]}>
-    <TouchableOpacity onPress={onBack} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-      <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
-    </TouchableOpacity>
-    <Text style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 17 }}>{title}</Text>
-    <View style={{ width: 32 }} />
-  </View>
-);
+const ScreenHeader: React.FC<{ title: string; onBack: () => void }> = ({ title, onBack }) => {
+  const { colors } = useTheme();
+  return (
+    <View style={[sh.wrap, { backgroundColor: colors.bgCard, borderBottomColor: colors.border }]}>
+      <TouchableOpacity onPress={onBack} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <Ionicons name="arrow-back" size={22} color={colors.text} />
+      </TouchableOpacity>
+      <Text style={{ color: colors.text, fontWeight: '700', fontSize: FONT_SIZE.base }}>{title}</Text>
+      <View style={{ width: 32 }} />
+    </View>
+  );
+};
 
 const sh = StyleSheet.create({
-  wrap: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: StyleSheet.hairlineWidth },
+  wrap: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: StyleSheet.hairlineWidth,
+  },
 });
 
 // ─── Add Portfolio Screen ─────────────────────────────────────────────────────
 
 export const AddPortfolioScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { colors } = useTheme();
+  const { colors, spacing } = useTheme();
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
 
-  const handleSubmit = useCallback(async (form: PortfolioForm) => {
+  // beforeRemove guard
+  useEffect(() => {
+    const unsub = navigation.addListener('beforeRemove', (e: any) => {
+      if (!isDirty) return;
+      e.preventDefault();
+      Alert.alert(
+        'Discard changes?',
+        'You have unsaved changes. Are you sure you want to leave?',
+        [
+          { text: 'Stay', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: () => navigation.dispatch(e.data.action) },
+        ],
+      );
+    });
+    return unsub;
+  }, [navigation, isDirty]);
+
+  const accentColor = colors.organization;
+
+  const handleSubmit = useCallback(async (form: PortfolioFormData) => {
     setSaving(true);
     try {
       const payload = {
@@ -363,6 +372,7 @@ export const AddPortfolioScreen: React.FC = () => {
       await api.post('/freelancer/portfolio', payload);
       await queryClient.invalidateQueries({ queryKey: FREELANCER_KEYS.portfolio });
       toast.success('Portfolio item added!');
+      setIsDirty(false);
       navigation.goBack();
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? err.message ?? 'Failed to add item');
@@ -372,14 +382,20 @@ export const AddPortfolioScreen: React.FC = () => {
   }, [navigation, queryClient]);
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bgPrimary }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Header title="Add Portfolio Item" onBack={() => navigation.goBack()} colors={colors} />
-      <PortfolioForm
-        onSubmit={handleSubmit}
-        submitLabel="Add to Portfolio"
-        isLoading={saving}
-      />
-    </KeyboardAvoidingView>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScreenHeader title="Add Portfolio Item" onBack={() => navigation.goBack()} />
+        <PortfolioFormBody
+          onSubmit={handleSubmit}
+          submitLabel="Add to Portfolio"
+          isLoading={saving}
+          accentColor={accentColor}
+        />
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
@@ -388,17 +404,35 @@ export const AddPortfolioScreen: React.FC = () => {
 type EditRouteParams = { itemId: string };
 
 export const EditPortfolioScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
-  const route      = useRoute<RouteProp<{ params: EditRouteParams }, 'params'>>();
-  const { colors } = useTheme();
+  const navigation  = useNavigation<any>();
+  const route       = useRoute<RouteProp<{ params: EditRouteParams }, 'params'>>();
+  const { colors }  = useTheme();
+  const insets      = useSafeAreaInsets();
   const queryClient = useQueryClient();
 
   const { itemId } = route.params;
   const [saving, setSaving]   = useState(false);
   const [loading, setLoading] = useState(true);
-  const [initial, setInitial] = useState<Partial<PortfolioForm>>({});
+  const [initial, setInitial] = useState<Partial<PortfolioFormData>>({});
+  const [isDirty, setIsDirty] = useState(false);
 
-  // Load existing item
+  // beforeRemove guard
+  useEffect(() => {
+    const unsub = navigation.addListener('beforeRemove', (e: any) => {
+      if (!isDirty) return;
+      e.preventDefault();
+      Alert.alert(
+        'Discard changes?',
+        'You have unsaved changes. Are you sure you want to leave?',
+        [
+          { text: 'Stay', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: () => navigation.dispatch(e.data.action) },
+        ],
+      );
+    });
+    return unsub;
+  }, [navigation, isDirty]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -433,7 +467,9 @@ export const EditPortfolioScreen: React.FC = () => {
     return () => { cancelled = true; };
   }, [itemId]);
 
-  const handleSubmit = useCallback(async (form: PortfolioForm) => {
+  const accentColor = colors.organization;
+
+  const handleSubmit = useCallback(async (form: PortfolioFormData) => {
     setSaving(true);
     try {
       const payload = {
@@ -455,6 +491,7 @@ export const EditPortfolioScreen: React.FC = () => {
       await api.put(`/freelancer/portfolio/${itemId}`, payload);
       await queryClient.invalidateQueries({ queryKey: FREELANCER_KEYS.portfolio });
       toast.success('Portfolio item updated!');
+      setIsDirty(false);
       navigation.goBack();
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? err.message ?? 'Failed to update item');
@@ -465,24 +502,30 @@ export const EditPortfolioScreen: React.FC = () => {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
-        <Header title="Edit Portfolio Item" onBack={() => navigation.goBack()} colors={colors} />
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+        <ScreenHeader title="Edit Portfolio Item" onBack={() => navigation.goBack()} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color={ACCENT} />
+          <ActivityIndicator size="large" color={accentColor} />
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bgPrimary }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Header title="Edit Portfolio Item" onBack={() => navigation.goBack()} colors={colors} />
-      <PortfolioForm
-        initialForm={initial}
-        onSubmit={handleSubmit}
-        submitLabel="Save Changes"
-        isLoading={saving}
-      />
-    </KeyboardAvoidingView>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScreenHeader title="Edit Portfolio Item" onBack={() => navigation.goBack()} />
+        <PortfolioFormBody
+          initialForm={initial}
+          onSubmit={handleSubmit}
+          submitLabel="Save Changes"
+          isLoading={saving}
+          accentColor={accentColor}
+        />
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };

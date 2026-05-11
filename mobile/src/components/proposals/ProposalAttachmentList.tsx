@@ -1,19 +1,16 @@
 // src/components/proposals/ProposalAttachmentList.tsx
 // Banana Mobile App — Module 6B: Proposals
 // Renders a list of proposal attachments with file type icons and optional delete.
+// REFACTORED: Ionicons replace all emoji icons. useTheme() + withAlpha(). No hardcoded hex.
 
-import React, { useState } from 'react';
+import React, { memo, useState, useMemo } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  ViewStyle,
-  Linking,
+  View, Text, TouchableOpacity, StyleSheet,
+  Alert, ActivityIndicator, ViewStyle, Linking,
 } from 'react-native';
-import { useThemeStore } from '../../store/themeStore';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
 import type { ProposalAttachment } from '../../types/proposal';
 
 interface ProposalAttachmentListProps {
@@ -23,37 +20,43 @@ interface ProposalAttachmentListProps {
   style?: ViewStyle;
 }
 
-function getFileIcon(mimetype: string, fileName: string): string {
-  if (mimetype === 'application/pdf' || fileName.endsWith('.pdf')) return '📄';
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+type FileIconName = keyof typeof Ionicons.glyphMap;
+
+function getFileIconName(mimetype: string, fileName: string): FileIconName {
+  if (mimetype === 'application/pdf' || fileName.endsWith('.pdf'))
+    return 'document-text-outline';
   if (
     mimetype === 'application/msword' ||
     mimetype.includes('wordprocessing') ||
     fileName.endsWith('.doc') ||
     fileName.endsWith('.docx')
   )
-    return '📝';
-  if (mimetype.startsWith('image/')) return '🖼️';
+    return 'document-outline';
+  if (mimetype.startsWith('image/'))
+    return 'image-outline';
   if (mimetype.includes('zip') || mimetype.includes('compressed') || fileName.endsWith('.zip'))
-    return '🗜️';
-  if (mimetype === 'text/plain' || fileName.endsWith('.txt')) return '📃';
-  return '📎';
+    return 'archive-outline';
+  if (mimetype === 'text/plain' || fileName.endsWith('.txt'))
+    return 'reader-outline';
+  return 'attach-outline';
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024)           return `${bytes} B`;
+  if (bytes < 1024 * 1024)    return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function getTypeLabel(type: ProposalAttachment['attachmentType']): string {
-  const labels: Record<string, string> = {
-    cv: 'CV / Resume',
-    portfolio: 'Portfolio',
-    sample: 'Work Sample',
-    other: 'Document',
-  };
-  return labels[type] ?? 'Document';
-}
+const TYPE_LABELS: Record<string, string> = {
+  cv:        'CV / Resume',
+  portfolio: 'Portfolio',
+  sample:    'Work Sample',
+  other:     'Document',
+};
+
+// ─── AttachmentItem ───────────────────────────────────────────────────────────
 
 interface AttachmentItemProps {
   attachment: ProposalAttachment;
@@ -61,72 +64,47 @@ interface AttachmentItemProps {
   onDelete?: (id: string) => Promise<void> | void;
 }
 
-const AttachmentItem: React.FC<AttachmentItemProps> = ({
-  attachment,
-  canDelete,
-  onDelete,
-}) => {
-  const { theme } = useThemeStore();
-  const { colors } = theme;
+const AttachmentItem: React.FC<AttachmentItemProps> = memo(({ attachment, canDelete, onDelete }) => {
+  const { colors: c, radius, type } = useTheme();
   const [deleting, setDeleting] = useState(false);
+  const styles = useMemo(() => makeItemStyles(c, radius), [c, radius]);
 
-  const handleDelete = () => {
-    Alert.alert(
-      'Remove Attachment',
-      `Remove "${attachment.originalName}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              await onDelete?.(attachment._id);
-            } finally {
-              setDeleting(false);
-            }
-          },
+  const iconName = getFileIconName(attachment.mimetype, attachment.originalName);
+  const typeLabel = TYPE_LABELS[attachment.attachmentType] ?? 'Document';
+
+  const handleDelete = () =>
+    Alert.alert('Remove Attachment', `Remove "${attachment.originalName}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove', style: 'destructive',
+        onPress: async () => {
+          setDeleting(true);
+          try { await onDelete?.(attachment._id); }
+          finally { setDeleting(false); }
         },
-      ],
-    );
-  };
+      },
+    ]);
 
   const handleOpen = () => {
     if (attachment.url) {
-      Linking.openURL(attachment.url).catch(() => {
-        Alert.alert('Cannot open file', 'The file URL could not be opened.');
-      });
+      Linking.openURL(attachment.url).catch(() =>
+        Alert.alert('Cannot open file', 'The file URL could not be opened.'),
+      );
     }
   };
 
-  const icon = getFileIcon(attachment.mimetype, attachment.originalName);
-
   return (
-    <TouchableOpacity
-      onPress={handleOpen}
-      activeOpacity={0.7}
-      style={[
-        styles.item,
-        {
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-        },
-      ]}
-    >
-      <View style={styles.iconContainer}>
-        <Text style={styles.fileIcon}>{icon}</Text>
+    <TouchableOpacity onPress={handleOpen} activeOpacity={0.75} style={styles.item}>
+      <View style={styles.iconBox}>
+        <Ionicons name={iconName} size={18} color={c.primary} />
       </View>
 
-      <View style={styles.fileInfo}>
-        <Text
-          style={[styles.fileName, { color: colors.text }]}
-          numberOfLines={1}
-        >
+      <View style={styles.info}>
+        <Text style={[type.bodySm, { color: c.text, fontWeight: '600' }]} numberOfLines={1}>
           {attachment.originalName}
         </Text>
-        <Text style={[styles.fileMeta, { color: colors.textMuted }]}>
-          {getTypeLabel(attachment.attachmentType)} • {formatBytes(attachment.size)}
+        <Text style={[type.caption, { color: c.textMuted, marginTop: 1 }]}>
+          {typeLabel} · {formatBytes(attachment.size)}
         </Text>
       </View>
 
@@ -135,35 +113,31 @@ const AttachmentItem: React.FC<AttachmentItemProps> = ({
           onPress={handleDelete}
           disabled={deleting}
           style={styles.deleteBtn}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${attachment.originalName}`}
         >
-          {deleting ? (
-            <ActivityIndicator size="small" color="#EF4444" />
-          ) : (
-            <Text style={styles.deleteIcon}>🗑️</Text>
-          )}
+          {deleting
+            ? <ActivityIndicator size="small" color={c.danger} />
+            : <Ionicons name="trash-outline" size={16} color={c.danger} />}
         </TouchableOpacity>
       )}
     </TouchableOpacity>
   );
-};
+});
 
-export const ProposalAttachmentList: React.FC<ProposalAttachmentListProps> = ({
-  attachments,
-  canDelete = false,
-  onDelete,
-  style,
+AttachmentItem.displayName = 'AttachmentItem';
+
+// ─── List ─────────────────────────────────────────────────────────────────────
+
+const ProposalAttachmentList: React.FC<ProposalAttachmentListProps> = memo(({
+  attachments, canDelete = false, onDelete, style,
 }) => {
-  const { theme } = useThemeStore();
-  const { colors } = theme;
-
-  if (!attachments || attachments.length === 0) {
-    return null;
-  }
+  if (!attachments?.length) return null;
 
   return (
     <View style={[styles.container, style]}>
-      {attachments.map((att) => (
+      {attachments.map(att => (
         <AttachmentItem
           key={att._id}
           attachment={att}
@@ -173,54 +147,41 @@ export const ProposalAttachmentList: React.FC<ProposalAttachmentListProps> = ({
       ))}
     </View>
   );
-};
-
-const styles = StyleSheet.create({
-  container: {
-    gap: 8,
-  },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 10,
-  },
-  iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: 'rgba(241,187,3,0.10)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  fileIcon: {
-    fontSize: 18,
-  },
-  fileInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  fileName: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  fileMeta: {
-    fontSize: 11,
-  },
-  deleteBtn: {
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  deleteIcon: {
-    fontSize: 15,
-  },
 });
 
+ProposalAttachmentList.displayName = 'ProposalAttachmentList';
+
+const styles = StyleSheet.create({ container: { gap: 8 } });
+
+const makeItemStyles = (c: any, radius: any) =>
+  StyleSheet.create({
+    item: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surface ?? c.bgCard,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      gap: 10,
+    },
+    iconBox: {
+      width: 36, height: 36,
+      borderRadius: radius.sm,
+      backgroundColor: withAlpha(c.primary, 0.10),
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    info: { flex: 1, gap: 2 },
+    deleteBtn: {
+      width: 36, height: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+  });
+
+export { ProposalAttachmentList };
 export default ProposalAttachmentList;

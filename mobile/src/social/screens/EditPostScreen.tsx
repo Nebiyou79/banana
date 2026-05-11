@@ -1,7 +1,9 @@
 // src/social/screens/EditPostScreen.tsx
+// ✅ role-theme-migrated
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useState } from 'react';
 import {
@@ -37,7 +39,7 @@ const EditPostScreen: React.FC = () => {
   const theme = useSocialTheme();
   const navigation = useNavigation<any>();
   const route = useRoute<EditPostRoute>();
-  const { post } = route.params;
+  const { post } = route.params ?? {};
   const updateM = useUpdatePost();
 
   const [content, setContent] = useState(post.content ?? '');
@@ -103,30 +105,51 @@ const EditPostScreen: React.FC = () => {
   ]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['top']}>
-      <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+    <SafeAreaView style={[styles.container, theme.getPageBgStyle()]} edges={['top']}>
+      {/* Role-tinted accent strip */}
+      <View style={[styles.accentStrip, { backgroundColor: theme.colors.primary }]} />
+
+      {/* Header */}
+      <View style={[styles.header, {
+        backgroundColor: theme.withAlpha(theme.colors.primary, 0.03),
+        borderBottomColor: theme.border,
+      }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           style={styles.headerBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
         >
           <Ionicons name="close" size={26} color={theme.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.text }]}>Edit post</Text>
+
+        {/* Gradient save button */}
         <TouchableOpacity
           onPress={handleSubmit}
           disabled={!canSubmit}
           activeOpacity={0.85}
-          style={[
-            styles.saveBtn,
-            { backgroundColor: theme.primary, opacity: canSubmit ? 1 : 0.4 },
-          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Save"
+          style={{ opacity: canSubmit ? 1 : 0.4 }}
         >
-          {updateM.isPending ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={styles.saveBtnText}>Save</Text>
-          )}
+          <LinearGradient
+            colors={
+              canSubmit
+                ? [theme.colors.primary, theme.colors.primaryDark]
+                : [theme.colors.cardAlt, theme.colors.cardAlt]
+            }
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.saveBtn}
+          >
+            {updateM.isPending ? (
+              <ActivityIndicator size="small" color={theme.colors.white} />
+            ) : (
+              <Text style={[styles.saveBtnText, { color: theme.colors.white }]}>Save</Text>
+            )}
+          </LinearGradient>
         </TouchableOpacity>
       </View>
 
@@ -137,7 +160,9 @@ const EditPostScreen: React.FC = () => {
         <ScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: 40 }}
+          showsVerticalScrollIndicator={false}
         >
+          {/* Text input */}
           <TextInput
             value={content}
             onChangeText={setContent}
@@ -145,51 +170,64 @@ const EditPostScreen: React.FC = () => {
             placeholderTextColor={theme.muted}
             multiline
             maxLength={5000}
-            style={[styles.input, { color: theme.text, backgroundColor: theme.bg }]}
+            style={[styles.input, { color: theme.text }]}
             autoFocus
           />
 
+          {/* Media preview row */}
           {(existingMedia.length > 0 || newMedia.length > 0) ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.mediaRow}
-            >
-              {existingMedia.map((m) => (
-                <View key={m.public_id ?? m.url} style={styles.mediaTile}>
-                  <Image
-                    source={{ uri: m.thumbnail || m.url || m.secure_url }}
-                    style={[styles.mediaImage, { backgroundColor: theme.skeleton }]}
-                  />
-                  <TouchableOpacity
-                    onPress={() => removeExisting(m)}
-                    style={styles.mediaRemove}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons name="close-circle" size={22} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-              {newMedia.map((m) => (
-                <View key={m.uri} style={styles.mediaTile}>
-                  <Image
-                    source={{ uri: m.uri }}
-                    style={[styles.mediaImage, { backgroundColor: theme.skeleton }]}
-                  />
-                  <TouchableOpacity
-                    onPress={() => removeNew(m.uri)}
-                    style={styles.mediaRemove}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons name="close-circle" size={22} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </ScrollView>
+            <View style={[styles.mediaContainer, {
+              backgroundColor: theme.withAlpha(theme.colors.primary, 0.04),
+            }]}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.mediaRow}
+              >
+                {existingMedia.map((m) => (
+                  <View key={m.public_id ?? m.url} style={styles.mediaTile}>
+                    <Image
+                      source={{ uri: m.thumbnail || m.url || m.secure_url }}
+                      style={[styles.mediaImage, { backgroundColor: theme.skeleton }]}
+                    />
+                    <TouchableOpacity
+                      onPress={() => removeExisting(m)}
+                      style={styles.mediaRemove}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove media"
+                    >
+                      <Ionicons name="close-circle" size={22} color={theme.colors.white} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                {newMedia.map((m) => (
+                  <View key={m.uri} style={styles.mediaTile}>
+                    <Image
+                      source={{ uri: m.uri }}
+                      style={[styles.mediaImage, { backgroundColor: theme.skeleton }]}
+                    />
+                    <TouchableOpacity
+                      onPress={() => removeNew(m.uri)}
+                      style={styles.mediaRemove}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove media"
+                    >
+                      <Ionicons name="close-circle" size={22} color={theme.colors.white} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
           ) : null}
 
+          {/* Visibility section */}
           <View style={[styles.section, { borderTopColor: theme.border }]}>
-            <Text style={[styles.sectionLabel, { color: theme.subtext }]}>Visibility</Text>
+            {/* Primary-colored label */}
+            <Text style={[styles.sectionLabel, { color: theme.colors.primary }]}>
+              Visibility
+            </Text>
             <View style={styles.chipRow}>
               {VISIBILITIES.map((v) => (
                 <Chip
@@ -203,7 +241,11 @@ const EditPostScreen: React.FC = () => {
           </View>
         </ScrollView>
 
-        <View style={[styles.toolbar, { backgroundColor: theme.card, borderTopColor: theme.border }]}>
+        {/* Toolbar */}
+        <View style={[styles.toolbar, {
+          backgroundColor: theme.withAlpha(theme.colors.primary, 0.03),
+          borderTopColor: theme.border,
+        }]}>
           <TouchableOpacity
             onPress={pickMedia}
             disabled={existingMedia.length + newMedia.length >= 5}
@@ -212,9 +254,10 @@ const EditPostScreen: React.FC = () => {
               { opacity: existingMedia.length + newMedia.length >= 5 ? 0.4 : 1 },
             ]}
             accessibilityLabel="Add media"
+            accessibilityRole="button"
           >
-            <Ionicons name="image-outline" size={22} color={theme.primary} />
-            <Text style={[styles.toolBtnText, { color: theme.primary }]}>
+            <Ionicons name="image-outline" size={22} color={theme.colors.primary} />
+            <Text style={[styles.toolBtnText, { color: theme.colors.primary }]}>
               Add media
             </Text>
           </TouchableOpacity>
@@ -229,6 +272,10 @@ const EditPostScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  accentStrip: {
+    height: 2,
+    opacity: 0.7,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -249,7 +296,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  saveBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  saveBtnText: { fontSize: 13, fontWeight: '700' },
   input: {
     fontSize: 16,
     lineHeight: 23,
@@ -259,6 +306,7 @@ const styles = StyleSheet.create({
     minHeight: 180,
     textAlignVertical: 'top',
   },
+  mediaContainer: {},
   mediaRow: { paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
   mediaTile: { width: 96, height: 96, marginRight: 8 },
   mediaImage: { width: '100%', height: '100%', borderRadius: 10 },

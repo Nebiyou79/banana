@@ -1,47 +1,37 @@
 /**
- * mobile/src/screens/company/CreateProductScreen.tsx
- *
- * UPDATED:
- *  - useIsCompanyOwner() guard — non-owners cannot reach this screen
- *  - useTheme() throughout, no inline styles use hardcoded colors
- *  - StatusBar barStyle reacts to dark mode
- *  - On success, resets the navigation stack to MyProducts so back button
- *    doesn’t bring user back to the empty form
+ * src/screens/company/CreateProductScreen.tsx
  */
 import React from 'react';
-import {
-  View, Text, TouchableOpacity, StyleSheet,
-  SafeAreaView, StatusBar,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '../../hooks/useTheme';
 import { useIsCompanyOwner } from '../../hooks/useIsCompanyOwner';
 import { useCreateProduct } from '../../hooks/useProducts';
-
 import { ProductForm } from '../../components/products/ProductForm';
 import { CreateProductData, ImageAsset } from '../../services/productService';
 import { CompanyStackParamList } from '../../navigation/CompanyNavigator';
+import { FONT_SIZE } from '../../theme/tokens';
 
 type Props = NativeStackScreenProps<CompanyStackParamList, 'CreateProduct'>;
 
 export const CreateProductScreen: React.FC<Props> = ({ navigation }) => {
   const { colors, isDark } = useTheme();
-  const isOwner = useIsCompanyOwner();
+  const isOwner       = useIsCompanyOwner();
   const createProduct = useCreateProduct();
 
-  // Hard guard for non-owners (deep link safety)
   if (!isOwner) {
     return (
-      <SafeAreaView style={[s.safe, { backgroundColor: colors.bgPrimary }]}>
+      <SafeAreaView style={[s.safe, { backgroundColor: colors.bg }]} edges={['top']}>
         <View style={s.center}>
           <Ionicons name="lock-closed-outline" size={48} color={colors.textMuted} />
-          <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '600' }}>
+          <Text style={{ color: colors.text, fontSize: FONT_SIZE.md, fontWeight: '600' }}>
             Company access only
           </Text>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={{ color: colors.accent, fontWeight: '600' }}>Go back</Text>
+            <Text style={{ color: colors.primary, fontWeight: '600' }}>Go back</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -57,26 +47,23 @@ export const CreateProductScreen: React.FC<Props> = ({ navigation }) => {
       { data, imageAssets },
       {
         onSuccess: () =>
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'CompanyProductList' }],
-          }),
+          navigation.reset({ index: 0, routes: [{ name: 'CompanyProductList' }] }),
       },
     );
   };
 
   return (
-    <SafeAreaView style={[s.safe, { backgroundColor: colors.bgPrimary }]}>
+    <SafeAreaView style={[s.safe, { backgroundColor: colors.bg }]} edges={['top']}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      <View style={[s.header, { borderBottomColor: colors.borderPrimary }]}>
+      <View style={[s.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Ionicons name="close" size={24} color={colors.textPrimary} />
+          <Ionicons name="close" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[s.title, { color: colors.textPrimary }]}>New Product</Text>
+        <Text style={[s.title, { color: colors.text }]}>New Product</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -96,6 +83,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  title:  { fontSize: 18, fontWeight: '700' },
+  title:  { fontSize: FONT_SIZE.md, fontWeight: '700' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
 });

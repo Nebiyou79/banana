@@ -1,14 +1,30 @@
+// =============================================================================
+// FILE: mobile/src/social/components/chat/OnlineStatusDot.tsx
+// =============================================================================
+
 /**
- * OnlineStatusDot — colored circle showing presence level.
- * -----------------------------------------------------------------------------
- * Green/yellow/gray/transparent mapping follows the blueprint (Appendix A).
+ * OnlineStatusDot — presence indicator ring.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Color mapping:
+ * - Green  → online (now)
+ * - Yellow → recently active (within 15 min)
+ * - Gray   → away (>15 min, <1 hour)
+ * - Hidden → offline (>1 hour or unknown)
+ *
+ * Professional polish:
+ * - Theme-aware color derivation
+ * - Configurable size
+ * - Optional white border for placement on avatars
+ * - Proper border radius for perfect circle
  */
 
-import React from 'react';
+import React, { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { useSocialTheme } from '../../theme/socialTheme';
 import { getPresenceColor, getPresenceLevel } from '../../utils/presence';
+
+// ─── Props ───────────────────────────────────────────────────────────────────
 
 export interface OnlineStatusDotProps {
   lastSeen?: string | Date | null;
@@ -17,34 +33,52 @@ export interface OnlineStatusDotProps {
   showBorder?: boolean;
 }
 
-const OnlineStatusDot: React.FC<OnlineStatusDotProps> = ({
-  lastSeen,
-  isOnline,
-  size = 12,
-  showBorder,
-}) => {
-  const theme = useSocialTheme();
-  const color = getPresenceColor(getPresenceLevel(lastSeen, isOnline));
+// ─── Component ───────────────────────────────────────────────────────────────
 
-  if (color === 'transparent') return null;
+const OnlineStatusDot: React.FC<OnlineStatusDotProps> = memo(
+  ({ lastSeen, isOnline, size = 12, showBorder = false }) => {
+    const theme = useSocialTheme();
+    const level = getPresenceLevel(lastSeen, isOnline ?? false);
+    const color = getPresenceColor(level);
 
-  return (
-    <View
-      style={[
-        styles.dot,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: color,
-          borderWidth: showBorder ? 2 : 0,
-          borderColor: theme.card,
-        },
-      ]}
-    />
-  );
-};
+    if (color === 'transparent') return null;
 
-const styles = StyleSheet.create({ dot: {} });
+    return (
+      <View
+        style={[
+          styles.dot,
+          {
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            backgroundColor: color,
+            borderWidth: showBorder ? 2 : 0,
+            borderColor: theme.card,
+          },
+        ]}
+        accessibilityLabel={
+          level === 'online'
+            ? 'Online'
+            : level === 'recently'
+            ? 'Recently active'
+            : 'Away'
+        }
+      />
+    );
+  }
+);
+
+OnlineStatusDot.displayName = 'OnlineStatusDot';
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  dot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+  },
+});
 
 export default OnlineStatusDot;
+// ✅ theme-migrated

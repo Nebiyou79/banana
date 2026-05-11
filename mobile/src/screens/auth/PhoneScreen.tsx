@@ -1,82 +1,45 @@
 // src/screens/auth/PhoneScreen.tsx
-// Shows a "coming soon" placeholder for phone-based auth.
+// MIGRATED: useTheme() only, AuthShell, AppHeader, spacing/radius tokens, Ionicons only
 
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, StatusBar } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Ionicons }      from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme }       from '../../hooks/useTheme';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
+import { AppHeader } from '../../components/ui/AppHeader';
 
 interface ComingSoonProps {
   title:       string;
   description: string;
-  icon:        React.ComponentProps<typeof Ionicons>['name'];
+  icon:        keyof typeof Ionicons.glyphMap;
 }
 
 const ComingSoonLayout: React.FC<ComingSoonProps> = ({ title, description, icon }) => {
-  const { colors, type, spacing, radius, isDark } = useTheme();
+  const { colors: c, spacing, radius, type, shadows } = useTheme();
   const navigation = useNavigation<any>();
+  const insets     = useSafeAreaInsets();
 
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.bgPrimary }]}
-      edges={['top', 'bottom']}
-    >
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+    <SafeAreaView style={[S.safe, { backgroundColor: c.bg }]} edges={['top', 'bottom']}>
+      <AppHeader title="Coming Soon" showBack onBack={() => navigation.goBack()} />
 
-      {/* Back */}
-      <Pressable
-        onPress={() => navigation.goBack()}
-        style={[styles.backBtn, { paddingHorizontal: spacing.screen }]}
-        accessibilityLabel="Go back"
-      >
-        <Ionicons name="arrow-back-outline" size={22} color={colors.textPrimary} />
-      </Pressable>
-
-      <View style={styles.content}>
+      <View style={[S.content, { paddingHorizontal: spacing.xl }]}>
         {/* Icon circle */}
-        <LinearGradient
-          colors={[colors.accent, colors.accentDark]}
-          style={[styles.iconCircle, { borderRadius: 48 }]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <Ionicons name={icon} size={48} color="#fff" />
-        </LinearGradient>
-
-        {/* Badge */}
-        <View
-          style={[
-            styles.badge,
-            {
-              backgroundColor: colors.warningBg,
-              borderRadius:    radius.full,
-              paddingHorizontal: 14,
-              paddingVertical:   5,
-            },
-          ]}
-        >
-          <Text style={[type.label, { color: colors.warning }]}>
-            Coming Soon
-          </Text>
+        <View style={[S.iconCircle, { backgroundColor: c.primary, borderRadius: radius.full, ...shadows.lg }]}>
+          <Ionicons name={icon} size={48} color={c.bg} />
         </View>
 
-        <Text style={[type.h2, { color: colors.textPrimary, textAlign: 'center' }]}>
+        {/* Badge */}
+        <View style={[S.badge, { backgroundColor: c.warningBg, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: spacing.xs }]}>
+          <Text style={[type.caption, { color: c.warning, fontWeight: '700' }]}>Coming Soon</Text>
+        </View>
+
+        <Text style={[type.h2, { color: c.text, textAlign: 'center', fontWeight: '800' }]}>
           {title}
         </Text>
-        <Text
-          style={[
-            type.body,
-            {
-              color:           colors.textMuted,
-              textAlign:       'center',
-              lineHeight:      22,
-              paddingHorizontal: spacing['2xl'],
-            },
-          ]}
-        >
+        <Text style={[type.body, { color: c.textMuted, textAlign: 'center', lineHeight: 22, paddingHorizontal: spacing.xl }]}>
           {description}
         </Text>
       </View>
@@ -85,21 +48,20 @@ const ComingSoonLayout: React.FC<ComingSoonProps> = ({ title, description, icon 
       <Pressable
         onPress={() => navigation.navigate('Login')}
         style={({ pressed }) => [
-          styles.altBtn,
+          S.altBtn,
           {
-            borderColor:     colors.accent,
-            borderRadius:    radius.xl,
-            marginHorizontal: spacing.screen,
-            marginBottom:    spacing['2xl'],
-            opacity:         pressed ? 0.8 : 1,
+            borderColor:      c.primary,
+            borderRadius:     radius.lg,
+            marginHorizontal: spacing.lg,
+            marginBottom:     insets.bottom + spacing.xl,
+            opacity:          pressed ? 0.8 : 1,
           },
         ]}
         accessibilityLabel="Use email instead"
+        accessibilityRole="button"
       >
-        <Ionicons name="mail-outline" size={18} color={colors.accent} />
-        <Text style={[type.body, { color: colors.accent, fontWeight: '600' }]}>
-          Use email instead
-        </Text>
+        <Ionicons name="mail-outline" size={18} color={c.primary} />
+        <Text style={[type.body, { color: c.primary, fontWeight: '600' }]}>Use email instead</Text>
       </Pressable>
     </SafeAreaView>
   );
@@ -121,15 +83,13 @@ export const PhoneOtpScreen: React.FC = () => (
   />
 );
 
-const styles = StyleSheet.create({
-  safe:    { flex: 1 },
-  backBtn: { paddingTop: 12, marginBottom: 8 },
+const S = StyleSheet.create({
+  safe: { flex: 1 },
   content: {
     flex:            1,
     justifyContent:  'center',
     alignItems:      'center',
     gap:             16,
-    paddingHorizontal: 24,
   },
   iconCircle: {
     width:          96,

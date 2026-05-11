@@ -1,7 +1,6 @@
 /**
  * src/screens/candidate/cv-generator/GeneratedCVsScreen.tsx
- * ─────────────────────────────────────────────────────────────────────────────
- * Premium CV library. Uses FlashList + skeleton loading states.
+ * Refactored: useTheme(), correct color aliases, estimatedItemSize on FlashList.
  */
 
 import React, { useState, useCallback } from 'react';
@@ -12,16 +11,16 @@ import {
   StyleSheet,
   Animated,
   StatusBar,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
-import { RefreshControl } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { CandidateStackParamList } from '../../../navigation/CandidateNavigator';
 import { GeneratedCVCard } from '../../../components/cv/GeneratedCVCard';
 import { useGeneratedCVs, useDownloadCV } from '../../../hooks/useCvGenerator';
-import { useThemeStore } from '../../../store/themeStore';
+import { useTheme } from '../../../hooks/useTheme';
 import type { GeneratedCV } from '../../../services/cvGeneratorService';
 
 type Props = NativeStackScreenProps<CandidateStackParamList, 'GeneratedCVs'>;
@@ -31,7 +30,7 @@ type Props = NativeStackScreenProps<CandidateStackParamList, 'GeneratedCVs'>;
 const Skeleton: React.FC<{ width?: number | string; height?: number; radius?: number }> = ({
   width = '100%', height = 16, radius = 8,
 }) => {
-  const { theme } = useThemeStore();
+  const { colors } = useTheme();
   const anim = React.useRef(new Animated.Value(0.4)).current;
   React.useEffect(() => {
     Animated.loop(
@@ -41,7 +40,11 @@ const Skeleton: React.FC<{ width?: number | string; height?: number; radius?: nu
       ]),
     ).start();
   }, []);
-  return <Animated.View style={{ width, height, borderRadius: radius, backgroundColor: theme.colors.border, opacity: anim }} />;
+  return (
+    <Animated.View
+      style={{ width, height, borderRadius: radius, backgroundColor: colors.border, opacity: anim }}
+    />
+  );
 };
 
 const SkeletonCVCard = () => (
@@ -62,8 +65,7 @@ const SkeletonCVCard = () => (
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export const GeneratedCVsScreen: React.FC<Props> = ({ navigation }) => {
-  const { theme } = useThemeStore();
-  const { colors, typography, borderRadius, shadows } = theme;
+  const { colors, radius, shadows, type } = useTheme();
 
   const { data: cvs = [], isLoading, refetch } = useGeneratedCVs();
   const downloadMut = useDownloadCV();
@@ -96,19 +98,24 @@ export const GeneratedCVsScreen: React.FC<Props> = ({ navigation }) => {
   ), [downloadingId, handleDownload, handleRegenerate]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-      <StatusBar barStyle={theme.isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
+      <StatusBar barStyle="default" backgroundColor={colors.bg} />
 
       {/* Header */}
       <View style={[s.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text style={{ fontSize: typography.lg, fontWeight: '700', color: colors.text }}>My Generated CVs</Text>
+          <Text style={{ fontSize: type.h3.fontSize, fontWeight: '700', color: colors.text }}>
+            My Generated CVs
+          </Text>
           {cvs.length > 0 && (
-            <View style={[s.countBadge, { backgroundColor: colors.primary, borderRadius: borderRadius.full }]}>
+            <View style={[s.countBadge, { backgroundColor: colors.primary, borderRadius: radius.full }]}>
               <Text style={{ fontSize: 11, fontWeight: '800', color: '#fff' }}>{cvs.length}</Text>
             </View>
           )}
@@ -121,7 +128,7 @@ export const GeneratedCVsScreen: React.FC<Props> = ({ navigation }) => {
 
       {/* Summary banner */}
       {cvs.length > 0 && (
-        <View style={[s.summaryBanner, { backgroundColor: colors.primaryLight, borderBottomColor: colors.border }]}>
+        <View style={[s.summaryBanner, { backgroundColor: colors.primaryBg, borderBottomColor: colors.border }]}>
           <Ionicons name="information-circle-outline" size={14} color={colors.primary} />
           <Text style={{ fontSize: 12, color: colors.primary, marginLeft: 6 }}>
             {cvs.filter(c => c.isPrimary).length > 0
@@ -139,7 +146,6 @@ export const GeneratedCVsScreen: React.FC<Props> = ({ navigation }) => {
       ) : (
         <FlashList
           data={[...cvs].sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0))}
-          estimatedItemSize={88}
           keyExtractor={cv => cv._id}
           contentContainerStyle={{ paddingTop: 8, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
@@ -149,21 +155,21 @@ export const GeneratedCVsScreen: React.FC<Props> = ({ navigation }) => {
           }
           ListEmptyComponent={
             <View style={s.emptyState}>
-              <View style={[s.emptyIconWrap, { backgroundColor: colors.primaryLight, borderRadius: borderRadius.xl }]}>
+              <View style={[s.emptyIconWrap, { backgroundColor: colors.primaryBg, borderRadius: radius.xl }]}>
                 <Ionicons name="document-outline" size={48} color={colors.primary} />
               </View>
-              <Text style={{ fontSize: typography.md, fontWeight: '700', color: colors.text, marginTop: 20 }}>
+              <Text style={{ fontSize: type.body.fontSize, fontWeight: '700', color: colors.text, marginTop: 20 }}>
                 No CVs yet
               </Text>
-              <Text style={{ fontSize: typography.sm, color: colors.textMuted, textAlign: 'center', marginTop: 8, paddingHorizontal: 32, lineHeight: 20 }}>
+              <Text style={{ fontSize: type.bodySm.fontSize, color: colors.textMuted, textAlign: 'center', marginTop: 8, paddingHorizontal: 32, lineHeight: 20 }}>
                 Generate your first professional CV in seconds from your profile data.
               </Text>
               <TouchableOpacity
                 onPress={() => navigation.navigate('CvTemplates')}
-                style={[s.emptyBtn, { backgroundColor: colors.primary, borderRadius: borderRadius.lg, ...shadows.md }]}
+                style={[s.emptyBtn, { backgroundColor: colors.primary, borderRadius: radius.lg, ...shadows.md }]}
               >
                 <Ionicons name="add-outline" size={18} color="#fff" />
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: typography.sm, marginLeft: 6 }}>
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: type.bodySm.fontSize, marginLeft: 6 }}>
                   Generate Your First CV
                 </Text>
               </TouchableOpacity>

@@ -121,7 +121,7 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
           )}
         </View>
 
-        <View style={{ padding: spacing.card }}>
+        <View style={{ padding: spacing.md }}>
           <Text style={[type.body, { fontWeight: '700', color: colors.textPrimary }]} numberOfLines={2}>
             {item.title}
           </Text>

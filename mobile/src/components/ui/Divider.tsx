@@ -1,49 +1,39 @@
-// Divider.tsx
+// src/components/ui/Divider.tsx
+// Usage: <Divider /> | <Divider label="or" /> | <Divider inset={16} />
+
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle, DimensionValue } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
-import { type } from '../../constants/theme/theme';
 
 interface DividerProps {
-  label?: string | React.ReactNode;
-  orientation?: 'horizontal' | 'vertical';
-  thickness?: number;
+  label?: string;
+  inset?: number;
   color?: string;
-  insetLeft?: number;
-  insetRight?: number;
-  spacing?: number;
+  vertical?: boolean;
   height?: DimensionValue;
   style?: ViewStyle;
-  dashed?: boolean;
 }
 
 export const Divider: React.FC<DividerProps> = ({
   label,
-  orientation = 'horizontal',
-  thickness,
+  inset = 0,
   color,
-  insetLeft = 0,
-  insetRight = 0,
-  spacing = 0,
+  vertical = false,
   height = '100%',
   style,
-  dashed = false,
 }) => {
-  const { colors } = useTheme();
-  const lineColor = color ?? colors.borderPrimary;
-  const lineThickness = thickness ?? StyleSheet.hairlineWidth;
+  const { colors: c, spacing, type } = useTheme();
+  const lineColor = color ?? c.border;
 
-  if (orientation === 'vertical') {
+  if (vertical) {
     return (
       <View
         style={[
-          styles.vertical,
           {
+            width: StyleSheet.hairlineWidth,
             height,
-            width: lineThickness,
-            backgroundColor: dashed ? 'transparent' : lineColor,
+            backgroundColor: lineColor,
           },
-          dashed && { borderLeftWidth: lineThickness, borderColor: lineColor, borderStyle: 'dashed' },
           style,
         ]}
       />
@@ -52,102 +42,51 @@ export const Divider: React.FC<DividerProps> = ({
 
   if (!label) {
     return (
-      <View style={[styles.horizontal, { marginVertical: spacing }, style]}>
-        <View
-          style={[
-            styles.line,
-            {
-              height: lineThickness,
-              backgroundColor: dashed ? 'transparent' : lineColor,
-              marginLeft: insetLeft,
-              marginRight: insetRight,
-            },
-            dashed && {
-              borderTopWidth: lineThickness,
-              borderColor: lineColor,
-              borderStyle: 'dashed',
-              height: 0,
-            },
-          ]}
-        />
-      </View>
+      <View
+        style={[
+          {
+            height: StyleSheet.hairlineWidth,
+            backgroundColor: lineColor,
+            marginLeft: inset,
+            marginVertical: spacing.md,
+            alignSelf: 'stretch',
+          },
+          style,
+        ]}
+      />
     );
   }
 
-  const isStringLabel = typeof label === 'string';
-
   return (
-    <View style={[styles.labelRow, { marginVertical: spacing }, style]}>
-      <View
+    <View style={[styles.labelRow, { marginVertical: spacing.md }, style]}>
+      <View style={[styles.line, { backgroundColor: lineColor, marginLeft: inset }]} />
+      <Text
         style={[
-          styles.lineFlex,
+          type.caption,
           {
-            height: lineThickness,
-            backgroundColor: dashed ? 'transparent' : lineColor,
-            marginLeft: insetLeft,
+            color: c.textMuted,
+            marginHorizontal: spacing.sm,
+            fontWeight: '500',
           },
-          dashed && { borderTopWidth: lineThickness, borderColor: lineColor, borderStyle: 'dashed', height: 0 },
         ]}
-      />
-
-      <View style={styles.labelWrapper}>
-        {isStringLabel ? (
-          <Text style={[styles.labelText, type.caption, { color: colors.textMuted }]}>{label}</Text>
-        ) : (
-          label
-        )}
-      </View>
-
-      <View
-        style={[
-          styles.lineFlex,
-          {
-            height: lineThickness,
-            backgroundColor: dashed ? 'transparent' : lineColor,
-            marginRight: insetRight,
-          },
-          dashed && { borderTopWidth: lineThickness, borderColor: lineColor, borderStyle: 'dashed', height: 0 },
-        ]}
-      />
-    </View>
-  );
-};
-
-interface SectionDividerProps {
-  label: string;
-  action?: { label: string; onPress: () => void };
-  style?: ViewStyle;
-}
-
-export const SectionDivider: React.FC<SectionDividerProps> = ({ label, action, style }) => {
-  const { colors, type } = useTheme();
-
-  return (
-    <View style={[sectionStyles.container, { backgroundColor: colors.bgSecondary }, style]}>
-      <Text style={[sectionStyles.label, type.caption, { color: colors.textMuted }]}>
-        {label.toUpperCase()}
+      >
+        {label}
       </Text>
-      {action && (
-        <Text onPress={action.onPress} style={[sectionStyles.action, type.bodySm, { color: colors.accent }]}>
-          {action.label}
-        </Text>
-      )}
+      <View style={[styles.line, { backgroundColor: lineColor }]} />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  vertical: {},
-  horizontal: { alignSelf: 'stretch' },
-  line: { alignSelf: 'stretch' },
-  lineFlex: { flex: 1 },
-  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  labelWrapper: { paddingHorizontal: 4 },
-  labelText: { fontWeight: '500' },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+  },
+  line: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+  },
 });
 
-const sectionStyles = StyleSheet.create({
-  container: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 },
-  label: { fontWeight: '700', letterSpacing: 0.8 },
-  action: { fontWeight: '600' },
-});
+export default Divider;

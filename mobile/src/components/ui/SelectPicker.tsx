@@ -73,7 +73,7 @@ export const SelectPicker: React.FC<SelectPickerProps> = ({
         <View style={[s.overlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
           <View style={[s.sheet, { backgroundColor: colors.bgCard, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl }]}>
             <View style={[s.sheetHeader, { borderBottomColor: colors.borderPrimary }]}>
-              <Text style={[s.sheetTitle, type.h4, { color: colors.textPrimary }]}>{label}</Text>
+              <Text style={[s.sheetTitle, type.h3, { color: colors.textPrimary }]}>{label}</Text>
               <TouchableOpacity onPress={() => { setOpen(false); setSearch(''); }}>
                 <Ionicons name="close" size={24} color={colors.textPrimary} />
               </TouchableOpacity>

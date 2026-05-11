@@ -1,8 +1,6 @@
 /**
  * src/hooks/useVerification.ts
- * ─────────────────────────────────────────────────────────────────────────────
- * React Query hooks for the Verification module.
- * Covers: status, appointment slots/booking, and request submission.
+ * Updated with better error handling and caching
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -12,6 +10,7 @@ import {
   VERIFICATION_FALLBACK,
   VerificationRequestData,
   AppointmentRequest,
+  getUserId,
 } from '../services/verificationService';
 import toast from '../lib/toast';
 
@@ -29,22 +28,33 @@ export const VERIFICATION_KEYS = {
 
 /** Current user's verification status with skeleton-friendly loading state. */
 export const useMyVerificationStatus = () => {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
+  
   return useQuery({
     queryKey: VERIFICATION_KEYS.mine,
     queryFn:  async () => {
       try {
         const res = await verificationService.getMyStatus();
+        // Merge user data from auth store if needed
+        if (res && user) {
+          res.user = {
+            ...res.user,
+            _id: user._id ?? user._id,
+            name: res.user.name || user.name,
+            email: res.user.email || user.email,
+            role: res.user.role || user.role,
+          };
+        }
         return res ?? VERIFICATION_FALLBACK;
       } catch (err: any) {
-        if (err?.response?.status === 404) return VERIFICATION_FALLBACK;
-        throw err;
+        console.error('Failed to fetch verification status:', err);
+        return VERIFICATION_FALLBACK;
       }
     },
     enabled:   isAuthenticated,
-    staleTime: 10 * 60 * 1000,
-    retry:     (count, err: any) =>
-      err?.response?.status === 404 ? false : count < 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime:    10 * 60 * 1000, // 10 minutes
+    retry:     1,
   });
 };
 
@@ -64,6 +74,7 @@ export const useAppointmentSlots = (date: string, verificationType: string) =>
     queryFn:  () => verificationService.getAvailableSlots(date, verificationType),
     enabled:  !!date && !!verificationType,
     staleTime: 60 * 1000,     // slots change frequently
+    retry:    1,
   });
 
 /** Static office location (rarely changes — long stale time). */

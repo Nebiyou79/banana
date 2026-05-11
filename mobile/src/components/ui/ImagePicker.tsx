@@ -157,7 +157,7 @@ export const ImagePickerComponent: React.FC<ImagePickerComponentProps> = ({
         <Pressable style={styles.sheetBackdrop} onPress={() => setSheetVisible(false)} />
         <View style={[styles.sheet, { backgroundColor: colors.bgCard, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl }]}>
           <View style={[styles.sheetHandle, { backgroundColor: colors.borderPrimary, borderRadius: radius.full }]} />
-          <Text style={[styles.sheetTitle, type.h4, { color: colors.textPrimary }]}>Choose photo</Text>
+          <Text style={[styles.sheetTitle, type.h3, { color: colors.textPrimary }]}>Choose photo</Text>
 
           <TouchableOpacity onPress={pickFromCamera} style={[styles.sheetOption, { borderBottomColor: colors.borderPrimary }]}>
             <View style={[styles.sheetOptionIcon, { backgroundColor: colors.accentBg, borderRadius: radius.md }]}>

@@ -1,83 +1,63 @@
 // src/components/proposals/ProposalScreeningAnswers.tsx
 // Banana Mobile App — Module 6B: Proposals
 // Renders Q&A pairs from proposal screeningAnswers (read-only view).
+// REFACTORED: useTheme() + withAlpha(). No hardcoded hex. Ionicons replace emoji.
 
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ViewStyle,
-} from 'react-native';
-import { useThemeStore } from '../../store/themeStore';
+import React, { memo, useState, useMemo } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
 import type { ProposalScreeningAnswer } from '../../types/proposal';
 
 interface ProposalScreeningAnswersProps {
   answers: ProposalScreeningAnswer[];
   style?: ViewStyle;
-  /** Show all answers or truncate to first N */
   maxVisible?: number;
 }
 
-export const ProposalScreeningAnswers: React.FC<ProposalScreeningAnswersProps> = ({
-  answers,
-  style,
-  maxVisible,
+const ProposalScreeningAnswers: React.FC<ProposalScreeningAnswersProps> = memo(({
+  answers, style, maxVisible,
 }) => {
-  const { theme } = useThemeStore();
-  const { colors } = theme;
+  const { colors: c, radius, spacing, type } = useTheme();
   const [showAll, setShowAll] = useState(false);
+  const styles = useMemo(() => makeStyles(c, radius, spacing), [c, radius, spacing]);
 
-  if (!answers || answers.length === 0) {
-    return null;
-  }
+  if (!answers?.length) return null;
 
-  const visible =
-    maxVisible && !showAll ? answers.slice(0, maxVisible) : answers;
-  const hasMore = maxVisible && answers.length > maxVisible;
+  const visible  = maxVisible && !showAll ? answers.slice(0, maxVisible) : answers;
+  const hasMore  = !!(maxVisible && answers.length > maxVisible);
+  const extraCnt = maxVisible ? answers.length - maxVisible : 0;
 
   return (
     <View style={[styles.container, style]}>
       {visible.map((answer, index) => (
-        <View
-          key={index}
-          style={[
-            styles.item,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-            },
-          ]}
-        >
+        <View key={index} style={styles.item}>
           {/* Question */}
           <View style={styles.questionRow}>
-            <View
-              style={[
-                styles.qBadge,
-                { backgroundColor: 'rgba(241,187,3,0.15)' },
-              ]}
-            >
-              <Text style={styles.qBadgeText}>Q{answer.questionIndex + 1}</Text>
+            <View style={[styles.qBadge, { backgroundColor: withAlpha(c.primary, 0.13) }]}>
+              <Text style={[type.caption, { color: c.primary, fontWeight: '700' }]}>
+                Q{answer.questionIndex + 1}
+              </Text>
             </View>
             <Text
-              style={[styles.question, { color: colors.textSecondary }]}
+              style={[type.bodySm, { color: c.textSecondary, fontWeight: '600', flex: 1, lineHeight: 18 }]}
               numberOfLines={3}
             >
               {answer.questionText ?? `Question ${answer.questionIndex + 1}`}
               {answer.isRequired && (
-                <Text style={styles.required}> *</Text>
+                <Text style={{ color: c.danger }}> *</Text>
               )}
             </Text>
           </View>
 
           {/* Answer */}
-          {answer.answer && answer.answer.trim().length > 0 ? (
-            <Text style={[styles.answer, { color: colors.text }]}>
+          {answer.answer?.trim() ? (
+            <Text style={[type.bodySm, styles.answer, { color: c.text }]}>
               {answer.answer}
             </Text>
           ) : (
-            <Text style={[styles.noAnswer, { color: colors.textMuted }]}>
+            <Text style={[type.caption, styles.answer, { color: c.textMuted, fontStyle: 'italic' }]}>
               No answer provided
             </Text>
           )}
@@ -86,79 +66,56 @@ export const ProposalScreeningAnswers: React.FC<ProposalScreeningAnswersProps> =
 
       {hasMore && (
         <TouchableOpacity
-          onPress={() => setShowAll(!showAll)}
-          style={[
-            styles.showMoreBtn,
-            { borderColor: colors.border },
-          ]}
+          onPress={() => setShowAll(s => !s)}
+          style={[styles.showMoreBtn, { borderColor: c.border }]}
+          accessibilityRole="button"
         >
-          <Text style={[styles.showMoreText, { color: '#F1BB03' }]}>
+          <Ionicons
+            name={showAll ? 'chevron-up-outline' : 'chevron-down-outline'}
+            size={14}
+            color={c.primary}
+            style={{ marginRight: 4 }}
+          />
+          <Text style={[type.bodySm, { color: c.primary, fontWeight: '600' }]}>
             {showAll
               ? 'Show less'
-              : `Show ${answers.length - maxVisible!} more question${answers.length - maxVisible! !== 1 ? 's' : ''}`}
+              : `Show ${extraCnt} more question${extraCnt !== 1 ? 's' : ''}`}
           </Text>
         </TouchableOpacity>
       )}
     </View>
   );
-};
-
-const styles = StyleSheet.create({
-  container: {
-    gap: 10,
-  },
-  item: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 14,
-    gap: 8,
-  },
-  questionRow: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'flex-start',
-  },
-  qBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-    flexShrink: 0,
-    marginTop: 1,
-  },
-  qBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#D97706',
-  },
-  question: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 18,
-  },
-  required: {
-    color: '#EF4444',
-  },
-  answer: {
-    fontSize: 13,
-    lineHeight: 20,
-    paddingLeft: 30, // indent to align with question text
-  },
-  noAnswer: {
-    fontSize: 12,
-    fontStyle: 'italic',
-    paddingLeft: 30,
-  },
-  showMoreBtn: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  showMoreText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
 });
 
+ProposalScreeningAnswers.displayName = 'ProposalScreeningAnswers';
+
+const makeStyles = (c: any, radius: any, spacing: any) =>
+  StyleSheet.create({
+    container: { gap: 10 },
+    item: {
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surface ?? c.bgCard,
+      padding: 14,
+      gap: 8,
+    },
+    questionRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+    qBadge: {
+      paddingHorizontal: 7, paddingVertical: 2,
+      borderRadius: 6, flexShrink: 0, marginTop: 1,
+    },
+    answer: { lineHeight: 20, paddingLeft: 30 },
+    showMoreBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderRadius: radius.md,
+      paddingVertical: 10,
+      minHeight: 44,
+    },
+  });
+
+export { ProposalScreeningAnswers };
 export default ProposalScreeningAnswers;

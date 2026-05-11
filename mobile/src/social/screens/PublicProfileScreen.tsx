@@ -231,19 +231,21 @@ const PublicProfileScreen: React.FC = () => {
   // ── Loading / error gates ───────────────────────────────────────────
   if (isLoading) {
     return (
+      // Push screen — solid page background
       <SafeAreaView
-        style={[styles.center, { backgroundColor: theme.bg }]}
+        style={[styles.center, theme.getPageBgStyle()]}
         edges={['top']}
       >
-        <ActivityIndicator color={theme.primary} />
+        <ActivityIndicator color={theme.colors.primary} />
       </SafeAreaView>
     );
   }
 
   if (isError || !profile) {
     return (
+      // Push screen — solid page background
       <SafeAreaView
-        style={[styles.center, { backgroundColor: theme.bg }]}
+        style={[styles.center, theme.getPageBgStyle()]}
         edges={['top']}
       >
         <ErrorState message="Couldn't load profile" onRetry={refetch} />
@@ -263,25 +265,43 @@ const PublicProfileScreen: React.FC = () => {
     avatar: avatarUri ?? undefined,
     role: p.user?.role as UserRole,
     headline: p.headline,
-    verificationStatus: p.user?.verificationStatus,
+    // verificationStatus: p.user?.verificationStatus,
     lastSeen: (p as any).lastActive,
   };
 
   // ── Header block (cover + centered avatar + actions) ────────────────
   const HeaderBlock = (
     <View>
-      {/* Cover */}
-      <View
-        style={[styles.coverWrap, { backgroundColor: theme.primaryLighter }]}
-      >
-        {coverUri ? (
+      {/* Cover — role-tinted fallback with decorative circle when no image */}
+      {coverUri ? (
+        <View style={styles.coverWrap}>
           <RNImage
             source={{ uri: coverUri }}
             style={StyleSheet.absoluteFill}
             resizeMode="cover"
           />
-        ) : null}
-      </View>
+        </View>
+      ) : (
+        <View
+          style={[
+            styles.coverWrap,
+            { backgroundColor: theme.withAlpha(theme.colors.primary, 0.15) },
+          ]}
+        >
+          {/* Decorative glow circle */}
+          <View
+            style={{
+              position: 'absolute',
+              width: 300,
+              height: 300,
+              borderRadius: 150,
+              backgroundColor: theme.withAlpha(theme.colors.primary, 0.08),
+              top: -80,
+              right: -60,
+            }}
+          />
+        </View>
+      )}
 
       {/* Centered avatar overlapping the cover */}
       <View style={styles.avatarRow}>
@@ -379,7 +399,7 @@ const PublicProfileScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Tabs */}
+      {/* Tabs — underline-style active indicator */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -396,15 +416,22 @@ const PublicProfileScreen: React.FC = () => {
               style={[
                 styles.tab,
                 {
-                  backgroundColor: active ? theme.primary : 'transparent',
-                  borderColor: active ? theme.primary : theme.border,
+                  backgroundColor: 'transparent',
+                  borderWidth: 0,
+                  borderBottomWidth: active ? 3 : 0,
+                  borderBottomColor: active
+                    ? theme.colors.primary
+                    : 'transparent',
                 },
               ]}
             >
               <Text
                 style={[
                   styles.tabText,
-                  { color: active ? '#fff' : theme.muted },
+                  {
+                    color: active ? theme.colors.primary : theme.muted,
+                    fontWeight: active ? '700' : '500',
+                  },
                 ]}
               >
                 {t.label}
@@ -527,7 +554,7 @@ const PublicProfileScreen: React.FC = () => {
           {certs.length ? (
             <Section title="Certifications">
               {certs.map((c: any, i: number) => (
-                <CertificationItem key={c._id ?? i} item={c} />
+                <CertificationItem key={c._id ?? i} cert={c} />
               ))}
             </Section>
           ) : null}
@@ -612,8 +639,9 @@ const PublicProfileScreen: React.FC = () => {
   // ── Render: Posts tab uses FeedList ─────────────────────────────────
   if (activeTab === 'posts') {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.bg }}>
-        <TopBar onBack={() => navigation.goBack()} />
+      // Push screen — solid page background
+      <View style={[{ flex: 1 }, theme.getPageBgStyle()]}>
+        <TopBar onBack={() => navigation.goBack()} dark={theme.dark} />
         <FeedList
           posts={posts}
           loading={postsQ.isLoading}
@@ -656,8 +684,9 @@ const PublicProfileScreen: React.FC = () => {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <TopBar onBack={() => navigation.goBack()} />
+    // Push screen — solid page background
+    <View style={[{ flex: 1 }, theme.getPageBgStyle()]}>
+      <TopBar onBack={() => navigation.goBack()} dark={theme.dark} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 40 }}
@@ -673,12 +702,19 @@ const PublicProfileScreen: React.FC = () => {
 // Fragments
 // ──────────────────────────────────────────────────────────────────────────────
 
-const TopBar: React.FC<{ onBack: () => void }> = ({ onBack }) => (
+// TopBar now accepts dark prop for dark-mode-aware glass pill
+const TopBar: React.FC<{ onBack: () => void; dark: boolean }> = ({ onBack, dark }) => (
   <SafeAreaView edges={['top']} pointerEvents="box-none">
     <View style={styles.topBar} pointerEvents="box-none">
       <TouchableOpacity
         onPress={onBack}
-        style={[styles.iconBtn, { backgroundColor: 'rgba(0,0,0,0.45)' }]}
+        style={[
+          styles.iconBtn,
+          {
+            // Dark-mode-aware glassmorphism: darker overlay in dark mode
+            backgroundColor: dark ? 'rgba(0,0,0,0.50)' : 'rgba(0,0,0,0.35)',
+          },
+        ]}
         accessibilityLabel="Back"
         accessibilityRole="button"
       >
@@ -857,3 +893,4 @@ const styles = StyleSheet.create({
 });
 
 export default PublicProfileScreen;
+// ✅ role-theme-migrated

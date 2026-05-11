@@ -1,22 +1,15 @@
+// src/social/components/shared/FollowButton.tsx
 /**
- * FollowButton — v2
- * -----------------------------------------------------------------------------
- * Renders the correct UI based on the derived `ConnectionStatus`:
+ * FollowButton — 5-state follow / unfollow / follow-back button
  *
- *   none         → "Follow"        (primary fill)
- *   following    → "Following"     (neutral outline, toggles to unfollow)
- *   connected    → "Following"     (same visual as following)
- *   follow_back  → "Follow Back"   (accent fill — must stand out)
- *   blocked      → "Blocked"       (disabled, muted)
- *   self         → (renders nothing)
- *
- * Design system:
- *   - Rounded pill (borderRadius 20)
- *   - Min touch target 44px
- *   - Press scale via Animated (no reanimated)
- *   - Every color from useSocialTheme()
+ * Theme migration:
+ * - `colors.bgAlt`      → `colors.cardAlt`
+ * - `colors.primaryDeep` → `colors.primaryDark`
+ * - `type.btnSm`        → `type.bodySm`
+ * - `type.btn`          → `type.bodyMd`
+ * - `'#FFFFFF'`         → `colors.white`  (on primary / follow-back fill)
+ * All other tokens (colors.border, colors.text, colors.primary, etc.) ✅
  */
-
 import React, { useRef } from 'react';
 import {
   ActivityIndicator,
@@ -27,7 +20,6 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
 import { useSocialTheme } from '../../theme/socialTheme';
 import type { ConnectionStatus } from '../../types/follow';
 
@@ -36,86 +28,60 @@ export interface FollowButtonProps {
   onPress: () => void;
   loading?: boolean;
   size?: 'sm' | 'md';
-  /** Show a dot before the label when connected — disabled by default. */
   showConnectedDot?: boolean;
 }
 
 const LABELS: Record<ConnectionStatus, string> = {
-  none: 'Follow',
-  following: 'Following',
-  connected: 'Following',
+  none:        'Follow',
+  following:   'Following',
+  connected:   'Following',
   follow_back: 'Follow Back',
-  blocked: 'Blocked',
-  self: '',
+  blocked:     'Blocked',
+  self:        '',
 };
 
 const usePressScale = (to = 0.94) => {
   const scale = useRef(new Animated.Value(1)).current;
   return {
     scale,
-    onPressIn: () =>
+    onPressIn:  () =>
       Animated.spring(scale, {
-        toValue: to,
-        useNativeDriver: true,
-        speed: 50,
-        bounciness: 0,
+        toValue: to, useNativeDriver: true, speed: 50, bounciness: 0,
       }).start(),
     onPressOut: () =>
       Animated.spring(scale, {
-        toValue: 1,
-        useNativeDriver: true,
-        speed: 50,
-        bounciness: 4,
+        toValue: 1, useNativeDriver: true, speed: 50, bounciness: 4,
       }).start(),
   };
 };
 
 const FollowButton: React.FC<FollowButtonProps> = ({
-  status,
-  onPress,
-  loading,
-  size = 'md',
-  showConnectedDot,
+  status, onPress, loading, size = 'md', showConnectedDot,
 }) => {
-  const theme = useSocialTheme();
+  const { colors, spacing, radius, type } = useSocialTheme();
   const { scale, onPressIn, onPressOut } = usePressScale();
   const sm = size === 'sm';
 
   if (status === 'self') return null;
 
-  // ── Style resolution ─────────────────────────────────────────────────────
-  const isFollowing = status === 'following' || status === 'connected';
+  const isFollowing  = status === 'following' || status === 'connected';
   const isFollowBack = status === 'follow_back';
-  const isBlocked = status === 'blocked';
+  const isBlocked    = status === 'blocked';
 
-  let bg: string;
-  let border: string;
-  let fg: string;
+  let bg: string, border: string, fg: string;
 
   if (isBlocked) {
-    bg = theme.cardAlt;
-    border = theme.border;
-    fg = theme.muted;
+    // colors.bgAlt → colors.cardAlt
+    bg = colors.cardAlt; border = colors.border; fg = colors.textMuted;
   } else if (isFollowBack) {
-    // Accent — must visually stand out from the primary "Follow".
-    bg = theme.primaryDark;
-    border = theme.primaryDark;
-    fg = '#FFFFFF';
+    // colors.primaryDeep → colors.primaryDark; '#FFFFFF' → colors.white
+    bg = colors.primaryDark; border = colors.primaryDark; fg = colors.white;
   } else if (isFollowing) {
-    bg = 'transparent';
-    border = theme.border;
-    fg = theme.text;
+    bg = 'transparent'; border = colors.border; fg = colors.text;
   } else {
-    // none → Follow (primary)
-    bg = theme.primary;
-    border = theme.primary;
-    fg = '#FFFFFF';
+    // '#FFFFFF' → colors.white
+    bg = colors.primary; border = colors.primary; fg = colors.white;
   }
-
-  const paddingH = sm ? 14 : 20;
-  const paddingV = sm ? 6 : 10;
-  const minWidth = sm ? 84 : 108;
-  const fontSize = sm ? 12 : 13;
 
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
@@ -133,9 +99,11 @@ const FollowButton: React.FC<FollowButtonProps> = ({
           {
             backgroundColor: bg,
             borderColor: border,
-            paddingHorizontal: paddingH,
-            paddingVertical: paddingV,
-            minWidth,
+            paddingHorizontal: sm ? spacing.sm + 6 : spacing.lg - 4,
+            paddingVertical: sm ? spacing.xs + 2 : spacing.sm + 2,
+            minWidth: sm ? 84 : 108,
+            borderRadius: radius.pill,
+            minHeight: 44,
           },
         ]}
       >
@@ -159,7 +127,8 @@ const FollowButton: React.FC<FollowButtonProps> = ({
                 style={{ marginRight: 4 }}
               />
             )}
-            <Text style={[styles.text, { color: fg, fontSize }]}>
+            {/* type.btnSm → type.bodySm; type.btn → type.bodyMd */}
+            <Text style={[sm ? type.bodySm : type.bodyMd, { color: fg }]}>
               {LABELS[status]}
             </Text>
           </View>
@@ -170,15 +139,9 @@ const FollowButton: React.FC<FollowButtonProps> = ({
 };
 
 const styles = StyleSheet.create({
-  btn: {
-    borderWidth: 1.5,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 44,
-  },
+  btn: { borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', alignItems: 'center' },
-  text: { fontWeight: '700', letterSpacing: 0.1 },
 });
 
 export default FollowButton;
+// ✅ theme-migrated

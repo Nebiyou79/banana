@@ -3,15 +3,23 @@
 
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { useTheme } from '../../hooks/useThemes';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
 
-interface SocialBtnProps {
-  icon:  string;
+interface SocialBtnConfig {
+  icon: keyof typeof Ionicons.glyphMap;
   label: string;
+  iconColor: string;
 }
 
-const SocialBtn: React.FC<SocialBtnProps> = ({ icon, label }) => {
-  const { colors, type, spacing, radius } = useTheme();
+const SOCIAL_BUTTONS: SocialBtnConfig[] = [
+  { icon: 'logo-google', label: 'Continue with Google', iconColor: '#EA4335' },
+  { icon: 'logo-apple',  label: 'Continue with Apple',  iconColor: '#000000' },
+];
+
+const SocialBtn: React.FC<SocialBtnConfig> = ({ icon, label, iconColor }) => {
+  const { colors: c, type, spacing, radius } = useTheme();
 
   return (
     <Pressable
@@ -22,31 +30,37 @@ const SocialBtn: React.FC<SocialBtnProps> = ({ icon, label }) => {
       style={({ pressed }) => [
         styles.btn,
         {
-          borderColor:     colors.borderPrimary,
-          backgroundColor: colors.bgCard,
-          borderRadius:    radius.md,
-          paddingVertical:   spacing.lg,
+          borderColor: c.border,
+          backgroundColor: c.bgCard,
+          borderRadius: radius.md,
+          paddingVertical: spacing.md,
           paddingHorizontal: spacing.lg,
-          opacity:           pressed ? 0.7 : 0.55,
+          opacity: pressed ? 0.65 : 0.55,
+          height: 48,
         },
       ]}
     >
-      <Text style={styles.icon}>{icon}</Text>
-      <Text style={[type.body, { color: colors.textSecondary, flex: 1 }]}>
+      <Ionicons name={icon} size={18} color={iconColor} />
+      <Text
+        style={[type.body, { color: c.textSecondary, flex: 1 }]}
+        numberOfLines={1}
+      >
         {label}
       </Text>
       <View
         style={[
-          styles.badge,
+          styles.soonBadge,
           {
-            backgroundColor:   colors.warningBg,
-            borderRadius:      radius.full,
+            backgroundColor: c.warningBg,
+            borderRadius: radius.full,
             paddingHorizontal: 8,
-            paddingVertical:   3,
+            paddingVertical: 3,
           },
         ]}
       >
-        <Text style={[type.label, { color: colors.warning }]}>Soon</Text>
+        <Text style={[type.caption, { color: c.warning, fontWeight: '700' }]}>
+          Soon
+        </Text>
       </View>
     </Pressable>
   );
@@ -56,23 +70,22 @@ export const SocialAuthButtons: React.FC = () => {
   const { spacing } = useTheme();
 
   return (
-    <View style={[styles.container, { gap: spacing.sm }]}>
-      <SocialBtn icon="🔵" label="Continue with Google" />
-      <SocialBtn icon="⚫" label="Continue with Apple" />
+    <View style={{ gap: spacing.sm }}>
+      {SOCIAL_BUTTONS.map(btn => (
+        <SocialBtn key={btn.label} {...btn} />
+      ))}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {},
   btn: {
     flexDirection: 'row',
-    alignItems:    'center',
-    borderWidth:   1,
-    gap:           10,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    gap: 10,
   },
-  icon:  { fontSize: 18 },
-  badge: {},
+  soonBadge: {},
 });
 
 export default SocialAuthButtons;

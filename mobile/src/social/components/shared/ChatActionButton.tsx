@@ -1,22 +1,13 @@
 // src/social/components/shared/ChatActionButton.tsx
 /**
- * ChatActionButton — three-tier message entry point.
- * -----------------------------------------------------------------------------
- *   Tier 1: connected (mutual)        → "Start Chat"     opens chat directly
- *   Tier 2: following (one-way)       → "Send Message"   creates a request
- *   Tier 3: none (no relationship)    → "Message" disabled + tooltip toast
- *   Hidden: self / blocked / follow_back  (caller's responsibility upstream;
- *           we still defensively hide for self / blocked here)
+ * ChatActionButton — three-tier message entry point
  *
- * For follow_back we treat as Tier 3 — they follow me but I don't follow
- * them, so I cannot message them until I follow back.
+ * BUG FIX: `openChat` now receives a plain string (otherUser._id) and the
+ * onSuccess correctly unwraps the ConversationResponse to extract the
+ * conversation._id for navigation.
  *
- * Three render variants:
- *   - 'primary'   filled prominent button (PublicProfile main action)
- *   - 'secondary' outline button (PublicProfile + lists)
- *   - 'icon'      compact icon-only (search rows / dense lists)
+ * Three render variants: 'primary' | 'secondary' | 'icon'
  */
-
 import React from 'react';
 import {
   ActivityIndicator,
@@ -42,16 +33,16 @@ export interface ChatActionButtonProps {
   otherUser: ChatUser;
   variant?: 'primary' | 'secondary' | 'icon';
   size?: 'sm' | 'md';
-  /** Hide entirely instead of showing the disabled state. */
   hideWhenDisabled?: boolean;
 }
 
 interface ResolvedAction {
   label: string;
-  icon: 'chatbubble-ellipses-outline' | 'paper-plane-outline' | 'lock-closed-outline';
-  /** disabled = true → tap shows a toast instead of opening chat */
+  icon:
+    | 'chatbubble-ellipses-outline'
+    | 'paper-plane-outline'
+    | 'lock-closed-outline';
   disabled: boolean;
-  /** When disabled, this is the message shown in the toast. */
   disabledHint?: string;
 }
 
@@ -91,7 +82,7 @@ const ChatActionButton: React.FC<ChatActionButtonProps> = ({
   size = 'md',
   hideWhenDisabled = false,
 }) => {
-  const theme = useSocialTheme();
+  const theme      = useSocialTheme();
   const navigation = useNavigation<AnyNav>();
   const { mutate: openChat, isPending } = useGetOrCreateConversation();
 
@@ -99,6 +90,7 @@ const ChatActionButton: React.FC<ChatActionButtonProps> = ({
   if (!action) return null;
   if (action.disabled && hideWhenDisabled) return null;
 
+  // ─── FIXED handlePress ────────────────────────────────────────────────
   const handlePress = () => {
     if (action.disabled) {
       Toast.show({
@@ -109,20 +101,49 @@ const ChatActionButton: React.FC<ChatActionButtonProps> = ({
       return;
     }
     if (!otherUser?._id) return;
-    openChat(
-      { userId: otherUser._id },
-      {
-        onSuccess: (conv) => {
-          navigation.navigate('Chat', {
-            conversationId: conv._id,
-            otherUser,
+
+    // FIX: Pass userId as a plain string, NOT as an object
+    openChat(otherUser._id, {
+      onSuccess: (response: any) => {
+        // FIX: response is ConversationResponse { success, data: Conversation, created }
+        // Extract the inner conversation object
+        const conversation = response?.data ?? response;
+        const convId = conversation?._id;
+
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('[ChatActionButton] onSuccess');
+        console.log('[ChatActionButton] response keys:', Object.keys(response ?? {}));
+        console.log('[ChatActionButton] conversation._id:', convId);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+        if (!convId) {
+          Toast.show({
+            type: 'error',
+            text1: 'Failed to open chat',
+            text2: 'Could not get conversation. Please try again.',
+            position: 'bottom',
           });
-        },
+          return;
+        }
+
+        navigation.navigate('Chat', {
+          conversationId: convId,
+          otherUser,
+        });
       },
-    );
+      onError: (err: any) => {
+        console.log('[ChatActionButton] ERROR:', err?.response?.data ?? err?.message);
+        Toast.show({
+          type: 'error',
+          text1: 'Failed to open conversation',
+          text2: err?.response?.data?.message ?? 'Please try again.',
+          position: 'bottom',
+        });
+      },
+    } as any);
   };
 
-  // ── Icon variant ─────────────────────────────────────────────────────
+  // ── Icon variant ─────────────────────────────────────────────
   if (variant === 'icon') {
     return (
       <TouchableOpacity
@@ -135,7 +156,7 @@ const ChatActionButton: React.FC<ChatActionButtonProps> = ({
         style={[
           styles.iconBtn,
           {
-            backgroundColor: action.disabled ? theme.cardAlt : theme.cardAlt,
+            backgroundColor: theme.cardAlt,
             borderColor: theme.border,
             opacity: action.disabled ? 0.55 : 1,
           },
@@ -150,24 +171,15 @@ const ChatActionButton: React.FC<ChatActionButtonProps> = ({
     );
   }
 
-  const sm = size === 'sm';
+  const sm        = size === 'sm';
   const isPrimary = variant === 'primary';
 
-  // Resolve colors
-  const bg = action.disabled
-    ? theme.cardAlt
-    : isPrimary
-    ? theme.primary
-    : 'transparent';
-  const border = action.disabled
-    ? theme.border
-    : isPrimary
-    ? theme.primary
-    : theme.border;
+  const bg     = action.disabled ? theme.cardAlt : isPrimary ? theme.primary : 'transparent';
+  const border  = action.disabled ? theme.border  : isPrimary ? theme.primary : theme.border;
   const fg = action.disabled
     ? theme.muted
     : isPrimary
-    ? '#FFFFFF'
+    ? theme.colors.white
     : theme.text;
 
   return (
@@ -217,14 +229,14 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  row: { flexDirection: 'row', alignItems: 'center' },
+  row:  { flexDirection: 'row', alignItems: 'center' },
   text: { fontWeight: '700', letterSpacing: 0.1 },
 });
 

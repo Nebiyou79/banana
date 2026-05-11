@@ -1,14 +1,6 @@
 /**
  * screens/organization/MoreScreen.tsx
- *
- * Organization "More" hub — surfaces every screen not in the 6 main tabs:
- *   • Freelancer Marketplace (Shortlist)
- *   • Verification + Request Verification
- *   • Referrals & Rewards / Leaderboard
- *   • Public Product Marketplace
- *   • Account / Notifications / Privacy (placeholders)
- *   • Help, Terms, Contact (placeholders)
- *   • Sign Out
+ * Updated with proper verification integration
  */
 
 import React from 'react';
@@ -25,29 +17,31 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { useThemeStore }                     from '../../store/themeStore';
-import { useAuthStore }                      from '../../store/authStore';
-import { useProfile, useVerificationStatus } from '../../hooks/useProfile';
-import { useLogout }                         from '../../hooks/useAuth';
-import type { OrganizationStackParamList }   from '../../navigation/OrganizationNavigator';
+import { useThemeStore } from '../../store/themeStore';
+import { useAuthStore } from '../../store/authStore';
+import { useProfile } from '../../hooks/useProfile';
+import { useLogout } from '../../hooks/useAuth';
+import type { OrganizationStackParamList } from '../../navigation/OrganizationNavigator';
+import { useMyVerificationStatus } from '../../hooks/useVerification';
+import { verificationService } from '../../services/verificationService';
 
 type Nav = NativeStackNavigationProp<OrganizationStackParamList>;
 
 const ACCENT = '#8B5CF6'; // Organization accent — violet
 
 interface MenuItem {
-  icon:      keyof typeof Ionicons.glyphMap;
-  label:     string;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
   sublabel?: string;
-  color:     string;
-  screen?:   keyof OrganizationStackParamList;
-  badge?:    string;
+  color: string;
+  screen?: keyof OrganizationStackParamList;
+  badge?: string;
   badgeColor?: string;
 }
 
 const MenuSection: React.FC<{
-  title:      string;
-  items:      MenuItem[];
+  title: string;
+  items: MenuItem[];
   navigation: Nav;
 }> = ({ title, items, navigation }) => {
   const { theme } = useThemeStore();
@@ -98,20 +92,21 @@ const MenuSection: React.FC<{
 };
 
 export const OrganizationMoreScreen: React.FC = () => {
-  const { theme }  = useThemeStore();
+  const { theme } = useThemeStore();
   const { colors, typography, spacing } = theme;
-  const { user }   = useAuthStore();
+  const { user } = useAuthStore();
   const navigation = useNavigation<Nav>();
-  const logout     = useLogout();
+  const logout = useLogout();
 
-  const { data: profile }      = useProfile();
-  const { data: verification } = useVerificationStatus();
+  const { data: profile } = useProfile();
+  const { data: verificationData } = useMyVerificationStatus();
 
-  const avatarUrl  = profile?.avatar?.secure_url ?? null;
-  const initials   = (user?.name ?? 'O').split(' ').map((p: string) => p[0]).join('').toUpperCase().slice(0, 2);
-  const vStatus    = verification?.verificationStatus ?? 'none';
+  const avatarUrl = profile?.avatar?.secure_url ?? null;
+  const initials = (user?.name ?? 'O').split(' ').map((p: string) => p[0]).join('').toUpperCase().slice(0, 2);
+  const vStatus = verificationData?.verificationStatus ?? 'none';
   const isVerified = vStatus === 'full';
-  const isPartial  = vStatus === 'partial';
+  const isPartial = vStatus === 'partial';
+  const badgeConfig = verificationService.getBadgeConfig(vStatus);
 
   const handleLogout = () =>
     Alert.alert('Sign Out', 'Are you sure?', [
@@ -151,17 +146,26 @@ export const OrganizationMoreScreen: React.FC = () => {
   const verificationSection: MenuItem[] = [
     {
       icon: 'shield-checkmark-outline',
-      label: 'Verification',
+      label: 'Verification Status',
       sublabel: isVerified
         ? 'Fully verified ✓'
         : isPartial
         ? 'Partially verified — continue'
         : 'Get verified to build trust with applicants',
       color: isVerified ? '#10B981' : ACCENT,
-      screen: 'VerificationStatus',
-      badge: isVerified ? 'Verified' : isPartial ? 'Partial' : undefined,
+      screen: 'RoleVerification',
+      badge: isVerified ? 'Verified' : isPartial ? 'Partial' : 'Verify',
       badgeColor: isVerified ? '#10B981' : ACCENT,
     },
+    ...(!isVerified
+      ? [{
+          icon: 'document-text-outline' as keyof typeof Ionicons.glyphMap,
+          label: 'Request Verification',
+          sublabel: 'Submit your verification documents',
+          color: ACCENT,
+          screen: 'RequestVerification' as keyof OrganizationStackParamList,
+        }]
+      : []),
   ];
 
   const rewardsSection: MenuItem[] = [
@@ -189,16 +193,22 @@ export const OrganizationMoreScreen: React.FC = () => {
       color: ACCENT,
       screen: 'OrgJobList',
     },
+    {
+      icon: 'document-text-outline',
+      label: 'Tender Proposals',
+      sublabel: 'Review submitted proposals',
+      color: ACCENT,
+    },
   ];
 
   const accountSection: MenuItem[] = [
-    { icon: 'notifications-outline', label: 'Notifications',     color: colors.primary },
-    { icon: 'lock-closed-outline',   label: 'Privacy & Security', color: colors.primary },
+    { icon: 'notifications-outline', label: 'Notifications', color: colors.primary },
+    { icon: 'lock-closed-outline', label: 'Privacy & Security', color: colors.primary },
   ];
 
   const supportSection: MenuItem[] = [
-    { icon: 'help-circle-outline',   label: 'Help & FAQ',      color: '#64748B' },
-    { icon: 'mail-outline',          label: 'Contact Us',      color: '#64748B' },
+    { icon: 'help-circle-outline', label: 'Help & FAQ', color: '#64748B' },
+    { icon: 'mail-outline', label: 'Contact Us', color: '#64748B' },
     { icon: 'document-text-outline', label: 'Terms & Privacy', color: '#64748B' },
   ];
 
@@ -238,14 +248,33 @@ export const OrganizationMoreScreen: React.FC = () => {
         </View>
       </TouchableOpacity>
 
+      {/* Verification Banner */}
+      {!isVerified && (
+        <TouchableOpacity
+          onPress={() => navigation.navigate('RoleVerification')}
+          style={[styles.verifyBanner, { backgroundColor: badgeConfig.bgColor, borderColor: badgeConfig.color, marginBottom: 20 }]}
+        >
+          <Ionicons name={badgeConfig.icon} size={24} color={badgeConfig.color} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={{ fontWeight: '700', color: badgeConfig.color }}>
+              {badgeConfig.label}
+            </Text>
+            <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
+              Complete verification to access premium features
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={badgeConfig.color} />
+        </TouchableOpacity>
+      )}
+
       {/* ── Sections ────────────────────────────────── */}
-      <MenuSection title="Management"    items={managementSection}   navigation={navigation} />
-      <MenuSection title="Freelancers"   items={freelancerSection}   navigation={navigation} />
-      <MenuSection title="Marketplace"   items={marketplaceSection}  navigation={navigation} />
-      <MenuSection title="Verification"  items={verificationSection} navigation={navigation} />
-      <MenuSection title="Rewards"       items={rewardsSection}      navigation={navigation} />
-      <MenuSection title="Account"       items={accountSection}      navigation={navigation} />
-      <MenuSection title="Support"       items={supportSection}      navigation={navigation} />
+      <MenuSection title="Management" items={managementSection} navigation={navigation} />
+      <MenuSection title="Freelancers" items={freelancerSection} navigation={navigation} />
+      <MenuSection title="Marketplace" items={marketplaceSection} navigation={navigation} />
+      <MenuSection title="Verification" items={verificationSection} navigation={navigation} />
+      <MenuSection title="Rewards" items={rewardsSection} navigation={navigation} />
+      <MenuSection title="Account" items={accountSection} navigation={navigation} />
+      <MenuSection title="Support" items={supportSection} navigation={navigation} />
 
       {/* ── Sign out ────────────────────────────────── */}
       <TouchableOpacity
@@ -267,18 +296,28 @@ export const OrganizationMoreScreen: React.FC = () => {
   );
 };
 
-export default OrganizationMoreScreen;
-
 const ms = StyleSheet.create({
-  userCard:   { flexDirection: 'row', alignItems: 'center', gap: 14, borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 28 },
-  avatar:     { width: 56, height: 56, borderRadius: 28, flexShrink: 0 },
-  rolePill:   { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99, gap: 4 },
-  roleDot:    { width: 6, height: 6, borderRadius: 3 },
-  editArrow:  { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  secLabel:   { fontWeight: '700', letterSpacing: 0.8, marginBottom: 8, marginLeft: 4 },
-  list:       { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
-  item:       { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 14 },
-  icon:       { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  badge:      { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99, marginRight: 4 },
+  userCard: { flexDirection: 'row', alignItems: 'center', gap: 14, borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 28 },
+  avatar: { width: 56, height: 56, borderRadius: 28, flexShrink: 0 },
+  rolePill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99, gap: 4 },
+  roleDot: { width: 6, height: 6, borderRadius: 3 },
+  editArrow: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  secLabel: { fontWeight: '700', letterSpacing: 0.8, marginBottom: 8, marginLeft: 4 },
+  list: { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+  item: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 14 },
+  icon: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99, marginRight: 4 },
   signOutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: 14, paddingVertical: 14, marginBottom: 12 },
 });
+
+const styles = StyleSheet.create({
+  verifyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+});
+
+export default OrganizationMoreScreen;

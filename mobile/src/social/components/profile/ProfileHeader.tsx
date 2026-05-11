@@ -392,3 +392,4 @@ const styles = StyleSheet.create({
 });
 
 export default ProfileHeader;
+// ✅ theme-migrated

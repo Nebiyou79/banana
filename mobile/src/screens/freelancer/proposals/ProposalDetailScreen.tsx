@@ -1,23 +1,17 @@
-// src/screens/freelancer/proposals/ProposalDetailScreen.tsx
-// Banana Mobile App — Module 6B: Proposals
-// Freelancer's own proposal detail view — cover letter, bid, milestones,
-// attachments, status timeline, withdraw button.
+// screens/freelancer/proposals/ProposalDetailScreen.tsx
 
 import React, { useLayoutEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Linking,
+  View, Text, StyleSheet, ScrollView,
+  TouchableOpacity, Alert, ActivityIndicator, Linking,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useThemeStore } from '../../../store/themeStore';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../../hooks/useTheme';
+import { withAlpha } from '../../../theme/utils';
+import { FONT_SIZE } from '../../../theme/tokens';
 import {
   useProposalDetail,
   useWithdrawProposal,
@@ -29,93 +23,38 @@ import { ProposalAttachmentList } from '../../../components/proposals/ProposalAt
 import { ProposalScreeningAnswers } from '../../../components/proposals/ProposalScreeningAnswers';
 import { ProposalDetailSkeleton } from '../../../components/proposals/ProposalSkeleton';
 import { canWithdraw } from '../../../types/proposal';
-import type {
-  ProposalTender,
-  ProposalStatus,
-} from '../../../types/proposal';
+import {
+  PROPOSAL_STATUS_CONFIGS,
+  getProposalStatusColors,
+} from '../../../components/proposals/proposalStatusConfig';
+import type { ProposalStatus } from '../../../types/proposal';
 import type { FreelancerStackParamList } from '../../../navigation/FreelancerNavigator';
 
-// ─── Navigation ───────────────────────────────────────────────────────────────
-
-type ScreenRouteProp = RouteProp<
-  { ProposalDetail: { proposalId: string } },
-  'ProposalDetail'
->;
+type ScreenRouteProp = RouteProp<{ ProposalDetail: { proposalId: string } }, 'ProposalDetail'>;
 type NavProp = NativeStackNavigationProp<FreelancerStackParamList>;
 
 // ─── Status lifecycle steps ───────────────────────────────────────────────────
 
 const LIFECYCLE_STEPS: { status: ProposalStatus; label: string }[] = [
-  { status: 'submitted', label: 'Submitted' },
-  { status: 'under_review', label: 'Under Review' },
-  { status: 'shortlisted', label: 'Shortlisted' },
+  { status: 'submitted',           label: 'Submitted' },
+  { status: 'under_review',        label: 'Under Review' },
+  { status: 'shortlisted',         label: 'Shortlisted' },
   { status: 'interview_scheduled', label: 'Interview' },
-  { status: 'awarded', label: 'Awarded' },
+  { status: 'awarded',             label: 'Awarded' },
 ];
 
 const STEP_ORDER: ProposalStatus[] = [
-  'submitted',
-  'under_review',
-  'shortlisted',
-  'interview_scheduled',
-  'awarded',
+  'submitted', 'under_review', 'shortlisted', 'interview_scheduled', 'awarded',
 ];
-
-const STATUS_MESSAGES: Partial<Record<ProposalStatus, { icon: string; text: string; bg: string; color: string }>> = {
-  submitted: {
-    icon: '📤',
-    text: 'Your proposal has been submitted and is awaiting review by the client.',
-    bg: 'rgba(59,130,246,0.08)',
-    color: '#2563EB',
-  },
-  under_review: {
-    icon: '🔍',
-    text: 'The client is actively reviewing your proposal — a great sign!',
-    bg: 'rgba(99,102,241,0.08)',
-    color: '#4F46E5',
-  },
-  shortlisted: {
-    icon: '⭐',
-    text: "You've been shortlisted! The client may reach out for an interview.",
-    bg: 'rgba(20,184,166,0.08)',
-    color: '#0D9488',
-  },
-  interview_scheduled: {
-    icon: '📅',
-    text: 'An interview has been scheduled. Check the details carefully.',
-    bg: 'rgba(139,92,246,0.08)',
-    color: '#7C3AED',
-  },
-  awarded: {
-    icon: '🏆',
-    text: "Congratulations! You've been awarded this project.",
-    bg: 'rgba(16,185,129,0.08)',
-    color: '#059669',
-  },
-  rejected: {
-    icon: '✕',
-    text: 'This proposal was not selected. Keep applying — persistence pays off!',
-    bg: 'rgba(239,68,68,0.08)',
-    color: '#DC2626',
-  },
-  withdrawn: {
-    icon: '↩',
-    text: 'You have withdrawn this proposal.',
-    bg: 'rgba(100,116,139,0.08)',
-    color: '#64748B',
-  },
-};
 
 // ─── Section card ─────────────────────────────────────────────────────────────
 
-interface SectionCardProps {
-  title: string;
-  children: React.ReactNode;
-  colors: { card: string; border: string; textMuted: string };
-}
+interface SectionCardColors { bgCard: string; border: string; textMuted: string; }
 
-const SectionCard: React.FC<SectionCardProps> = ({ title, children, colors }) => (
-  <View style={[sectionStyles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+const SectionCard: React.FC<{ title: string; children: React.ReactNode; colors: SectionCardColors }> = ({
+  title, children, colors,
+}) => (
+  <View style={[sectionStyles.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
     <Text style={[sectionStyles.title, { color: colors.textMuted }]}>{title}</Text>
     {children}
   </View>
@@ -123,17 +62,14 @@ const SectionCard: React.FC<SectionCardProps> = ({ title, children, colors }) =>
 
 const sectionStyles = StyleSheet.create({
   card: { borderRadius: 16, borderWidth: 1, padding: 16, gap: 12 },
-  title: {
-    fontSize: 9, fontWeight: '700', textTransform: 'uppercase',
-    letterSpacing: 0.8, marginBottom: -4,
-  },
+  title: { fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: -4 },
 });
 
-// ─── Status timeline ──────────────────────────────────────────────────────────
+// ─── Status timeline — horizontal scroll to avoid overflow ───────────────────
 
 interface StatusTimelineProps {
   currentStatus: ProposalStatus;
-  colors: { border: string; textMuted: string; text: string };
+  colors: { border: string; textMuted: string; text: string; primary: string; success: string; textInverse: string };
 }
 
 const StatusTimeline: React.FC<StatusTimelineProps> = ({ currentStatus, colors }) => {
@@ -143,7 +79,7 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ currentStatus, colors }
   const currentIdx = STEP_ORDER.indexOf(currentStatus);
 
   return (
-    <View style={timelineStyles.container}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center' }}>
       {LIFECYCLE_STEPS.map((step, i) => {
         const done = currentIdx > i;
         const active = currentStatus === step.status;
@@ -152,20 +88,18 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ currentStatus, colors }
         return (
           <React.Fragment key={step.status}>
             <View style={timelineStyles.stepCol}>
-              <View
-                style={[
-                  timelineStyles.dot,
-                  {
-                    backgroundColor: active ? '#F1BB03' : done ? '#10B981' : colors.border,
-                    borderColor: active ? '#F1BB03' : done ? '#10B981' : colors.border,
-                    transform: [{ scale: active ? 1.15 : 1 }],
-                  },
-                ]}
-              >
+              <View style={[
+                timelineStyles.dot,
+                {
+                  backgroundColor: active ? colors.primary : done ? colors.success : colors.border,
+                  borderColor: active ? colors.primary : done ? colors.success : colors.border,
+                  transform: [{ scale: active ? 1.15 : 1 }],
+                },
+              ]}>
                 {done ? (
-                  <Text style={timelineStyles.checkText}>✓</Text>
+                  <Ionicons name="checkmark" size={10} color="#fff" />
                 ) : (
-                  <Text style={[timelineStyles.numText, { color: active ? '#0A2540' : colors.textMuted }]}>
+                  <Text style={[timelineStyles.numText, { color: active ? colors.textInverse : colors.textMuted }]}>
                     {i + 1}
                   </Text>
                 )}
@@ -174,7 +108,7 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ currentStatus, colors }
                 style={[
                   timelineStyles.stepLabel,
                   {
-                    color: active ? '#F1BB03' : done ? '#10B981' : colors.textMuted,
+                    color: active ? colors.primary : done ? colors.success : colors.textMuted,
                     fontWeight: active ? '700' : '400',
                   },
                 ]}
@@ -184,67 +118,75 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ currentStatus, colors }
               </Text>
             </View>
             {!isLast && (
-              <View
-                style={[
-                  timelineStyles.line,
-                  { backgroundColor: done ? '#10B981' : colors.border },
-                ]}
-              />
+              <View style={[timelineStyles.line, { backgroundColor: done ? colors.success : colors.border }]} />
             )}
           </React.Fragment>
         );
       })}
-    </View>
+    </ScrollView>
   );
 };
 
 const timelineStyles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: 4,
-  },
-  stepCol: { alignItems: 'center', gap: 4, width: 48 },
-  dot: {
-    width: 28, height: 28, borderRadius: 14, borderWidth: 2,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  checkText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  stepCol: { alignItems: 'center', width: 62, gap: 4 },
+  dot: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   numText: { fontSize: 11, fontWeight: '700' },
-  stepLabel: { fontSize: 9, textAlign: 'center', lineHeight: 13 },
-  line: { flex: 1, height: 2, borderRadius: 1, marginTop: 13 },
+  stepLabel: { fontSize: 9, textAlign: 'center', lineHeight: 12 },
+  line: { width: 24, height: 2, marginBottom: 20 },
 });
 
-// ─── Main Screen ──────────────────────────────────────────────────────────────
+// ─── Status message ───────────────────────────────────────────────────────────
 
-export const ProposalDetailScreen: React.FC = () => {
+const StatusMessageBox: React.FC<{ status: ProposalStatus }> = ({ status }) => {
+  const { colors } = useTheme();
+  const cfg = PROPOSAL_STATUS_CONFIGS[status];
+  if (!cfg) return null;
+  const { iconColor, bg } = getProposalStatusColors(status, colors);
+
+  return (
+    <View style={[smStyles.box, { backgroundColor: bg }]}>
+      <Ionicons name={cfg.icon} size={18} color={iconColor} />
+      <Text style={[smStyles.text, { color: iconColor }]}>{cfg.text}</Text>
+    </View>
+  );
+};
+
+const smStyles = StyleSheet.create({
+  box: { flexDirection: 'row', gap: 10, borderRadius: 12, padding: 12, alignItems: 'flex-start' },
+  text: { flex: 1, fontSize: 13, lineHeight: 20, fontWeight: '500' },
+});
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
+const ProposalDetailScreen: React.FC = () => {
   const route = useRoute<ScreenRouteProp>();
   const navigation = useNavigation<NavProp>();
-  const { theme } = useThemeStore();
-  const { colors } = theme;
+  const { colors, spacing } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const { proposalId } = route.params;
 
-  const { data: proposal, isLoading, refetch } = useProposalDetail(proposalId);
+  const { data: proposal, isLoading, error } = useProposalDetail(proposalId);
   const withdrawMutation = useWithdrawProposal();
 
   useLayoutEffect(() => {
-    navigation.setOptions({ title: 'My Proposal' });
+    navigation.setOptions({ title: 'Proposal Details' });
   }, [navigation]);
 
   const handleWithdraw = () => {
+    if (!proposal) return;
     Alert.alert(
       'Withdraw Proposal',
-      'Are you sure you want to withdraw this proposal? This action cannot be undone.',
+      'Are you sure you want to withdraw? This cannot be undone.',
       [
-        { text: 'Keep Proposal', style: 'cancel' },
+        { text: 'Keep', style: 'cancel' },
         {
-          text: 'Withdraw',
-          style: 'destructive',
+          text: 'Withdraw', style: 'destructive',
           onPress: () => {
-            withdrawMutation.mutate(proposalId, {
+            withdrawMutation.mutate(proposal._id, {
               onSuccess: () => {
-                Alert.alert('Withdrawn', 'Your proposal has been withdrawn successfully.');
+                Alert.alert('Withdrawn', 'Your proposal has been withdrawn.');
+                navigation.goBack();
               },
               onError: (err: Error) => {
                 Alert.alert('Error', err.message ?? 'Could not withdraw proposal.');
@@ -256,194 +198,134 @@ export const ProposalDetailScreen: React.FC = () => {
     );
   };
 
-  const handleOpenLink = (url: string) => {
-    Linking.openURL(url).catch(() =>
-      Alert.alert('Cannot open link', 'The URL could not be opened.'),
-    );
+  const handleOpenLink = async (url: string) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) await Linking.openURL(url);
+    } catch {
+      Alert.alert('Error', 'Could not open link.');
+    }
   };
 
-  // ── Loading ─────────────────────────────────────────────────────────────────
+  const formatDate = (d?: string) =>
+    d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  const formatDateTime = (d?: string) =>
+    d ? new Date(d).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 
   if (isLoading) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bg }]}>
         <ProposalDetailSkeleton />
       </SafeAreaView>
     );
   }
 
-  if (!proposal) {
+  if (!proposal || error) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bg }]}>
         <View style={styles.errorContainer}>
-          <Text style={[styles.errorText, { color: colors.textMuted }]}>
-            Proposal not found.
-          </Text>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.textMuted} />
+          <Text style={[styles.errorText, { color: colors.text }]}>Proposal not found</Text>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Text style={styles.backBtnText}>← Go back</Text>
+            <Text style={[styles.backBtnText, { color: colors.primary }]}>Go Back</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
 
-  const tender = typeof proposal.tender === 'object' ? (proposal.tender as ProposalTender) : null;
-  const tenderTitle = tender?.title ?? 'Untitled Tender';
-  const isAwarded = proposal.status === 'awarded';
   const isRejected = proposal.status === 'rejected';
-  const statusMsg = STATUS_MESSAGES[proposal.status];
-
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return '—';
-    return new Date(dateStr).toLocaleDateString('en-GB', {
-      day: 'numeric', month: 'short', year: 'numeric',
-    });
-  };
-
-  const formatDateTime = (dateStr?: string) => {
-    if (!dateStr) return '—';
-    return new Date(dateStr).toLocaleString('en-GB', {
-      day: 'numeric', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-  };
+  const tender = typeof proposal.tender === 'object' && proposal.tender !== null
+    ? proposal.tender as { title?: string; _id?: string }
+    : null;
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bg }]}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + spacing.xxl }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Hero status card ──────────────────────────────────────────── */}
-        <View
-          style={[
-            styles.heroCard,
-            {
-              backgroundColor: colors.card,
-              borderColor: isAwarded ? '#10B981' : colors.border,
-            },
-          ]}
-        >
-          {/* Accent strip */}
-          <View
-            style={[
-              styles.accentStrip,
-              {
-                backgroundColor: isAwarded
-                  ? '#10B981'
-                  : isRejected
-                  ? '#EF4444'
-                  : '#F1BB03',
-              },
-            ]}
-          />
-
-          {/* Awarded banner */}
-          {isAwarded && (
-            <View style={styles.awardedBanner}>
-              <Text style={styles.awardedText}>🏆 Contract Awarded!</Text>
+        {/* Hero card */}
+        <View style={[styles.heroCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <View style={[styles.accentStrip, { backgroundColor: colors.primary }]} />
+          {proposal.status === 'awarded' && (
+            <View style={[styles.awardedBanner, { backgroundColor: colors.success }]}>
+              <Text style={styles.awardedText}>AWARDED — Congratulations!</Text>
             </View>
           )}
-
           <View style={styles.heroBody}>
-            {/* Tender title + status */}
             <View style={styles.heroHeader}>
               <View style={styles.heroTitleBlock}>
-                <Text style={[styles.heroLabel, { color: colors.textMuted }]}>
-                  Applied to
-                </Text>
-                <Text
-                  style={[styles.heroTitle, { color: colors.text }]}
-                  numberOfLines={2}
-                >
-                  {tenderTitle}
+                <Text style={[styles.heroLabel, { color: colors.textMuted }]}>PROPOSAL FOR</Text>
+                <Text style={[styles.heroTitle, { color: colors.text }]} numberOfLines={2}>
+                  {tender?.title ?? 'Tender'}
                 </Text>
               </View>
               <ProposalStatusBadge status={proposal.status} size="md" />
             </View>
 
-            {/* Budget display */}
             <ProposalBudgetDisplay proposal={proposal} layout="card" />
 
-            {/* Meta row */}
             <View style={styles.metaRow}>
               {proposal.submittedAt && (
                 <Text style={[styles.metaItem, { color: colors.textMuted }]}>
-                  📅 Submitted {formatDate(proposal.submittedAt)}
+                  Submitted {formatDate(proposal.submittedAt)}
                 </Text>
               )}
               {proposal.viewCount > 0 && (
                 <Text style={[styles.metaItem, { color: colors.textMuted }]}>
-                  👁 Viewed {proposal.viewCount} time{proposal.viewCount !== 1 ? 's' : ''}
+                  Viewed {proposal.viewCount} time{proposal.viewCount !== 1 ? 's' : ''}
                 </Text>
               )}
             </View>
 
-            {/* Status timeline */}
+            {/* Status timeline — horizontal scroll */}
             {!['draft', 'withdrawn', 'rejected'].includes(proposal.status) && (
               <StatusTimeline currentStatus={proposal.status} colors={colors} />
             )}
 
             {/* Status message */}
-            {statusMsg && (
-              <View style={[styles.statusMsgBox, { backgroundColor: statusMsg.bg }]}>
-                <Text style={styles.statusMsgIcon}>{statusMsg.icon}</Text>
-                <Text style={[styles.statusMsgText, { color: statusMsg.color }]}>
-                  {statusMsg.text}
-                </Text>
-              </View>
-            )}
+            <StatusMessageBox status={proposal.status} />
 
-            {/* Interview scheduled info */}
+            {/* Interview scheduled */}
             {proposal.interviewDate && (
-              <View
-                style={[
-                  styles.interviewBox,
-                  { backgroundColor: 'rgba(139,92,246,0.08)', borderColor: 'rgba(139,92,246,0.25)' },
-                ]}
-              >
-                <Text style={[styles.interviewTitle, { color: '#7C3AED' }]}>
-                  📅 Interview Scheduled
-                </Text>
-                <Text style={[styles.interviewDateTime, { color: '#7C3AED' }]}>
+              <View style={[styles.interviewBox, {
+                backgroundColor: withAlpha(colors.organization, 0.08),
+                borderColor: withAlpha(colors.organization, 0.25),
+              }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name="calendar-outline" size={14} color={colors.organization} />
+                  <Text style={[styles.interviewTitle, { color: colors.organization }]}>Interview Scheduled</Text>
+                </View>
+                <Text style={[styles.interviewDateTime, { color: colors.organization }]}>
                   {formatDateTime(proposal.interviewDate)}
                 </Text>
                 {proposal.interviewNotes ? (
-                  <Text style={[styles.interviewNotes, { color: '#7C3AED' }]}>
+                  <Text style={[styles.interviewNotes, { color: colors.organization }]}>
                     {proposal.interviewNotes}
                   </Text>
                 ) : null}
               </View>
             )}
 
-            {/* Client feedback (if rejected with notes) */}
-            {(proposal.ownerNotes) && (
-              <View
-                style={[
-                  styles.feedbackBox,
-                  {
-                    backgroundColor: isRejected
-                      ? 'rgba(239,68,68,0.06)'
-                      : 'rgba(241,187,3,0.06)',
-                    borderColor: isRejected ? '#EF4444' : 'rgba(241,187,3,0.3)',
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.feedbackLabel,
-                    { color: isRejected ? '#DC2626' : '#D97706' },
-                  ]}
-                >
-                  {isRejected ? '🗒 Client Feedback' : '💬 Client Note'}
-                </Text>
-                <Text
-                  style={[
-                    styles.feedbackText,
-                    { color: isRejected ? '#DC2626' : '#D97706' },
-                  ]}
-                >
+            {/* Client feedback */}
+            {proposal.ownerNotes && (
+              <View style={[styles.feedbackBox, {
+                backgroundColor: isRejected ? colors.dangerBg : withAlpha(colors.primary, 0.06),
+                borderColor: isRejected ? colors.danger : withAlpha(colors.primary, 0.30),
+              }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons
+                    name={isRejected ? 'document-text-outline' : 'chatbubble-outline'}
+                    size={12}
+                    color={isRejected ? colors.danger : colors.warning}
+                  />
+                  <Text style={[styles.feedbackLabel, { color: isRejected ? colors.danger : colors.warning }]}>
+                    {isRejected ? 'Client Feedback' : 'Client Note'}
+                  </Text>
+                </View>
+                <Text style={[styles.feedbackText, { color: isRejected ? colors.danger : colors.warning }]}>
                   {proposal.ownerNotes}
                 </Text>
               </View>
@@ -451,14 +333,14 @@ export const ProposalDetailScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* ── Cover Letter ────────────────────────────────────────────────── */}
+        {/* Cover Letter */}
         <SectionCard title="Cover Letter" colors={colors}>
           <Text style={[styles.coverText, { color: colors.textSecondary }]}>
             {proposal.coverLetter}
           </Text>
         </SectionCard>
 
-        {/* ── Proposal Plan ────────────────────────────────────────────────── */}
+        {/* Work Plan */}
         {proposal.proposalPlan ? (
           <SectionCard title="Work Plan" colors={colors}>
             <Text style={[styles.coverText, { color: colors.textSecondary }]}>
@@ -467,12 +349,9 @@ export const ProposalDetailScreen: React.FC = () => {
           </SectionCard>
         ) : null}
 
-        {/* ── Milestones ───────────────────────────────────────────────────── */}
+        {/* Milestones */}
         {proposal.milestones && proposal.milestones.length > 0 && (
-          <SectionCard
-            title={`Payment Milestones (${proposal.milestones.length})`}
-            colors={colors}
-          >
+          <SectionCard title={`Payment Milestones (${proposal.milestones.length})`} colors={colors}>
             <ProposalMilestoneList
               milestones={proposal.milestones}
               currency={proposal.currency}
@@ -481,106 +360,76 @@ export const ProposalDetailScreen: React.FC = () => {
           </SectionCard>
         )}
 
-        {/* ── Screening Answers ────────────────────────────────────────────── */}
+        {/* Screening Answers */}
         {proposal.screeningAnswers && proposal.screeningAnswers.length > 0 && (
-          <SectionCard
-            title={`Screening Answers (${proposal.screeningAnswers.length})`}
-            colors={colors}
-          >
+          <SectionCard title={`Screening Answers (${proposal.screeningAnswers.length})`} colors={colors}>
             <ProposalScreeningAnswers answers={proposal.screeningAnswers} />
           </SectionCard>
         )}
 
-        {/* ── Portfolio Links ──────────────────────────────────────────────── */}
-        {proposal.portfolioLinks && proposal.portfolioLinks.filter((l) => l).length > 0 && (
-          <SectionCard
-            title={`Portfolio Links (${proposal.portfolioLinks.filter((l) => l).length})`}
-            colors={colors}
-          >
-            {proposal.portfolioLinks.filter((l) => l).map((link, i) => (
+        {/* Portfolio Links */}
+        {proposal.portfolioLinks && proposal.portfolioLinks.filter(l => l).length > 0 && (
+          <SectionCard title={`Portfolio Links (${proposal.portfolioLinks.filter(l => l).length})`} colors={colors}>
+            {proposal.portfolioLinks.filter(l => l).map((link, i) => (
               <TouchableOpacity
                 key={i}
                 onPress={() => handleOpenLink(link)}
-                style={[
-                  styles.linkRow,
-                  { backgroundColor: colors.inputBg, borderColor: colors.border },
-                ]}
+                style={[styles.linkRow, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
               >
-                <Text style={[styles.linkIcon]}>🔗</Text>
-                <Text
-                  style={[styles.linkText, { color: '#2563EB' }]}
-                  numberOfLines={1}
-                >
-                  {link}
-                </Text>
-                <Text style={[styles.linkArrow, { color: colors.textMuted }]}>↗</Text>
+                <Ionicons name="link-outline" size={14} color={colors.textMuted} />
+                <Text style={[styles.linkText, { color: colors.candidate }]} numberOfLines={1}>{link}</Text>
+                <Ionicons name="open-outline" size={14} color={colors.textMuted} />
               </TouchableOpacity>
             ))}
           </SectionCard>
         )}
 
-        {/* ── Attachments ──────────────────────────────────────────────────── */}
+        {/* Attachments */}
         {proposal.attachments && proposal.attachments.length > 0 && (
-          <SectionCard
-            title={`Attachments (${proposal.attachments.length})`}
-            colors={colors}
-          >
-            <ProposalAttachmentList
-              attachments={proposal.attachments}
-              canDelete={false}
-            />
+          <SectionCard title={`Attachments (${proposal.attachments.length})`} colors={colors}>
+            <ProposalAttachmentList attachments={proposal.attachments} canDelete={false} />
           </SectionCard>
         )}
 
-        {/* ── Audit log ────────────────────────────────────────────────────── */}
+        {/* Audit log */}
         {proposal.auditLog && proposal.auditLog.length > 0 && (
           <SectionCard title="Activity History" colors={colors}>
-            {[...proposal.auditLog]
-              .reverse()
-              .slice(0, 6)
-              .map((entry, i) => (
-                <View key={i} style={styles.auditRow}>
-                  <View style={[styles.auditDot, { backgroundColor: '#F1BB03' }]} />
-                  <View style={styles.auditContent}>
-                    <Text style={[styles.auditAction, { color: colors.text }]}>
-                      {String(entry.action ?? '').replace(/_/g, ' ')}
+            {[...proposal.auditLog].reverse().slice(0, 6).map((entry: any, i: number) => (
+              <View key={i} style={styles.auditRow}>
+                <View style={[styles.auditDot, { backgroundColor: colors.primary }]} />
+                <View style={styles.auditContent}>
+                  <Text style={[styles.auditAction, { color: colors.text }]}>
+                    {String(entry.action ?? '').replace(/_/g, ' ')}
+                  </Text>
+                  {entry.performedAt && (
+                    <Text style={[styles.auditDate, { color: colors.textMuted }]}>
+                      {formatDateTime(entry.performedAt)}
                     </Text>
-                    {entry.performedAt && (
-                      <Text style={[styles.auditDate, { color: colors.textMuted }]}>
-                        {formatDateTime(entry.performedAt)}
-                      </Text>
-                    )}
-                    {entry.note ? (
-                      <Text style={[styles.auditNote, { color: colors.textMuted }]}>
-                        "{entry.note}"
-                      </Text>
-                    ) : null}
-                  </View>
+                  )}
+                  {entry.note ? (
+                    <Text style={[styles.auditNote, { color: colors.textMuted }]}>"{entry.note}"</Text>
+                  ) : null}
                 </View>
-              ))}
+              </View>
+            ))}
           </SectionCard>
         )}
 
-        {/* ── Withdraw action ───────────────────────────────────────────────── */}
+        {/* Withdraw */}
         {canWithdraw(proposal.status) && (
           <TouchableOpacity
             onPress={handleWithdraw}
             disabled={withdrawMutation.isPending}
             activeOpacity={0.75}
-            style={[
-              styles.withdrawBtn,
-              {
-                borderColor: '#EF4444',
-                backgroundColor: withdrawMutation.isPending
-                  ? 'rgba(239,68,68,0.04)'
-                  : 'transparent',
-              },
-            ]}
+            style={[styles.withdrawBtn, {
+              borderColor: colors.danger,
+              backgroundColor: withdrawMutation.isPending ? colors.dangerBg : 'transparent',
+            }]}
           >
             {withdrawMutation.isPending ? (
-              <ActivityIndicator size="small" color="#EF4444" />
+              <ActivityIndicator size="small" color={colors.danger} />
             ) : (
-              <Text style={styles.withdrawText}>Withdraw Proposal</Text>
+              <Text style={[styles.withdrawText, { color: colors.danger }]}>Withdraw Proposal</Text>
             )}
           </TouchableOpacity>
         )}
@@ -595,77 +444,45 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scroll: { flex: 1 },
   scrollContent: { padding: 16, gap: 14 },
-  errorContainer: {
-    flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16,
-  },
+  errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   errorText: { fontSize: 16 },
   backBtn: { padding: 8 },
-  backBtnText: { color: '#F1BB03', fontSize: 15, fontWeight: '600' },
-
-  // Hero card
+  backBtnText: { fontSize: 15, fontWeight: '600' },
   heroCard: { borderRadius: 18, borderWidth: 1.5, overflow: 'hidden' },
   accentStrip: { height: 4, width: '100%' },
-  awardedBanner: { backgroundColor: '#10B981', paddingHorizontal: 16, paddingVertical: 6 },
+  awardedBanner: { paddingHorizontal: 16, paddingVertical: 6 },
   awardedText: { color: '#fff', fontSize: 12, fontWeight: '800', letterSpacing: 0.3 },
   heroBody: { padding: 16, gap: 14 },
-  heroHeader: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'flex-start', gap: 10,
-  },
+  heroHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
   heroTitleBlock: { flex: 1, gap: 3 },
   heroLabel: { fontSize: 11, fontWeight: '600' },
   heroTitle: { fontSize: 17, fontWeight: '700', lineHeight: 24 },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   metaItem: { fontSize: 12 },
-
-  // Status message
-  statusMsgBox: {
-    flexDirection: 'row', gap: 10, borderRadius: 12,
-    padding: 12, alignItems: 'flex-start',
-  },
-  statusMsgIcon: { fontSize: 16, flexShrink: 0 },
-  statusMsgText: { flex: 1, fontSize: 13, lineHeight: 20, fontWeight: '500' },
-
-  // Interview box
-  interviewBox: {
-    borderWidth: 1, borderRadius: 12, padding: 12, gap: 4,
-  },
+  interviewBox: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 4 },
   interviewTitle: { fontSize: 12, fontWeight: '700' },
   interviewDateTime: { fontSize: 14, fontWeight: '700' },
   interviewNotes: { fontSize: 12, lineHeight: 18, marginTop: 2 },
-
-  // Feedback box
   feedbackBox: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 4 },
   feedbackLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
   feedbackText: { fontSize: 13, lineHeight: 20 },
-
-  // Content
   coverText: { fontSize: 14, lineHeight: 22 },
-
-  // Links
   linkRow: {
     flexDirection: 'row', alignItems: 'center', borderRadius: 10,
     borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, gap: 8,
   },
-  linkIcon: { fontSize: 14 },
   linkText: { flex: 1, fontSize: 13 },
-  linkArrow: { fontSize: 14, flexShrink: 0 },
-
-  // Audit
   auditRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   auditDot: { width: 8, height: 8, borderRadius: 4, marginTop: 5, flexShrink: 0 },
   auditContent: { flex: 1, gap: 2 },
   auditAction: { fontSize: 13, fontWeight: '600', textTransform: 'capitalize' },
   auditDate: { fontSize: 11 },
   auditNote: { fontSize: 12, fontStyle: 'italic' },
-
-  // Withdraw
   withdrawBtn: {
     borderWidth: 1.5, borderRadius: 14, paddingVertical: 14,
     alignItems: 'center', justifyContent: 'center',
   },
-  withdrawText: { color: '#EF4444', fontSize: 15, fontWeight: '700' },
-
+  withdrawText: { fontSize: 15, fontWeight: '700' },
   bottomSpacer: { height: 24 },
 });
 

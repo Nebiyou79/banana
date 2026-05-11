@@ -1,39 +1,31 @@
 /**
- * screens/organization/
- * ─ DashboardScreen.tsx
- * ─ ProfileScreen.tsx
- * ─ EditProfileScreen.tsx
- * ─ MoreScreen.tsx
- *
- * All four Organization role screens, strictly isolated from Company / Candidate styles.
- * Accent colour: #8B5CF6 (violet).
+ * screens/organization/DashboardScreen.tsx
+ * Updated with consistent header showing user name, avatar, and verification status
  */
- 
+
 import React, { useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
- RefreshControl,
+  RefreshControl, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
- 
-import { useThemeStore }  from '../../store/themeStore';
-import { useAuthStore }   from '../../store/authStore';
-import {
-  useProfile,
 
-} from '../../hooks/useProfile';
+import { useThemeStore } from '../../store/themeStore';
+import { useAuthStore } from '../../store/authStore';
+import { useProfile } from '../../hooks/useProfile';
 import { organizationService } from '../../services/organizationService';
-import {
- SkeletonCard,
-  StatCard,
-} from '../../components/shared/ProfileAtoms';
+import { SkeletonCard } from '../../components/shared/ProfileAtoms';
 import type { OrganizationStackParamList } from '../../navigation/OrganizationNavigator';
- 
-type Nav  = NativeStackNavigationProp<OrganizationStackParamList>;
+import { useMyVerificationStatus } from '../../hooks/useVerification';
+import { verificationService } from '../../services/verificationService';
+import { initials as getInitials } from '../../theme/text';
+import StatCard from '../../components/shared/StatCard';
+
+type Nav = NativeStackNavigationProp<OrganizationStackParamList>;
 const ACC = '#8B5CF6';
 
 interface OrgJobRow {
@@ -43,7 +35,7 @@ interface OrgJobRow {
 const OrgJobListItem: React.FC<{ item: OrgJobRow; onPress: () => void }> = React.memo(
   ({ item, onPress }) => {
     const { theme } = useThemeStore();
-    const isActive  = item.status === 'active';
+    const isActive = item.status === 'active';
     return (
       <TouchableOpacity
         style={[dsh.jobRow, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
@@ -97,27 +89,38 @@ const QuickAction: React.FC<{
 });
 
 export const OrganizationDashboardScreen: React.FC = () => {
-  const { theme }   = useThemeStore();
+  const { theme } = useThemeStore();
   const { colors, typography, spacing } = theme;
-  const { user }    = useAuthStore();
-  const navigation  = useNavigation<Nav>();
-  const qc          = useQueryClient();
+  const { user } = useAuthStore();
+  const navigation = useNavigation<Nav>();
+  const qc = useQueryClient();
 
-  const { data: profile }                = useProfile();
+  const { data: profile } = useProfile();
+  const { data: verificationData } = useMyVerificationStatus();
   const { data: stats, isLoading: sLoad, refetch: rs } = useQuery({
     queryKey: ['org', 'stats'],
-    queryFn:  organizationService.getDashboardStats,
+    queryFn: organizationService.getDashboardStats,
     staleTime: 5 * 60 * 1000,
   });
   const { data: jobs, isLoading: jLoad, refetch: rj } = useQuery({
     queryKey: ['org', 'jobs'],
-    queryFn:  organizationService.getMyJobs,
+    queryFn: organizationService.getMyJobs,
     staleTime: 5 * 60 * 1000,
   });
 
   const completion = profile?.profileCompletion?.percentage ?? 0;
   const recentJobs = (jobs ?? []).slice(0, 5);
-  const isLoading  = sLoad || jLoad;
+  const isLoading = sLoad || jLoad;
+  
+  // Verification status
+  const vStatus = verificationData?.verificationStatus ?? 'none';
+  const isVerified = vStatus === 'full';
+  const isPartial = vStatus === 'partial';
+  const badgeConfig = verificationService.getBadgeConfig(vStatus);
+  
+  // Avatar and initials
+  const avatarUrl = profile?.avatar?.secure_url ?? null;
+  const userInitials = getInitials(user?.name ?? 'O');
 
   const onRefresh = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['profile'] });
@@ -138,21 +141,59 @@ export const OrganizationDashboardScreen: React.FC = () => {
       showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={ACC} />}
     >
-      {/* Greeting */}
-      <View style={[dsh.greeting, { paddingHorizontal: spacing[5] }]}>
+      {/* Header with Avatar and Verification Badge */}
+      <View style={[dsh.headerContainer, { paddingHorizontal: spacing[5] }]}>
         <View>
-          <Text style={{ color: colors.textMuted, fontSize: typography.sm, fontWeight: '500' }}>Welcome back 👋</Text>
+          <Text style={{ color: colors.textMuted, fontSize: typography.sm, fontWeight: '500' }}>Welcome back</Text>
           <Text style={{ color: colors.text, fontWeight: '800', fontSize: typography['2xl'], letterSpacing: -0.5 }}>
             {user?.name?.split(' ')[0] ?? 'Organization'}
           </Text>
         </View>
+        
         <TouchableOpacity
-          style={[dsh.iconBtn, { backgroundColor: ACC + '18' }]}
           onPress={() => navigation.navigate('EditProfile')}
+          activeOpacity={0.85}
         >
-          <Ionicons name="people" size={20} color={ACC} />
+          <View style={[dsh.avatarContainer, { backgroundColor: ACC + '18' }]}>
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={dsh.avatar} />
+            ) : (
+              <Text style={[dsh.avatarText, { color: ACC }]}>{userInitials}</Text>
+            )}
+            {isVerified && (
+              <View style={[dsh.verifiedBadge, { backgroundColor: '#10B981' }]}>
+                <Ionicons name="checkmark" size={10} color="#fff" />
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
       </View>
+
+      {/* Verification Status Banner */}
+      {!isVerified && (
+        <TouchableOpacity
+          onPress={() => navigation.navigate('RoleVerification')}
+          style={[dsh.verifyBanner, { 
+            backgroundColor: badgeConfig.bgColor, 
+            borderColor: badgeConfig.color,
+            marginHorizontal: spacing[5],
+            marginBottom: spacing[4],
+          }]}
+        >
+          <Ionicons name={badgeConfig.icon} size={20} color={badgeConfig.color} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={{ fontWeight: '700', color: badgeConfig.color }}>
+              {badgeConfig.label}
+            </Text>
+            <Text style={{ fontSize: 12, color: colors.textMuted }}>
+              {isPartial 
+                ? 'Complete remaining steps to get fully verified'
+                : 'Get verified to build trust with applicants'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={badgeConfig.color} />
+        </TouchableOpacity>
+      )}
 
       {/* Strength */}
       <View style={[dsh.card, { backgroundColor: colors.surface, borderColor: colors.border, marginHorizontal: spacing[5] }]}>
@@ -179,10 +220,10 @@ export const OrganizationDashboardScreen: React.FC = () => {
         </View>
       ) : (
         <View style={[dsh.grid, { paddingHorizontal: spacing[5] }]}>
-          <StatCard label="Jobs"         value={stats?.totalJobs ?? 0}         icon="briefcase-outline"     color={ACC}      />
-          <StatCard label="Active"       value={stats?.activeJobs ?? 0}        icon="radio-button-on"       color="#10B981"  />
-          <StatCard label="Applications" value={stats?.totalApplications ?? 0} icon="document-text-outline" color="#F59E0B"  />
-          <StatCard label="New Today"    value={stats?.newApplications ?? 0}   icon="notifications-outline" color="#EF4444"  />
+          <StatCard label="Jobs" value={stats?.totalJobs ?? 0} icon="briefcase-outline" color={ACC} />
+          <StatCard label="Active" value={stats?.activeJobs ?? 0} icon="radio-button-on" color="#10B981" />
+          <StatCard label="Applications" value={stats?.totalApplications ?? 0} icon="document-text-outline" color="#F59E0B" />
+          <StatCard label="New Today" value={stats?.newApplications ?? 0} icon="notifications-outline" color="#EF4444" />
         </View>
       )}
 
@@ -190,10 +231,18 @@ export const OrganizationDashboardScreen: React.FC = () => {
       <View style={[dsh.sectionRow, { paddingHorizontal: spacing[5] }]}>
         <Text style={{ color: colors.text, fontWeight: '700', fontSize: typography.base }}>Quick Actions</Text>
       </View>
-      <View style={{ paddingHorizontal: spacing[5], gap: 10 }}>
-        <QuickAction icon="add-circle-outline"        label="Post Opportunity"   sub="Jobs, volunteering, internships" color={ACC}      onPress={() => navigation.navigate('OrgJobCreate')} />
-        <QuickAction icon="people-outline"             label="View Applicants"   sub="Review and manage candidates"   color="#6366F1"  onPress={() => navigation.navigate('OrgJobList')} />
-        <QuickAction icon="shield-checkmark-outline"   label="Get Verified"     sub="Boost trust with applicants"    color="#10B981"  onPress={() => navigation.navigate('VerificationStatus')} />
+      <View style={{ paddingHorizontal: spacing[5], gap: 10, marginBottom: 20 }}>
+        <QuickAction icon="add-circle-outline" label="Post Opportunity" sub="Jobs, volunteering, internships" color={ACC} onPress={() => navigation.navigate('OrgJobCreate')} />
+        <QuickAction icon="people-outline" label="View Applicants" sub="Review and manage candidates" color="#6366F1" onPress={() => navigation.navigate('OrgJobList')} />
+        {!isVerified && (
+          <QuickAction 
+            icon="shield-checkmark-outline" 
+            label={isPartial ? "Complete Verification" : "Get Verified"} 
+            sub="Boost trust with applicants" 
+            color={isPartial ? "#F59E0B" : "#10B981"} 
+            onPress={() => navigation.navigate('RoleVerification')} 
+          />
+        )}
       </View>
 
       {/* Recent postings */}
@@ -222,17 +271,23 @@ export const OrganizationDashboardScreen: React.FC = () => {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const dsh = StyleSheet.create({
-  greeting:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  iconBtn:    { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  card:       { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 28 },
-  row:        { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  barBg:      { height: 8, borderRadius: 99, overflow: 'hidden', marginBottom: 4 },
-  barFill:    { height: 8, borderRadius: 99 },
+  headerContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  avatarContainer: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  avatar: { width: 52, height: 52, borderRadius: 26 },
+  avatarText: { fontSize: 20, fontWeight: '800' },
+  verifiedBadge: { position: 'absolute', bottom: 0, right: 0, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
+  verifyBanner: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, borderWidth: 1 },
+  greeting: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  card: { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 28 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  barBg: { height: 8, borderRadius: 99, overflow: 'hidden', marginBottom: 4 },
+  barFill: { height: 8, borderRadius: 99 },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 28, marginBottom: 12 },
-  grid:       { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  skeleRow:   { flexDirection: 'row', gap: 10 },
-  jobRow:     { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 8 },
-  pill:       { borderRadius: 99, paddingHorizontal: 8, paddingVertical: 3 },
-  qa:         { flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 1, borderRadius: 14, padding: 14 },
-  qaIcon:     { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  skeleRow: { flexDirection: 'row', gap: 10 },
+  jobRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 8 },
+  pill: { borderRadius: 99, paddingHorizontal: 8, paddingVertical: 3 },
+  qa: { flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 1, borderRadius: 14, padding: 14 },
+  qaIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
 });

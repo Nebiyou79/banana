@@ -10,7 +10,7 @@ import {
 import { usePressScale, useSlideUp } from '../../theme/animations';
 import { useSocialTheme } from '../../theme/socialTheme';
 import type { ComponentProps } from 'react';
-type IoniconName = ComponentProps<typeof Ionicons>['name']
+type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
 interface Props {
   onPress: () => void;
@@ -93,3 +93,4 @@ const styles = StyleSheet.create({
 });
 
 export default CreatePostFAB;
+// ✅ theme-migrated

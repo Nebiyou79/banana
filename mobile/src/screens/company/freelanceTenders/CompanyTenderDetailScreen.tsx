@@ -14,7 +14,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useThemeStore } from '../../../store/themeStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../../hooks/useTheme';
+import { withAlpha } from '../../../theme/utils';
 import {
   useCloseFreelanceTender,
   useDeleteFreelanceTender,
@@ -37,126 +39,115 @@ type Tab = 'overview' | 'applicants';
 
 // ─── Application card ─────────────────────────────────────────────────────────
 
-const APP_STATUS_COLORS: Record<ApplicationStatus, string> = {
-  submitted: '#3B82F6',
-  under_review: '#F59E0B',
-  shortlisted: '#8B5CF6',
-  awarded: '#10B981',
-  rejected: '#EF4444',
-};
-
 interface ApplicantCardProps {
   app: FreelanceTenderApplication;
   tenderId: string;
-  textColor: string;
-  mutedColor: string;
-  surfaceColor: string;
-  borderColor: string;
-  primaryColor: string;
 }
 
-const ApplicantCard: React.FC<ApplicantCardProps> = React.memo(
-  ({ app, tenderId, textColor, mutedColor, surfaceColor, borderColor, primaryColor }) => {
-    const updateStatus = useUpdateApplicationStatus();
-    const applicant =
-      typeof app.applicant === 'object' ? app.applicant : { _id: String(app.applicant), name: 'Unknown', avatar: undefined };
+const ApplicantCard: React.FC<ApplicantCardProps> = React.memo(({ app, tenderId }) => {
+  const { colors } = useTheme();
+  const updateStatus = useUpdateApplicationStatus();
 
-    const STATUS_OPTIONS: ApplicationStatus[] = [
-      'under_review',
-      'shortlisted',
-      'awarded',
-      'rejected',
-    ];
+  // APP_STATUS_COLORS via theme tokens
+  const APP_STATUS_COLORS: Record<ApplicationStatus, string> = {
+    submitted:    colors.candidate,
+    under_review: colors.warning,
+    shortlisted:  colors.organization,
+    awarded:      colors.success,
+    rejected:     colors.danger,
+  };
 
-    const handleStatusChange = (status: ApplicationStatus) => {
-      Alert.alert(
-        'Update Status',
-        `Set application to "${status.replace(/_/g, ' ')}"?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Confirm',
-            onPress: () =>
-              updateStatus.mutate({ tenderId, appId: app._id, status }),
-          },
-        ]
-      );
-    };
+  const applicant =
+    typeof app.applicant === 'object'
+      ? app.applicant
+      : { _id: String(app.applicant), name: 'Unknown', avatar: undefined };
 
-    const statusColor = APP_STATUS_COLORS[app.status] ?? mutedColor;
+  const STATUS_OPTIONS: ApplicationStatus[] = [
+    'under_review',
+    'shortlisted',
+    'awarded',
+    'rejected',
+  ];
 
-    return (
-      <View style={[styles.appCard, { backgroundColor: surfaceColor, borderColor }]}>
-        {/* Applicant info */}
-        <View style={styles.appHeader}>
-          <View style={[styles.appAvatar, { backgroundColor: primaryColor + '22' }]}>
-            <Text style={[styles.appAvatarText, { color: primaryColor }]}>
-              {applicant.name.charAt(0).toUpperCase()}
-            </Text>
-          </View>
-          <View style={styles.appInfo}>
-            <Text style={[styles.appName, { color: textColor }]}>{applicant.name}</Text>
-            <Text style={[styles.appDate, { color: mutedColor }]}>
-              Applied {new Date(app.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </Text>
-          </View>
-          <View style={[styles.appStatusBadge, { backgroundColor: statusColor + '22' }]}>
-            <Text style={[styles.appStatusText, { color: statusColor }]}>
-              {app.status.replace(/_/g, ' ')}
-            </Text>
-          </View>
+  const handleStatusChange = (status: ApplicationStatus) => {
+    Alert.alert(
+      'Update Status',
+      `Set application to "${status.replace(/_/g, ' ')}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: () => updateStatus.mutate({ tenderId, appId: app._id, status }),
+        },
+      ]
+    );
+  };
+
+  const statusColor = APP_STATUS_COLORS[app.status] ?? colors.textMuted;
+
+  return (
+    <View style={[styles.appCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+      <View style={styles.appHeader}>
+        <View style={[styles.appAvatar, { backgroundColor: withAlpha(colors.primary, 0.13) }]}>
+          <Text style={[styles.appAvatarText, { color: colors.primary }]}>
+            {applicant.name.charAt(0).toUpperCase()}
+          </Text>
         </View>
+        <View style={styles.appInfo}>
+          <Text style={[styles.appName, { color: colors.text }]}>{applicant.name}</Text>
+          <Text style={[styles.appDate, { color: colors.textMuted }]}>
+            Applied{' '}
+            {new Date(app.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </Text>
+        </View>
+        <View style={[styles.appStatusBadge, { backgroundColor: withAlpha(statusColor, 0.13) }]}>
+          <Text style={[styles.appStatusText, { color: statusColor }]}>
+            {app.status.replace(/_/g, ' ')}
+          </Text>
+        </View>
+      </View>
 
-        {/* Rate */}
-        <Text style={[styles.appRate, { color: textColor }]}>
-          Proposed: {app.proposedRateCurrency ?? 'ETB'} {app.proposedRate.toLocaleString()}
-        </Text>
+      <Text style={[styles.appRate, { color: colors.text }]}>
+        Proposed: {app.proposedRateCurrency ?? 'ETB'} {app.proposedRate.toLocaleString()}
+      </Text>
 
-        {/* Cover letter preview */}
-        <Text style={[styles.appCover, { color: mutedColor }]} numberOfLines={3}>
-          {app.coverLetter}
-        </Text>
+      <Text style={[styles.appCover, { color: colors.textMuted }]} numberOfLines={3}>
+        {app.coverLetter}
+      </Text>
 
-        {/* Status actions */}
-        {app.status !== 'awarded' && app.status !== 'rejected' && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.appActions}>
-            {STATUS_OPTIONS.filter((s) => s !== app.status).map((s) => (
+      {app.status !== 'awarded' && app.status !== 'rejected' && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.appActions}>
+          {STATUS_OPTIONS.filter((s) => s !== app.status).map((s) => {
+            const sc = APP_STATUS_COLORS[s] ?? colors.textMuted;
+            return (
               <TouchableOpacity
                 key={s}
                 onPress={() => handleStatusChange(s)}
-                style={[
-                  styles.appActionBtn,
-                  { borderColor: (APP_STATUS_COLORS[s] ?? mutedColor) + '66' },
-                ]}
+                style={[styles.appActionBtn, { borderColor: withAlpha(sc, 0.40) }]}
                 activeOpacity={0.75}
                 accessibilityRole="button"
               >
-                <Text
-                  style={[
-                    styles.appActionText,
-                    { color: APP_STATUS_COLORS[s] ?? mutedColor },
-                  ]}
-                >
+                <Text style={[styles.appActionText, { color: sc }]}>
                   {s.replace(/_/g, ' ')}
                 </Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
+            );
+          })}
+        </ScrollView>
+      )}
 
-        {updateStatus.isPending && (
-          <ActivityIndicator size="small" style={{ marginTop: 8 }} />
-        )}
-      </View>
-    );
-  }
-);
+      {updateStatus.isPending && (
+        <ActivityIndicator size="small" style={{ marginTop: 8 }} />
+      )}
+    </View>
+  );
+});
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 const CompanyTenderDetailScreen: React.FC = () => {
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ CompanyTenderDetail: RouteParams }, 'CompanyTenderDetail'>>();
   const { tenderId } = route.params;
@@ -197,18 +188,24 @@ const CompanyTenderDetailScreen: React.FC = () => {
   const handleClose = useCallback(() => {
     Alert.alert('Close Tender', 'Stop accepting new applications?', [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Close',
-        style: 'destructive',
-        onPress: () => closeMutation.mutate(tenderId),
-      },
+      { text: 'Close', onPress: () => closeMutation.mutate(tenderId) },
     ]);
   }, [closeMutation, tenderId]);
 
-  if (isLoading || !tender) {
+  if (isLoading) {
     return (
-      <SafeAreaView style={[styles.root, { backgroundColor: c.background ?? c.card }]} edges={['top']}>
-        <ActivityIndicator color={c.primary} style={{ flex: 1 }} />
+      <SafeAreaView style={[styles.root, { backgroundColor: colors.bg }]} edges={['top']}>
+        <ActivityIndicator color={colors.primary} style={{ flex: 1 }} />
+      </SafeAreaView>
+    );
+  }
+
+  if (!tender) {
+    return (
+      <SafeAreaView style={[styles.root, { backgroundColor: colors.bg }]} edges={['top']}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ color: colors.textMuted }}>Tender not found.</Text>
+        </View>
       </SafeAreaView>
     );
   }
@@ -217,115 +214,121 @@ const CompanyTenderDetailScreen: React.FC = () => {
   const isPublished = tender.status === 'published';
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: c.background ?? c.card }]} edges={['top']}>
+    <SafeAreaView style={[styles.root, { backgroundColor: colors.bg }]} edges={['top']}>
       {/* Top bar */}
-      <View style={[styles.topBar, { borderBottomColor: c.border ?? c.textMuted + '22' }]}>
+      <View style={[styles.topBar, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backBtn}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
         >
-          <Text style={[styles.backBtnText, { color: c.primary }]}>← Back</Text>
+          <Text style={[styles.backBtnText, { color: colors.primary }]}>← Back</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => navigation.navigate('FreelanceTenderEdit', { tenderId })}
-          style={[styles.editTopBtn, { borderColor: c.primary + '66' }]}
+          onPress={() => navigation.navigate('CompanyTenderEdit', { tenderId })}
+          style={[styles.editTopBtn, { borderColor: colors.border }]}
           accessibilityRole="button"
         >
-          <Text style={[styles.editTopBtnText, { color: c.primary }]}>Edit</Text>
+          <Text style={[styles.editTopBtnText, { color: colors.text }]}>Edit</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Tabs */}
-      <View style={[styles.tabRow, { borderBottomColor: c.border ?? c.textMuted + '22' }]}>
+      {/* Tab row */}
+      <View style={[styles.tabRow, { borderBottomColor: colors.border }]}>
         {(['overview', 'applicants'] as Tab[]).map((t) => {
           const active = tab === t;
           return (
             <TouchableOpacity
               key={t}
               onPress={() => setTab(t)}
-              style={[styles.tabItem, active && { borderBottomColor: c.primary, borderBottomWidth: 2 }]}
+              style={[
+                styles.tabItem,
+                active && { borderBottomWidth: 2, borderBottomColor: colors.primary },
+              ]}
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
             >
-              <Text style={[styles.tabText, { color: active ? c.primary : c.textMuted, fontWeight: active ? '700' : '400' }]}>
-                {t === 'applicants' ? `Applicants (${appCount})` : 'Overview'}
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: active ? colors.primary : colors.textMuted, fontWeight: active ? '700' : '400' },
+                ]}
+              >
+                {t === 'overview' ? 'Overview' : `Applicants (${appCount})`}
               </Text>
             </TouchableOpacity>
           );
         })}
       </View>
 
-      {/* Content */}
       {tab === 'overview' ? (
         <ScrollView
-          contentContainerStyle={styles.content}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={c.primary} />}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: insets.bottom + 32 },
+          ]}
+          refreshControl={
+            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
+          }
           showsVerticalScrollIndicator={false}
         >
-          {/* Status + badges */}
           <View style={styles.badgeRow}>
             <FreelanceTenderStatusBadge status={tender.status} />
           </View>
 
-          <Text style={[styles.title, { color: c.text }]}>{tender.title}</Text>
-          <Text style={[styles.category, { color: c.textMuted }]}>{tender.procurementCategory}</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{tender.title}</Text>
+          <Text style={[styles.category, { color: colors.textMuted }]}>{tender.procurementCategory}</Text>
 
-          {/* Meta */}
           <View style={styles.metaRow}>
             <FreelanceTenderBudgetTag details={tender.details} />
             <FreelanceTenderDeadlineTimer deadline={tender.deadline} />
           </View>
 
-          {/* Skills */}
           {tender.skillsRequired.length > 0 && (
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: c.text }]}>Required Skills</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Required Skills</Text>
               <FreelanceTenderSkillTags skills={tender.skillsRequired} />
             </View>
           )}
 
-          {/* Brief */}
           {tender.briefDescription && (
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: c.text }]}>Summary</Text>
-              <Text style={[styles.body, { color: c.text }]}>{tender.briefDescription}</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Summary</Text>
+              <Text style={[styles.body, { color: colors.text }]}>{tender.briefDescription}</Text>
             </View>
           )}
 
-          {/* Description */}
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: c.text }]}>Full Description</Text>
-            <Text style={[styles.body, { color: c.text }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Full Description</Text>
+            <Text style={[styles.body, { color: colors.text }]}>
               {tender.description.replace(/<[^>]+>/g, ' ').trim()}
             </Text>
           </View>
 
-          {/* Stats */}
-          <View style={[styles.statsCard, { backgroundColor: c.surface ?? c.card, borderColor: c.border ?? c.textMuted + '33' }]}>
-            <StatRow label="Views" value={String(tender.metadata?.views ?? 0)} textColor={c.text} mutedColor={c.textMuted} />
-            <StatRow label="Applications" value={String(tender.metadata?.totalApplications ?? 0)} textColor={c.text} mutedColor={c.textMuted} />
-            <StatRow label="Saved by" value={String(tender.metadata?.savedBy?.length ?? 0)} textColor={c.text} mutedColor={c.textMuted} />
+          <View style={[styles.statsCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <StatRow label="Views"            value={String(tender.metadata?.views ?? 0)}                textColor={colors.text} mutedColor={colors.textMuted} />
+            <StatRow label="Applications"     value={String(tender.metadata?.totalApplications ?? 0)}    textColor={colors.text} mutedColor={colors.textMuted} />
+            <StatRow label="Saved by"         value={String(tender.metadata?.savedBy?.length ?? 0)}      textColor={colors.text} mutedColor={colors.textMuted} />
             {tender.maxApplications != null && (
-              <StatRow label="Max applications" value={String(tender.maxApplications)} textColor={c.text} mutedColor={c.textMuted} />
+              <StatRow label="Max applications" value={String(tender.maxApplications)}                   textColor={colors.text} mutedColor={colors.textMuted} />
             )}
           </View>
 
-          {/* Owner actions */}
           <View style={styles.ownerActions}>
             {isDraft && (
               <TouchableOpacity
                 onPress={handlePublish}
                 disabled={publishMutation.isPending}
-                style={[styles.ownerActionBtn, { backgroundColor: c.success }]}
+                style={[styles.ownerActionBtn, { backgroundColor: colors.success }]}
                 activeOpacity={0.85}
                 accessibilityRole="button"
               >
                 {publishMutation.isPending ? (
-                  <ActivityIndicator color="#fff" size="small" />
+                  <ActivityIndicator color={colors.textInverse} size="small" />
                 ) : (
-                  <Text style={styles.ownerActionBtnText}>Publish Tender</Text>
+                  <Text style={[styles.ownerActionBtnText, { color: colors.textInverse }]}>
+                    Publish Tender
+                  </Text>
                 )}
               </TouchableOpacity>
             )}
@@ -333,14 +336,16 @@ const CompanyTenderDetailScreen: React.FC = () => {
               <TouchableOpacity
                 onPress={handleClose}
                 disabled={closeMutation.isPending}
-                style={[styles.ownerActionBtn, { backgroundColor: c.textMuted }]}
+                style={[styles.ownerActionBtn, { backgroundColor: colors.textMuted }]}
                 activeOpacity={0.85}
                 accessibilityRole="button"
               >
                 {closeMutation.isPending ? (
-                  <ActivityIndicator color="#fff" size="small" />
+                  <ActivityIndicator color={colors.textInverse} size="small" />
                 ) : (
-                  <Text style={styles.ownerActionBtnText}>Close Tender</Text>
+                  <Text style={[styles.ownerActionBtnText, { color: colors.textInverse }]}>
+                    Close Tender
+                  </Text>
                 )}
               </TouchableOpacity>
             )}
@@ -348,48 +353,42 @@ const CompanyTenderDetailScreen: React.FC = () => {
               <TouchableOpacity
                 onPress={handleDelete}
                 disabled={deleteMutation.isPending}
-                style={[styles.ownerActionBtn, { backgroundColor: c.error ?? '#EF4444' }]}
+                style={[styles.ownerActionBtn, { backgroundColor: colors.danger }]}
                 activeOpacity={0.85}
                 accessibilityRole="button"
               >
                 {deleteMutation.isPending ? (
-                  <ActivityIndicator color="#fff" size="small" />
+                  <ActivityIndicator color={colors.textInverse} size="small" />
                 ) : (
-                  <Text style={styles.ownerActionBtnText}>Delete Tender</Text>
+                  <Text style={[styles.ownerActionBtnText, { color: colors.textInverse }]}>
+                    Delete Tender
+                  </Text>
                 )}
               </TouchableOpacity>
             )}
           </View>
         </ScrollView>
+      ) : appsLoading ? (
+        <ActivityIndicator color={colors.primary} style={{ flex: 1 }} />
       ) : (
-        // Applicants tab
-        appsLoading ? (
-          <ActivityIndicator color={c.primary} style={{ flex: 1 }} />
-        ) : (
-          <FlashList
-            data={applications}
-            keyExtractor={(item) => item._id}
-            contentContainerStyle={styles.content}
-            renderItem={({ item }) => (
-              <ApplicantCard
-                app={item}
-                tenderId={tenderId}
-                textColor={c.text}
-                mutedColor={c.textMuted}
-                surfaceColor={c.surface ?? c.card}
-                borderColor={c.border ?? c.textMuted + '33'}
-                primaryColor={c.primary}
-              />
-            )}
-            ListEmptyComponent={
-              <View style={styles.emptyApps}>
-                <Text style={[styles.emptyAppsText, { color: c.textMuted }]}>
-                  No applications yet.
-                </Text>
-              </View>
-            }
-          />
-        )
+        <FlashList
+          data={applications}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={{
+            padding: 16,
+            paddingBottom: insets.bottom + 32,
+          }}
+          renderItem={({ item }) => (
+            <ApplicantCard app={item} tenderId={tenderId} />
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyApps}>
+              <Text style={[styles.emptyAppsText, { color: colors.textMuted }]}>
+                No applications yet.
+              </Text>
+            </View>
+          }
+        />
       )}
     </SafeAreaView>
   );
@@ -419,7 +418,7 @@ const styles = StyleSheet.create({
   editTopBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, minHeight: 44, justifyContent: 'center' },
   editTopBtnText: { fontSize: 13, fontWeight: '600' },
   tabRow: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth },
-  tabItem: { flex: 1, alignItems: 'center', paddingVertical: 12, minHeight: 44, justifyContent: 'center' },
+  tabItem: { flex: 1, alignItems: 'center', paddingVertical: 12, minHeight: 44, justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
   tabText: { fontSize: 14 },
   content: { padding: 16 },
   badgeRow: { flexDirection: 'row', gap: 8, marginBottom: 10, flexWrap: 'wrap' },
@@ -435,7 +434,7 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 13, fontWeight: '700' },
   ownerActions: { gap: 10, marginBottom: 40 },
   ownerActionBtn: { borderRadius: 14, paddingVertical: 15, alignItems: 'center', minHeight: 52 },
-  ownerActionBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  ownerActionBtnText: { fontSize: 15, fontWeight: '700' },
   appCard: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 14 },
   appHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   appAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },

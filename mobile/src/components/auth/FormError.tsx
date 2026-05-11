@@ -1,18 +1,19 @@
 // src/components/auth/FormError.tsx
-// Usage: <FormError message={apiError} visible={!!apiError} />
+// Usage: <FormError message="Invalid credentials" visible={!!error} />
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../hooks/useThemes';
+import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
 
 interface FormErrorProps {
   message?: string;
-  visible:  boolean;
+  visible: boolean;
 }
 
 export const FormError: React.FC<FormErrorProps> = ({ message, visible }) => {
-  const { colors, type, spacing, radius } = useTheme();
+  const { colors: c, type, spacing, radius } = useTheme();
 
   if (!visible || !message) return null;
 
@@ -21,18 +22,28 @@ export const FormError: React.FC<FormErrorProps> = ({ message, visible }) => {
       style={[
         styles.container,
         {
-          backgroundColor: colors.errorBg,
-          borderColor:     colors.error,
-          borderRadius:    radius.md,
-          padding:         spacing.md,
-          marginBottom:    spacing.md,
+          backgroundColor: withAlpha(c.danger, 0.10),
+          borderColor: c.danger,
+          borderRadius: radius.md,
+          padding: spacing.md,
+          marginBottom: spacing.md,
         },
       ]}
       accessibilityRole="alert"
       accessibilityLiveRegion="polite"
     >
-      <Ionicons name="alert-circle-outline" size={16} color={colors.error} />
-      <Text style={[type.bodySm, { color: colors.error, flex: 1 }]}>
+      <Ionicons
+        name="alert-circle-outline"
+        size={16}
+        color={c.danger}
+        style={{ marginTop: 1 }}
+      />
+      <Text
+        style={[
+          type.bodySm,
+          { color: c.danger, flex: 1, marginLeft: 8 },
+        ]}
+      >
         {message}
       </Text>
     </View>
@@ -42,9 +53,8 @@ export const FormError: React.FC<FormErrorProps> = ({ message, visible }) => {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    alignItems:    'flex-start',
-    gap:           8,
-    borderWidth:   1,
+    alignItems: 'flex-start',
+    borderWidth: 1,
   },
 });
 

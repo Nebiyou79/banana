@@ -1,41 +1,27 @@
-/**
- * mobile/src/screens/products/ProductDetailsScreen.tsx
- *
- * Public product detail screen — read-only for all visitors.
- *
- * UPDATED (major):
- *  - Switched from useThemeStore() (was reading colors.background / colors.text /
- *    colors.primary which DON'T exist on AppColors) to useTheme() — same shape
- *    as every other product screen
- *  - useIsCompanyOwner(product) replaces resolveIsOwner() inline call
- *  - All hardcoded hex (#FBBF24, #fff) replaced with theme tokens
- *  - localSaved now hydrates from useSavedProducts on mount, so the bookmark
- *    icon reflects truth, not just user-tap state
- *  - Pull-to-refresh added
- *  - Bottom CTA shows "Save to Favorites" outlined + "Contact Company" gold
- *    solid, matching the spec
- */
+// src/screens/products/ProductDetailsScreen.tsx
+// MIGRATED: useTheme() only, AppHeader, spacing/radius tokens, Ionicons only, pull-to-refresh
+
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  SafeAreaView, FlatList, Linking, ActivityIndicator,
+  FlatList, Linking, ActivityIndicator,
   StatusBar, Share, RefreshControl,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-
 import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
 import { useAuthStore } from '../../store/authStore';
 import { useIsCompanyOwner } from '../../hooks/useIsCompanyOwner';
 import {
   useProduct, useRelatedProducts,
   useSaveProduct, useUnsaveProduct, useSavedProducts,
 } from '../../hooks/useProducts';
-
 import { ProductImageGallery } from '../../components/products/ProductImageGallery';
-import { PublicProductCard } from '../../components/products/PublicProductCard';
-import { OwnerAvatar } from '../../components/products/OwnerAvatar';
-
+import { PublicProductCard }   from '../../components/products/PublicProductCard';
+import { OwnerAvatar }         from '../../components/products/OwnerAvatar';
+import { AppHeader }           from '../../components/ui/AppHeader';
 import {
   formatPrice, getStockStatus, getStockBadgeConfig,
 } from '../../utils/productHelpers';
@@ -48,7 +34,8 @@ const SHOW_MORE_LINES = 4;
 
 export const ProductDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   const { productId } = route.params;
-  const { colors, isDark } = useTheme();
+  const { colors: c, spacing, radius, type, shadows } = useTheme();
+  const insets  = useSafeAreaInsets();
   const { user } = useAuthStore();
 
   const [descExpanded, setDescExpanded] = useState(false);
@@ -57,12 +44,11 @@ export const ProductDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
   const {
     data: product, isLoading, isError, refetch, isRefetching,
   } = useProduct(productId);
-  const { data: related = [] }    = useRelatedProducts(productId);
-  const saveProduct                = useSaveProduct();
-  const unsaveProduct              = useUnsaveProduct();
+  const { data: related = [] }  = useRelatedProducts(productId);
+  const saveProduct              = useSaveProduct();
+  const unsaveProduct            = useUnsaveProduct();
+  const { data: savedData }      = useSavedProducts({ limit: 100 });
 
-  // Hydrate save state from server
-  const { data: savedData } = useSavedProducts({ limit: 100 });
   useEffect(() => {
     if (!savedData) return;
     const ids = new Set<string>();
@@ -70,19 +56,15 @@ export const ProductDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
     setLocalSaved(ids.has(productId));
   }, [savedData, productId]);
 
-  // Ownership — used only to surface a "Manage" link, never to show edit UI here
   const isOwner = useIsCompanyOwner(product);
 
   const handleToggleSave = useCallback(() => {
     if (!user) return;
     const wasSaved = localSaved;
-    setLocalSaved(!wasSaved); // optimistic
+    setLocalSaved(!wasSaved);
     const rollback = () => setLocalSaved(wasSaved);
-    if (wasSaved) {
-      unsaveProduct.mutate(productId, { onError: rollback });
-    } else {
-      saveProduct.mutate(productId, { onError: rollback });
-    }
+    if (wasSaved) unsaveProduct.mutate(productId, { onError: rollback });
+    else          saveProduct.mutate(productId,   { onError: rollback });
   }, [localSaved, productId, user, saveProduct, unsaveProduct]);
 
   const handleShare = useCallback(async () => {
@@ -100,35 +82,31 @@ export const ProductDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
         : null;
     const phone   = company?.phone;
     const website = company?.website;
-    if (phone) {
-      Linking.openURL(`tel:${phone}`).catch(() => {});
-    } else if (website) {
-      Linking.openURL(
-        website.startsWith('http') ? website : `https://${website}`,
-      ).catch(() => {});
-    }
+    if (phone)        Linking.openURL(`tel:${phone}`).catch(() => {});
+    else if (website) Linking.openURL(website.startsWith('http') ? website : `https://${website}`).catch(() => {});
   }, [product]);
 
-  // ── Loading / not-found ────────────────────────────────────────────────────
-
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <SafeAreaView style={[s.safe, { backgroundColor: colors.bgPrimary }]}>
-        <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 80 }} />
+      <SafeAreaView style={[S.safe, { backgroundColor: c.bg }]} edges={['top']}>
+        <AppHeader title="Product" showBack onBack={() => navigation.goBack()} />
+        <ActivityIndicator size="large" color={c.primary} style={{ marginTop: 80 }} />
       </SafeAreaView>
     );
   }
 
   if (isError || !product) {
     return (
-      <SafeAreaView style={[s.safe, { backgroundColor: colors.bgPrimary }]}>
-        <View style={s.center}>
-          <Ionicons name="alert-circle-outline" size={56} color={colors.textMuted} />
-          <Text style={[s.notFoundTxt, { color: colors.textPrimary }]}>
+      <SafeAreaView style={[S.safe, { backgroundColor: c.bg }]} edges={['top']}>
+        <AppHeader title="Product" showBack onBack={() => navigation.goBack()} />
+        <View style={S.center}>
+          <Ionicons name="alert-circle-outline" size={56} color={c.textMuted} />
+          <Text style={[type.bodySm, { color: c.text, fontWeight: '600', textAlign: 'center', marginTop: spacing.md }]}>
             {isError ? 'Failed to load product' : 'Product not found'}
           </Text>
-          <TouchableOpacity onPress={() => (isError ? refetch() : navigation.goBack())}>
-            <Text style={{ color: colors.accent, fontWeight: '600' }}>
+          <TouchableOpacity onPress={() => isError ? refetch() : navigation.goBack()} hitSlop={8}>
+            <Text style={[type.bodySm, { color: c.primary, fontWeight: '600', marginTop: spacing.sm }]}>
               {isError ? 'Retry' : 'Go back'}
             </Text>
           </TouchableOpacity>
@@ -137,97 +115,78 @@ export const ProductDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
     );
   }
 
-  const priceNum   = product.price?.amount ?? 0;
-  const currency   = product.price?.currency ?? 'USD';
-  const stockStat  = getStockStatus(product.inventory);
-  const stockCfg   = getStockBadgeConfig(stockStat);
-  const ownerName  = productService.getOwnerName(product);
+  const priceNum    = product.price?.amount ?? 0;
+  const currency    = product.price?.currency ?? 'USD';
+  const stockStat   = getStockStatus(product.inventory);
+  const stockCfg    = getStockBadgeConfig(stockStat);
+  const ownerName   = productService.getOwnerName(product);
   const ownerAvatar = productService.getOwnerAvatarUrl(product);
 
   return (
-    <SafeAreaView style={[s.safe, { backgroundColor: colors.bgPrimary }]}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+    <SafeAreaView style={[S.safe, { backgroundColor: c.bg }]} edges={['top']}>
+      <StatusBar barStyle="light-content" />
 
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <View style={[s.topBar, { borderBottomColor: colors.borderPrimary }]}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
-
-        <Text style={[s.topBarTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-          {product.name}
-        </Text>
-
-        <View style={{ flexDirection: 'row', gap: 14 }}>
-          {user && !isOwner && (
-            <TouchableOpacity
-              onPress={handleToggleSave}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons
-                name={localSaved ? 'bookmark' : 'bookmark-outline'}
-                size={22}
-                color={localSaved ? colors.accent : colors.textPrimary}
-              />
+      <AppHeader
+        title={product.name}
+        showBack
+        onBack={() => navigation.goBack()}
+        rightAction={
+          <View style={{ flexDirection: 'row', gap: spacing.md }}>
+            {user && !isOwner && (
+              <TouchableOpacity onPress={handleToggleSave} hitSlop={8}>
+                <Ionicons
+                  name={localSaved ? 'bookmark' : 'bookmark-outline'}
+                  size={22}
+                  color={localSaved ? c.primary : c.text}
+                />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={handleShare} hitSlop={8}>
+              <Ionicons name="share-outline" size={22} color={c.text} />
             </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            onPress={handleShare}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="share-outline" size={22} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
-      </View>
+          </View>
+        }
+      />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 110 }}
-        refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.accent} />
-        }
+        contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={c.primary} />}
       >
         <ProductImageGallery images={product.images} />
 
-        <View style={{ padding: 16, gap: 14 }}>
+        <View style={{ padding: spacing.lg, gap: spacing.md }}>
 
           {/* Stock + Featured badges */}
-          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-            <View style={[s.badge, { backgroundColor: stockCfg.background }]}>
-              <View style={[s.dot, { backgroundColor: stockCfg.color }]} />
-              <Text style={[s.badgeTxt, { color: stockCfg.color }]}>{stockCfg.label}</Text>
+          <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
+            <View style={[S.badge, { backgroundColor: stockCfg.background }]}>
+              <View style={[S.dot, { backgroundColor: stockCfg.color }]} />
+              <Text style={[type.caption, { color: stockCfg.color, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 }]}>
+                {stockCfg.label}
+              </Text>
             </View>
             {product.featured && (
-              <View style={[s.badge, { backgroundColor: colors.warningBg }]}>
-                <Ionicons name="star" size={10} color={colors.warning} />
-                <Text style={[s.badgeTxt, { color: colors.warning }]}>Featured</Text>
+              <View style={[S.badge, { backgroundColor: c.warningBg }]}>
+                <Ionicons name="star" size={10} color={c.warning} />
+                <Text style={[type.caption, { color: c.warning, fontWeight: '700' }]}>Featured</Text>
               </View>
             )}
           </View>
 
           {/* Name + price */}
-          <Text style={[s.name, { color: colors.textPrimary }]}>{product.name}</Text>
-          <Text style={[s.price, { color: colors.accent }]}>
+          <Text style={[type.h2, { color: c.text, fontWeight: '700' }]}>{product.name}</Text>
+          <Text style={[S.price, { color: c.primary }]}>
             {formatPrice(priceNum, currency)}
-            {product.price?.unit && product.price.unit !== 'unit' ? (
-              <Text style={[s.unit, { color: colors.textMuted }]}>
-                {' '}/ {product.price.unit}
-              </Text>
-            ) : null}
+            {product.price?.unit && product.price.unit !== 'unit' && (
+              <Text style={[type.body, { color: c.textMuted }]}> / {product.price.unit}</Text>
+            )}
           </Text>
 
           {/* Category */}
           {product.category && (
-            <View style={[
-              s.catChip,
-              { backgroundColor: colors.bgSurface, borderColor: colors.borderPrimary },
-            ]}>
-              <Text style={{ fontSize: 11, color: colors.textMuted }}>
-                {product.category}
-                {product.subcategory ? ` › ${product.subcategory}` : ''}
+            <View style={[S.catChip, { backgroundColor: c.surface, borderColor: c.border, borderRadius: radius.full }]}>
+              <Text style={[type.caption, { color: c.textMuted }]}>
+                {product.category}{product.subcategory ? ` › ${product.subcategory}` : ''}
               </Text>
             </View>
           )}
@@ -235,10 +194,7 @@ export const ProductDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
           {/* Owner card */}
           <TouchableOpacity
             activeOpacity={0.85}
-            style={[
-              s.ownerCard,
-              { backgroundColor: colors.bgSurface, borderColor: colors.borderPrimary },
-            ]}
+            style={[S.ownerCard, { backgroundColor: c.surface, borderColor: c.border, borderRadius: radius.md }]}
             onPress={handleContact}
           >
             <OwnerAvatar
@@ -249,70 +205,50 @@ export const ProductDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
             />
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Text
-                  style={[s.ownerName, { color: colors.textPrimary }]}
-                  numberOfLines={1}
-                >
+                <Text style={[type.bodySm, { color: c.text, fontWeight: '700' }]} numberOfLines={1}>
                   {ownerName}
                 </Text>
                 {product.ownerSnapshot?.verified && (
-                  <Ionicons name="checkmark-circle" size={14} color={colors.accent} />
+                  <Ionicons name="checkmark-circle" size={14} color={c.primary} />
                 )}
               </View>
               {product.ownerSnapshot?.industry && (
-                <Text
-                  style={{ fontSize: 12, color: colors.textMuted }}
-                  numberOfLines={1}
-                >
+                <Text style={[type.caption, { color: c.textMuted }]} numberOfLines={1}>
                   {product.ownerSnapshot.industry}
                 </Text>
               )}
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+            <Ionicons name="chevron-forward" size={16} color={c.textMuted} />
           </TouchableOpacity>
 
-          {/* Owner shortcut — only if viewer is owner */}
+          {/* Owner manage hint */}
           {isOwner && (
             <TouchableOpacity
-              style={[
-                s.manageHint,
-                { backgroundColor: colors.accentBg, borderColor: colors.borderAccent },
-              ]}
+              style={[S.manageHint, { backgroundColor: c.primaryBg, borderColor: withAlpha(c.primary, 0.3), borderRadius: radius.md }]}
               onPress={() =>
-                // CompanyProductDetails lives on the Company stack, not the
-                // Products stack. Cast is necessary because this screen's
-                // type-safe param list doesn't know about it.
-                (navigation as unknown as {
-                  navigate: (n: string, p: { productId: string }) => void;
-                }).navigate('CompanyProductDetails', { productId })
+                (navigation as unknown as { navigate: (n: string, p: { productId: string }) => void })
+                  .navigate('CompanyProductDetails', { productId })
               }
               activeOpacity={0.85}
             >
-              <Ionicons name="settings-outline" size={16} color={colors.accent} />
-              <Text style={{ fontSize: 13, fontWeight: '600', color: colors.accent }}>
-                Manage this product
-              </Text>
+              <Ionicons name="settings-outline" size={16} color={c.primary} />
+              <Text style={[type.bodySm, { color: c.primary, fontWeight: '600' }]}>Manage this product</Text>
             </TouchableOpacity>
           )}
 
           {/* Description */}
           {product.description && (
             <View>
-              <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
-                Description
-              </Text>
+              <Text style={[type.bodySm, { color: c.text, fontWeight: '700', marginBottom: spacing.sm }]}>Description</Text>
               <Text
-                style={[s.desc, { color: colors.textSecondary }]}
+                style={[type.body, { color: c.textSecondary, lineHeight: 22 }]}
                 numberOfLines={descExpanded ? undefined : SHOW_MORE_LINES}
               >
                 {product.description}
               </Text>
               {product.description.length > 180 && (
-                <TouchableOpacity onPress={() => setDescExpanded(v => !v)}>
-                  <Text style={{
-                    fontSize: 13, fontWeight: '600',
-                    color: colors.accent, marginTop: 4,
-                  }}>
+                <TouchableOpacity onPress={() => setDescExpanded(v => !v)} hitSlop={8}>
+                  <Text style={[type.bodySm, { color: c.primary, fontWeight: '600', marginTop: spacing.xs }]}>
                     {descExpanded ? 'Show less' : 'Show more'}
                   </Text>
                 </TouchableOpacity>
@@ -323,24 +259,22 @@ export const ProductDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
           {/* Specifications */}
           {!!product.specifications?.length && (
             <View>
-              <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
-                Specifications
-              </Text>
-              <View style={[s.specTable, { borderColor: colors.borderPrimary }]}>
+              <Text style={[type.bodySm, { color: c.text, fontWeight: '700', marginBottom: spacing.sm }]}>Specifications</Text>
+              <View style={[S.specTable, { borderColor: c.border, borderRadius: radius.md }]}>
                 {product.specifications.map((spec, i) => (
                   <View
                     key={`spec-${spec.key}-${i}`}
                     style={[
-                      s.specRow,
+                      S.specRow,
                       {
-                        backgroundColor: i % 2 === 0 ? colors.bgSurface : colors.bgPrimary,
-                        borderTopColor:  colors.borderPrimary,
-                        borderTopWidth:  i === 0 ? 0 : StyleSheet.hairlineWidth,
+                        backgroundColor:  i % 2 === 0 ? c.surface : c.bg,
+                        borderTopColor:   c.border,
+                        borderTopWidth:   i === 0 ? 0 : StyleSheet.hairlineWidth,
                       },
                     ]}
                   >
-                    <Text style={[s.specKey, { color: colors.textMuted }]}>{spec.key}</Text>
-                    <Text style={[s.specVal, { color: colors.textPrimary }]}>{spec.value}</Text>
+                    <Text style={[type.bodySm, { color: c.textMuted, flex: 1 }]}>{spec.key}</Text>
+                    <Text style={[type.bodySm, { color: c.text, fontWeight: '600', flex: 1, textAlign: 'right' }]}>{spec.value}</Text>
                   </View>
                 ))}
               </View>
@@ -349,13 +283,13 @@ export const ProductDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
 
           {/* Tags */}
           {!!product.tags?.length && (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
               {product.tags.map((tag, i) => (
                 <View
                   key={`tag-${tag}-${i}`}
-                  style={[s.tag, { backgroundColor: colors.bgSurface, borderColor: colors.borderPrimary }]}
+                  style={[S.tag, { backgroundColor: c.surface, borderColor: c.border, borderRadius: radius.full }]}
                 >
-                  <Text style={{ fontSize: 11, color: colors.textMuted }}>#{tag}</Text>
+                  <Text style={[type.caption, { color: c.textMuted }]}>#{tag}</Text>
                 </View>
               ))}
             </View>
@@ -364,16 +298,14 @@ export const ProductDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
           {/* Related */}
           {related.length > 0 && (
             <View>
-              <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
-                Related Products
-              </Text>
+              <Text style={[type.bodySm, { color: c.text, fontWeight: '700', marginBottom: spacing.sm }]}>Related Products</Text>
               <FlatList
                 horizontal
                 nestedScrollEnabled
                 data={related}
                 keyExtractor={item => `related-${item._id}`}
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 10 }}
+                contentContainerStyle={{ gap: spacing.sm }}
                 renderItem={({ item }) => (
                   <PublicProductCard
                     product={item}
@@ -388,100 +320,65 @@ export const ProductDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
         </View>
       </ScrollView>
 
-      {/* ── Bottom CTAs ─────────────────────────────────────────────────── */}
+      {/* Bottom CTAs */}
       <View style={[
-        s.bottomBar,
-        { backgroundColor: colors.bgPrimary, borderTopColor: colors.borderPrimary },
+        S.bottomBar,
+        {
+          backgroundColor: c.bg,
+          borderTopColor:  c.border,
+          paddingBottom:   insets.bottom + spacing.md,
+          paddingHorizontal: spacing.lg,
+          paddingTop:      spacing.md,
+        },
       ]}>
         <TouchableOpacity
           onPress={handleToggleSave}
           activeOpacity={0.85}
-          style={[
-            s.saveBtn,
-            {
-              backgroundColor: localSaved ? colors.accentBg : colors.bgSurface,
-              borderColor:     localSaved ? colors.accent   : colors.borderPrimary,
-            },
-          ]}
+          style={[S.saveBtn, {
+            backgroundColor: localSaved ? c.primaryBg : c.surface,
+            borderColor:     localSaved ? c.primary   : c.border,
+            borderRadius:    radius.md,
+          }]}
         >
           <Ionicons
             name={localSaved ? 'bookmark' : 'bookmark-outline'}
             size={20}
-            color={localSaved ? colors.accent : colors.textMuted}
+            color={localSaved ? c.primary : c.textMuted}
           />
         </TouchableOpacity>
 
         <TouchableOpacity
           onPress={handleContact}
           activeOpacity={0.9}
-          style={[s.contactBtn, { backgroundColor: colors.accent }]}
+          style={[S.contactBtn, { backgroundColor: c.primary, borderRadius: radius.md }]}
         >
-          <Ionicons name="chatbubble-outline" size={18} color={colors.textInverse} />
-          <Text style={[s.contactBtnText, { color: colors.textInverse }]}>
-            Contact Company
-          </Text>
+          <Ionicons name="chatbubble-outline" size={18} color={c.bg} />
+          <Text style={[type.body, { color: c.bg, fontWeight: '700' }]}>Contact Company</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 };
 
-const s = StyleSheet.create({
-  safe:    { flex: 1 },
-  topBar: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth, gap: 12,
-  },
-  topBarTitle: { flex: 1, fontSize: 16, fontWeight: '700' },
-  center: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    gap: 12, padding: 32,
-  },
-  notFoundTxt: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
-  badge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999,
-  },
-  dot:      { width: 6, height: 6, borderRadius: 3 },
-  badgeTxt: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
-  name:     { fontSize: 22, fontWeight: '700', lineHeight: 28 },
-  price:    { fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  unit:     { fontSize: 14, fontWeight: '400' },
-  catChip: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10, paddingVertical: 4,
-    borderRadius: 999, borderWidth: 1,
-  },
-  ownerCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    padding: 12, borderRadius: 12, borderWidth: 1,
-  },
-  ownerName: { fontSize: 14, fontWeight: '700' },
-  manageHint: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    padding: 10, borderRadius: 10, borderWidth: 1,
-  },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
-  desc:        { fontSize: 14, lineHeight: 22 },
-  specTable:   { borderRadius: 10, borderWidth: 1, overflow: 'hidden' },
-  specRow:     { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 10 },
-  specKey:     { flex: 1, fontSize: 13 },
-  specVal:     { flex: 1, fontSize: 13, fontWeight: '600', textAlign: 'right' },
-  tag:         { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
+const S = StyleSheet.create({
+  safe:       { flex: 1 },
+  center:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
+  badge:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  dot:        { width: 6, height: 6, borderRadius: 3 },
+  price:      { fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  catChip:    { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1 },
+  ownerCard:  { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderWidth: 1 },
+  manageHint: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderWidth: 1 },
+  specTable:  { borderWidth: 1, overflow: 'hidden' },
+  specRow:    { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 10 },
+  tag:        { paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1 },
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 12, paddingBottom: 28,
     borderTopWidth: StyleSheet.hairlineWidth, gap: 10,
   },
-  saveBtn: {
-    width: 44, height: 44, borderRadius: 12, borderWidth: 1.5,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  contactBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, paddingVertical: 13, borderRadius: 12,
-  },
-  contactBtnText: { fontSize: 15, fontWeight: '700' },
+  saveBtn:    { width: 44, height: 44, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  contactBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13 },
 });
+
+export default ProductDetailsScreen;

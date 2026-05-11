@@ -1,5 +1,8 @@
+// src/social/screens/EditProfileScreen.tsx
+// ✅ role-theme-migrated
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
 import {
@@ -109,7 +112,6 @@ const EditProfileScreen: React.FC = () => {
   const handleSave = () => {
     updateM.mutate(form, {
       onSuccess: () => {
-        // Persist social links in a follow-up call so they aren't lost
         const hasLinkChange =
           links.linkedin !== (profileQ.data?.socialLinks?.linkedin ?? '') ||
           links.github !== (profileQ.data?.socialLinks?.github ?? '') ||
@@ -132,7 +134,7 @@ const EditProfileScreen: React.FC = () => {
       <SafeAreaView
         style={[styles.center, { backgroundColor: theme.bg }]}
       >
-        <ActivityIndicator color={theme.primary} />
+        <ActivityIndicator color={theme.colors.primary} />
       </SafeAreaView>
     );
   }
@@ -154,14 +156,17 @@ const EditProfileScreen: React.FC = () => {
 
   return (
     <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.bg }]}
+      style={[styles.container, theme.getPageBgStyle()]}
       edges={['top']}
     >
       {/* Header */}
       <View
         style={[
           styles.header,
-          { backgroundColor: theme.card, borderBottomColor: theme.border },
+          {
+            backgroundColor: theme.withAlpha(theme.colors.primary, 0.03),
+            borderBottomColor: theme.border,
+          },
         ]}
       >
         <TouchableOpacity
@@ -177,16 +182,24 @@ const EditProfileScreen: React.FC = () => {
           onPress={handleSave}
           disabled={saving}
           activeOpacity={0.8}
-          style={[
-            styles.saveBtn,
-            { backgroundColor: theme.primary, opacity: saving ? 0.6 : 1 },
-          ]}
+          style={{ opacity: saving ? 0.6 : 1 }}
         >
-          {saving ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={styles.saveBtnText}>Save</Text>
-          )}
+          <LinearGradient
+            colors={
+              saving
+                ? [theme.colors.cardAlt, theme.colors.cardAlt]
+                : [theme.colors.primary, theme.colors.primaryDark]
+            }
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.saveBtn}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color={theme.colors.white} />
+            ) : (
+              <Text style={styles.saveBtnText}>Save</Text>
+            )}
+          </LinearGradient>
         </TouchableOpacity>
       </View>
 
@@ -199,68 +212,73 @@ const EditProfileScreen: React.FC = () => {
           keyboardShouldPersistTaps="handled"
         >
           {/* Avatar / cover pickers */}
-          <View style={styles.photosRow}>
-            <TouchableOpacity
-              onPress={handleAvatarPick}
-              activeOpacity={0.85}
-              style={styles.photoCard}
-              disabled={avatarM.isPending}
-            >
-              <Avatar
-                uri={avatarUri}
-                name={profile.user?.name}
-                size={SOCIAL_LAYOUT.avatarLg}
-              />
-              <View
-                style={[
-                  styles.photoOverlay,
-                  { backgroundColor: theme.primary },
-                ]}
+          <LinearGradient
+            colors={[theme.withAlpha(theme.colors.primary, 0.10), 'transparent']}
+            style={{ paddingTop: 16, paddingBottom: 20 }}
+          >
+            <View style={styles.photosRow}>
+              <TouchableOpacity
+                onPress={handleAvatarPick}
+                activeOpacity={0.85}
+                style={styles.photoCard}
+                disabled={avatarM.isPending}
               >
-                {avatarM.isPending ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Ionicons name="camera" size={14} color="#fff" />
-                )}
-              </View>
-              <Text style={[styles.photoLabel, { color: theme.subtext }]}>
-                Avatar
-              </Text>
-            </TouchableOpacity>
+                <Avatar
+                  uri={avatarUri}
+                  name={profile.user?.name}
+                  size={SOCIAL_LAYOUT.avatarLg}
+                />
+                <View
+                  style={[
+                    styles.photoOverlay,
+                    { backgroundColor: theme.colors.primary },
+                  ]}
+                >
+                  {avatarM.isPending ? (
+                    <ActivityIndicator size="small" color={theme.colors.white} />
+                  ) : (
+                    <Ionicons name="camera" size={14} color={theme.colors.white} />
+                  )}
+                </View>
+                <Text style={[styles.photoLabel, { color: theme.subtext }]}>
+                  Avatar
+                </Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={handleCoverPick}
-              activeOpacity={0.85}
-              style={[
-                styles.coverCard,
-                {
-                  backgroundColor: theme.primaryLighter,
-                  borderColor: theme.border,
-                },
-              ]}
-              disabled={coverM.isPending}
-            >
-              {coverM.isPending ? (
-                <ActivityIndicator color={theme.primary} />
-              ) : (
-                <>
-                  <Ionicons
-                    name="image-outline"
-                    size={22}
-                    color={theme.primary}
-                  />
-                  <Text
-                    style={[
-                      styles.photoLabel,
-                      { color: theme.subtext, marginTop: 4 },
-                    ]}
-                  >
-                    Change cover
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity
+                onPress={handleCoverPick}
+                activeOpacity={0.85}
+                style={[
+                  styles.coverCard,
+                  {
+                    backgroundColor: theme.primaryLighter,
+                    borderColor: theme.border,
+                  },
+                ]}
+                disabled={coverM.isPending}
+              >
+                {coverM.isPending ? (
+                  <ActivityIndicator color={theme.colors.primary} />
+                ) : (
+                  <>
+                    <Ionicons
+                      name="image-outline"
+                      size={22}
+                      color={theme.colors.primary}
+                    />
+                    <Text
+                      style={[
+                        styles.photoLabel,
+                        { color: theme.subtext, marginTop: 4 },
+                      ]}
+                    >
+                      Change cover
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
 
           {/* Basic info */}
           <SectionHeader title="About you" />
@@ -434,7 +452,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     paddingHorizontal: 16,
-    paddingTop: 16,
   },
   photoCard: { alignItems: 'center' },
   photoOverlay: {

@@ -1,19 +1,15 @@
 /**
  * src/screens/candidate/JobDetailScreen.tsx
- * ─────────────────────────────────────────────────────────────────────────────
- * Full candidate job detail view.
- * Uses JobHeader for colourful top section.
- * Tabs: Overview · Requirements · Details · Company
- * ─────────────────────────────────────────────────────────────────────────────
+ * Refactored: useTheme(), correct color aliases, insets for sticky bottom bar.
  */
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, Share, Linking,
+  Alert, Share,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 import { useJob, useSaveJob, useUnsaveJob, useSavedJobs } from '../../hooks/useJobs';
 import { ListSkeleton } from '../../components/skeletons';
 import { JobHeader } from '../../components/jobs/JobHeader';
@@ -26,29 +22,31 @@ interface Props {
 
 type Tab = 'overview' | 'requirements' | 'details' | 'company';
 const TABS: { key: Tab; label: string; icon: string }[] = [
-  { key: 'overview',     label: 'Overview',      icon: 'document-text-outline' },
-  { key: 'requirements', label: 'Requirements',  icon: 'checkmark-circle-outline' },
-  { key: 'details',      label: 'Details',       icon: 'information-circle-outline' },
-  { key: 'company',      label: 'Company',       icon: 'business-outline' },
+  { key: 'overview',     label: 'Overview',     icon: 'document-text-outline' },
+  { key: 'requirements', label: 'Requirements', icon: 'checkmark-circle-outline' },
+  { key: 'details',      label: 'Details',      icon: 'information-circle-outline' },
+  { key: 'company',      label: 'Company',      icon: 'business-outline' },
 ];
 
-// ─── Education map ────────────────────────────────────────────────────────────
 const EDU_LABELS: Record<string, string> = {
-  'primary-education': 'Primary Education',
-  'secondary-education': 'Secondary Education',
-  'tvet-level-i': 'TVET Level I', 'tvet-level-ii': 'TVET Level II',
-  'tvet-level-iii': 'TVET Level III', 'tvet-level-iv': 'TVET Level IV',
-  'tvet-level-v': 'TVET Level V',
-  'undergraduate-bachelors': "Bachelor's Degree",
-  'postgraduate-masters': "Master's Degree",
-  'doctoral-phd': 'PhD / Doctoral',
-  'none-required': 'No Requirement',
+  'primary-education':      'Primary Education',
+  'secondary-education':    'Secondary Education',
+  'tvet-level-i':           'TVET Level I',
+  'tvet-level-ii':          'TVET Level II',
+  'tvet-level-iii':         'TVET Level III',
+  'tvet-level-iv':          'TVET Level IV',
+  'tvet-level-v':           'TVET Level V',
+  'undergraduate-bachelors':"Bachelor's Degree",
+  'postgraduate-masters':   "Master's Degree",
+  'doctoral-phd':           'PhD / Doctoral',
+  'none-required':          'No Requirement',
 };
 
 const EXP_LABELS: Record<string, string> = {
   'fresh-graduate': 'Fresh Graduate', 'entry-level': 'Entry Level',
-  'mid-level': 'Mid Level', 'senior-level': 'Senior Level',
-  'managerial': 'Managerial', 'director': 'Director', 'executive': 'Executive',
+  'mid-level': 'Mid Level',           'senior-level': 'Senior Level',
+  'managerial': 'Managerial',         'director': 'Director',
+  'executive': 'Executive',
 };
 
 const REMOTE_LABELS: Record<string, string> = {
@@ -57,17 +55,17 @@ const REMOTE_LABELS: Record<string, string> = {
 
 export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const { jobId } = route.params;
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+  const { colors, spacing } = useTheme();
+  const insets = useSafeAreaInsets();
 
-  const jobQ = useJob(jobId);
+  const jobQ       = useJob(jobId);
   const savedJobsQ = useSavedJobs();
-  const saveMut   = useSaveJob();
-  const unsaveMut = useUnsaveJob();
+  const saveMut    = useSaveJob();
+  const unsaveMut  = useUnsaveJob();
 
   const [tab, setTab] = useState<Tab>('overview');
 
-  const job = jobQ.data;
+  const job     = jobQ.data;
   const isSaved = (savedJobsQ.data ?? []).some(j => j._id === jobId);
 
   const handleSave = useCallback(() => {
@@ -101,10 +99,10 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
   if (jobQ.isLoading) {
     return (
-      <SafeAreaView style={[s.root, { backgroundColor: c.background }]} edges={[]}>
-        <View style={[s.loadingHeader, { backgroundColor: '#0F2040' }]}>
+      <SafeAreaView style={[s.root, { backgroundColor: colors.bg }]} edges={[]}>
+        <View style={[s.loadingHeader, { backgroundColor: colors.bgCard }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-            <Ionicons name="arrow-back" size={22} color="#fff" />
+            <Ionicons name="arrow-back" size={22} color={colors.text} />
           </TouchableOpacity>
         </View>
         <ListSkeleton count={3} type="job" />
@@ -114,12 +112,12 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
   if (!job) {
     return (
-      <SafeAreaView style={[s.root, { backgroundColor: c.background }]} edges={['top']}>
-        <View style={[s.emptyContainer, { backgroundColor: c.background }]}>
-          <Ionicons name="alert-circle-outline" size={64} color={c.textMuted} />
-          <Text style={[s.emptyTitle, { color: c.text }]}>Job Not Found</Text>
-          <Text style={[s.emptySubtitle, { color: c.textMuted }]}>This job may have been removed.</Text>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={[s.backButton, { backgroundColor: c.primary }]}>
+      <SafeAreaView style={[s.root, { backgroundColor: colors.bg }]} edges={['top']}>
+        <View style={[s.emptyContainer, { backgroundColor: colors.bg }]}>
+          <Ionicons name="alert-circle-outline" size={64} color={colors.textMuted} />
+          <Text style={[s.emptyTitle, { color: colors.text }]}>Job Not Found</Text>
+          <Text style={[s.emptySubtitle, { color: colors.textMuted }]}>This job may have been removed.</Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={[s.backButton, { backgroundColor: colors.primary }]}>
             <Text style={{ color: '#fff', fontWeight: '600' }}>Go Back</Text>
           </TouchableOpacity>
         </View>
@@ -131,13 +129,12 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     (!job.applicationDeadline || new Date(job.applicationDeadline) >= new Date());
 
   return (
-    <SafeAreaView style={[s.root, { backgroundColor: c.background }]} edges={[]}>
+    <SafeAreaView style={[s.root, { backgroundColor: colors.bg }]} edges={[]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[1]}
         contentContainerStyle={{ paddingBottom: 100 }}
       >
-        {/* Colourful Job Header */}
         <JobHeader
           job={job}
           onBack={() => navigation.goBack()}
@@ -147,7 +144,7 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         />
 
         {/* Tab bar — sticky */}
-        <View style={[s.tabBar, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
+        <View style={[s.tabBar, { backgroundColor: colors.bgCard, borderBottomColor: colors.border }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabs}>
             {TABS.map(t => {
               const active = tab === t.key;
@@ -155,10 +152,10 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 <TouchableOpacity
                   key={t.key}
                   onPress={() => setTab(t.key)}
-                  style={[s.tab, active && { borderBottomColor: c.primary, borderBottomWidth: 2 }]}
+                  style={[s.tab, active && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
                 >
-                  <Ionicons name={t.icon as any} size={14} color={active ? c.primary : c.textMuted} />
-                  <Text style={[s.tabText, { color: active ? c.primary : c.textMuted, fontWeight: active ? '700' : '400' }]}>
+                  <Ionicons name={t.icon as any} size={14} color={active ? colors.primary : colors.textMuted} />
+                  <Text style={[s.tabText, { color: active ? colors.primary : colors.textMuted, fontWeight: active ? '700' : '400' }]}>
                     {t.label}
                   </Text>
                 </TouchableOpacity>
@@ -169,23 +166,30 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
         {/* Tab Content */}
         <View style={s.content}>
-          {tab === 'overview' && <OverviewTab job={job} c={c} />}
-          {tab === 'requirements' && <RequirementsTab job={job} c={c} />}
-          {tab === 'details' && <DetailsTab job={job} c={c} />}
-          {tab === 'company' && <CompanyTab job={job} c={c} />}
+          {tab === 'overview'     && <OverviewTab     job={job} c={colors} />}
+          {tab === 'requirements' && <RequirementsTab job={job} c={colors} />}
+          {tab === 'details'      && <DetailsTab      job={job} c={colors} />}
+          {tab === 'company'      && <CompanyTab      job={job} c={colors} />}
         </View>
       </ScrollView>
 
       {/* Apply CTA */}
-      <View style={[s.cta, { backgroundColor: c.surface, borderTopColor: c.border }]}>
+      <View style={[
+        s.cta,
+        {
+          backgroundColor: colors.bgCard,
+          borderTopColor:  colors.border,
+          paddingBottom:   insets.bottom + spacing.md,
+        },
+      ]}>
         <View style={s.ctaLeft}>
           {job.applicationInfo?.applicationCount !== undefined && (
-            <Text style={[s.ctaApplicants, { color: c.textMuted }]}>
+            <Text style={[s.ctaApplicants, { color: colors.textMuted }]}>
               {job.applicationInfo.applicationCount} applicants
             </Text>
           )}
           {canApply && job.applicationInfo?.candidatesRemaining !== undefined && (
-            <Text style={[s.ctaSpots, { color: c.success ?? '#10B981' }]}>
+            <Text style={[s.ctaSpots, { color: colors.success }]}>
               {job.applicationInfo.candidatesRemaining} spot{job.applicationInfo.candidatesRemaining !== 1 ? 's' : ''} left
             </Text>
           )}
@@ -193,13 +197,10 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         <TouchableOpacity
           onPress={handleApply}
           disabled={!canApply}
-          style={[
-            s.applyBtn,
-            { backgroundColor: canApply ? c.primary : c.border },
-          ]}
+          style={[s.applyBtn, { backgroundColor: canApply ? colors.primary : colors.border }]}
         >
-          <Ionicons name="send-outline" size={18} color={canApply ? '#fff' : c.textMuted} />
-          <Text style={[s.applyBtnText, { color: canApply ? '#fff' : c.textMuted }]}>
+          <Ionicons name="send-outline" size={18} color={canApply ? '#fff' : colors.textMuted} />
+          <Text style={[s.applyBtnText, { color: canApply ? '#fff' : colors.textMuted }]}>
             {canApply ? 'Apply Now' : 'Closed'}
           </Text>
         </TouchableOpacity>
@@ -220,10 +221,10 @@ const OverviewTab = ({ job, c }: { job: Job; c: any }) => (
       <Text style={[ts.body, { color: c.textSecondary ?? c.textMuted }]}>{job.description}</Text>
     </Card>
     {(job.skills ?? []).length > 0 && (
-      <Card c={c} title="Key Skills" icon="sparkles-outline">
+      <Card c={c} title="Key Skills" icon="flash-outline">
         <View style={ts.tagsRow}>
           {job.skills!.map((sk, i) => (
-            <View key={i} style={[ts.tag, { backgroundColor: `${c.primary}15`, borderColor: `${c.primary}30` }]}>
+            <View key={i} style={[ts.tag, { backgroundColor: c.primary + '15', borderColor: c.primary + '30' }]}>
               <Text style={[ts.tagText, { color: c.primary }]}>{sk}</Text>
             </View>
           ))}
@@ -231,9 +232,9 @@ const OverviewTab = ({ job, c }: { job: Job; c: any }) => (
       </Card>
     )}
     {(job.benefits ?? []).length > 0 && (
-      <Card c={c} title="Benefits & Perks" icon="gift-outline">
+      <Card c={c} title="Benefits and Perks" icon="gift-outline">
         {job.benefits!.map((b, i) => (
-          <BulletItem key={i} text={b} c={c} icon="checkmark-circle" color="#10B981" />
+          <BulletItem key={i} text={b} c={c} icon="checkmark-circle" color={c.success} />
         ))}
       </Card>
     )}
@@ -253,7 +254,7 @@ const RequirementsTab = ({ job, c }: { job: Job; c: any }) => (
     {(job.responsibilities ?? []).length > 0 && (
       <Card c={c} title="Responsibilities" icon="list-outline">
         {job.responsibilities!.map((r, i) => (
-          <BulletItem key={i} text={r} c={c} icon="arrow-forward-circle" color="#F59E0B" />
+          <BulletItem key={i} text={r} c={c} icon="arrow-forward-circle" color={c.warning} />
         ))}
       </Card>
     )}
@@ -269,25 +270,25 @@ const RequirementsTab = ({ job, c }: { job: Job; c: any }) => (
 // ─── Details Tab ─────────────────────────────────────────────────────────────
 const DetailsTab = ({ job, c }: { job: Job; c: any }) => {
   const rows = [
-    { icon: 'briefcase-outline', label: 'Employment Type', value: job.type },
-    { icon: 'trending-up-outline', label: 'Experience Level', value: EXP_LABELS[job.experienceLevel] ?? job.experienceLevel },
-    { icon: 'school-outline', label: 'Education Level', value: EDU_LABELS[job.educationLevel ?? ''] ?? job.educationLevel },
-    { icon: 'globe-outline', label: 'Work Mode', value: REMOTE_LABELS[job.remote] ?? job.remote },
-    { icon: 'business-outline', label: 'Work Arrangement', value: job.workArrangement === 'office' ? 'Office Based' : job.workArrangement === 'field-work' ? 'Field Work' : job.workArrangement === 'both' ? 'Office & Field' : undefined },
-    { icon: 'location-outline', label: 'Region', value: job.location?.region },
-    { icon: 'map-outline', label: 'City', value: job.location?.city },
-    { icon: 'flag-outline', label: 'Country', value: job.location?.country ?? 'Ethiopia' },
-    { icon: 'people-outline', label: 'Positions Available', value: job.candidatesNeeded ? `${job.candidatesNeeded} position${job.candidatesNeeded > 1 ? 's' : ''}` : undefined },
-    { icon: 'calendar-outline', label: 'Posted On', value: job.createdAt ? new Date(job.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : undefined },
-    { icon: 'time-outline', label: 'Application Deadline', value: job.applicationDeadline ? new Date(job.applicationDeadline).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : undefined },
-    { icon: 'document-outline', label: 'Job Reference', value: job.jobNumber },
+    { icon: 'briefcase-outline',     label: 'Employment Type',    value: job.type },
+    { icon: 'trending-up-outline',   label: 'Experience Level',   value: EXP_LABELS[job.experienceLevel] ?? job.experienceLevel },
+    { icon: 'school-outline',        label: 'Education Level',    value: EDU_LABELS[job.educationLevel ?? ''] ?? job.educationLevel },
+    { icon: 'globe-outline',         label: 'Work Mode',          value: REMOTE_LABELS[job.remote] ?? job.remote },
+    { icon: 'business-outline',      label: 'Work Arrangement',   value: job.workArrangement === 'office' ? 'Office Based' : job.workArrangement === 'field-work' ? 'Field Work' : job.workArrangement === 'both' ? 'Office & Field' : undefined },
+    { icon: 'location-outline',      label: 'Region',             value: job.location?.region },
+    { icon: 'map-outline',           label: 'City',               value: job.location?.city },
+    { icon: 'flag-outline',          label: 'Country',            value: job.location?.country ?? 'Ethiopia' },
+    { icon: 'people-outline',        label: 'Positions Available',value: job.candidatesNeeded ? `${job.candidatesNeeded} position${job.candidatesNeeded > 1 ? 's' : ''}` : undefined },
+    { icon: 'calendar-outline',      label: 'Posted On',          value: job.createdAt ? new Date(job.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : undefined },
+    { icon: 'time-outline',          label: 'Application Deadline',value: job.applicationDeadline ? new Date(job.applicationDeadline).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : undefined },
+    { icon: 'document-outline',      label: 'Job Reference',      value: job.jobNumber },
   ].filter(r => r.value);
 
   const salaryText = (() => {
-    if (job.salaryDisplay) return job.salaryDisplay;
-    if (job.salaryMode === 'negotiable') return 'Negotiable';
-    if (job.salaryMode === 'hidden') return 'Confidential';
-    if (job.salaryMode === 'company-scale') return 'As per company scale';
+    if (job.salaryDisplay)             return job.salaryDisplay;
+    if (job.salaryMode === 'negotiable')   return 'Negotiable';
+    if (job.salaryMode === 'hidden')       return 'Confidential';
+    if (job.salaryMode === 'company-scale')return 'As per company scale';
     if (job.salary?.min || job.salary?.max) {
       const fmt = (n: number) => n.toLocaleString();
       const cur = job.salary?.currency ?? 'ETB';
@@ -300,17 +301,17 @@ const DetailsTab = ({ job, c }: { job: Job; c: any }) => {
   return (
     <View>
       {salaryText && (
-        <Card c={c} title="Salary & Compensation" icon="cash-outline">
-          <View style={[ts.salaryBox, { backgroundColor: `${c.success ?? '#10B981'}10`, borderColor: `${c.success ?? '#10B981'}30` }]}>
-            <Ionicons name="cash-outline" size={22} color={c.success ?? '#10B981'} />
-            <Text style={[ts.salaryText, { color: c.success ?? '#10B981' }]}>{salaryText}</Text>
+        <Card c={c} title="Salary and Compensation" icon="cash-outline">
+          <View style={[ts.salaryBox, { backgroundColor: c.successBg, borderColor: c.success + '30' }]}>
+            <Ionicons name="cash-outline" size={22} color={c.success} />
+            <Text style={[ts.salaryText, { color: c.success }]}>{salaryText}</Text>
           </View>
         </Card>
       )}
       <Card c={c} title="Position Details" icon="information-circle-outline">
         {rows.map((row, i) => (
           <View key={i} style={[ts.detailRow, { borderBottomColor: c.border }]}>
-            <View style={[ts.detailIconBox, { backgroundColor: `${c.primary}15` }]}>
+            <View style={[ts.detailIconBox, { backgroundColor: c.primary + '15' }]}>
               <Ionicons name={row.icon as any} size={15} color={c.primary} />
             </View>
             <View style={{ flex: 1 }}>
@@ -353,15 +354,15 @@ const CompanyTab = ({ job, c }: { job: Job; c: any }) => {
     <View>
       <Card c={c} title={isOrg ? 'Organization Info' : 'Company Info'} icon="business-outline">
         <View style={[ts.companyHeader, { borderBottomColor: c.border }]}>
-          <View style={[ts.companyLogoBox, { backgroundColor: isOrg ? '#7C3AED' : '#F1BB03' }]}>
+          <View style={[ts.companyLogoBox, { backgroundColor: isOrg ? c.organization : c.company }]}>
             <Text style={ts.companyLogoText}>
-              {(owner.name ?? '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)}
+              {(owner.name ?? '?').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
             </Text>
           </View>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Text style={[ts.companyName, { color: c.text }]}>{owner.name}</Text>
-              {owner.verified && <Ionicons name="checkmark-circle" size={16} color="#10B981" />}
+              {owner.verified && <Ionicons name="checkmark-circle" size={16} color={c.success} />}
             </View>
             {owner.industry && (
               <Text style={[ts.companyIndustry, { color: c.textMuted }]}>{owner.industry}</Text>
@@ -390,7 +391,7 @@ const CompanyTab = ({ job, c }: { job: Job; c: any }) => {
 
 // ─── Reusable atoms ───────────────────────────────────────────────────────────
 const Card = ({ children, title, icon, c }: any) => (
-  <View style={[ts.card, { backgroundColor: c.card ?? c.surface, borderColor: c.border }]}>
+  <View style={[ts.card, { backgroundColor: c.bgCard, borderColor: c.border }]}>
     <View style={[ts.cardHeader, { borderBottomColor: c.border }]}>
       <Ionicons name={icon} size={18} color={c.primary} />
       <Text style={[ts.cardTitle, { color: c.text }]}>{title}</Text>
@@ -408,7 +409,7 @@ const BulletItem = ({ text, c, icon, color }: any) => (
 
 const InfoRow = ({ icon, label, value, c }: any) => (
   <View style={[ts.detailRow, { borderBottomColor: c.border }]}>
-    <View style={[ts.detailIconBox, { backgroundColor: `${c.primary}15` }]}>
+    <View style={[ts.detailIconBox, { backgroundColor: c.primary + '15' }]}>
       <Ionicons name={icon} size={15} color={c.primary} />
     </View>
     <View style={{ flex: 1 }}>
@@ -421,8 +422,8 @@ const InfoRow = ({ icon, label, value, c }: any) => (
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   root:          { flex: 1 },
-  loadingHeader: { height: 180, paddingTop: 50, paddingLeft: 16 },
-  backBtn:       { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  loadingHeader: { height: 180, paddingTop: 50, paddingLeft: 16, justifyContent: 'flex-start' },
+  backBtn:       { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   emptyContainer:{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
   emptyTitle:    { fontSize: 20, fontWeight: '700' },
   emptySubtitle: { fontSize: 14, textAlign: 'center' },
@@ -432,7 +433,7 @@ const s = StyleSheet.create({
   tab:           { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 14, gap: 5 },
   tabText:       { fontSize: 13 },
   content:       { padding: 16, gap: 12 },
-  cta:           { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 1, paddingBottom: 30, gap: 12 },
+  cta:           { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 14, borderTopWidth: 1, gap: 12 },
   ctaLeft:       { flex: 1 },
   ctaApplicants: { fontSize: 12 },
   ctaSpots:      { fontSize: 12, fontWeight: '600', marginTop: 2 },

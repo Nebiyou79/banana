@@ -3,28 +3,33 @@
  */
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity,
-  StyleSheet, RefreshControl, Alert,
+  View, Text, TouchableOpacity, StyleSheet, Alert,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useThemeStore } from '../../store/themeStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../hooks/useTheme';
+import { FONT_SIZE } from '../../theme/tokens';
 import {
   useFreelancerPortfolio,
   useDeletePortfolioItem,
 } from '../../hooks/useFreelancer';
 import { PortfolioCard, PortfolioListItem } from '../../components/freelancer/PortfolioCard';
-import { ScreenWrapper, ScreenHeader, LoadingState, EmptyState, PillButton } from '../../components/shared/UIComponents';
+import {
+  ScreenWrapper, LoadingState, EmptyState, PillButton,
+} from '../../components/shared/UIComponents';
 import type { PortfolioItem } from '../../types/freelancer';
 import type { FreelancerStackParamList } from '../../navigation/FreelancerNavigator';
+import { ScreenHeader } from '../../components/freelancer/ScreenHeader';
 
 type Nav = NativeStackNavigationProp<FreelancerStackParamList>;
 
 export const PortfolioListScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
-  const { theme } = useThemeStore();
-  const { colors, spacing, typography, borderRadius } = theme;
+  const { colors, spacing, radius } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -33,12 +38,12 @@ export const PortfolioListScreen: React.FC = () => {
   const deleteMutation = useDeletePortfolioItem();
 
   const items = data?.items ?? [];
-  const categories = ['all', ...Array.from(new Set(items.map(i => i.category).filter(Boolean) as string[]))];
-  const filtered = filterCategory === 'all' ? items : items.filter(i => i.category === filterCategory);
+  const categories = ['all', ...Array.from(new Set(items.map((i: any) => i.category).filter(Boolean) as string[]))];
+  const filtered = filterCategory === 'all' ? items : items.filter((i: any) => i.category === filterCategory);
 
-  const featured    = items.filter(i => i.featured).length;
-  const totalImages = items.reduce((acc, i) =>
-    acc + ((i.mediaUrls ?? []).filter(u => u?.includes('cloudinary.com')).length), 0);
+  const featured = items.filter((i: any) => i.featured).length;
+  const totalImages = items.reduce((acc: number, i: any) =>
+    acc + ((i.mediaUrls ?? []).filter((u: string) => u?.includes('cloudinary.com')).length), 0);
 
   const handleDelete = useCallback((id: string) => {
     Alert.alert(
@@ -62,34 +67,34 @@ export const PortfolioListScreen: React.FC = () => {
   const renderHeader = () => (
     <View>
       {/* Stats */}
-      <View style={[styles.statsRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View style={[styles.statsRow, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
         {[
-          { label: 'Projects', value: items.length, icon: 'folder-outline' as const },
-          { label: 'Featured', value: featured,     icon: 'star-outline' as const },
-          { label: 'Images',   value: totalImages,  icon: 'images-outline' as const },
+          { label: 'Projects', value: items.length,    icon: 'folder-outline' as const },
+          { label: 'Featured', value: featured,        icon: 'star-outline' as const },
+          { label: 'Images',   value: totalImages,     icon: 'images-outline' as const },
         ].map((stat, i) => (
           <View
             key={i}
             style={[styles.statItem, i < 2 && { borderRightWidth: 1, borderRightColor: colors.border }]}
           >
             <Ionicons name={stat.icon} size={16} color={colors.primary} />
-            <Text style={{ fontSize: typography.xl, fontWeight: '800', color: colors.text, marginTop: 4 }}>
+            <Text style={{ fontSize: FONT_SIZE.xl, fontWeight: '800', color: colors.text, marginTop: 4 }}>
               {stat.value}
             </Text>
-            <Text style={{ fontSize: typography.xs, color: colors.textMuted }}>{stat.label}</Text>
+            <Text style={{ fontSize: FONT_SIZE.xs, color: colors.textMuted }}>{stat.label}</Text>
           </View>
         ))}
       </View>
 
-      {/* Filter pills */}
+      {/* Filter pills — horizontal scroll via FlashList header inline FlashList not allowed; use View row */}
       {categories.length > 1 && (
         <View style={styles.filterRow}>
-          <FlatList
+          <FlashList
             data={categories}
             horizontal
             showsHorizontalScrollIndicator={false}
             keyExtractor={c => c}
-            contentContainerStyle={{ paddingHorizontal: spacing[4] }}
+            contentContainerStyle={{ paddingHorizontal: spacing.lg }}
             renderItem={({ item: cat }) => (
               <PillButton
                 label={cat === 'all' ? 'All' : cat}
@@ -102,14 +107,14 @@ export const PortfolioListScreen: React.FC = () => {
       )}
 
       {/* View toggle */}
-      <View style={[styles.viewToggleRow, { paddingHorizontal: spacing[4] }]}>
-        <Text style={{ fontSize: typography.sm, color: colors.textMuted }}>
+      <View style={[styles.viewToggleRow, { paddingHorizontal: spacing.lg }]}>
+        <Text style={{ fontSize: FONT_SIZE.sm, color: colors.textMuted }}>
           {filtered.length} project{filtered.length !== 1 ? 's' : ''}
         </Text>
         <View style={[styles.viewToggle, {
-          backgroundColor: colors.surface,
+          backgroundColor: colors.bgCard,
           borderColor: colors.border,
-          borderRadius: borderRadius.lg,
+          borderRadius: radius.lg,
         }]}>
           {(['grid', 'list'] as const).map(mode => (
             <TouchableOpacity
@@ -117,7 +122,7 @@ export const PortfolioListScreen: React.FC = () => {
               onPress={() => setViewMode(mode)}
               style={[styles.viewToggleBtn, {
                 backgroundColor: viewMode === mode ? colors.primary : 'transparent',
-                borderRadius: borderRadius.md,
+                borderRadius: radius.md,
               }]}
             >
               <Ionicons
@@ -152,24 +157,28 @@ export const PortfolioListScreen: React.FC = () => {
         rightAction={{ icon: 'add', onPress: () => navigation.navigate('AddPortfolio') }}
       />
 
-      {viewMode === 'grid' ? (
-        <FlatList
-          data={filtered}
-          keyExtractor={i => i._id}
-          numColumns={2}
-          columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: spacing[4] }}
-          contentContainerStyle={{ paddingBottom: 100, paddingTop: 4 }}
-          ListHeaderComponent={renderHeader}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />}
-          ListEmptyComponent={
-            <EmptyState
-              icon="images-outline"
-              title="No portfolio items"
-              subtitle="Add your first project to showcase your work."
-              action={{ label: 'Add Project', onPress: () => navigation.navigate('AddPortfolio') }}
-            />
-          }
-          renderItem={({ item }) => (
+      <FlashList
+        data={filtered}
+        keyExtractor={i => i._id}
+        numColumns={viewMode === 'grid' ? 2 : 1}
+        ListHeaderComponent={renderHeader}
+        contentContainerStyle={{
+          paddingHorizontal: viewMode === 'grid' ? spacing.lg : spacing.lg,
+          paddingBottom: insets.bottom + spacing.xxl,
+          paddingTop: 4,
+        }}
+        refreshing={isRefetching}
+        onRefresh={refetch}
+        ListEmptyComponent={
+          <EmptyState
+            icon="images-outline"
+            title="No portfolio items"
+            subtitle="Add your first project to showcase your work."
+            action={{ label: 'Add Project', onPress: () => navigation.navigate('AddPortfolio') }}
+          />
+        }
+        renderItem={({ item }) =>
+          viewMode === 'grid' ? (
             <PortfolioCard
               item={item}
               onPress={handlePress}
@@ -177,24 +186,7 @@ export const PortfolioListScreen: React.FC = () => {
               onDelete={handleDelete}
               isOwner
             />
-          )}
-        />
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={i => i._id}
-          contentContainerStyle={{ paddingHorizontal: spacing[4], paddingBottom: 100, paddingTop: 4 }}
-          ListHeaderComponent={renderHeader}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />}
-          ListEmptyComponent={
-            <EmptyState
-              icon="images-outline"
-              title="No portfolio items"
-              subtitle="Add your first project to showcase your work."
-              action={{ label: 'Add Project', onPress: () => navigation.navigate('AddPortfolio') }}
-            />
-          }
-          renderItem={({ item }) => (
+          ) : (
             <PortfolioListItem
               item={item}
               onPress={handlePress}
@@ -202,14 +194,18 @@ export const PortfolioListScreen: React.FC = () => {
               onDelete={handleDelete}
               isOwner
             />
-          )}
-        />
-      )}
+          )
+        }
+      />
 
       {/* FAB */}
       <TouchableOpacity
         onPress={() => navigation.navigate('AddPortfolio')}
-        style={[styles.fab, { backgroundColor: colors.primary, borderRadius: 28 }]}
+        style={[styles.fab, {
+          backgroundColor: colors.primary,
+          borderRadius: 28,
+          bottom: insets.bottom + spacing.lg,
+        }]}
         activeOpacity={0.85}
       >
         <Ionicons name="add" size={28} color="#fff" />
@@ -225,5 +221,5 @@ const styles = StyleSheet.create({
   viewToggleRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   viewToggle:     { flexDirection: 'row', borderWidth: 1, padding: 3, gap: 2 },
   viewToggleBtn:  { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
-  fab:            { position: 'absolute', bottom: 24, right: 24, width: 56, height: 56, alignItems: 'center', justifyContent: 'center', elevation: 6, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
+  fab:            { position: 'absolute', right: 24, width: 56, height: 56, alignItems: 'center', justifyContent: 'center', elevation: 6, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
 });

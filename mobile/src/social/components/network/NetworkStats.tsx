@@ -1,7 +1,19 @@
+// src/social/components/shared/NetworkStats.tsx
+/**
+ * NetworkStats — follower / following / connections tile row
+ *
+ * Theme migration:
+ * - `elevation.xs` does not exist → replaced with Platform.select() shadow inline
+ * - `colors.textMuted` → valid on colors object ✅ (no change needed)
+ * - `colors.bg` used for loader overlay → theme.colors.bg ✅
+ * - All other tokens (colors.card, colors.border, colors.primary, etc.) already
+ *   on the colors object ✅
+ */
 import { Ionicons } from '@expo/vector-icons';
 import React, { memo } from 'react';
 import {
   Animated,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -22,16 +34,11 @@ interface TileProps {
 }
 
 const Tile: React.FC<TileProps> = ({ icon, label, value, onPress, delay }) => {
-  const theme = useSocialTheme();
+  const { colors, spacing, radius, type, withAlpha } = useSocialTheme();
   const { translateY, opacity } = useSlideUp(16, delay);
+
   return (
-    <Animated.View
-      style={{
-        flex: 1,
-        opacity,
-        transform: [{ translateY }],
-      }}
-    >
+    <Animated.View style={{ flex: 1, opacity, transform: [{ translateY }] }}>
       <TouchableOpacity
         onPress={onPress}
         activeOpacity={onPress ? 0.75 : 1}
@@ -39,23 +46,45 @@ const Tile: React.FC<TileProps> = ({ icon, label, value, onPress, delay }) => {
         style={[
           styles.tile,
           {
-            backgroundColor: theme.card,
-            borderColor: theme.border,
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            borderRadius: radius.md,
+            paddingVertical: spacing.md - 2,
+            paddingHorizontal: spacing.sm,
+            minHeight: 96,
+            // elevation.xs → inline Platform.select
+            ...Platform.select({
+              ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.08,
+                shadowRadius: 3,
+              },
+              android: { elevation: 2 },
+            }),
           },
         ]}
       >
         <View
           style={[
             styles.iconWrap,
-            { backgroundColor: `${theme.primary}1F` },
+            {
+              backgroundColor: withAlpha(colors.primary, 0.12),
+              borderRadius: radius.pill,
+              width: 34,
+              height: 34,
+              marginBottom: spacing.sm,
+            },
           ]}
         >
-          <Ionicons name={icon} size={18} color={theme.primary} />
+          <Ionicons name={icon} size={18} color={colors.primary} />
         </View>
-        <Text style={[styles.value, { color: theme.text }]}>
+        <Text style={[type.title, { color: colors.text }]}>
           {formatCount(value)}
         </Text>
-        <Text style={[styles.label, { color: theme.muted }]}>{label}</Text>
+        <Text style={[type.caption, { color: colors.textMuted, marginTop: 2 }]}>
+          {label}
+        </Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -69,92 +98,65 @@ interface Props {
   onConnectionsPress?: () => void;
 }
 
-/**
- * Three-tile strip of network stats. Each tile slides up in sequence on mount.
- */
-const NetworkStats: React.FC<Props> = memo(
-  ({
-    stats,
-    loading,
-    onFollowersPress,
-    onFollowingPress,
-    onConnectionsPress,
-  }) => {
-    const theme = useSocialTheme();
-    const opacity = useFadeIn(0, 200);
-    const safe: FollowStats = stats ?? {
-      followers: 0,
-      following: 0,
-      totalConnections: 0,
-    };
+const NetworkStats: React.FC<Props> = memo(({
+  stats, loading, onFollowersPress, onFollowingPress, onConnectionsPress,
+}) => {
+  const { colors, spacing } = useSocialTheme();
+  const opacity = useFadeIn(0, 200);
+  const safe: FollowStats = stats ?? { followers: 0, following: 0, totalConnections: 0 };
 
-    return (
-      <Animated.View style={[styles.row, { opacity }]}>
-        <Tile
-          icon="people-outline"
-          label="Followers"
-          value={safe.followers}
-          onPress={onFollowersPress}
-          delay={0}
+  return (
+    <Animated.View
+      style={[
+        styles.row,
+        {
+          opacity,
+          gap: spacing.sm + 2,
+          paddingHorizontal: spacing.md,
+          paddingTop: spacing.sm + 2,
+          paddingBottom: spacing.sm,
+        },
+      ]}
+    >
+      <Tile
+        icon="people-outline"
+        label="Followers"
+        value={safe.followers}
+        onPress={onFollowersPress}
+        delay={0}
+      />
+      <Tile
+        icon="person-add-outline"
+        label="Following"
+        value={safe.following}
+        onPress={onFollowingPress}
+        delay={70}
+      />
+      <Tile
+        icon="git-network-outline"
+        label="Connections"
+        value={safe.totalConnections}
+        onPress={onConnectionsPress}
+        delay={140}
+      />
+      {loading ? (
+        <View
+          style={[styles.loaderOverlay, { backgroundColor: colors.bg + 'CC' }]}
+          pointerEvents="none"
         />
-        <Tile
-          icon="person-add-outline"
-          label="Following"
-          value={safe.following}
-          onPress={onFollowingPress}
-          delay={70}
-        />
-        <Tile
-          icon="git-network-outline"
-          label="Connections"
-          value={safe.totalConnections}
-          onPress={onConnectionsPress}
-          delay={140}
-        />
-        {loading ? (
-          <View
-            style={[
-              styles.loaderOverlay,
-              { backgroundColor: `${theme.bg}CC` },
-            ]}
-            pointerEvents="none"
-          />
-        ) : null}
-      </Animated.View>
-    );
-  }
-);
+      ) : null}
+    </Animated.View>
+  );
+});
 
 NetworkStats.displayName = 'NetworkStats';
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  tile: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    minHeight: 96,
-  },
-  iconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  value: { fontSize: 18, fontWeight: '800' },
-  label: { fontSize: 11, marginTop: 2 },
+  row: { flexDirection: 'row' },
+  tile: { alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  iconWrap: { alignItems: 'center', justifyContent: 'center' },
   loaderOverlay: { ...StyleSheet.absoluteFillObject },
 });
 
 export default NetworkStats;
+// ✅ theme-migrated

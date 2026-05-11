@@ -66,7 +66,7 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
         </View>
 
         <View style={[styles.titleZone, !centerTitle && styles.titleZoneLeft]}>
-          <Text style={[styles.title, type.h4, { color: colors.textPrimary }, !centerTitle && styles.titleLeft]} numberOfLines={1}>{title}</Text>
+          <Text style={[styles.title, type.h3, { color: colors.textPrimary }, !centerTitle && styles.titleLeft]} numberOfLines={1}>{title}</Text>
           {subtitle && <Text style={[styles.subtitle, type.caption, { color: colors.textMuted }]} numberOfLines={1}>{subtitle}</Text>}
         </View>
 

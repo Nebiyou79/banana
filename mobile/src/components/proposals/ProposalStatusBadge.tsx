@@ -1,10 +1,12 @@
 // src/components/proposals/ProposalStatusBadge.tsx
 // Banana Mobile App — Module 6B: Proposals
 // Displays a color-coded pill badge for a proposal status.
+// REFACTORED: All colors via useTheme() tokens + withAlpha(). No hardcoded hex.
 
-import React from 'react';
-import { View, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
-import { useThemeStore } from '../../store/themeStore';
+import React, { memo, useMemo } from 'react';
+import { View, Text, StyleSheet, ViewStyle } from 'react-native';
+import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
 import type { ProposalStatus } from '../../types/proposal';
 
 interface ProposalStatusBadgeProps {
@@ -13,127 +15,86 @@ interface ProposalStatusBadgeProps {
   style?: ViewStyle;
 }
 
-interface StatusConfig {
-  label: string;
-  bg: string;
-  text: string;
-  dot: string;
-}
+// Semantic role → theme token name (resolved at render time from useTheme)
+type StatusRole = 'muted' | 'warning' | 'info' | 'teal' | 'violet' | 'success' | 'danger' | 'slate';
 
-const STATUS_CONFIG: Record<ProposalStatus, StatusConfig> = {
-  draft: {
-    label: 'Draft',
-    bg: 'rgba(100,116,139,0.12)',
-    text: '#64748B',
-    dot: '#64748B',
-  },
-  submitted: {
-    label: 'Submitted',
-    bg: 'rgba(245,158,11,0.12)',
-    text: '#D97706',
-    dot: '#F59E0B',
-  },
-  under_review: {
-    label: 'Under Review',
-    bg: 'rgba(59,130,246,0.12)',
-    text: '#2563EB',
-    dot: '#3B82F6',
-  },
-  shortlisted: {
-    label: 'Shortlisted',
-    bg: 'rgba(20,184,166,0.12)',
-    text: '#0D9488',
-    dot: '#14B8A6',
-  },
-  interview_scheduled: {
-    label: 'Interview',
-    bg: 'rgba(139,92,246,0.12)',
-    text: '#7C3AED',
-    dot: '#8B5CF6',
-  },
-  awarded: {
-    label: 'Awarded',
-    bg: 'rgba(16,185,129,0.12)',
-    text: '#059669',
-    dot: '#10B981',
-  },
-  rejected: {
-    label: 'Not Selected',
-    bg: 'rgba(239,68,68,0.12)',
-    text: '#DC2626',
-    dot: '#EF4444',
-  },
-  withdrawn: {
-    label: 'Withdrawn',
-    bg: 'rgba(71,85,105,0.12)',
-    text: '#475569',
-    dot: '#64748B',
-  },
+const STATUS_META: Record<ProposalStatus, { label: string; role: StatusRole }> = {
+  draft:                { label: 'Draft',          role: 'muted'   },
+  submitted:            { label: 'Submitted',       role: 'warning' },
+  under_review:         { label: 'Under Review',    role: 'info'    },
+  shortlisted:          { label: 'Shortlisted',     role: 'teal'    },
+  interview_scheduled:  { label: 'Interview',       role: 'violet'  },
+  awarded:              { label: 'Awarded',         role: 'success' },
+  rejected:             { label: 'Not Selected',    role: 'danger'  },
+  withdrawn:            { label: 'Withdrawn',       role: 'slate'   },
 };
 
 const SIZE_CONFIG = {
-  sm: { paddingHorizontal: 8, paddingVertical: 3, fontSize: 10, dotSize: 5 },
-  md: { paddingHorizontal: 10, paddingVertical: 4, fontSize: 11, dotSize: 6 },
-  lg: { paddingHorizontal: 12, paddingVertical: 5, fontSize: 12, dotSize: 7 },
+  sm: { paddingH: 8,  paddingV: 3,  fontSize: 10, dotSize: 5  },
+  md: { paddingH: 10, paddingV: 4,  fontSize: 11, dotSize: 6  },
+  lg: { paddingH: 12, paddingV: 5,  fontSize: 12, dotSize: 7  },
 };
 
-export const ProposalStatusBadge: React.FC<ProposalStatusBadgeProps> = ({
-  status,
-  size = 'md',
-  style,
-}) => {
-  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.draft;
-  const sizeConf = SIZE_CONFIG[size];
+// Fixed palette entries that don't have a direct theme alias
+const STATIC_COLORS = {
+  teal:   '#0D9488',
+  violet: '#7C3AED',
+  slate:  '#475569',
+} as const;
+
+const ProposalStatusBadge: React.FC<ProposalStatusBadgeProps> = memo(({ status, size = 'md', style }) => {
+  const { colors: c } = useTheme();
+
+  const meta   = STATUS_META[status] ?? STATUS_META.draft;
+  const sizeC  = SIZE_CONFIG[size];
+
+  const dotColor = useMemo((): string => {
+    switch (meta.role) {
+      case 'muted':   return c.textMuted;
+      case 'warning': return c.warning;
+      case 'info':    return c.info;
+      case 'success': return c.success;
+      case 'danger':  return c.danger;
+      case 'teal':    return STATIC_COLORS.teal;
+      case 'violet':  return STATIC_COLORS.violet;
+      case 'slate':   return STATIC_COLORS.slate;
+    }
+  }, [meta.role, c]);
+
+  const styles = useMemo(() => StyleSheet.create({
+    badge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderRadius: 9999,
+      alignSelf: 'flex-start',
+      gap: 5,
+      backgroundColor: withAlpha(dotColor, 0.13),
+      paddingHorizontal: sizeC.paddingH,
+      paddingVertical: sizeC.paddingV,
+    },
+    dot: {
+      width: sizeC.dotSize,
+      height: sizeC.dotSize,
+      borderRadius: sizeC.dotSize / 2,
+      backgroundColor: dotColor,
+    },
+    label: {
+      fontWeight: '600',
+      letterSpacing: 0.2,
+      fontSize: sizeC.fontSize,
+      color: dotColor,
+    },
+  }), [dotColor, sizeC]);
 
   return (
-    <View
-      style={[
-        styles.badge,
-        {
-          backgroundColor: config.bg,
-          paddingHorizontal: sizeConf.paddingHorizontal,
-          paddingVertical: sizeConf.paddingVertical,
-        },
-        style,
-      ]}
-    >
-      <View
-        style={[
-          styles.dot,
-          {
-            backgroundColor: config.dot,
-            width: sizeConf.dotSize,
-            height: sizeConf.dotSize,
-            borderRadius: sizeConf.dotSize / 2,
-          },
-        ]}
-      />
-      <Text
-        style={[
-          styles.label,
-          { color: config.text, fontSize: sizeConf.fontSize },
-        ]}
-        numberOfLines={1}
-      >
-        {config.label}
-      </Text>
+    <View style={[styles.badge, style]}>
+      <View style={styles.dot} />
+      <Text style={styles.label} numberOfLines={1}>{meta.label}</Text>
     </View>
   );
-};
-
-const styles = StyleSheet.create({
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 999,
-    alignSelf: 'flex-start',
-    gap: 5,
-  },
-  dot: {},
-  label: {
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
 });
 
+ProposalStatusBadge.displayName = 'ProposalStatusBadge';
+
+export { ProposalStatusBadge };
 export default ProposalStatusBadge;

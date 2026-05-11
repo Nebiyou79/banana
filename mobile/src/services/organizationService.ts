@@ -3,6 +3,10 @@ import { apiGet, apiPost, apiPut } from '../lib/api';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface OrganizationProfile {
+  email: string;
+  foundedYear: any;
+  socialMedia: any;
+  settings: any;
   _id: string;
   user: { _id: string; name: string; email: string };
   name: string;
@@ -14,6 +18,8 @@ export interface OrganizationProfile {
   headquarters?: string;
   website?: string;
   phone?: string;
+  secondaryPhone?: string;
+  address?: string;
   registrationNumber?: string;
   logoUrl?: string;
   bannerUrl?: string;
@@ -35,6 +41,8 @@ export interface UpdateOrganizationData {
   headquarters?: string;
   website?: string;
   phone?: string;
+  secondaryPhone?: string;
+  address?: string;
   registrationNumber?: string;
   mission?: string;
   values?: string[];
@@ -63,37 +71,79 @@ export interface OrgJob {
 
 export const organizationService = {
   // GET /organization  → current user's org
-  getMyOrganization: async (): Promise<OrganizationProfile> => {
-    const res = await apiGet<{ success: boolean; data: OrganizationProfile }>('/organization');
+  getMyOrganization: async (): Promise<OrganizationProfile | null> => {
+    const res = await apiGet<{ success: boolean; data: OrganizationProfile | null }>('/organization');
+    return res.data?.data ?? null;
+  },
+
+  // POST /organization  → create organization profile
+  createOrganization: async (data: Partial<OrganizationProfile>): Promise<OrganizationProfile> => {
+    const res = await apiPost<{ success: boolean; data: OrganizationProfile }>('/organization', data);
     return res.data.data;
   },
 
-  // PUT /organization/me
+  // PUT /organization/me  → update current user's org
   updateMyOrganization: async (data: UpdateOrganizationData): Promise<OrganizationProfile> => {
-    const res = await apiPut<{ success: boolean; data: OrganizationProfile }>('/organization/me', data);
-    return res.data.data;
+    console.log('📤 Updating organization with data:', data);
+    try {
+      const res = await apiPut<{ success: boolean; data: OrganizationProfile }>('/organization/me', data);
+      console.log('✅ Organization updated successfully:', res.data);
+      return res.data.data;
+    } catch (error) {
+      console.error('❌ Failed to update organization:', error);
+      throw error;
+    }
   },
 
-  // GET /organization/public/:id
+  // GET /organization/public/:id  → public org profile (no auth)
   getPublicOrganization: async (id: string): Promise<OrganizationProfile | null> => {
     try {
       const res = await apiGet<{ success: boolean; data: OrganizationProfile }>(`/organization/public/${id}`);
-      return res.data.data ?? null;
+      return res.data?.data ?? null;
     } catch {
       return null;
     }
   },
 
+  // GET /organization/:id  → get org by ID (auth required)
+  getOrganizationById: async (id: string): Promise<OrganizationProfile> => {
+    const res = await apiGet<{ success: boolean; data: OrganizationProfile }>(`/organization/${id}`);
+    return res.data.data;
+  },
+
+  // ── Upload methods ────────────────────────────────────────────────────────
+  uploadLogo: async (formData: FormData): Promise<{ logoUrl: string }> => {
+    const res = await apiPost<{ success: boolean; data: { logoUrl: string; logoPath: string } }>('/organization/upload/logo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data.data;
+  },
+
+  uploadBanner: async (formData: FormData): Promise<{ bannerUrl: string }> => {
+    const res = await apiPost<{ success: boolean; data: { bannerUrl: string; bannerPath: string } }>('/organization/upload/banner', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data.data;
+  },
+
+  deleteLogo: async (): Promise<void> => {
+    await apiPost<{ success: boolean }>('/organization/upload/logo', {});
+  },
+
+  deleteBanner: async (): Promise<void> => {
+    await apiPost<{ success: boolean }>('/organization/upload/banner', {});
+  },
+
   // ── Jobs (via job routes) ──────────────────────────────────────────────────
   getMyJobs: async (): Promise<OrgJob[]> => {
     const res = await apiGet<{ success: boolean; data: OrgJob[] }>('/job/organization/my-jobs');
-    return res.data.data ?? [];
+    return res.data?.data ?? [];
   },
 
   // ── Applications ──────────────────────────────────────────────────────────
   getApplications: async (): Promise<any[]> => {
     const res = await apiGet<{ success: boolean; data: any[] }>('/applications/organization/applications');
-    return res.data.data ?? [];
+    return res.data?.data ?? [];
   },
 
   // ── Computed stats ────────────────────────────────────────────────────────

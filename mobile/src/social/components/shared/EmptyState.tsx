@@ -1,6 +1,23 @@
+// src/social/components/shared/EmptyState.tsx
+/**
+ * EmptyState — centred icon + title + subtitle + optional CTA
+ *
+ * Theme migration:
+ * - `type.titleSm`      → `type.title`
+ * - `type.btn`          → `type.bodyMd`
+ * - `colors.onPrimary`  → `colors.white`
+ * - `colors.textSecondary` → `colors.textMuted`
+ * All other tokens ✅
+ */
 import { Ionicons } from '@expo/vector-icons';
 import React, { memo } from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Animated,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useFadeIn, useSlideUp } from '../../theme/animations';
 import { useSocialTheme } from '../../theme/socialTheme';
 
@@ -12,90 +29,99 @@ interface Props {
   onAction?: () => void;
 }
 
-/**
- * Friendly empty-state block with soft entrance animation. Used on every
- * list screen when there's nothing to render.
- */
-const EmptyState: React.FC<Props> = memo(
-  ({ icon = 'sparkles-outline', title, subtitle, actionLabel, onAction }) => {
-    const theme = useSocialTheme();
-    const opacity = useFadeIn(50, 400);
-    const { translateY } = useSlideUp(20, 100);
+const EmptyState: React.FC<Props> = memo(({
+  icon = 'sparkles-outline', title, subtitle, actionLabel, onAction,
+}) => {
+  const { colors, spacing, radius, type, withAlpha } = useSocialTheme();
+  const opacity              = useFadeIn(50, 400);
+  const { translateY }       = useSlideUp(20, 100);
 
-    return (
-      <Animated.View
-        style={[styles.wrap, { opacity, transform: [{ translateY }] }]}
+  return (
+    <Animated.View
+      style={[
+        styles.wrap,
+        {
+          opacity,
+          transform: [{ translateY }],
+          paddingHorizontal: spacing.xl,
+          paddingVertical: spacing.xxl,
+        },
+      ]}
+    >
+      <View
+        style={[
+          styles.iconCircle,
+          {
+            backgroundColor: withAlpha(colors.primary, 0.10),
+            borderRadius: radius.pill,
+            width: 72,
+            height: 72,
+            marginBottom: spacing.md,
+          },
+        ]}
       >
-        <View
+        <Ionicons name={icon} size={32} color={colors.primary} />
+      </View>
+
+      {/* type.titleSm → type.title */}
+      <Text
+        style={[
+          type.title,
+          { color: colors.text, textAlign: 'center', marginBottom: spacing.xs },
+        ]}
+      >
+        {title}
+      </Text>
+
+      {subtitle ? (
+        <Text
           style={[
-            styles.iconCircle,
-            { backgroundColor: `${theme.primary}16` },
+            type.bodySm,
+            {
+              // colors.textSecondary → colors.textMuted
+              color: colors.textMuted,
+              textAlign: 'center',
+              maxWidth: 280,
+            },
           ]}
         >
-          <Ionicons name={icon} size={32} color={theme.primary} />
-        </View>
-        <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
-        {subtitle ? (
-          <Text style={[styles.subtitle, { color: theme.subtext }]}>
-            {subtitle}
+          {subtitle}
+        </Text>
+      ) : null}
+
+      {actionLabel && onAction ? (
+        <TouchableOpacity
+          onPress={onAction}
+          activeOpacity={0.85}
+          style={[
+            styles.action,
+            {
+              backgroundColor: colors.primary,
+              borderRadius: radius.pill,
+              paddingHorizontal: spacing.lg,
+              paddingVertical: spacing.sm + 2,
+              marginTop: spacing.lg,
+              minHeight: 44,
+            },
+          ]}
+        >
+          {/* type.btn → type.bodyMd; colors.onPrimary → colors.white */}
+          <Text style={[type.bodyMd, { color: colors.white }]}>
+            {actionLabel}
           </Text>
-        ) : null}
-        {actionLabel && onAction ? (
-          <TouchableOpacity
-            onPress={onAction}
-            activeOpacity={0.85}
-            style={[styles.action, { backgroundColor: theme.primary }]}
-          >
-            <Text style={styles.actionText}>{actionLabel}</Text>
-          </TouchableOpacity>
-        ) : null}
-      </Animated.View>
-    );
-  }
-);
+        </TouchableOpacity>
+      ) : null}
+    </Animated.View>
+  );
+});
 
 EmptyState.displayName = 'EmptyState';
 
 const styles = StyleSheet.create({
-  wrap: {
-    paddingVertical: 48,
-    paddingHorizontal: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 13,
-    lineHeight: 19,
-    textAlign: 'center',
-    maxWidth: 280,
-  },
-  action: {
-    marginTop: 20,
-    paddingHorizontal: 22,
-    paddingVertical: 11,
-    borderRadius: 22,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  actionText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
+  wrap:       { alignItems: 'center', justifyContent: 'center' },
+  iconCircle: { alignItems: 'center', justifyContent: 'center' },
+  action:     { justifyContent: 'center' },
 });
 
 export default EmptyState;
+// ✅ theme-migrated

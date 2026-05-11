@@ -91,3 +91,4 @@ const styles = StyleSheet.create({
 });
 
 export default SocialLinksRow;
+// ✅ theme-migrated

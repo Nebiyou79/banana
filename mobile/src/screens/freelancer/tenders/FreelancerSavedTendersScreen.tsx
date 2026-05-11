@@ -1,17 +1,15 @@
-// mobile/src/screens/freelancer/tenders/FreelancerSavedTendersScreen.tsx
+// screens/freelancer/tenders/FreelancerSavedTendersScreen.tsx
 
 import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
 import React, { useCallback } from 'react';
 import {
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+  RefreshControl, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useThemeStore } from '../../../store/themeStore';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../../hooks/useTheme';
+import { FONT_SIZE } from '../../../theme/tokens';
 import { useSavedFreelanceTenders } from '../../../hooks/useFreelanceTender';
 import type { FreelanceTenderListItem } from '../../../types/freelanceTender';
 import FreelanceTenderCard from '../../../components/freelanceTenders/FreelanceTenderCard';
@@ -19,8 +17,7 @@ import FreelanceTenderSkeleton from '../../../components/freelanceTenders/Freela
 import FreelanceTenderEmptyState from '../../../components/freelanceTenders/FreelanceTenderEmptyState';
 
 const FreelancerSavedTendersScreen: React.FC = () => {
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+  const { colors } = useTheme();
   const navigation = useNavigation<any>();
 
   const { data, isLoading, refetch, isRefetching } = useSavedFreelanceTenders();
@@ -34,25 +31,25 @@ const FreelancerSavedTendersScreen: React.FC = () => {
         role="freelancer"
       />
     ),
-    [navigation]
+    [navigation],
   );
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: c.background ?? c.card }]} edges={['top']}>
+    <SafeAreaView style={[styles.root, { backgroundColor: colors.bg }]} edges={['top']}>
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: c.border ?? c.textMuted + '22' }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backBtn}
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
-          <Text style={[styles.backText, { color: c.primary }]}>← Back</Text>
+          <Ionicons name="arrow-back" size={22} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={[styles.screenTitle, { color: c.text }]}>Saved Tenders</Text>
+        <Text style={[styles.screenTitle, { color: colors.text }]}>Saved Tenders</Text>
         <View style={styles.headerRight}>
           {!isLoading && (
-            <Text style={[styles.countText, { color: c.textMuted }]}>
+            <Text style={[styles.countText, { color: colors.textMuted }]}>
               {tenders.length}
             </Text>
           )}
@@ -65,14 +62,10 @@ const FreelancerSavedTendersScreen: React.FC = () => {
         <FlashList
           data={tenders}
           renderItem={renderItem}
-          keyExtractor={(item) => item._id}
+          keyExtractor={item => item._id}
           contentContainerStyle={styles.list}
           refreshControl={
-            <RefreshControl
-              refreshing={isRefetching}
-              onRefresh={refetch}
-              tintColor={c.primary}
-            />
+            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
           }
           ListEmptyComponent={
             <FreelanceTenderEmptyState
@@ -90,15 +83,10 @@ const FreelancerSavedTendersScreen: React.FC = () => {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backBtn: { minWidth: 44, minHeight: 44, justifyContent: 'center' },
-  backText: { fontSize: 15, fontWeight: '600' },
   screenTitle: { fontSize: 17, fontWeight: '700' },
   headerRight: { minWidth: 44, alignItems: 'flex-end' },
   countText: { fontSize: 14, fontWeight: '600' },

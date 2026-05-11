@@ -28,7 +28,8 @@ export type ProfessionalTenderStatus =
   | 'deadline_reached'
   | 'revealed'
   | 'closed'
-  | 'cancelled';
+  | 'cancelled'
+  | 'awarded';
 
 export type ProfessionalTenderType =
   | 'works'
@@ -159,6 +160,7 @@ export interface Addendum {
 }
 
 export interface TenderAttachment {
+  url(url: any): unknown;
   _id: string;
   filename: string;
   originalName?: string;
@@ -303,6 +305,7 @@ export interface ProfessionalTender {
  * level — sealed contents are never exposed in lists.
  */
 export interface ProfessionalTenderListItem {
+  metadata: any;
   _id: string;
   title: string;
   briefDescription?: string;

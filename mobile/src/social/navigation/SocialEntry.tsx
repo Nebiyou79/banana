@@ -1,43 +1,78 @@
-// src/social/navigation/SocialEntry.tsx
 /**
- * SocialEntry — root of the Social feature.
- * -----------------------------------------------------------------------------
- *   1. Bootstraps the socket connection (useSocketBootstrap).
- *   2. Registers every screen in the social module, including chat.
+ * src/social/navigation/SocialEntry.tsx
+ * ─────────────────────────────────────────────────────────────────────────────
+ * BananaLink Social v3 — Root of the Social feature
+ *
+ * Responsibilities:
+ *  1. Bootstraps the socket connection via useSocketBootstrap().
+ *  2. Registers every social screen in one NativeStack.
+ *  3. SocialNavigator (bottom tabs) sits at "SocialTabs".
+ *  4. All push screens (profile, chat, post detail …) are siblings of
+ *     SocialTabs so they slide over the tab bar cleanly.
+ *
+ * Navigation flow:
+ *  SocialSplash → SocialTabs (bottom tabs)
+ *                   └─ push from any tab:
+ *                        PublicProfile, PostDetail, EditProfile,
+ *                        Followers, Following,
+ *                        Chat, MessageRequests, NewChat
+ *
+ * NOTE: MessagesScreen (inbox) lives INSIDE the bottom tabs at the
+ * "Messages" tab, NOT as a push screen. Only Chat (room), MessageRequests,
+ * and NewChat are push screens.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import SocialSplashScreen from '../screens/SocialSplashScreen';
+// Navigators
 import SocialNavigator from './SocialNavigator';
-import PublicProfileScreen from '../screens/PublicProfileScreen';
-import PostDetailScreen from '../screens/PostDetailScreen';
-import EditProfileScreen from '../screens/EditProfileScreen';
-import FollowListScreen from '../screens/FollowListScreen';
-import MessagesScreen from '../screens/MessagesScreen';
-import ChatScreen from '../screens/ChatScreen';
-import MessageRequestsScreen from '../screens/MessageRequestsScreen';
-import NewChatScreen from '../screens/NewChatScreen';
 
+// Screens — splash
+import SocialSplashScreen from '../screens/SocialSplashScreen';
+
+// Screens — profile & posts
+import PublicProfileScreen from '../screens/PublicProfileScreen';
+import PostDetailScreen    from '../screens/PostDetailScreen';
+import EditProfileScreen   from '../screens/EditProfileScreen';
+import FollowListScreen    from '../screens/FollowListScreen';
+
+// Screens — chat
+import ChatScreen            from '../screens/ChatScreen';
+import MessageRequestsScreen from '../screens/MessageRequestsScreen';
+import NewChatScreen         from '../screens/NewChatScreen';
+
+// Socket bootstrap
 import { useSocketBootstrap } from '../hooks/useSocket';
 
-import type {
-  SocialScreenParamList,
-  SocialStackParamList,
-} from './types';
+import type { SocialStackParamList } from './types';
 
-type FullSocialStack = SocialStackParamList & SocialScreenParamList;
-const Stack = createNativeStackNavigator<FullSocialStack>();
+const Stack = createNativeStackNavigator<SocialStackParamList>();
 
 const SocialEntry: React.FC = () => {
+  // Connect socket once at the root of the social module.
+  // Disconnects automatically when SocialEntry unmounts.
   useSocketBootstrap();
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="SocialSplash" component={SocialSplashScreen} />
-      <Stack.Screen name="SocialTabs" component={SocialNavigator} />
+    <Stack.Navigator
+      initialRouteName="SocialSplash"
+      screenOptions={{ headerShown: false }}
+    >
+      {/* ── Initial splash → auto-navigates to SocialTabs ── */}
+      <Stack.Screen
+        name="SocialSplash"
+        component={SocialSplashScreen}
+      />
 
+      {/* ── Bottom tab container ── */}
+      <Stack.Screen
+        name="SocialTabs"
+        component={SocialNavigator}
+      />
+
+      {/* ── Profile push screens ── */}
       <Stack.Screen
         name="PublicProfile"
         component={PublicProfileScreen}
@@ -51,7 +86,10 @@ const SocialEntry: React.FC = () => {
       <Stack.Screen
         name="EditProfile"
         component={EditProfileScreen}
-        options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
+        options={{
+          animation:    'slide_from_bottom',
+          presentation: 'modal',
+        }}
       />
       <Stack.Screen
         name="Followers"
@@ -64,12 +102,11 @@ const SocialEntry: React.FC = () => {
         options={{ animation: 'slide_from_right' }}
       />
 
-      {/* Chat */}
-      <Stack.Screen
-        name="Messages"
-        component={MessagesScreen}
-        options={{ animation: 'slide_from_right' }}
-      />
+      {/* ── Chat push screens ─────────────────────────────────────────────
+           MessagesScreen (inbox) is NOT registered here — it lives inside
+           the bottom tab as the "Messages" tab in SocialNavigator.
+           Only the chat ROOM and supporting screens are push screens.
+      ── */}
       <Stack.Screen
         name="Chat"
         component={ChatScreen}
@@ -83,7 +120,10 @@ const SocialEntry: React.FC = () => {
       <Stack.Screen
         name="NewChat"
         component={NewChatScreen}
-        options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
+        options={{
+          animation:    'slide_from_bottom',
+          presentation: 'modal',
+        }}
       />
     </Stack.Navigator>
   );

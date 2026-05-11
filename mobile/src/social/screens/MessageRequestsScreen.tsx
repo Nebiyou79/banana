@@ -1,14 +1,21 @@
+// src/social/screens/MessageRequestsScreen.tsx
 /**
  * MessageRequestsScreen — dedicated list of incoming message requests.
- * -----------------------------------------------------------------------------
- * Each row supports Accept / Decline inline. Tapping the body opens the
- * conversation (where the user can also act via the banner).
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Features:
+ *   - Inline Accept/Decline with loading states
+ *   - Tapping the body opens the conversation
+ *   - Pull-to-refresh
+ *   - Empty state with clear messaging
+ *   - Full socialTheme integration
+ *   - Professional card layout
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   RefreshControl,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -18,8 +25,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useSocialTheme } from '../theme/socialTheme';
+import { useFadeIn } from '../theme/animations';
 import {
   useAcceptRequest,
   useDeclineRequest,
@@ -27,60 +36,154 @@ import {
 } from '../hooks/useConversations';
 import { RequestCard } from '../components/chat';
 import type { Conversation } from '../types/chat';
+import { EmptyState } from '../components';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 type AnyNav = NativeStackNavigationProp<any>;
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 const MessageRequestsScreen: React.FC = () => {
   const theme = useSocialTheme();
   const navigation = useNavigation<AnyNav>();
   const styles = makeStyles(theme);
+  const fadeIn = useFadeIn(100, 250);
 
+  // ── Data ─────────────────────────────────────────────────────────────
   const {
     data,
     fetchNextPage,
     hasNextPage,
     isRefetching,
     refetch,
+    isLoading,
   } = useMessageRequests();
-  const { mutate: acceptRequest } = useAcceptRequest();
-  const { mutate: declineRequest } = useDeclineRequest();
 
-  // Per-row pending state for buttons.
-  const [pendingById, setPendingById] = useState<
-    Record<string, 'accept' | 'decline' | null>
-  >({});
+  const { mutate: acceptRequest, isPending: accepting } = useAcceptRequest();
+  const { mutate: declineRequest, isPending: declining } = useDeclineRequest();
 
-  const requests: Conversation[] = data?.list ?? [];
+  // Extract list safely from infinite query
+  const requests: Conversation[] = useMemo(() => {
+    if (!data) return [];
+    const enhanced = data as any;
+    if (Array.isArray(enhanced.list)) return enhanced.list;
+    if (Array.isArray(enhanced.pages)) {
+      return enhanced.pages.flatMap((p: any) => p?.data ?? []);
+    }
+    return [];
+  }, [data]);
 
-  const setPending = (id: string, v: 'accept' | 'decline' | null) =>
-    setPendingById((m) => ({ ...m, [id]: v }));
+  // Per-row pending state
+  const [pendingById, setPendingById] = useState<Record<string, 'accept' | 'decline' | null>>({});
 
-  const handleAccept = (conv: Conversation) => {
-    setPending(conv._id, 'accept');
-    acceptRequest(conv._id, {
-      onSettled: () => setPending(conv._id, null),
-      onSuccess: () =>
-        navigation.navigate('Chat', {
-          conversationId: conv._id,
-          otherUser: conv.otherUser,
-        }),
-    });
-  };
+  const setPending = useCallback((id: string, v: 'accept' | 'decline' | null) => {
+    setPendingById((prev) => ({ ...prev, [id]: v }));
+  }, []);
 
-  const handleDecline = (conv: Conversation) => {
-    setPending(conv._id, 'decline');
-    declineRequest(conv._id, {
-      onSettled: () => setPending(conv._id, null),
-    });
-  };
+  // ── Handlers ─────────────────────────────────────────────────────────
+  const handleAccept = useCallback(
+    (conv: Conversation) => {
+      setPending(conv._id, 'accept');
+      acceptRequest(conv._id, {
+        onSettled: () => setPending(conv._id, null),
+        onSuccess: () => {
+          navigation.navigate('Chat', {
+            conversationId: conv._id,
+            otherUser: conv.otherUser,
+          });
+        },
+      } as any);
+    },
+    [acceptRequest, setPending, navigation],
+  );
 
+  const handleDecline = useCallback(
+    (conv: Conversation) => {
+      setPending(conv._id, 'decline');
+      declineRequest(conv._id, {
+        onSettled: () => setPending(conv._id, null),
+      } as any);
+    },
+    [declineRequest, setPending],
+  );
+
+  const openChat = useCallback(
+    (conv: Conversation) => {
+      navigation.navigate('Chat', {
+        conversationId: conv._id,
+        otherUser: conv.otherUser,
+      });
+    },
+    [navigation],
+  );
+
+  // ── Render item ──────────────────────────────────────────────────────
+  const renderItem = useCallback(
+    ({ item }: { item: Conversation }) => (
+      <RequestCard
+        conversation={item}
+        onPress={() => openChat(item)}
+        onAccept={() => handleAccept(item)}
+        onDecline={() => handleDecline(item)}
+        actionPending={pendingById[item._id] ?? null}
+      />
+    ),
+    [openChat, handleAccept, handleDecline, pendingById],
+  );
+
+  const keyExtractor = useCallback((item: Conversation) => item._id, []);
+
+  // ── Empty state ──────────────────────────────────────────────────────
+  const EmptyComponent = useMemo(() => {
+    if (isLoading) {
+      return (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={theme.primary} />
+        </View>
+      );
+    }
+    return (
+      <View style={styles.empty}>
+        <View style={[styles.emptyIconWrap, { backgroundColor: theme.withAlpha(theme.primary, 0.08) }]}>
+          <Ionicons name="mail-open-outline" size={48} color={theme.primary} />
+        </View>
+        <Text style={[styles.emptyTitle, { color: theme.text }]}>
+          No message requests
+        </Text>
+        <Text style={[styles.emptySub, { color: theme.subtext }]}>
+          When someone you're not connected with sends you a message, it will appear here.
+        </Text>
+      </View>
+    );
+  }, [isLoading, theme, styles]);
+
+  // ── Loading ──────────────────────────────────────────────────────────
+  if (isLoading && requests.length === 0) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['top']}>
+        <View style={[styles.header, { borderBottomColor: theme.border }]}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Ionicons name="chevron-back" size={26} color={theme.text} />
+          </TouchableOpacity>
+          <Text style={[styles.title, { color: theme.text }]}>Message Requests</Text>
+          <View style={{ width: 44 }} />
+        </View>
+        <EmptyState title={''} />
+      </SafeAreaView>
+    );
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg, opacity: fadeIn }]} edges={['top']}>
+      {/* Header */}
       <View style={[styles.header, { borderBottomColor: theme.border }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backBtn}
-          hitSlop={8}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={26} color={theme.text} />
@@ -88,73 +191,91 @@ const MessageRequestsScreen: React.FC = () => {
         <Text style={[styles.title, { color: theme.text }]}>
           Message Requests
         </Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
 
+      {/* Count subtitle */}
+      {requests.length > 0 && (
+        <View style={[styles.subtitleWrap, { borderBottomColor: theme.border }]}>
+          <Text style={[styles.subtitle, { color: theme.subtext }]}>
+            {requests.length} pending {requests.length === 1 ? 'request' : 'requests'}
+          </Text>
+        </View>
+      )}
+
+      {/* List */}
       <FlashList
         data={requests}
-        keyExtractor={(item) => item._id}
-        renderItem={({ item }) => (
-          <RequestCard
-            conversation={item}
-            onPress={() =>
-              navigation.navigate('Chat', {
-                conversationId: item._id,
-                otherUser: item.otherUser,
-              })
-            }
-            onAccept={() => handleAccept(item)}
-            onDecline={() => handleDecline(item)}
-            actionPending={pendingById[item._id] ?? null}
-          />
-        )}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
         onEndReached={() => hasNextPage && fetchNextPage()}
-        onEndReachedThreshold={0.3}
+        onEndReachedThreshold={0.5}
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}
             onRefresh={refetch}
             tintColor={theme.primary}
+            colors={[theme.primary]}
           />
         }
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons
-              name="mail-open-outline"
-              size={48}
-              color={theme.muted}
+        ListEmptyComponent={EmptyComponent}
+        ListFooterComponent={
+          hasNextPage && requests.length > 0 ? (
+            <ActivityIndicator
+              color={theme.primary}
+              style={{ paddingVertical: 16 }}
             />
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>
-              No message requests
-            </Text>
-            <Text style={[styles.emptySub, { color: theme.subtext }]}>
-              When someone you're not connected with sends you a message,
-              it will appear here.
-            </Text>
-          </View>
+          ) : null
         }
+        contentContainerStyle={styles.listContent}
       />
     </SafeAreaView>
   );
 };
 
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
 const makeStyles = (theme: ReturnType<typeof useSocialTheme>) =>
   StyleSheet.create({
-    container: { flex: 1 },
+    container: {
+      flex: 1,
+    },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 8,
-      paddingVertical: 8,
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: theme.spacing.sm,
       borderBottomWidth: StyleSheet.hairlineWidth,
+      minHeight: 56,
     },
     backBtn: {
-      width: 40,
-      height: 40,
+      width: 44,
+      height: 44,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    title: { flex: 1, fontSize: 17, fontWeight: '700', textAlign: 'center' },
+    title: {
+      flex: 1,
+      fontSize: 17,
+      fontWeight: '700',
+      textAlign: 'center',
+    },
+    subtitleWrap: {
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    subtitle: {
+      fontSize: 13,
+    },
+    listContent: {
+      paddingBottom: theme.spacing.xl,
+    },
+    centered: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 80,
+    },
     empty: {
       alignItems: 'center',
       justifyContent: 'center',
@@ -162,8 +283,24 @@ const makeStyles = (theme: ReturnType<typeof useSocialTheme>) =>
       paddingVertical: 80,
       gap: 10,
     },
-    emptyTitle: { fontSize: 16, fontWeight: '700' },
-    emptySub: { fontSize: 13, textAlign: 'center', lineHeight: 18 },
+    emptyIconWrap: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 4,
+    },
+    emptyTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      textAlign: 'center',
+    },
+    emptySub: {
+      fontSize: 14,
+      textAlign: 'center',
+      lineHeight: 20,
+    },
   });
 
 export default MessageRequestsScreen;

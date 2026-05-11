@@ -1,6 +1,17 @@
 // src/social/components/search/SearchBar.tsx
+/**
+ * SearchBar — controlled search input with clear + cancel actions
+ *
+ * Theme migration:
+ * - theme.inputBg → theme.colors.inputBg  (authoritative)
+ * - theme.border  → theme.colors.border   (authoritative)
+ * - theme.muted   → theme.colors.muted    (authoritative)
+ * - theme.text    → theme.colors.text     (authoritative)
+ * - theme.primary → theme.colors.primary  (authoritative)
+ * Flat aliases remain valid but colours object used for consistency.
+ */
 import { Ionicons } from '@expo/vector-icons';
-import React, { memo, useImperativeHandle, useRef, forwardRef } from 'react';
+import React, { forwardRef, memo, useImperativeHandle, useRef } from 'react';
 import {
   Keyboard,
   StyleSheet,
@@ -9,12 +20,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-
 import { useSocialTheme } from '../../theme/socialTheme';
 
 export interface SearchBarHandle {
   focus: () => void;
-  blur: () => void;
+  blur:  () => void;
 }
 
 interface Props {
@@ -44,12 +54,12 @@ const SearchBar = memo(
       },
       ref,
     ) => {
-      const theme = useSocialTheme();
+      const theme    = useSocialTheme();
       const inputRef = useRef<TextInput>(null);
 
       useImperativeHandle(ref, () => ({
         focus: () => inputRef.current?.focus(),
-        blur: () => inputRef.current?.blur(),
+        blur:  () => inputRef.current?.blur(),
       }));
 
       const handleCancel = () => {
@@ -69,10 +79,13 @@ const SearchBar = memo(
           <View
             style={[
               styles.field,
-              { backgroundColor: theme.inputBg, borderColor: theme.border },
+              {
+                backgroundColor: theme.colors.inputBg,
+                borderColor:     theme.colors.border,
+              },
             ]}
           >
-            <Ionicons name="search-outline" size={18} color={theme.muted} />
+            <Ionicons name="search-outline" size={18} color={theme.colors.muted} />
             <TextInput
               ref={inputRef}
               value={value}
@@ -80,12 +93,12 @@ const SearchBar = memo(
               onSubmitEditing={onSubmit}
               onFocus={onFocus}
               placeholder={placeholder}
-              placeholderTextColor={theme.muted}
+              placeholderTextColor={theme.colors.muted}
               returnKeyType="search"
               autoCapitalize="none"
               autoCorrect={false}
               autoFocus={autoFocus}
-              style={[styles.input, { color: theme.text }]}
+              style={[styles.input, { color: theme.colors.text }]}
               accessibilityLabel="Search"
             />
             {value.length > 0 ? (
@@ -95,7 +108,7 @@ const SearchBar = memo(
                 accessibilityLabel="Clear search"
                 accessibilityRole="button"
               >
-                <Ionicons name="close-circle" size={18} color={theme.muted} />
+                <Ionicons name="close-circle" size={18} color={theme.colors.muted} />
               </TouchableOpacity>
             ) : null}
           </View>
@@ -108,7 +121,7 @@ const SearchBar = memo(
               accessibilityRole="button"
               accessibilityLabel="Cancel"
             >
-              <Text style={[styles.cancelText, { color: theme.primary }]}>
+              <Text style={[styles.cancelText, { color: theme.colors.primary }]}>
                 Cancel
               </Text>
             </TouchableOpacity>
@@ -122,24 +135,21 @@ const SearchBar = memo(
 SearchBar.displayName = 'SearchBar';
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  row:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
   field: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderRadius: 22,
+    flex:           1,
+    flexDirection:  'row',
+    alignItems:     'center',
+    gap:            8,
+    borderWidth:    1,
+    borderRadius:   22,
     paddingHorizontal: 14,
-    height: 44,
+    height:         44,
   },
-  input: { flex: 1, fontSize: 14, paddingVertical: 0 },
-  cancel: {
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
+  input:      { flex: 1, fontSize: 14, paddingVertical: 0 },
+  cancel:     { minHeight: 44, justifyContent: 'center', paddingHorizontal: 6 },
   cancelText: { fontSize: 14, fontWeight: '600' },
 });
 
 export default SearchBar;
+// ✅ theme-migrated

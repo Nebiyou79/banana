@@ -8,6 +8,15 @@ import { JOBS, APPLICATIONS } from '../constants/api';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface CompanyProfile {
+  headline: string;
+  mission: string;
+  culture: string;
+  companySize: string;
+  companyType: string;
+  specialties: never[];
+  tags: never[];
+  values: never[];
+  settings: any;
   size: string;
   email: string;
   location: any;
@@ -256,6 +265,13 @@ export const companyService = {
 // ─── Organization Types ───────────────────────────────────────────────────────
 
 export interface OrganizationProfile {
+  email: string;
+  size: string;
+  foundedYear: any;
+  socialMedia: any;
+  values: never[];
+  specialties: never[];
+  settings: any;
   _id: string;
   name: string;
   registrationNumber?: string;

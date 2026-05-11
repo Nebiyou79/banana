@@ -1,4 +1,18 @@
-// src/social/hooks/useSocialSearch.ts
+// =============================================================================
+// FILE 7: mobile/src/social/hooks/useSocialSearch.ts — UPDATED
+// =============================================================================
+
+/**
+ * useSocialSearch — search hooks
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Aligns with socialSearchController.js v4:
+ * - searchProfiles returns normalized results with followState and isMutual
+ * - Suggestions hook for typeahead
+ * - History hooks with proper cache management
+ * - Self-exclusion handled server-side (belt-and-suspenders)
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 import {
   useMutation,
   useQuery,
@@ -8,14 +22,14 @@ import { useEffect, useState } from 'react';
 
 import {
   socialSearchService,
+  searchHistoryStorage,  // ← ADD THIS
   type SearchHistoryEntry,
+  type SearchType,
 } from '../services/socialSearchService';
-import type {
-  SearchParams,
-  SearchResponse,
-  SearchResult,
-} from '../types';
+import type { SearchParams, SearchResponse, SearchResult } from '../types';
 import { SOCIAL_KEYS } from './queryKeys';
+
+// ─── Debounce ─────────────────────────────────────────────────────────────────
 
 const DEBOUNCE_MS = 300;
 
@@ -28,18 +42,14 @@ const useDebounced = (value: string, delay = DEBOUNCE_MS) => {
   return v;
 };
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Result normalization
-// ──────────────────────────────────────────────────────────────────────────────
-//
-// Different endpoints return different envelopes. We normalize every shape
-// into a single SearchResponse so consumers don't have to defend.
-//   - Express controllers usually return { success, data: { results, pagination } }
-//   - Some legacy endpoints return { success, data: [...] }
-//   - Some return the array directly
-// ──────────────────────────────────────────────────────────────────────────────
+// ─── Result normalization ─────────────────────────────────────────────────────
 
-const normalizeProfiles = (raw: any): SearchResponse => {
+/**
+ * Normalize server response into a consistent SearchResponse shape.
+ * Handles various response envelopes from different endpoints.
+ */
+function normalizeProfiles(raw: any): SearchResponse {
+  // Drill into response layers
   const inner = raw?.data?.data ?? raw?.data ?? raw;
 
   let results: SearchResult[] = [];
@@ -53,28 +63,26 @@ const normalizeProfiles = (raw: any): SearchResponse => {
     results = inner.profiles;
   }
 
-  // Normalize each entry — backend may return a Profile object, a User, or
-  // a flattened search hit. We collapse them onto the SearchResult shape.
+  // Normalize each entry to SearchResult shape
   const normalized: SearchResult[] = results
     .map((entry: any): SearchResult | null => {
       if (!entry) return null;
-      const u = entry.user ?? entry;
-      const id = u._id ?? entry._id;
-      if (!id) return null;
       return {
-        _id: id,
-        name: u.name ?? entry.name ?? 'Unknown',
-        avatar: u.avatar ?? entry.avatar ?? entry.avatarUrl,
-        role: u.role ?? entry.role ?? 'candidate',
-        headline: entry.headline ?? u.headline,
-        followerCount:
-          entry.socialStats?.followerCount ??
-          u.socialStats?.followerCount ??
-          entry.followerCount,
-        verificationStatus:
-          u.verificationStatus ?? entry.verificationStatus,
-        location: entry.location ?? u.location,
-        skills: entry.skills,
+        _id: entry._id,
+        type: entry.type ?? entry.role ?? 'candidate',
+        name: entry.name ?? 'Unknown',
+        avatar: entry.avatar ?? null,
+        role: entry.role ?? 'candidate',
+        headline: entry.headline ?? null,
+        followerCount: entry.followerCount ?? 0,
+        verificationStatus: entry.verificationStatus ?? 'none',
+        followState: entry.followState ?? 'not_following',
+        isMutual: entry.isMutual ?? false,
+        isOnline: entry.isOnline ?? false,
+        lastSeen: entry.lastSeen ?? null,
+        skills: entry.skills ?? [],
+        location: entry.location ?? null,
+        bio: entry.bio ?? null,
       };
     })
     .filter(Boolean) as SearchResult[];
@@ -91,25 +99,25 @@ const normalizeProfiles = (raw: any): SearchResponse => {
     pagination,
     total: pagination.total ?? normalized.length,
   };
-};
+}
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Hooks
-// ──────────────────────────────────────────────────────────────────────────────
+// ─── Hooks ────────────────────────────────────────────────────────────────────
 
 /**
- * People search. Debounces the query (300ms), enables only when the trimmed
- * query is ≥2 chars OR a non-default type filter is active. Returns a
- * normalized SearchResponse so consumers can rely on `.results` and
- * `.pagination`.
+ * People search with debounce.
+ * Server excludes the current user automatically.
+ * Returns normalized SearchResponse with followState per result.
  */
-export const useSocialSearch = (params: SearchParams) => {
-  const debouncedQuery = useDebounced(params.q ?? '');
+export function useSocialSearch(params: SearchParams) {
+  const debouncedQuery = useDebounced(params.q ?? '', DEBOUNCE_MS);
   const trimmed = debouncedQuery.trim();
   const hasTypeFilter = Boolean(params.type && params.type !== 'all');
 
   return useQuery<SearchResponse>({
-    queryKey: SOCIAL_KEYS.searchProfiles({ ...params, q: trimmed }),
+    queryKey: SOCIAL_KEYS.searchProfiles({
+      ...params,
+      q: trimmed,
+    }),
     queryFn: async () => {
       const res = await socialSearchService.searchProfiles({
         ...params,
@@ -118,19 +126,45 @@ export const useSocialSearch = (params: SearchParams) => {
       return normalizeProfiles(res);
     },
     enabled: trimmed.length >= 2 || hasTypeFilter,
-    staleTime: 1000 * 30,
+    staleTime: 30_000,
     placeholderData: (prev) => prev,
   });
-};
+}
 
-export const useSearchPosts = (params: {
+/**
+ * Typeahead suggestions for instant dropdown.
+ * Returns ≤8 results, debounced at 200ms for perceived speed.
+ */
+export function useSearchSuggestions(q: string, type?: SearchType) {
+  const debouncedQuery = useDebounced(q, 200);
+
+  return useQuery({
+    queryKey: SOCIAL_KEYS.searchSuggestions(debouncedQuery, type),
+    queryFn: async () => {
+      const res = await socialSearchService.getSuggestions(
+        debouncedQuery,
+        type
+      );
+      return res.data?.data ?? [];
+    },
+    enabled: debouncedQuery.trim().length >= 2,
+    staleTime: 15_000,
+    placeholderData: (prev) => prev ?? [],
+  });
+}
+
+export function useSearchPosts(params: {
   q: string;
   hashtag?: string;
   type?: string;
-}) => {
-  const debouncedQuery = useDebounced(params.q ?? '');
+}) {
+  const debouncedQuery = useDebounced(params.q ?? '', DEBOUNCE_MS);
+
   return useQuery({
-    queryKey: SOCIAL_KEYS.searchPosts({ ...params, q: debouncedQuery }),
+    queryKey: SOCIAL_KEYS.searchPosts({
+      ...params,
+      q: debouncedQuery,
+    }),
     queryFn: async () => {
       const res = await socialSearchService.searchPosts({
         ...params,
@@ -140,82 +174,80 @@ export const useSearchPosts = (params: {
     },
     enabled:
       debouncedQuery.trim().length >= 2 || Boolean(params.hashtag),
-    staleTime: 1000 * 30,
+    staleTime: 30_000,
     placeholderData: (prev) => prev,
   });
-};
+}
 
-export const useSearchHashtags = (query: string, trending = false) => {
-  const debouncedQuery = useDebounced(query);
+export function useSearchHashtags(query: string, trending = false) {
+  const debouncedQuery = useDebounced(query, DEBOUNCE_MS);
+
   return useQuery({
     queryKey: SOCIAL_KEYS.searchHashtags(debouncedQuery, trending),
     queryFn: async () => {
       const res = await socialSearchService.searchHashtags(
         debouncedQuery,
-        trending,
+        trending
       );
       return res.data?.data ?? res.data;
     },
     enabled: trending || debouncedQuery.trim().length >= 2,
-    staleTime: 1000 * 60,
+    staleTime: 60_000,
   });
-};
+}
 
-export const useSearchUnified = (params: SearchParams) => {
-  const debouncedQuery = useDebounced(params.q ?? '');
+export function useTrendingHashtags(days = 7, limit = 20) {
   return useQuery({
-    queryKey: SOCIAL_KEYS.searchUnified({ ...params, q: debouncedQuery }),
+    queryKey: SOCIAL_KEYS.trendingHashtags(days, limit),
     queryFn: async () => {
-      const res = await socialSearchService.unified({
-        ...params,
-        q: debouncedQuery,
-      });
-      return res.data?.data ?? res.data;
+      const res = await socialSearchService.getTrending(days, limit);
+      return res.data?.data?.hashtags ?? [];
     },
-    enabled: debouncedQuery.trim().length >= 2,
-    staleTime: 1000 * 30,
+    staleTime: 120_000, // 2 minutes
   });
-};
+}
 
-// ──────────────────────────────────────────────────────────────────────────────
-// History (local AsyncStorage, surfaced via Query for cache consistency)
-// ──────────────────────────────────────────────────────────────────────────────
+// ─── Search History Hooks ─────────────────────────────────────────────────────
 
-export const useSearchHistory = () =>
-  useQuery({
+export function useSearchHistory() {
+  return useQuery<SearchHistoryEntry[]>({
     queryKey: SOCIAL_KEYS.searchHistory,
-    queryFn: () => socialSearchService.getHistory(),
+    queryFn: () => searchHistoryStorage.get(),
     staleTime: Infinity,
   });
+}
 
-export const useAddSearchHistory = () => {
+export function useAddSearchHistory() {
   const qc = useQueryClient();
+
   return useMutation({
-    mutationFn: (entry: { query: string; type?: string }) =>
-      socialSearchService.addHistory(entry),
-    onSuccess: (next: SearchHistoryEntry[]) => {
+    mutationFn: (entry: { query: string; type?: SearchType }) =>
+      searchHistoryStorage.add(entry),
+    onSuccess: (next) => {
       qc.setQueryData(SOCIAL_KEYS.searchHistory, next);
     },
   });
-};
+}
 
-export const useRemoveSearchHistoryEntry = () => {
+export function useRemoveSearchHistoryEntry() {
   const qc = useQueryClient();
+
   return useMutation({
     mutationFn: (query: string) =>
-      socialSearchService.removeHistoryEntry(query),
-    onSuccess: (next: SearchHistoryEntry[]) => {
+      searchHistoryStorage.remove(query),
+    onSuccess: (next) => {
       qc.setQueryData(SOCIAL_KEYS.searchHistory, next);
     },
   });
-};
+}
 
-export const useClearSearchHistory = () => {
+export function useClearSearchHistory() {
   const qc = useQueryClient();
+
   return useMutation({
-    mutationFn: () => socialSearchService.clearHistory(),
+    mutationFn: () => searchHistoryStorage.clear(),
     onSuccess: () => {
       qc.setQueryData(SOCIAL_KEYS.searchHistory, []);
     },
   });
-};
+}

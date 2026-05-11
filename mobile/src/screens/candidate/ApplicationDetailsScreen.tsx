@@ -70,13 +70,12 @@ export const ApplicationDetailScreen: React.FC<Props> = ({ navigation, route }) 
         application={application}
         role="candidate"
         onBack={() => navigation.goBack()}
-        isDark={isDark}
+        // isDark={isDark}
       />
 
       {/* 3-tab detail */}
       <CandidateApplicationDetails
         application={application}
-        colors={c}
         onUpdated={(updated) => setLocalApp(updated)}
       />
     </SafeAreaView>

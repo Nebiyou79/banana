@@ -1,77 +1,121 @@
 // ScreenHeader.tsx
-import React, { useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, StatusBar, Animated } from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, ViewStyle, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
+
+interface HeaderAction {
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  badge?: number;
+  label?: string;
+  disabled?: boolean;
+}
 
 interface ScreenHeaderProps {
   title: string;
   subtitle?: string;
-  onBack?: () => void;
-  rightIcon?: string;
-  rightLabel?: string;
-  onRightPress?: () => void;
-  transparent?: boolean;
+  showBack?: boolean;
+  onBackPress?: () => void;
+  actions?: HeaderAction[];
+  rightContent?: React.ReactNode;
+  bottomContent?: React.ReactNode;
+  style?: ViewStyle;
+  variant?: 'default' | 'transparent';
+  centerTitle?: boolean;
+  bordered?: boolean;
 }
 
 export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
-  title, subtitle, onBack, rightIcon, rightLabel, onRightPress, transparent,
+  title, subtitle, showBack, onBackPress, actions = [], rightContent,
+  bottomContent, style, variant = 'default', centerTitle = true, bordered = true,
 }) => {
-  const { colors, radius, type, shadows } = useTheme();
+  const { colors, shadows, radius, type, spacing } = useTheme();
   const insets = useSafeAreaInsets();
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const navigation = useNavigation();
 
-  useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
-  }, []);
+  const canGoBack = navigation.canGoBack();
+  const shouldShowBack = showBack ?? canGoBack;
+
+  const handleBack = () => {
+    if (onBackPress) onBackPress();
+    else if (canGoBack) navigation.goBack();
+  };
+
+  const isTransparent = variant === 'transparent';
+  const paddingTop = insets.top + (Platform.OS === 'android' ? 4 : 0);
 
   return (
-    <Animated.View style={[h.wrap, {
-      backgroundColor: transparent ? 'transparent' : colors.bgCard,
-      borderBottomColor: transparent ? 'transparent' : colors.borderPrimary,
-      paddingTop: insets.top + 4,
-      ...(!transparent ? shadows.sm : {}),
-      opacity: fadeAnim,
-    }]}>
-      <StatusBar barStyle="dark-content" />
-      <View style={h.row}>
-        {onBack ? (
-          <TouchableOpacity onPress={onBack} style={[h.backBtn, { backgroundColor: colors.bgSecondary, borderRadius: radius.md }]} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-            <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
-        ) : (
-          <View style={{ width: 44 }} />
-        )}
-
-        <View style={h.center}>
-          <Text style={[h.title, type.h4, { color: colors.textPrimary }]} numberOfLines={1}>{title}</Text>
-          {subtitle && <Text style={[h.subtitle, type.caption, { color: colors.textMuted }]} numberOfLines={1}>{subtitle}</Text>}
-        </View>
-
-        <View style={h.right}>
-          {(rightIcon || rightLabel) && onRightPress ? (
-            <TouchableOpacity onPress={onRightPress} style={[h.rightBtn, { backgroundColor: colors.accentBg, borderRadius: radius.full }]} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-              {rightIcon && <Ionicons name={rightIcon as any} size={20} color={colors.accent} />}
-              {rightLabel && <Text style={[h.rightLabel, type.caption, { color: colors.accent }]}>{rightLabel}</Text>}
+    <View
+      style={[
+        styles.wrapper,
+        { paddingTop, backgroundColor: isTransparent ? 'transparent' : colors.bgCard },
+        bordered && !isTransparent && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderPrimary, ...shadows.sm },
+        style,
+      ]}
+    >
+      <View style={styles.row}>
+        <View style={styles.sideZone}>
+          {shouldShowBack && (
+            <TouchableOpacity onPress={handleBack} hitSlop={8} activeOpacity={0.7} style={[styles.backButton, { backgroundColor: colors.bgSecondary, borderRadius: radius.md }]}>
+              <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
             </TouchableOpacity>
-          ) : (
-            <View style={{ width: 44 }} />
           )}
         </View>
+
+        <View style={[styles.titleZone, !centerTitle && styles.titleZoneLeft]}>
+          <Text style={[styles.title, type.h3, { color: colors.textPrimary }, !centerTitle && styles.titleLeft]} numberOfLines={1}>{title}</Text>
+          {subtitle && <Text style={[styles.subtitle, type.caption, { color: colors.textMuted }]} numberOfLines={1}>{subtitle}</Text>}
+        </View>
+
+        <View style={[styles.sideZone, styles.rightZone]}>
+          {rightContent ?? actions.slice(0, 3).map((action, i) => <ActionButton key={i} action={action} />)}
+        </View>
       </View>
-    </Animated.View>
+
+      {bottomContent && <View style={styles.bottomSlot}>{bottomContent}</View>}
+    </View>
   );
 };
 
-const h = StyleSheet.create({
-  wrap: { borderBottomWidth: StyleSheet.hairlineWidth },
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 10, minHeight: 52 },
-  backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  center: { flex: 1, alignItems: 'center' },
+const ActionButton: React.FC<{ action: HeaderAction }> = ({ action }) => {
+  const { colors, radius } = useTheme();
+
+  return (
+    <TouchableOpacity
+      onPress={action.onPress}
+      disabled={action.disabled}
+      hitSlop={8}
+      activeOpacity={0.7}
+      style={[styles.actionButton, { backgroundColor: colors.bgSecondary, borderRadius: radius.md }, action.disabled && styles.actionDisabled]}
+      accessibilityLabel={action.label}
+    >
+      <Ionicons name={action.icon} size={20} color={colors.textPrimary} />
+      {action.badge !== undefined && action.badge > 0 && (
+        <View style={[styles.badge, { backgroundColor: colors.error, borderRadius: radius.full }]}>
+          <Text style={styles.badgeText}>{action.badge > 99 ? '99+' : action.badge}</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+};
+
+const styles = StyleSheet.create({
+  wrapper: { paddingHorizontal: 16, paddingBottom: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', minHeight: 48 },
+  sideZone: { width: 80, flexDirection: 'row', alignItems: 'center' },
+  rightZone: { justifyContent: 'flex-end', gap: 6 },
+  titleZone: { flex: 1, alignItems: 'center' },
+  titleZoneLeft: { alignItems: 'flex-start', paddingLeft: 4 },
   title: { fontWeight: '700' },
+  titleLeft: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
   subtitle: { marginTop: 1 },
-  right: { width: 44, alignItems: 'flex-end' },
-  rightBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, gap: 4 },
-  rightLabel: { fontWeight: '600' },
+  backButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  actionButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  actionDisabled: { opacity: 0.4 },
+  badge: { position: 'absolute', top: -3, right: -3, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  badgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
+  bottomSlot: { marginTop: 10 },
 });

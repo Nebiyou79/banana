@@ -1,4 +1,5 @@
 // src/social/screens/SavedPostsScreen.tsx
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
 import { Share, StyleSheet } from 'react-native';
@@ -71,46 +72,51 @@ const SavedPostsScreen: React.FC = () => {
   );
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.bg }]}
-      edges={[]}
+    // Tab-like dedicated screen — LinearGradient background
+    <LinearGradient
+      colors={theme.bgGradient}
+      style={{ flex: 1 }}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0.3, y: 1 }}
     >
-      <FeedList
-        posts={posts}
-        loading={savedQ.isLoading}
-        refreshing={savedQ.isRefetching}
-        onRefresh={savedQ.refetch}
-        onEndReached={() => savedQ.fetchNextPage()}
-        hasNextPage={savedQ.hasNextPage}
-        isFetchingNextPage={savedQ.isFetchingNextPage}
-        onReact={handleReact}
-        onRemoveReact={removeReact}
-        onDislike={handleDislike}
-        onComment={(p) => {
-          setSelectedPost(p);
-          setSheetVisible(true);
-        }}
-        onShare={handleShare}
-        onSave={(id, isSaved) => toggleSave({ id, isSaved })}
-        onAuthorPress={(userId) =>
-          navigation.navigate('PublicProfile', { userId })
-        }
-        onAdPress={handleAdPress}
-        adPlacement="savedPosts"
-        emptyTitle="Nothing saved yet"
-        emptySubtitle="Tap the bookmark on any post to save it for later."
-        emptyIcon="bookmark-outline"
-      />
+      <SafeAreaView style={styles.container} edges={[]}>
+        <FeedList
+          posts={posts}
+          loading={savedQ.isLoading}
+          refreshing={savedQ.isRefetching}
+          onRefresh={savedQ.refetch}
+          onEndReached={() => savedQ.fetchNextPage()}
+          hasNextPage={savedQ.hasNextPage}
+          isFetchingNextPage={savedQ.isFetchingNextPage}
+          onReact={handleReact}
+          onRemoveReact={removeReact}
+          onDislike={handleDislike}
+          onComment={(p) => {
+            setSelectedPost(p);
+            setSheetVisible(true);
+          }}
+          onShare={handleShare}
+          onSave={(id, isSaved) => toggleSave({ id, isSaved })}
+          onAuthorPress={(userId) =>
+            navigation.navigate('PublicProfile', { userId })
+          }
+          onAdPress={handleAdPress}
+          adPlacement="savedPosts"
+          emptyTitle="Nothing saved yet"
+          emptySubtitle="Tap the bookmark on any post to save it for later."
+          emptyIcon="bookmark-outline"
+        />
 
-      <CommentsSheet
-        visible={sheetVisible}
-        post={selectedPost}
-        onClose={() => setSheetVisible(false)}
-        onAuthorPress={(userId) =>
-          navigation.navigate('PublicProfile', { userId })
-        }
-      />
-    </SafeAreaView>
+        <CommentsSheet
+          visible={sheetVisible}
+          post={selectedPost}
+          onClose={() => setSheetVisible(false)}
+          onAuthorPress={(userId) =>
+            navigation.navigate('PublicProfile', { userId })
+          }
+        />
+      </SafeAreaView>
+    </LinearGradient>
   );
 };
 
@@ -119,3 +125,4 @@ const styles = StyleSheet.create({
 });
 
 export default SavedPostsScreen;
+// ✅ role-theme-migrated

@@ -1,8 +1,5 @@
 /**
  * screens/freelancer/MyReviewsScreen.tsx
- *
- * Fetches reviews via the freelancer marketplace profile.
- * Mirrors the web /dashboard/freelancer/reviews page.
  */
 import React, { useEffect, useState } from 'react';
 import {
@@ -11,13 +8,15 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
+import { FONT_SIZE } from '../../theme/tokens';
 import { useFreelancerProfile } from '../../hooks/useFreelancer';
-import { ScreenWrapper, ScreenHeader, EmptyState } from '../../components/shared/UIComponents';
+import { ScreenWrapper, EmptyState } from '../../components/shared/UIComponents';
 import { StarRating } from '../../components/freelancer/StarRating';
+import api from '../../lib/api';
 import type { FreelancerReview } from '../../types/freelancer';
-
-const ACCENT = '#F59E0B';
+import { ScreenHeader } from '../../components/freelancer/ScreenHeader';
 
 interface ReviewsData {
   reviews: FreelancerReview[];
@@ -26,22 +25,19 @@ interface ReviewsData {
 
 export const MyReviewsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { theme }  = useThemeStore();
-  const { colors, typography, spacing, borderRadius, shadows } = theme;
+  const { colors, radius, spacing } = useTheme();
 
   const { data: profile } = useFreelancerProfile();
   const [reviewsData, setReviewsData] = useState<ReviewsData | null>(null);
-  const [loading, setLoading]         = useState(false);
-  const [refreshing, setRefreshing]   = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const profileId = profile?.freelancerProfile?._id ?? profile?._id;
+  const profileId = (profile as any)?.freelancerProfile?._id ?? (profile as any)?._id;
 
   const fetchReviews = async (silent = false) => {
     if (!profileId) return;
     silent ? setRefreshing(true) : setLoading(true);
     try {
-      // Use the marketplace reviews endpoint via direct API call
-      const { default: api } = await import('../../lib/api');
       const res = await api.get(`/freelancers/${profileId}/reviews`);
       if (res.data.success) {
         setReviewsData({
@@ -59,7 +55,7 @@ export const MyReviewsScreen: React.FC = () => {
 
   useEffect(() => { fetchReviews(); }, [profileId]);
 
-  const avg   = reviewsData?.summary?.average ?? 0;
+  const avg = reviewsData?.summary?.average ?? 0;
   const total = reviewsData?.summary?.count ?? 0;
   const reviews = reviewsData?.reviews ?? [];
 
@@ -73,20 +69,22 @@ export const MyReviewsScreen: React.FC = () => {
         </View>
       ) : (
         <ScrollView
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchReviews(true)} tintColor={ACCENT} />}
-          contentContainerStyle={{ padding: spacing[4], paddingBottom: 40 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => fetchReviews(true)} tintColor={colors.warning} />
+          }
+          contentContainerStyle={{ padding: spacing.lg, paddingBottom: 40 }}
           showsVerticalScrollIndicator={false}
         >
           {/* Summary card */}
           <View style={[styles.summaryCard, {
-            backgroundColor: ACCENT,
-            borderRadius: borderRadius.xl,
+            backgroundColor: colors.warning,
+            borderRadius: radius.xl,
           }]}>
             <Text style={{ color: '#fff', fontSize: 48, fontWeight: '900', lineHeight: 56 }}>
               {avg > 0 ? avg.toFixed(1) : '—'}
             </Text>
             <StarRating value={avg} size={18} color="#fff" />
-            <Text style={{ color: '#ffffff90', fontSize: typography.sm, marginTop: 6 }}>
+            <Text style={{ color: withAlpha('#fff', 0.56), fontSize: FONT_SIZE.sm, marginTop: 6 }}>
               Based on {total} review{total !== 1 ? 's' : ''}
             </Text>
           </View>
@@ -110,8 +108,7 @@ export const MyReviewsScreen: React.FC = () => {
 };
 
 const ReviewCard: React.FC<{ review: FreelancerReview }> = ({ review }) => {
-  const { theme } = useThemeStore();
-  const { colors, borderRadius, typography, spacing, shadows } = theme;
+  const { colors, radius } = useTheme();
   const [imgErr, setImgErr] = useState(false);
 
   const company = review.companyId;
@@ -120,10 +117,9 @@ const ReviewCard: React.FC<{ review: FreelancerReview }> = ({ review }) => {
 
   return (
     <View style={[styles.reviewCard, {
-      backgroundColor: colors.surface,
+      backgroundColor: colors.bgCard,
       borderColor: colors.border,
-      borderRadius: borderRadius.lg,
-      ...shadows.sm,
+      borderRadius: radius.lg,
     }]}>
       {/* Header */}
       <View style={styles.reviewHeader}>
@@ -136,7 +132,7 @@ const ReviewCard: React.FC<{ review: FreelancerReview }> = ({ review }) => {
               onError={() => setImgErr(true)}
             />
           ) : (
-            <View style={[styles.companyInitials, { backgroundColor: colors.primary + '20' }]}>
+            <View style={[styles.companyInitials, { backgroundColor: withAlpha(colors.primary, 0.12) }]}>
               <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '700' }}>
                 {company?.name?.charAt(0)?.toUpperCase() ?? 'C'}
               </Text>
@@ -163,7 +159,7 @@ const ReviewCard: React.FC<{ review: FreelancerReview }> = ({ review }) => {
 
       {/* Sub-ratings */}
       {hasSubRatings && (
-        <View style={[styles.subRatingsBox, { backgroundColor: colors.background, borderRadius: borderRadius.md }]}>
+        <View style={[styles.subRatingsBox, { backgroundColor: colors.bg, borderRadius: radius.md }]}>
           {Object.entries(review.subRatings!).map(([key, val]) => {
             if (!val || val === 0) return null;
             return (

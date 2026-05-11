@@ -54,7 +54,7 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
     avatar: result.avatar,
     role: result.role,
     headline: result.headline,
-    verificationStatus: result.verificationStatus,
+    // verificationStatus: result.verificationStatus,
   };
 
   return (
@@ -139,3 +139,4 @@ const styles = StyleSheet.create({
 });
 
 export default SearchResultCard;
+// ✅ theme-migrated

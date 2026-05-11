@@ -1,74 +1,68 @@
+// =============================================================================
+// FILE 1: mobile/src/social/types/chat.ts — COMPLETE TYPES DEFINITION
+// =============================================================================
+
 /**
- * Chat & Presence Types
- * -----------------------------------------------------------------------------
- * Backend models: server/src/models/Conversation.js, server/src/models/Message.js
- * Keep these shapes in sync with the backend — do NOT invent fields.
+ * mobile/src/social/types/chat.ts
+ * ─────────────────────────────────────────────────────────────────────────────
+ * BananaLink Chat Types v4 — Complete type definitions for chat system
+ * 
+ * Aligns with backend models:
+ * - Conversation model (Conversation.js)
+ * - Message model (Message.js)
+ * - Controller response shapes
+ * - Socket event payloads
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import type { UserRole, VerificationStatus } from './index';
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Presence
-// ──────────────────────────────────────────────────────────────────────────────
-
-export type PresenceLevel =
-  | 'active_now'
-  | 'recently'
-  | 'today'
-  | 'this_week'
-  | 'two_weeks'
-  | 'inactive';
-
-export interface UserPresence {
-  userId: string;
-  isOnline: boolean;
-  lastSeen: string; // ISO date
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Chat participant (lightweight user embed)
-// ──────────────────────────────────────────────────────────────────────────────
+// ─── User (minimal participant info) ─────────────────────────────────────────
 
 export interface ChatUser {
   _id: string;
   name: string;
-  avatar?: string;
-  role: UserRole;
-  headline?: string;
-  verificationStatus?: VerificationStatus;
+  avatar?: string | null;
+  role?: string;
+  headline?: string | null;
+  lastSeen?: string | null;
   isOnline?: boolean;
-  lastSeen?: string;
+  verificationStatus?: 'none' | 'partial' | 'full';
+  socialStats?: {
+    followerCount?: number;
+    followingCount?: number;
+    postCount?: number;
+  };
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Conversation
-// ──────────────────────────────────────────────────────────────────────────────
+// ─── Conversation ─────────────────────────────────────────────────────────────
 
 export type ConversationStatus = 'active' | 'request' | 'declined';
-export type ConversationType = 'direct'; // future: 'group'
+export type ConversationType = 'direct';
 
 export interface Conversation {
   _id: string;
   participants: ChatUser[];
   type: ConversationType;
   status: ConversationStatus;
-  requestedBy?: string;
-  lastMessage?: Message;
-  lastMessageAt?: string;
-  unreadCount: number; // derived for current user
-  otherUser: ChatUser; // derived for current user (the non-self participant)
+  requestedBy?: string | null;
+  lastMessage?: Message | null;
+  lastMessageAt: string;
+  unreadCounts?: Record<string, number>;
+  unreadCount?: number;        // Computed for viewer (injected by enrichForViewer)
+  deletedFor?: string[];
+  isArchived?: boolean;
   createdAt: string;
   updatedAt: string;
+  // ─── Viewer-specific fields (injected by enrichForViewer) ───────────
+  otherUser?: ChatUser | null;
+  viewerRole?: 'requester' | 'recipient';
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Message
-// ──────────────────────────────────────────────────────────────────────────────
+// ─── Message ──────────────────────────────────────────────────────────────────
 
-export type MessageType = 'text' | 'emoji' | 'deleted';
+export type MessageType = 'text' | 'emoji' | 'image' | 'system' | 'deleted';
 export type MessageStatus = 'sent' | 'delivered' | 'read';
 
-export interface MessageReadReceipt {
+export interface ReadReceipt {
   user: string;
   readAt: string;
 }
@@ -80,18 +74,63 @@ export interface Message {
   content: string | null;
   type: MessageType;
   status: MessageStatus;
-  readBy: MessageReadReceipt[];
-  deletedAt?: string;
-  deletedBy?: string;
-  canDeleteUntil?: string;
-  replyTo?: string | Message;
+  readBy: ReadReceipt[];
+  deletedAt?: string | null;
+  deletedBy?: string | null;
+  deletedFor?: string[];
+  replyTo?: Message | string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// API payload shapes
-// ──────────────────────────────────────────────────────────────────────────────
+// ─── API Response Shapes ──────────────────────────────────────────────────────
+
+export interface ConversationResponse {
+  success: boolean;
+  data: Conversation;
+  created?: boolean;
+}
+
+export interface ConversationListResponse {
+  success: boolean;
+  data: Conversation[];
+  requestsCount?: number;
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+}
+
+export interface MessageResponse {
+  success: boolean;
+  data: Message;
+}
+
+export interface MessageListResponse {
+  success: boolean;
+  data: Message[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+}
+
+export interface OnlineContact {
+  _id: string;
+  name: string;
+  avatar?: string | null;
+  isOnline: boolean;
+  lastSeen?: string | null;
+  headline?: string | null;
+  role?: string;
+  verificationStatus?: string;
+}
+
+// ─── Payloads ─────────────────────────────────────────────────────────────────
 
 export interface SendMessagePayload {
   conversationId: string;
@@ -100,37 +139,35 @@ export interface SendMessagePayload {
   replyTo?: string;
 }
 
-export interface ConversationListResponse {
-  success: boolean;
-  data: Conversation[];
-  pagination?: {
-    page: number;
-    limit: number;
-    total: number;
-    pages: number;
-  };
-  requestsCount?: number;
+export interface DeleteMessagePayload {
+  messageId: string;
+  conversationId: string;
+  deleteFor: 'me' | 'everyone';
 }
 
-export interface MessageListResponse {
-  success: boolean;
-  data: Message[];
-  pagination?: {
-    page: number;
-    limit: number;
-    total: number;
-    pages: number;
-  };
+// ─── Socket Event Types ───────────────────────────────────────────────────────
+
+export interface SocketNewMessageEvent {
+  message: Message;
+  conversationId: string;
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Socket events (typed)
-// ──────────────────────────────────────────────────────────────────────────────
+export interface SocketMessageDeletedEvent {
+  messageId: string;
+  conversationId: string;
+  deletedFor: 'me' | 'everyone';
+}
 
 export interface SocketTypingEvent {
-  userId: string;
   conversationId: string;
+  userId: string;
   isTyping: boolean;
+}
+
+export interface SocketMessageReadEvent {
+  conversationId: string;
+  userId: string;
+  readAt: string;
 }
 
 export interface SocketPresenceEvent {
@@ -139,14 +176,22 @@ export interface SocketPresenceEvent {
   lastSeen: string;
 }
 
-export interface SocketMessageReadEvent {
-  messageId: string;
+export interface SocketConversationUpdateEvent {
   conversationId: string;
-  userId: string;
-  readAt: string;
+  status?: ConversationStatus;
 }
 
-export interface SocketNewMessageEvent {
-  message: Message;
-  conversation: Conversation;
+// ─── Presence Types ───────────────────────────────────────────────────────────
+
+export type PresenceLevel =
+  | 'active_now'   // Online right now (socket connected or last seen < 1 min)
+  | 'recently'     // Last seen 1-59 min ago
+  | 'today'        // Last seen 1-23 hours ago
+  | 'this_week'    // Last seen 1-6 days ago
+  | 'two_weeks'    // Last seen 7-13 days ago
+  | 'inactive';    // Last seen 14+ days ago or unknown
+  
+export interface PresenceData {
+  isOnline: boolean;
+  lastSeen?: string;
 }

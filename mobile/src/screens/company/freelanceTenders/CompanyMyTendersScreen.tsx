@@ -12,7 +12,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useThemeStore } from '../../../store/themeStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../../hooks/useTheme';
+import { withAlpha } from '../../../theme/utils';
 import {
   useCloseFreelanceTender,
   useDeleteFreelanceTender,
@@ -40,8 +42,8 @@ const STATUS_TABS: Array<{ key: TabStatus; label: string }> = [
 ];
 
 const CompanyMyTendersScreen: React.FC<Props> = ({ navigation }) => {
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+  const { colors, spacing } = useTheme();
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabStatus>('all');
 
   const { data, isLoading, refetch, isRefetching } = useMyPostedFreelanceTenders({
@@ -129,42 +131,35 @@ const CompanyMyTendersScreen: React.FC<Props> = ({ navigation }) => {
         onPublish={() => handlePublish(item)}
         onClose={() => handleClose(item)}
         onDelete={() => handleDelete(item)}
-        primaryColor={c.primary}
-        textColor={c.text}
-        mutedColor={c.textMuted}
-        surfaceColor={c.surface ?? c.card}
-        borderColor={c.border ?? c.textMuted + '33'}
-        successColor={c.success}
-        errorColor={c.error ?? '#EF4444'}
       />
     ),
-    [navigation, c, handlePublish, handleClose, handleDelete]
+    [navigation, handlePublish, handleClose, handleDelete]
   );
 
   return (
     <SafeAreaView
-      style={[styles.root, { backgroundColor: c.background ?? c.card }]}
+      style={[styles.root, { backgroundColor: colors.bg }]}
       edges={['top']}
     >
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={[styles.title, { color: c.text }]}>My Tenders</Text>
-          <Text style={[styles.subtitle, { color: c.textMuted }]}>
+          <Text style={[styles.title, { color: colors.text }]}>My Tenders</Text>
+          <Text style={[styles.subtitle, { color: colors.textMuted }]}>
             {totalCount} tender{totalCount !== 1 ? 's' : ''}
           </Text>
         </View>
         <TouchableOpacity
           onPress={() => navigation.navigate('CompanyTenderCreate')}
-          style={[styles.createBtn, { backgroundColor: c.primary }]}
+          style={[styles.createBtn, { backgroundColor: colors.primary }]}
           accessibilityRole="button"
         >
-          <Text style={styles.createBtnText}>+ Create</Text>
+          <Text style={[styles.createBtnText, { color: colors.textInverse }]}>+ Create</Text>
         </TouchableOpacity>
       </View>
 
       {/* Status tabs */}
-      <View style={[styles.tabsBar, { borderBottomColor: c.border ?? c.textMuted + '22' }]}>
+      <View style={[styles.tabsBar, { borderBottomColor: colors.border }]}>
         <FlashList
           data={STATUS_TABS}
           horizontal
@@ -179,7 +174,7 @@ const CompanyMyTendersScreen: React.FC<Props> = ({ navigation }) => {
                   styles.tab,
                   active && {
                     borderBottomWidth: 2,
-                    borderBottomColor: c.primary,
+                    borderBottomColor: colors.primary,
                   },
                 ]}
                 accessibilityRole="tab"
@@ -188,7 +183,10 @@ const CompanyMyTendersScreen: React.FC<Props> = ({ navigation }) => {
                 <Text
                   style={[
                     styles.tabText,
-                    { color: active ? c.primary : c.textMuted, fontWeight: active ? '700' : '400' },
+                    {
+                      color: active ? colors.primary : colors.textMuted,
+                      fontWeight: active ? '700' : '400',
+                    },
                   ]}
                 >
                   {tab.label}
@@ -208,12 +206,15 @@ const CompanyMyTendersScreen: React.FC<Props> = ({ navigation }) => {
           data={tenders}
           renderItem={renderItem}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={{
+            padding: 16,
+            paddingBottom: insets.bottom + spacing.xxl,
+          }}
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
               onRefresh={refetch}
-              tintColor={c.primary}
+              tintColor={colors.primary}
             />
           }
           ListEmptyComponent={
@@ -252,13 +253,6 @@ interface TenderOwnerCardProps {
   onPublish: () => void;
   onClose: () => void;
   onDelete: () => void;
-  primaryColor: string;
-  textColor: string;
-  mutedColor: string;
-  surfaceColor: string;
-  borderColor: string;
-  successColor: string;
-  errorColor: string;
 }
 
 const TenderOwnerCard: React.FC<TenderOwnerCardProps> = ({
@@ -269,27 +263,24 @@ const TenderOwnerCard: React.FC<TenderOwnerCardProps> = ({
   onPublish,
   onClose,
   onDelete,
-  primaryColor,
-  textColor,
-  mutedColor,
-  surfaceColor,
-  borderColor,
-  successColor,
-  errorColor,
 }) => {
+  const { colors } = useTheme();
   const appCount = tender.metadata?.totalApplications ?? 0;
 
   return (
     <TouchableOpacity
       onPress={onPress}
-      style={[styles.card, { backgroundColor: surfaceColor, borderColor }]}
+      style={[
+        styles.card,
+        { backgroundColor: colors.bgCard, borderColor: colors.border },
+      ]}
       activeOpacity={0.8}
       accessibilityRole="button"
     >
       {/* Top row */}
       <View style={styles.cardTop}>
         <View style={styles.cardTitleRow}>
-          <Text style={[styles.cardTitle, { color: textColor }]} numberOfLines={2}>
+          <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={2}>
             {tender.title}
           </Text>
         </View>
@@ -297,7 +288,7 @@ const TenderOwnerCard: React.FC<TenderOwnerCardProps> = ({
       </View>
 
       {/* Category */}
-      <Text style={[styles.cardCategory, { color: mutedColor }]} numberOfLines={1}>
+      <Text style={[styles.cardCategory, { color: colors.textMuted }]} numberOfLines={1}>
         {tender.procurementCategory}
       </Text>
 
@@ -308,11 +299,11 @@ const TenderOwnerCard: React.FC<TenderOwnerCardProps> = ({
       </View>
 
       {/* Stats */}
-      <View style={[styles.statsRow, { borderTopColor: borderColor }]}>
-        <Text style={[styles.statText, { color: mutedColor }]}>
+      <View style={[styles.statsRow, { borderTopColor: colors.border }]}>
+        <Text style={[styles.statText, { color: colors.textMuted }]}>
           {appCount} applicant{appCount !== 1 ? 's' : ''}
         </Text>
-        <Text style={[styles.statText, { color: mutedColor }]}>
+        <Text style={[styles.statText, { color: colors.textMuted }]}>
           {tender.metadata?.views ?? 0} views
         </Text>
       </View>
@@ -321,49 +312,76 @@ const TenderOwnerCard: React.FC<TenderOwnerCardProps> = ({
       <View style={styles.actionsRow}>
         <TouchableOpacity
           onPress={onViewApplicants}
-          style={[styles.actionBtn, { backgroundColor: primaryColor + '15', borderColor: primaryColor + '44' }]}
+          style={[
+            styles.actionBtn,
+            {
+              backgroundColor: withAlpha(colors.primary, 0.08),
+              borderColor: withAlpha(colors.primary, 0.27),
+            },
+          ]}
           accessibilityRole="button"
         >
-          <Text style={[styles.actionBtnText, { color: primaryColor }]}>
+          <Text style={[styles.actionBtnText, { color: colors.primary }]}>
             Applicants ({appCount})
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           onPress={onEdit}
-          style={[styles.actionBtn, { backgroundColor: surfaceColor, borderColor }]}
+          style={[
+            styles.actionBtn,
+            { backgroundColor: colors.bgCard, borderColor: colors.border },
+          ]}
           accessibilityRole="button"
         >
-          <Text style={[styles.actionBtnText, { color: textColor }]}>Edit</Text>
+          <Text style={[styles.actionBtnText, { color: colors.text }]}>Edit</Text>
         </TouchableOpacity>
 
         {tender.status === 'draft' && (
           <TouchableOpacity
             onPress={onPublish}
-            style={[styles.actionBtn, { backgroundColor: successColor + '15', borderColor: successColor + '44' }]}
+            style={[
+              styles.actionBtn,
+              {
+                backgroundColor: withAlpha(colors.success, 0.08),
+                borderColor: withAlpha(colors.success, 0.27),
+              },
+            ]}
             accessibilityRole="button"
           >
-            <Text style={[styles.actionBtnText, { color: successColor }]}>Publish</Text>
+            <Text style={[styles.actionBtnText, { color: colors.success }]}>Publish</Text>
           </TouchableOpacity>
         )}
 
         {tender.status === 'published' && (
           <TouchableOpacity
             onPress={onClose}
-            style={[styles.actionBtn, { backgroundColor: errorColor + '10', borderColor: errorColor + '33' }]}
+            style={[
+              styles.actionBtn,
+              {
+                backgroundColor: withAlpha(colors.danger, 0.06),
+                borderColor: withAlpha(colors.danger, 0.20),
+              },
+            ]}
             accessibilityRole="button"
           >
-            <Text style={[styles.actionBtnText, { color: errorColor }]}>Close</Text>
+            <Text style={[styles.actionBtnText, { color: colors.danger }]}>Close</Text>
           </TouchableOpacity>
         )}
 
         {tender.status === 'draft' && (
           <TouchableOpacity
             onPress={onDelete}
-            style={[styles.actionBtn, { backgroundColor: errorColor + '10', borderColor: errorColor + '33' }]}
+            style={[
+              styles.actionBtn,
+              {
+                backgroundColor: withAlpha(colors.danger, 0.06),
+                borderColor: withAlpha(colors.danger, 0.20),
+              },
+            ]}
             accessibilityRole="button"
           >
-            <Text style={[styles.actionBtnText, { color: errorColor }]}>Delete</Text>
+            <Text style={[styles.actionBtnText, { color: colors.danger }]}>Delete</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -390,7 +408,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: 'center',
   },
-  createBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  createBtnText: { fontSize: 14, fontWeight: '700' },
   tabsBar: { borderBottomWidth: StyleSheet.hairlineWidth },
   tab: {
     paddingHorizontal: 14,
@@ -400,7 +418,6 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   tabText: { fontSize: 14 },
-  listContent: { padding: 16 },
   card: {
     borderWidth: 1,
     borderRadius: 16,

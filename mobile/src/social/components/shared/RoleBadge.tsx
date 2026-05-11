@@ -1,6 +1,41 @@
+export {
+  ROLE_COLORS,
+  DARK_SOCIAL,
+  LIGHT_SOCIAL,
+  ROLE_SPLASH_LABELS,
+  REACTION_EMOJI,
+  SPACING,
+  RADIUS,
+  TYPE,
+  withAlpha,
+  useSocialTheme,
+} from '../../theme/socialTheme';
+export type { SocialTheme } from '../../theme/socialTheme';
+
+export {
+  useFadeIn,
+  useSlideUp,
+  usePressScale,
+  useLikeBurst,
+  useSkeletonPulse,
+  useTabIndicator,
+  useHeaderCollapse,
+} from '../../theme/animations';
+
+export {
+  ADS_CONFIG,
+  getAdForPlacement,
+  injectAdsIntoFeed,
+} from '../../theme/adsConfig';
+
+export {
+  getRoleBadgeStyle,
+  getFollowButtonStyle,
+  type FollowState,
+} from '../../theme/styleHelpers';
 import React, { memo } from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { ROLE_COLORS, useSocialTheme } from '../../theme/socialTheme';
+import { useSocialTheme } from '../../theme/socialTheme';
 import type { UserRole } from '../../types';
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -12,32 +47,36 @@ const ROLE_LABELS: Record<UserRole, string> = {
 
 interface Props {
   role?: UserRole;
-  size?: 'xs' | 'sm';
+  size?: 'sm' | 'md';
   style?: ViewStyle;
 }
 
 /**
- * Small uppercase pill that displays the owner's role. Color follows the
- * role's own palette (not the viewer's), so a candidate sees a freelancer's
- * purple badge on a freelancer's post.
+ * Small uppercase pill that displays the owner's role. The role's own palette
+ * is used (not the viewer's), so a candidate sees a freelancer's purple badge
+ * on a freelancer's post. Background uses `withAlpha(roleColor, 0.12)`.
  */
-const RoleBadge: React.FC<Props> = memo(({ role, size = 'xs', style }) => {
-  const theme = useSocialTheme();
+const RoleBadge: React.FC<Props> = memo(({ role, size = 'sm', style }) => {
+  const { roleColors, withAlpha, colors } = useSocialTheme();
   if (!role) return null;
 
-  const colors = ROLE_COLORS[role] ?? ROLE_COLORS.candidate;
+  const palette = roleColors[role] ?? roleColors.candidate;
   const label = ROLE_LABELS[role] ?? role;
-  const sm = size === 'sm';
+  const md = size === 'md';
+
+  const height = md ? 22 : 18;
+  const paddingHorizontal = md ? 8 : 6;
+  const fontSize = md ? 11 : 10;
 
   return (
     <View
       style={[
         styles.badge,
         {
-          backgroundColor: theme.dark ? `${colors.primary}22` : colors.lighter,
-          borderColor: theme.dark ? colors.light : colors.adBorder,
-          paddingHorizontal: sm ? 7 : 5,
-          paddingVertical: sm ? 2 : 1,
+          height,
+          paddingHorizontal,
+          backgroundColor: withAlpha(palette.primary, 0.12),
+          borderColor: withAlpha(palette.primary, 0.28),
         },
         style,
       ]}
@@ -47,10 +86,11 @@ const RoleBadge: React.FC<Props> = memo(({ role, size = 'xs', style }) => {
         style={[
           styles.text,
           {
-            color: theme.dark ? colors.light : colors.dark,
-            fontSize: sm ? 10 : 9,
+            color: palette.primary,
+            fontSize,
           },
         ]}
+        numberOfLines={1}
       >
         {label}
       </Text>
@@ -62,7 +102,9 @@ RoleBadge.displayName = 'RoleBadge';
 
 const styles = StyleSheet.create({
   badge: {
-    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 4,
     marginLeft: 5,
     alignSelf: 'flex-start',

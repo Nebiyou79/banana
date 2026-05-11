@@ -1,31 +1,31 @@
-// ============================================================
-// NAVIGATION TYPES — All Roles
-// ============================================================
+// src/navigation/types.ts
+// ─────────────────────────────────────────────────────────────────────────────
+// Canonical navigation param lists for all roles.
+// Keep this file as the single source of truth for tab/stack param shapes.
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ─── AUTH ────────────────────────────────────────────────────
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+
 export type AuthStackParamList = {
+  Onboarding: undefined;
   Login: undefined;
   Register: undefined;
+  RoleSelect: undefined;
+  OtpVerify: { email: string };
   ForgotPassword: undefined;
-  RoleSelection: undefined;
+  ResetPassword: { email: string };
+  PhoneRegister: undefined;
+  PhoneOtp: { phone: string };
 };
 
-// ─── SHARED SOCIAL (used by all roles) ───────────────────────
-export type SocialTabParamList = {
-  Feed: undefined;           // ⚠️ Screen not yet created
-  MyPosts: undefined;        // ⚠️ Screen not yet created
-  Network: undefined;        // ⚠️ Screen not yet created
-  SocialProfile: undefined;  // ⚠️ Screen not yet created
-  SavedPosts: undefined;     // ⚠️ Screen not yet created
-};
-
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // 1. CANDIDATE
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
+
 export type CandidateMainTabParamList = {
   Home: undefined;
-  Jobs: undefined;         // opens CandidateJobsTab navigator
-  Social: undefined;       // opens shared SocialTab navigator
+  Jobs: undefined;
+  Social: undefined;
   Profile: undefined;
   More: undefined;
 };
@@ -34,7 +34,6 @@ export type CandidateJobsTabParamList = {
   JobsList: undefined;
   SavedJobs: undefined;
   Applications: undefined;
-  BackToHome: undefined;   // triggers navigation.navigate('Home')
 };
 
 export type CandidateMoreStackParamList = {
@@ -42,16 +41,16 @@ export type CandidateMoreStackParamList = {
   Notifications: undefined;
   Settings: undefined;
   Help: undefined;
-  // Add future screens here ⬇
 };
 
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // 2. FREELANCER
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
+
 export type FreelancerMainTabParamList = {
   Home: undefined;
-  Tenders: undefined;      // opens FreelancerTendersTab navigator
-  Social: undefined;       // opens shared SocialTab navigator
+  Tenders: undefined;
+  Social: undefined;
   Profile: undefined;
   More: undefined;
 };
@@ -60,7 +59,6 @@ export type FreelancerTendersTabParamList = {
   TendersList: undefined;
   SavedTenders: undefined;
   Proposals: undefined;
-  BackToHome: undefined;   // triggers navigation.navigate('Home')
 };
 
 export type FreelancerMoreStackParamList = {
@@ -68,18 +66,18 @@ export type FreelancerMoreStackParamList = {
   Notifications: undefined;
   Settings: undefined;
   Help: undefined;
-  // Add future screens here ⬇
 };
 
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // 3. COMPANY
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
+
 export type CompanyMainTabParamList = {
   Home: undefined;
-  Jobs: undefined;         // opens CompanyJobsTab navigator
-  Social: undefined;       // opens shared SocialTab navigator
-  Tenders: undefined;      // opens CompanyTendersTab navigator
-  Profile: undefined;      // opens CompanyProfileTab navigator
+  Jobs: undefined;
+  Social: undefined;
+  Tenders: undefined;
+  Profile: undefined;
   More: undefined;
 };
 
@@ -87,58 +85,32 @@ export type CompanyJobsTabParamList = {
   JobsList: undefined;
   CreateJob: undefined;
   JobApplications: undefined;
-  BackToHome: undefined;
-};
-
-// Tenders is the most complex navigator for Company
-export type CompanyTendersTabParamList = {
-  TenderDashboard: undefined;   // ⚠️ Screen not yet created
-  Tenders: undefined;           // opens CompanyTendersInner stack
-  Bids: undefined;              // opens CompanyBidsInner stack
-  Proposals: undefined;         // ⚠️ Screen not yet created
-  BackToHome: undefined;
-};
-
-export type CompanyTendersInnerStackParamList = {
-  MyFreelanceTenders: undefined;    // ⚠️ Screen not yet created
-  ProfessionalTenders: undefined;   // ⚠️ Screen not yet created
-  BrowseTenders: undefined;         // ⚠️ Screen not yet created
-  SavedTenders: undefined;          // ⚠️ Screen not yet created
-  Invitations: undefined;           // ⚠️ Screen not yet created
-  BackToTenders: undefined;         // returns to CompanyTendersTab
-};
-
-export type CompanyBidsInnerStackParamList = {
-  MyBids: undefined;       // ⚠️ Screen not yet created
-  ReceivedBids: undefined; // ⚠️ Screen not yet created
-  BackToTenders: undefined;
 };
 
 export type CompanyProfileTabParamList = {
   CompanyProfile: undefined;
-  Products: undefined;              // ⚠️ Screen not yet created
-  FreelanceMarketplace: undefined;  // ⚠️ Screen not yet created
-  BackToHome: undefined;
+  Products: undefined;
+  FreelanceMarketplace: undefined;
 };
 
 export type CompanyMoreStackParamList = {
   MoreMenu: undefined;
   Notifications: undefined;
   Settings: undefined;
-  Analytics: undefined;   // ⚠️ Screen not yet created
+  Analytics: undefined;
   Help: undefined;
-  // Add future screens here ⬇
 };
 
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // 4. ORGANIZATION
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
+
 export type OrganizationMainTabParamList = {
   Home: undefined;
-  Jobs: undefined;         // opens OrganizationJobsTab navigator
-  Social: undefined;       // opens shared SocialTab navigator
-  Tenders: undefined;      // opens OrganizationTendersTab navigator
-  Profile: undefined;      // opens OrganizationProfileTab navigator
+  Jobs: undefined;
+  Social: undefined;
+  Tenders: undefined;
+  Profile: undefined;
   More: undefined;
 };
 
@@ -146,28 +118,18 @@ export type OrganizationJobsTabParamList = {
   JobsList: undefined;
   CreateJob: undefined;
   JobApplications: undefined;
-  BackToHome: undefined;
-};
-
-export type OrganizationTendersTabParamList = {
-  TendersList: undefined;  // ⚠️ Screen not yet created
-  Bids: undefined;         // ⚠️ Screen not yet created
-  Proposals: undefined;    // ⚠️ Screen not yet created
-  BackToHome: undefined;
 };
 
 export type OrganizationProfileTabParamList = {
   OrganizationProfile: undefined;
-  FreelanceMarketplace: undefined;  // ⚠️ Screen not yet created
-  BackToHome: undefined;
+  FreelanceMarketplace: undefined;
 };
 
 export type OrganizationMoreStackParamList = {
   MoreMenu: undefined;
   Notifications: undefined;
   Settings: undefined;
-  Members: undefined;      // ⚠️ Screen not yet created
-  Analytics: undefined;    // ⚠️ Screen not yet created
+  Members: undefined;
+  Analytics: undefined;
   Help: undefined;
-  // Add future screens here ⬇
 };

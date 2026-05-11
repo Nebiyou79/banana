@@ -1,57 +1,103 @@
-// Badge.tsx
-import React from 'react';
+// src/components/ui/Badge.tsx
+// Usage: <Badge variant="role" role="candidate" size="md" />
+//        <Badge variant="status" status="success" label="Active" />
+
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
 
-type BadgeVariant = 'success' | 'error' | 'warning' | 'info' | 'default' | 'primary' | 'muted';
+type BadgeVariant = 'role' | 'status' | 'custom';
+type RoleType = 'candidate' | 'freelancer' | 'company' | 'organization';
+type StatusType = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 type BadgeSize = 'sm' | 'md';
 
 interface BadgeProps {
   label: string;
   variant?: BadgeVariant;
+  role?: RoleType;
+  status?: StatusType;
+  color?: string;
   size?: BadgeSize;
+  filled?: boolean;
 }
 
 export const Badge: React.FC<BadgeProps> = ({
   label,
-  variant = 'default',
+  variant = 'custom',
+  role,
+  status,
+  color,
   size = 'md',
+  filled = true,
 }) => {
-  const { colors, radius, type } = useTheme();
-  const { bg, text } = getColors(variant, colors);
+  const { colors: c, radius } = useTheme();
+
+  const resolvedColor = useMemo(() => {
+    if (variant === 'role' && role) return c[role];
+    if (variant === 'status' && status) {
+      if (status === 'neutral') return c.textMuted;
+      return c[status];
+    }
+    return color ?? c.primary;
+  }, [variant, role, status, color, c]);
+
+  const sizeStyle = size === 'sm' ? styles.sm : styles.md;
+  const textStyle = size === 'sm' ? styles.textSm : styles.textMd;
 
   return (
-    <View style={[styles.base, sizeStyles[size], { backgroundColor: bg, borderRadius: radius.sm }]}>
-      <Text style={[styles.text, textSizeStyles[size], { color: text }]} numberOfLines={1}>
-        {label}
+    <View
+      style={[
+        styles.base,
+        sizeStyle,
+        { borderRadius: radius.full },
+        filled
+          ? { backgroundColor: resolvedColor }
+          : {
+              backgroundColor: withAlpha(resolvedColor, 0.12),
+              borderWidth: 1,
+              borderColor: resolvedColor,
+            },
+      ]}
+    >
+      <Text
+        style={[
+          styles.text,
+          textStyle,
+          { color: filled ? '#FFFFFF' : resolvedColor },
+        ]}
+        numberOfLines={1}
+      >
+        {label.toUpperCase()}
       </Text>
     </View>
   );
 };
 
-const getColors = (variant: BadgeVariant, colors: any) => {
-  switch (variant) {
-    case 'success': return { bg: colors.successBg, text: colors.success };
-    case 'error':   return { bg: colors.errorBg,   text: colors.error };
-    case 'warning': return { bg: colors.warningBg, text: colors.warning };
-    case 'info':    return { bg: colors.infoBg,    text: colors.info };
-    case 'primary': return { bg: colors.accentBg, text: colors.accent };
-    case 'muted':   return { bg: colors.bgSecondary,  text: colors.textMuted };
-    default:        return { bg: colors.bgSecondary,  text: colors.textSecondary };
-  }
-};
-
-const sizeStyles: Record<BadgeSize, object> = {
-  sm: { paddingHorizontal: 6, paddingVertical: 2 },
-  md: { paddingHorizontal: 10, paddingVertical: 4 },
-};
-
-const textSizeStyles: Record<BadgeSize, object> = {
-  sm: { fontSize: 10, lineHeight: 14 },
-  md: { fontSize: 12, lineHeight: 16 },
-};
-
 const styles = StyleSheet.create({
-  base: { alignSelf: 'flex-start' },
-  text: { fontWeight: '600' },
+  base: {
+    alignSelf: 'flex-start',
+    overflow: 'hidden',
+  },
+  sm: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    height: 22,
+    justifyContent: 'center',
+  },
+  md: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    height: 28,
+    justifyContent: 'center',
+  },
+  text: {
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textAlignVertical: 'center',
+  },
+  textSm: { fontSize: 10, lineHeight: 14 },
+  textMd: { fontSize: 12, lineHeight: 16 },
 });
+
+export default Badge;

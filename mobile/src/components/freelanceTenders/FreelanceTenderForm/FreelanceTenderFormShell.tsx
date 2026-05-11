@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../../../store/themeStore';
 import {
   useCreateFreelanceTender,
+  useFreelanceTenderCategories,
   useFreelanceTenderEditData,
   usePublishFreelanceTender,
   useUpdateFreelanceTender,
@@ -149,8 +150,8 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
-  // Hooks
-  const { data: categories } = useFreelanceTenderCategories();
+  // BUG 1 FIX: import and use the real hook — no local stub below
+  const { data: categoriesRaw = {} } = useFreelanceTenderCategories();
   const { data: editData } = useFreelanceTenderEditData(tenderId ?? '');
   const createMutation = useCreateFreelanceTender();
   const updateMutation = useUpdateFreelanceTender();
@@ -175,6 +176,7 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
       attachmentFiles: [],
     });
     setDescription((t.description as string) ?? '');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editData]);
 
   const patchFormData = useCallback(
@@ -205,7 +207,6 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
     setCurrentStep(step);
   };
 
-  // Merge description into formData before submit
   const buildPayload = (): FreelanceTenderFormData => ({
     ...formData,
     description,
@@ -213,7 +214,6 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
   });
 
   const handleSubmit = async (action: SubmitAction) => {
-    // Validate all steps before submit
     let allErrors: Record<string, string> = {};
     for (let s = 1; s <= 4; s++) {
       allErrors = { ...allErrors, ...validateStep(s, formData, description) };
@@ -250,9 +250,13 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
     }
   };
 
-  const isMutating = submitting || createMutation.isPending || updateMutation.isPending || publishMutation.isPending;
+  const isMutating =
+    submitting ||
+    createMutation.isPending ||
+    updateMutation.isPending ||
+    publishMutation.isPending;
 
-  // ─── Render step content ────────────────────────────────────────────────────
+  // ─── Render step content ──────────────────────────────────────────────────
 
   const renderStep = () => {
     switch (currentStep) {
@@ -262,7 +266,7 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
             data={formData}
             onChange={patchFormData}
             errors={errors}
-            categories={categories ?? {}}
+            categories={categoriesRaw}
           />
         );
       case 2:
@@ -307,7 +311,7 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
     }
   };
 
-  // ─── Stepper bar ────────────────────────────────────────────────────────────
+  // ─── Stepper bar ──────────────────────────────────────────────────────────
 
   const StepperBar = () => (
     <View style={[styles.stepperRow, { borderBottomColor: c.border ?? c.textMuted + '22' }]}>
@@ -375,14 +379,26 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
     </View>
   );
 
-  // ─── Footer buttons ─────────────────────────────────────────────────────────
+  // ─── Footer buttons ───────────────────────────────────────────────────────
 
   const Footer = () => (
-    <View style={[styles.footer, { borderTopColor: c.border ?? c.textMuted + '22', backgroundColor: c.background ?? c.card }]}>
+    <View
+      style={[
+        styles.footer,
+        {
+          borderTopColor: c.border ?? c.textMuted + '22',
+          backgroundColor: c.background ?? c.card,
+        },
+      ]}
+    >
       {currentStep > 1 ? (
         <Pressable
           onPress={goBack}
-          style={[styles.footerBtn, styles.footerBtnSecondary, { borderColor: c.textMuted + '55' }]}
+          style={[
+            styles.footerBtn,
+            styles.footerBtnSecondary,
+            { borderColor: c.textMuted + '55' },
+          ]}
           accessibilityRole="button"
           disabled={isMutating}
         >
@@ -391,7 +407,11 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
       ) : (
         <Pressable
           onPress={onCancel}
-          style={[styles.footerBtn, styles.footerBtnSecondary, { borderColor: c.textMuted + '55' }]}
+          style={[
+            styles.footerBtn,
+            styles.footerBtnSecondary,
+            { borderColor: c.textMuted + '55' },
+          ]}
           accessibilityRole="button"
         >
           <Text style={[styles.footerBtnText, { color: c.textMuted }]}>Cancel</Text>
@@ -449,7 +469,7 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
     </View>
   );
 
-  // ─── Root render ─────────────────────────────────────────────────────────────
+  // ─── Root render ──────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView
@@ -468,7 +488,6 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Step heading */}
           <View style={styles.stepHeader}>
             <Text style={[styles.stepHeadingSmall, { color: c.textMuted }]}>
               Step {currentStep} of {STEPS.length}
@@ -506,11 +525,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   stepCircleText: { fontSize: 11, fontWeight: '700' },
-  stepLabel: { fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.3, maxWidth: 52 },
+  stepLabel: {
+    fontSize: 9,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    maxWidth: 52,
+  },
   stepConnector: { flex: 1, height: 1.5, marginHorizontal: 4, marginBottom: 14 },
   scrollContent: { padding: 20, paddingBottom: 40 },
   stepHeader: { marginBottom: 24 },
-  stepHeadingSmall: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+  stepHeadingSmall: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
   stepHeading: { fontSize: 22, fontWeight: '800' },
   footer: {
     flexDirection: 'row',
@@ -533,7 +563,3 @@ const styles = StyleSheet.create({
 });
 
 export default FreelanceTenderFormShell;
-
-function useFreelanceTenderCategories(): { data: any; } {
-    throw new Error('Function not implemented.');
-}

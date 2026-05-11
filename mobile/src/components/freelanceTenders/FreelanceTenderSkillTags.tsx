@@ -1,108 +1,75 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  ViewStyle,
-} from 'react-native';
+import React, { memo, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, ViewStyle } from 'react-native';
+import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
 
-type Props = {
+interface Props {
   skills: string[];
   variant?: 'wrap' | 'scroll' | 'compact';
   containerStyle?: ViewStyle;
-  maxVisible?: number; // used for compact mode
-};
+  maxVisible?: number;
+}
 
-const FreelanceTenderSkillTags: React.FC<Props> = ({
-  skills,
-  variant = 'wrap',
-  containerStyle,
-  maxVisible = 4,
+const FreelanceTenderSkillTags: React.FC<Props> = memo(({
+  skills, variant = 'wrap', containerStyle, maxVisible = 4,
 }) => {
-  if (!skills || skills.length === 0) return null;
+  const { colors: c, radius, type } = useTheme();
+  const styles = useMemo(() => makeStyles(c, radius), [c, radius]);
+
+  if (!skills?.length) return null;
 
   const renderTag = (skill: string, index: number) => (
     <View key={`${skill}-${index}`} style={styles.tag}>
-      <Text style={styles.tagText}>{skill}</Text>
+      <Text style={[type.caption, styles.tagText]}>{skill}</Text>
     </View>
   );
 
-  // ─── COMPACT MODE (e.g. cards) ─────────────────────────────
   if (variant === 'compact') {
-    const visibleSkills = skills.slice(0, maxVisible);
+    const visible = skills.slice(0, maxVisible);
     const remaining = skills.length - maxVisible;
-
     return (
-      <View style={[styles.container, styles.wrap, containerStyle]}>
-        {visibleSkills.map(renderTag)}
-
+      <View style={[styles.wrap, containerStyle]}>
+        {visible.map(renderTag)}
         {remaining > 0 && (
           <View style={[styles.tag, styles.moreTag]}>
-            <Text style={styles.moreText}>+{remaining}</Text>
+            <Text style={[type.caption, styles.moreText]}>+{remaining}</Text>
           </View>
         )}
       </View>
     );
   }
 
-  // ─── SCROLL MODE (horizontal) ──────────────────────────────
   if (variant === 'scroll') {
     return (
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.container, containerStyle]}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}
+        contentContainerStyle={[styles.container, containerStyle]}>
         {skills.map(renderTag)}
       </ScrollView>
     );
   }
 
-  // ─── WRAP MODE (default) ───────────────────────────────────
   return (
-    <View style={[styles.container, styles.wrap, containerStyle]}>
+    <View style={[styles.wrap, containerStyle]}>
       {skills.map(renderTag)}
     </View>
   );
-};
+});
+
+FreelanceTenderSkillTags.displayName = 'FreelanceTenderSkillTags';
+
+const makeStyles = (c: any, radius: any) =>
+  StyleSheet.create({
+    container: { gap: 8 },
+    wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    tag: {
+      backgroundColor: withAlpha(c.text, 0.07),
+      paddingHorizontal: 10, paddingVertical: 5,
+      borderRadius: radius.full,
+      borderWidth: 1, borderColor: c.border,
+    },
+    tagText: { color: c.textSecondary, fontWeight: '500' },
+    moreTag: { backgroundColor: withAlpha(c.textMuted, 0.14) },
+    moreText: { color: c.text, fontWeight: '700' },
+  });
 
 export default FreelanceTenderSkillTags;
-
-// ─── STYLES ──────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  container: {
-    gap: 8,
-  },
-
-  wrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-
-  tag: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-
-  tagText: {
-    fontSize: 12,
-    color: '#374151',
-    fontWeight: '500',
-  },
-
-  moreTag: {
-    backgroundColor: '#E5E7EB',
-  },
-
-  moreText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#111827',
-  },
-});

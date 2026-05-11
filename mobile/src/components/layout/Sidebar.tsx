@@ -100,13 +100,13 @@ export const Sidebar: React.FC = () => {
         pointerEvents={isOpen ? 'auto' : 'none'}
       >
         <View style={[styles.header, { borderBottomColor: colors.borderPrimary }]}>
-          <Avatar uri={user.avatar} name={user.name} size="lg" />
+          <Avatar uri={user.avatar} name={user.name} />
           <View style={styles.headerText}>
-            <Text style={[styles.userName, type.h4, { color: colors.textPrimary }]} numberOfLines={1}>
+            <Text style={[styles.userName, type.h3, { color: colors.textPrimary }]} numberOfLines={1}>
               {user.name}
             </Text>
             <View style={styles.badgeRow}>
-              <Badge label={config.label} variant="info" size="sm" />
+              <Badge label={config.label} size="sm" />
             </View>
           </View>
           <TouchableOpacity onPress={close} style={styles.closeBtn}>

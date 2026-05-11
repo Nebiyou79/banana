@@ -8,6 +8,8 @@
  *   4. following  — I follow them, they do NOT follow me
  *   5. follow_back — they follow me, I do NOT follow them  ← critical case
  *   6. none       — neither follows the other
+ *
+ * No bugs found. File is correct as-is.
  */
 
 import type { ConnectionStatus } from '../types/follow';
@@ -15,11 +17,11 @@ import type { ConnectionStatus } from '../types/follow';
 export interface ConnectionStatusInput {
   /** Is the viewer looking at their own profile? */
   isSelf?: boolean;
-  /** Me → target */
+  /** Me → target follow relationship */
   iFollow: boolean;
-  /** Target → me */
+  /** Target → me follow relationship */
   theyFollow: boolean;
-  /** Either side blocked */
+  /** Either side has blocked the other */
   isBlocked?: boolean;
 }
 
@@ -37,10 +39,13 @@ export const deriveConnectionStatus = ({
   return 'none';
 };
 
-/** True when chat is allowed (not blocked, not self). */
+/** True when starting a chat is allowed (not blocked, not self). */
 export const canChat = (status: ConnectionStatus): boolean =>
   status !== 'blocked' && status !== 'self';
 
-/** True when Start Chat opens directly. Otherwise it's a Message Request. */
+/**
+ * True when "Start Chat" opens a direct conversation.
+ * False means it's a Message Request (following but not mutual).
+ */
 export const isDirectChat = (status: ConnectionStatus): boolean =>
   status === 'connected';

@@ -1,25 +1,42 @@
-import React, { memo } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
-import { useSkeletonPulse } from '../../theme/animations';
-import { useSocialTheme } from '../../theme/socialTheme';
+// src/social/components/post/PostSkeleton.tsx
+/**
+ * PostSkeleton — shimmer loading placeholder for post cards (core Animated)
+ *
+ * Theme migration:
+ * - theme.skeleton → theme.colors.skeleton (authoritative colors object)
+ * - theme.card     → theme.colors.card
+ * - theme.border   → theme.colors.border
+ * - RADIUS.md, SPACING.* already imported from socialTheme ✅
+ */
+import React, { memo, useEffect, useRef } from 'react';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { RADIUS, SPACING, useSocialTheme } from '../../theme/socialTheme';
 
+// ── Single shimmer bone ──────────────────────────────────────
 interface BoneProps {
-  w?: number | string;
-  h?: number;
-  r?: number;
+  width?: number | `${number}%`;
+  height?: number;
+  borderRadius?: number;
+  style?: object;
   pulse: Animated.Value;
-  color: string;
-  style?: any;
+  baseColor: string;
 }
 
-const Bone: React.FC<BoneProps> = ({ w = '100%', h = 14, r = 6, pulse, color, style }) => (
+const Bone: React.FC<BoneProps> = ({
+  width = '100%',
+  height = 14,
+  borderRadius = RADIUS.sm,
+  style,
+  pulse,
+  baseColor,
+}) => (
   <Animated.View
     style={[
       {
-        width: w as any,
-        height: h,
-        borderRadius: r,
-        backgroundColor: color,
+        width: width as any,
+        height,
+        borderRadius,
+        backgroundColor: baseColor,
         opacity: pulse,
         marginVertical: 4,
       },
@@ -28,66 +45,128 @@ const Bone: React.FC<BoneProps> = ({ w = '100%', h = 14, r = 6, pulse, color, st
   />
 );
 
-/**
- * Loading placeholder that mimics a post card shape. Used while the feed
- * is loading its first page.
- */
-const PostSkeleton: React.FC = memo(() => {
-  const theme = useSocialTheme();
-  const pulse = useSkeletonPulse();
-
-  return (
-    <View
-      style={[
-        styles.card,
-        { backgroundColor: theme.card, borderTopColor: theme.border },
-      ]}
-    >
-      <View style={styles.header}>
-        <Animated.View
-          style={[
-            styles.avatar,
-            { backgroundColor: theme.skeleton, opacity: pulse },
-          ]}
-        />
-        <View style={{ flex: 1, marginLeft: 10 }}>
-          <Bone w="50%" h={13} color={theme.skeleton} pulse={pulse} />
-          <Bone w="35%" h={11} color={theme.skeleton} pulse={pulse} />
-        </View>
-      </View>
-      <View style={{ paddingHorizontal: 14 }}>
-        <Bone h={13} color={theme.skeleton} pulse={pulse} />
-        <Bone w="85%" h={13} color={theme.skeleton} pulse={pulse} />
-        <Bone w="60%" h={13} color={theme.skeleton} pulse={pulse} />
-      </View>
-      <Animated.View
-        style={[
-          styles.mediaPlaceholder,
-          { backgroundColor: theme.skeleton, opacity: pulse },
-        ]}
+// ── Single skeleton card ─────────────────────────────────────
+const SkeletonCard: React.FC<{
+  pulse: Animated.Value;
+  baseColor: string;
+  cardBg: string;
+  borderColor: string;
+}> = ({ pulse, baseColor, cardBg, borderColor }) => (
+  <View style={[styles.card, { backgroundColor: cardBg, borderColor }]}>
+    {/* Header */}
+    <View style={styles.header}>
+      <Bone
+        width={44}
+        height={44}
+        borderRadius={22}
+        style={{ flexShrink: 0, marginVertical: 0 }}
+        pulse={pulse}
+        baseColor={baseColor}
       />
-      <View style={styles.actionsRow}>
-        <Bone w={60} h={18} color={theme.skeleton} pulse={pulse} />
-        <Bone w={80} h={18} color={theme.skeleton} pulse={pulse} />
-        <Bone w={60} h={18} color={theme.skeleton} pulse={pulse} />
+      <View style={styles.headerLines}>
+        <Bone width="50%" height={13} pulse={pulse} baseColor={baseColor} />
+        <Bone width="34%" height={11} pulse={pulse} baseColor={baseColor} />
       </View>
     </View>
+
+    {/* Text lines */}
+    <View style={styles.textBlock}>
+      <Bone width="100%" height={13} pulse={pulse} baseColor={baseColor} />
+      <Bone width="88%"  height={13} pulse={pulse} baseColor={baseColor} />
+      <Bone width="64%"  height={13} pulse={pulse} baseColor={baseColor} />
+    </View>
+
+    {/* Media block */}
+    <Bone
+      width="100%"
+      height={200}
+      borderRadius={0}
+      style={{ marginVertical: 0 }}
+      pulse={pulse}
+      baseColor={baseColor}
+    />
+
+    {/* Actions row */}
+    <View style={styles.actions}>
+      <Bone width={68} height={20} borderRadius={10} style={{ marginVertical: 0 }} pulse={pulse} baseColor={baseColor} />
+      <Bone width={76} height={20} borderRadius={10} style={{ marginVertical: 0 }} pulse={pulse} baseColor={baseColor} />
+      <Bone width={68} height={20} borderRadius={10} style={{ marginVertical: 0 }} pulse={pulse} baseColor={baseColor} />
+    </View>
+  </View>
+);
+
+interface Props {
+  count?: number;
+}
+
+const PostSkeleton: React.FC<Props> = memo(({ count = 2 }) => {
+  const theme = useSocialTheme();
+  const pulse = useRef(new Animated.Value(0.45)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 750,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.45,
+          duration: 750,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+
+  return (
+    <>
+      {Array.from({ length: count }).map((_, i) => (
+        <SkeletonCard
+          key={i}
+          pulse={pulse}
+          baseColor={theme.colors.skeleton}
+          cardBg={theme.colors.card}
+          borderColor={theme.colors.border}
+        />
+      ))}
+    </>
   );
 });
 
 PostSkeleton.displayName = 'PostSkeleton';
 
 const styles = StyleSheet.create({
-  card: { borderTopWidth: 0.5, marginBottom: 8, paddingVertical: 12 },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 12 },
-  avatar: { width: 44, height: 44, borderRadius: 22 },
-  mediaPlaceholder: { height: 200, marginTop: 10 },
-  actionsRow: {
+  card: {
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.md,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  header: {
     flexDirection: 'row',
-    gap: 16,
-    paddingHorizontal: 14,
-    paddingTop: 14,
+    alignItems: 'center',
+    gap: SPACING.sm,
+    padding: SPACING.md,
+  },
+  headerLines: { flex: 1 },
+  textBlock: {
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.md,
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: SPACING.lg,
+    padding: SPACING.md,
   },
 });
 
 export default PostSkeleton;
+export { PostSkeleton };
+// ✅ theme-migrated

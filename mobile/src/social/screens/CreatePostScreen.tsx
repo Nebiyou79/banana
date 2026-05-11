@@ -1,6 +1,8 @@
 // src/social/screens/CreatePostScreen.tsx
+// ✅ role-theme-migrated
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useState } from 'react';
 import {
@@ -75,30 +77,51 @@ const CreatePostScreen: React.FC = () => {
   }, [canSubmit, content, visibility, media, createM, navigation]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['top']}>
-      <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+    <SafeAreaView style={[styles.container, theme.getPageBgStyle()]} edges={['top']}>
+      {/* Role-tinted accent strip at top for brand anchoring */}
+      <View style={[styles.accentStrip, { backgroundColor: theme.colors.primary }]} />
+
+      {/* Header */}
+      <View style={[styles.header, {
+        backgroundColor: theme.withAlpha(theme.colors.primary, 0.03),
+        borderBottomColor: theme.border,
+      }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           style={styles.headerBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
         >
           <Ionicons name="close" size={26} color={theme.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.text }]}>New post</Text>
+
+        {/* Gradient post button */}
         <TouchableOpacity
           onPress={handleSubmit}
           disabled={!canSubmit}
           activeOpacity={0.85}
-          style={[
-            styles.postBtn,
-            { backgroundColor: theme.primary, opacity: canSubmit ? 1 : 0.4 },
-          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Post"
+          style={{ opacity: canSubmit ? 1 : 0.4 }}
         >
-          {createM.isPending ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={styles.postBtnText}>Post</Text>
-          )}
+          <LinearGradient
+            colors={
+              canSubmit
+                ? [theme.colors.primary, theme.colors.primaryDark]
+                : [theme.colors.cardAlt, theme.colors.cardAlt]
+            }
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.postBtn}
+          >
+            {createM.isPending ? (
+              <ActivityIndicator size="small" color={theme.colors.white} />
+            ) : (
+              <Text style={[styles.postBtnText, { color: theme.colors.white }]}>Post</Text>
+            )}
+          </LinearGradient>
         </TouchableOpacity>
       </View>
 
@@ -109,7 +132,9 @@ const CreatePostScreen: React.FC = () => {
         <ScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: 40 }}
+          showsVerticalScrollIndicator={false}
         >
+          {/* Text input */}
           <TextInput
             value={content}
             onChangeText={setContent}
@@ -119,40 +144,47 @@ const CreatePostScreen: React.FC = () => {
             maxLength={5000}
             style={[
               styles.input,
-              {
-                color: theme.text,
-                backgroundColor: theme.bg,
-              },
+              { color: theme.text },
             ]}
             autoFocus
           />
 
+          {/* Media preview row */}
           {media.length > 0 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.mediaRow}
-            >
-              {media.map((m) => (
-                <View key={m.uri} style={styles.mediaTile}>
-                  <Image
-                    source={{ uri: m.uri }}
-                    style={[styles.mediaImage, { backgroundColor: theme.skeleton }]}
-                  />
-                  <TouchableOpacity
-                    onPress={() => removeMedia(m.uri)}
-                    style={styles.mediaRemove}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons name="close-circle" size={22} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </ScrollView>
+            <View style={[styles.mediaContainer, {
+              backgroundColor: theme.withAlpha(theme.colors.primary, 0.04),
+            }]}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.mediaRow}
+              >
+                {media.map((m) => (
+                  <View key={m.uri} style={styles.mediaTile}>
+                    <Image
+                      source={{ uri: m.uri }}
+                      style={[styles.mediaImage, { backgroundColor: theme.skeleton }]}
+                    />
+                    <TouchableOpacity
+                      onPress={() => removeMedia(m.uri)}
+                      style={styles.mediaRemove}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove media"
+                    >
+                      <Ionicons name="close-circle" size={22} color={theme.colors.white} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
           ) : null}
 
+          {/* Visibility section */}
           <View style={[styles.section, { borderTopColor: theme.border }]}>
-            <Text style={[styles.sectionLabel, { color: theme.subtext }]}>Visibility</Text>
+            <Text style={[styles.sectionLabel, { color: theme.colors.primary }]}>
+              Visibility
+            </Text>
             <View style={styles.chipRow}>
               {VISIBILITIES.map((v) => (
                 <Chip
@@ -166,15 +198,20 @@ const CreatePostScreen: React.FC = () => {
           </View>
         </ScrollView>
 
-        <View style={[styles.toolbar, { backgroundColor: theme.card, borderTopColor: theme.border }]}>
+        {/* Toolbar */}
+        <View style={[styles.toolbar, {
+          backgroundColor: theme.withAlpha(theme.colors.primary, 0.03),
+          borderTopColor: theme.border,
+        }]}>
           <TouchableOpacity
             onPress={pickMedia}
             disabled={media.length >= 5}
             style={[styles.toolBtn, { opacity: media.length >= 5 ? 0.4 : 1 }]}
             accessibilityLabel="Add media"
+            accessibilityRole="button"
           >
-            <Ionicons name="image-outline" size={22} color={theme.primary} />
-            <Text style={[styles.toolBtnText, { color: theme.primary }]}>
+            <Ionicons name="image-outline" size={22} color={theme.colors.primary} />
+            <Text style={[styles.toolBtnText, { color: theme.colors.primary }]}>
               Photo / Video
             </Text>
           </TouchableOpacity>
@@ -189,6 +226,10 @@ const CreatePostScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  accentStrip: {
+    height: 2,
+    opacity: 0.7,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -209,7 +250,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  postBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  postBtnText: { fontSize: 13, fontWeight: '700' },
   input: {
     fontSize: 16,
     lineHeight: 23,
@@ -219,6 +260,7 @@ const styles = StyleSheet.create({
     minHeight: 180,
     textAlignVertical: 'top',
   },
+  mediaContainer: {},
   mediaRow: { paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
   mediaTile: { width: 96, height: 96, marginRight: 8 },
   mediaImage: { width: '100%', height: '100%', borderRadius: 10 },

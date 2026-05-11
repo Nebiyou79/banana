@@ -83,7 +83,7 @@ const CompanyInfoCard: React.FC<Props> = memo(({ info }) => {
           style={[styles.tagline, { color: theme.text }]}
           numberOfLines={2}
         >
-          “{info.tagline}”
+          "{info.tagline}"
         </Text>
       ) : null}
 
@@ -155,3 +155,4 @@ const styles = StyleSheet.create({
 });
 
 export default CompanyInfoCard;
+// ✅ theme-migrated

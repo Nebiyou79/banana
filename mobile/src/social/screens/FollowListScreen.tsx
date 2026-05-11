@@ -82,14 +82,15 @@ const FollowListScreen: React.FC = () => {
         const id = u?._id ?? entry?._id;
         if (!id) return null;
         return {
-          _id: id,
-          name: u?.name ?? 'Unknown',
-          avatar: u?.avatar,
-          role: u?.role ?? 'candidate',
-          headline: u?.headline,
-          followerCount: u?.socialStats?.followerCount,
-          verificationStatus: u?.verificationStatus,
-        };
+  _id: id,
+  name: u?.name ?? 'Unknown',
+  avatar: u?.avatar,
+  role: u?.role ?? 'candidate',
+  headline: u?.headline,
+  followerCount: u?.socialStats?.followerCount,
+  verificationStatus: u?.verificationStatus,
+  type: 'candidate',
+};
       })
       .filter(Boolean) as SearchResult[];
   }, [listQ.data?.list]);
@@ -120,8 +121,9 @@ const FollowListScreen: React.FC = () => {
   // ── Render ─────────────────────────────────────────────────────────────
   if (listQ.isError) {
     return (
+      // Push screen — solid page background
       <SafeAreaView
-        style={[styles.center, { backgroundColor: theme.bg }]}
+        style={[styles.center, theme.getPageBgStyle()]}
         edges={['top']}
       >
         <ErrorState
@@ -133,14 +135,19 @@ const FollowListScreen: React.FC = () => {
   }
 
   return (
+    // Push screen — solid page background
     <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.bg }]}
+      style={[styles.container, theme.getPageBgStyle()]}
       edges={['top']}
     >
+      {/* Header — role-tinted background tint */}
       <View
         style={[
           styles.header,
-          { backgroundColor: theme.card, borderBottomColor: theme.border },
+          {
+            backgroundColor: theme.withAlpha(theme.colors.primary, 0.03),
+            borderBottomColor: theme.border,
+          },
         ]}
       >
         <TouchableOpacity
@@ -170,7 +177,8 @@ const FollowListScreen: React.FC = () => {
           <RefreshControl
             refreshing={listQ.isRefetching}
             onRefresh={listQ.refetch}
-            tintColor={theme.primary}
+            tintColor={theme.colors.primary}
+            colors={[theme.colors.primary]}
           />
         }
         renderItem={({ item }) => (
@@ -204,7 +212,7 @@ const FollowListScreen: React.FC = () => {
         ListFooterComponent={
           listQ.isFetchingNextPage ? (
             <ActivityIndicator
-              color={theme.primary}
+              color={theme.colors.primary}
               style={{ padding: 20 }}
             />
           ) : null
@@ -242,3 +250,4 @@ const styles = StyleSheet.create({
 });
 
 export default FollowListScreen;
+// ✅ role-theme-migrated

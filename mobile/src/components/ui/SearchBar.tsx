@@ -1,116 +1,164 @@
-// SearchBar.tsx
-import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { View, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Animated, ViewStyle, Platform } from 'react-native';
+// src/components/ui/SearchBar.tsx
+// Usage: <SearchBar value={q} onChangeText={setQ} placeholder="Search people..." />
+
+import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import {
+  View,
+  TextInput,
+  TouchableOpacity,
+  Pressable,
+  Text,
+  StyleSheet,
+  Animated,
+  ViewStyle,
+  Platform,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 
 interface SearchBarProps {
   value: string;
-  onChangeText: (text: string) => void;
-  onDebouncedChange?: (text: string) => void;
-  debounceMs?: number;
-  placeholder?: string;
-  loading?: boolean;
-  autoFocus?: boolean;
-  cancelable?: boolean;
-  onCancel?: () => void;
-  style?: ViewStyle;
-  readOnly?: boolean;
+  onChangeText?: (v: string) => void;
+  onSubmit?: (v: string) => void;
   onPress?: () => void;
+  placeholder?: string;
+  readOnly?: boolean;
+  autoFocus?: boolean;
+  showFilter?: boolean;
+  onFilterPress?: () => void;
+  style?: ViewStyle;
 }
 
 export const SearchBar: React.FC<SearchBarProps> = ({
-  value, onChangeText, onDebouncedChange, debounceMs = 400,
-  placeholder = 'Search...', loading = false, autoFocus = false,
-  cancelable = false, onCancel, style, readOnly = false, onPress,
+  value,
+  onChangeText,
+  onSubmit,
+  onPress,
+  placeholder = 'Search…',
+  readOnly = false,
+  autoFocus = false,
+  showFilter = false,
+  onFilterPress,
+  style,
 }) => {
-  const { colors, radius, type } = useTheme();
+  // CRITICAL FIX: use ONLY useTheme() — never mix with useThemeStore()
+  const { colors: c, radius, spacing } = useTheme();
   const inputRef = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
-  const cancelAnim = useRef(new Animated.Value(0)).current;
 
+  // Android autoFocus fix
   useEffect(() => {
-    Animated.timing(cancelAnim, { toValue: focused && cancelable ? 1 : 0, duration: 200, useNativeDriver: false }).start();
-  }, [focused, cancelable]);
-
-  const cancelWidth = cancelAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 72] });
-
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleChangeText = useCallback((text: string) => {
-    onChangeText(text);
-    if (onDebouncedChange) {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-      debounceTimer.current = setTimeout(() => onDebouncedChange(text), debounceMs);
+    if (autoFocus && Platform.OS === 'android') {
+      const timer = setTimeout(() => inputRef.current?.focus(), 100);
+      return () => clearTimeout(timer);
     }
-  }, [onChangeText, onDebouncedChange, debounceMs]);
+  }, [autoFocus]);
 
-  useEffect(() => { return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); }; }, []);
-
-  const handleClear = () => {
-    onChangeText('');
-    onDebouncedChange?.('');
+  const handleClear = useCallback(() => {
+    onChangeText?.('');
     inputRef.current?.focus();
-  };
+  }, [onChangeText]);
 
-  const handleCancel = () => {
-    onChangeText('');
-    onDebouncedChange?.('');
-    inputRef.current?.blur();
-    setFocused(false);
-    onCancel?.();
-  };
+  const containerStyle = useMemo<ViewStyle>(() => ({
+    height: 48,
+    borderRadius: radius.md,
+    backgroundColor: c.inputBg,
+    borderWidth: 1.5,
+    borderColor: focused ? c.inputBorderFocus : c.inputBorder,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
+  }), [c, radius, spacing, focused]);
 
-  const borderColor = focused ? colors.accent : colors.borderPrimary;
-
+  // ReadOnly mode: pure Pressable — no editable TextInput (accessibility fix)
   if (readOnly) {
     return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={[styles.container, styles.readOnly, { borderColor: colors.borderPrimary, backgroundColor: colors.bgCard, borderRadius: radius.md }, style]}>
-        <Ionicons name="search-outline" size={18} color={colors.textMuted} style={styles.searchIcon} />
-        <TextInput editable={false} value={value} placeholder={placeholder} placeholderTextColor={colors.textMuted} style={[styles.input, type.body, { color: colors.textMuted }]} pointerEvents="none" />
-      </TouchableOpacity>
+      <Pressable
+        onPress={onPress}
+        style={[containerStyle, style]}
+        accessibilityRole="search"
+        accessibilityLabel={placeholder}
+      >
+        <Ionicons name="search-outline" size={18} color={c.textMuted} />
+        <Text
+          style={{ flex: 1, color: value ? c.text : c.inputPlaceholder, fontSize: 15 }}
+          numberOfLines={1}
+        >
+          {value || placeholder}
+        </Text>
+        {showFilter && (
+          <TouchableOpacity
+            onPress={onFilterPress}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="options-outline" size={18} color={c.textMuted} />
+          </TouchableOpacity>
+        )}
+      </Pressable>
     );
   }
 
   return (
-    <View style={[styles.wrapper, style]}>
-      <View style={[styles.container, { borderColor, backgroundColor: colors.bgCard, borderRadius: radius.md }]}>
-        <View style={styles.searchIcon}>
-          {loading ? <ActivityIndicator size="small" color={colors.accent} /> : <Ionicons name="search-outline" size={18} color={focused ? colors.accent : colors.textMuted} />}
-        </View>
-        <TextInput
-          ref={inputRef} value={value} onChangeText={handleChangeText}
-          placeholder={placeholder} placeholderTextColor={colors.textMuted}
-          autoFocus={autoFocus} returnKeyType="search" clearButtonMode="never"
-          onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-          style={[styles.input, type.body, { color: colors.textPrimary }]}
-        />
-        {value.length > 0 && (
-          <TouchableOpacity onPress={handleClear} style={styles.clearButton} hitSlop={8}>
-            <View style={[styles.clearCircle, { backgroundColor: colors.textMuted, borderRadius: radius.full }]}>
-              <Ionicons name="close" size={11} color={colors.bgCard} />
-            </View>
-          </TouchableOpacity>
-        )}
-      </View>
-      {cancelable && (
-        <Animated.View style={{ width: cancelWidth, overflow: 'hidden' }}>
-          <TouchableOpacity onPress={handleCancel} style={styles.cancelButton}>
-            <Animated.Text style={[styles.cancelText, type.bodySm, { color: colors.accent }]}>Cancel</Animated.Text>
-          </TouchableOpacity>
-        </Animated.View>
+    <View style={[containerStyle, style]}>
+      <Ionicons
+        name="search-outline"
+        size={18}
+        color={focused ? c.primary : c.textMuted}
+      />
+
+      <TextInput
+        ref={inputRef}
+        value={value}
+        onChangeText={onChangeText}
+        onSubmitEditing={() => onSubmit?.(value)}
+        placeholder={placeholder}
+        placeholderTextColor={c.inputPlaceholder}
+        autoFocus={autoFocus && Platform.OS === 'ios'}
+        returnKeyType="search"
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{ flex: 1, color: c.text, fontSize: 15, paddingVertical: 0 }}
+      />
+
+      {value.length > 0 && (
+        <TouchableOpacity
+          onPress={handleClear}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={styles.clearBtn}
+        >
+          <Ionicons name="close-circle" size={18} color={c.textMuted} />
+        </TouchableOpacity>
+      )}
+
+      {showFilter && (
+        <TouchableOpacity
+          onPress={onFilterPress}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={styles.filterBtn}
+        >
+          <Ionicons name="options-outline" size={18} color={c.textMuted} />
+        </TouchableOpacity>
       )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  wrapper: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  container: { flex: 1, flexDirection: 'row', alignItems: 'center', height: 46, borderWidth: 1.5, paddingHorizontal: 12 },
-  readOnly: { opacity: 0.85 },
-  searchIcon: { marginRight: 8, width: 20, alignItems: 'center' },
-  input: { flex: 1, paddingVertical: 0, ...Platform.select({ android: { paddingVertical: 0 } }) },
-  clearButton: { marginLeft: 6, padding: 2 },
-  clearCircle: { width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
-  cancelButton: { paddingLeft: 8, height: 46, justifyContent: 'center' },
-  cancelText: { fontWeight: '600' },
+  clearBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: -8,
+  },
+  filterBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: -8,
+  },
 });
+
+export default SearchBar;

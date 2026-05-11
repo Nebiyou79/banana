@@ -1,8 +1,11 @@
-// StatCard.tsx
+// src/components/shared/StatCard.tsx
+// Usage: <StatCard label="Applications" value={42} icon="document-text-outline" color={c.candidate} trend="up" subLabel="+12 this week" />
+
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Platform, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
 
 interface StatCardProps {
   label: string;
@@ -13,42 +16,51 @@ interface StatCardProps {
   trend?: 'up' | 'down' | 'neutral';
 }
 
-export const StatCard: React.FC<StatCardProps> = ({ label, value, icon, color, subLabel, trend }) => {
-  const { colors, radius, type, shadows } = useTheme();
+export const StatCard: React.FC<StatCardProps> = ({
+  label, value, icon, color, subLabel, trend,
+}) => {
+  const { colors: c, radius, type, shadows } = useTheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(6)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
     ]).start();
   }, []);
 
+  const trendColor = trend === 'up' ? c.success : trend === 'down' ? c.danger : c.textMuted;
+  const trendIcon = trend === 'up' ? 'trending-up' : trend === 'down' ? 'trending-down' : 'remove';
+
   return (
     <Animated.View style={[sc.card, {
-      backgroundColor: colors.bgCard,
-      borderColor: colors.borderPrimary,
+      backgroundColor: c.bgCard,
+      borderColor: c.border,
       borderRadius: radius.lg,
       ...shadows.sm,
       opacity: fadeAnim,
       transform: [{ translateY: slideAnim }],
     }]}>
-      <View style={[sc.iconWrap, { backgroundColor: color + '18', borderRadius: radius.md }]}>
+      <View style={[sc.iconWrap, {
+        backgroundColor: withAlpha(color, 0.12),
+        borderRadius: radius.md,
+      }]}>
         <Ionicons name={icon as any} size={22} color={color} />
       </View>
-      <Text style={[sc.value, type.h2, { color: colors.textPrimary }]}>{value}</Text>
-      <Text style={[sc.label, type.caption, { color: colors.textMuted }]}>{label}</Text>
+
+      <Text style={[sc.value, type.h2, { color: c.text }]} numberOfLines={1} adjustsFontSizeToFit>
+        {value}
+      </Text>
+
+      <Text style={[sc.label, type.caption, { color: c.textMuted }]} numberOfLines={1}>
+        {label}
+      </Text>
+
       {subLabel && (
         <View style={sc.subRow}>
-          {trend && (
-            <Ionicons
-              name={trend === 'up' ? 'trending-up' : trend === 'down' ? 'trending-down' : 'remove'}
-              size={12}
-              color={trend === 'up' ? colors.success : trend === 'down' ? colors.error : colors.textMuted}
-            />
-          )}
-          <Text style={[sc.sub, type.caption, { color: trend === 'up' ? colors.success : trend === 'down' ? colors.error : colors.textMuted }]}>
+          <Ionicons name={trendIcon as any} size={12} color={trendColor} />
+          <Text style={[sc.sub, type.caption, { color: trendColor }]} numberOfLines={1}>
             {subLabel}
           </Text>
         </View>
@@ -58,10 +70,12 @@ export const StatCard: React.FC<StatCardProps> = ({ label, value, icon, color, s
 };
 
 const sc = StyleSheet.create({
-  card: { borderWidth: 1, padding: 16, flex: 1, minWidth: 140 },
-  iconWrap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  value: { marginBottom: 2, fontWeight: '800' },
-  label: { fontWeight: '400' },
-  subRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 6 },
-  sub: { fontWeight: '600' },
+  card:    { borderWidth: 1, padding: 16, flex: 1, minWidth: 140 },
+  iconWrap:{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  value:   { marginBottom: 2, fontWeight: '800' },
+  label:   { fontWeight: '400' },
+  subRow:  { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 6 },
+  sub:     { fontWeight: '600' },
 });
+
+export default StatCard;

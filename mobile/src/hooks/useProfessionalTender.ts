@@ -33,6 +33,10 @@ import type {
   ProfessionalTenderDetailResponse,
   ProfessionalTenderFilters,
   ProfessionalTenderListResponse,
+  ProfessionalTenderListItem,
+  ProfessionalTenderStatus,
+  ProfessionalTenderType,
+  ProfessionalTenderWorkflowType,
   UpdateProfessionalTenderData,
 } from '../types/professionalTender';
 import { CompanyProfile, CompanySearchResult, companyService } from '../services/companyService';
@@ -456,5 +460,75 @@ export const useCompaniesByIds = (
     enabled: ids.length > 0 && (options?.enabled ?? true),
     staleTime: 60_000,
     ...options,
+  });
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  SAVED PROFESSIONAL TENDERS
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Fetches saved professional tenders for the current user.
+ */
+export const useSavedProfessionalTenders = (
+  filters?: { page?: number; limit?: number },
+  options?: Omit<UseQueryOptions<ProfessionalTenderListResponse>, 'queryKey' | 'queryFn'>,
+) => {
+  return useQuery<ProfessionalTenderListResponse>({
+    queryKey: [...professionalTenderKeys.all, 'saved', filters] as const,
+    queryFn: () => professionalTenderService.getSavedProfessionalTenders(filters),
+    staleTime: 30_000,
+    ...options,
+  });
+};
+
+/**
+ * Toggles save status for a professional tender (save/unsave).
+ * Accepts either just an id or an object with id and tender data.
+ */
+export const useToggleSavedProfessionalTender = () => {
+  const qc = useQueryClient();
+  
+  return useMutation<
+    { saved: boolean; totalSaves: number },
+    Error,
+    { id: string; tender?: ProfessionalTenderListItem }
+  >({
+    mutationFn: ({ id }) => professionalTenderService.toggleSaveProfessionalTender(id),
+    
+    onSuccess: (result, variables) => {
+      // Invalidate saved tenders list to reflect changes
+      qc.invalidateQueries({ 
+        queryKey: [...professionalTenderKeys.all, 'saved'] 
+      });
+      
+      // If tender data is provided, update the individual tender cache
+      if (variables.tender) {
+        qc.setQueryData(
+          professionalTenderKeys.detail(variables.id),
+          (old: any) => {
+            if (!old) return old;
+            const authData = qc.getQueryData(['auth']) as any;
+            const userId = authData?.user?._id;
+            if (!userId) return old;
+            
+            return {
+              ...old,
+              tender: {
+                ...old.tender,
+                metadata: {
+                  ...old.tender?.metadata,
+                  savedBy: result.saved 
+                    ? [...(old.tender?.metadata?.savedBy || []), userId]
+                    : (old.tender?.metadata?.savedBy || []).filter((id: string) => 
+                        id !== userId
+                      )
+                }
+              }
+            };
+          }
+        );
+      }
+    },
   });
 };

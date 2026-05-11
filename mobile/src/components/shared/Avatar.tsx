@@ -1,7 +1,19 @@
-// Avatar.tsx
+// src/components/shared/Avatar.tsx
+// ─────────────────────────────────────────────────────────────────────────────
+// FIXED: jobOwnerToEntity now uses resolveLogoUrl() which checks every field
+// name the backend might use (avatarUrl, logoUrl, logo, profileImage, avatar,
+// avatar.secure_url) — same priority chain as ProductController.buildOwnerSnapshot.
+// ─────────────────────────────────────────────────────────────────────────────
 import React, { useState, memo, useEffect, useRef } from 'react';
-import { View, Text, Image, StyleSheet, ViewStyle, ActivityIndicator, Animated } from 'react-native';
+import {
+  View, Text, Image, StyleSheet, ViewStyle,
+  ActivityIndicator, Animated,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
+import { resolveLogoUrl } from '../../models/companyPreview';
+
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 export type AvatarEntity =
   | { type: 'company';      name?: string; logoUrl?: string; logo?: string; verified?: boolean }
@@ -10,12 +22,15 @@ export type AvatarEntity =
   | { type: 'freelancer';   name?: string; avatar?: string; profileImage?: string }
   | { type: 'generic';      name?: string; imageUrl?: string };
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
 export function getEntityAvatarUrl(entity: AvatarEntity): string | null {
   if (!entity) return null;
   switch (entity.type) {
     case 'company':
     case 'organization':
-      return entity.logoUrl || entity.logo || null;
+      // FIXED: use resolveLogoUrl so all field names are checked
+      return resolveLogoUrl(entity as Record<string, any>) ?? null;
     case 'candidate':
     case 'freelancer':
       return entity.avatar || entity.profileImage || null;
@@ -33,6 +48,8 @@ export function getInitials(name?: string | null): string {
   return (words[0][0] + words[words.length - 1][0]).toUpperCase();
 }
 
+// ─── Component Props ────────────────────────────────────────────────────────
+
 export interface AvatarProps {
   entity?: AvatarEntity;
   uri?: string | null;
@@ -44,6 +61,8 @@ export interface AvatarProps {
   style?: ViewStyle;
 }
 
+// ─── Component ──────────────────────────────────────────────────────────────
+
 export const Avatar = memo<AvatarProps>(({
   entity,
   uri: uriOverride,
@@ -54,13 +73,15 @@ export const Avatar = memo<AvatarProps>(({
   showLoader = false,
   style,
 }) => {
-  const { colors } = useTheme();
+  const { colors: c } = useTheme();
   const [imgError, setImgError] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]   = useState(true);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+    Animated.timing(fadeAnim, {
+      toValue: 1, duration: 200, useNativeDriver: true,
+    }).start();
   }, []);
 
   const resolvedUri = (() => {
@@ -69,14 +90,19 @@ export const Avatar = memo<AvatarProps>(({
     return null;
   })();
 
-  const resolvedName = nameOverride ?? entity?.name ?? null;
-  const entityType: AvatarEntity['type'] = entity?.type ?? 'generic';
-  const showVerified = verified ?? (entity && ('verified' in entity) ? (entity as any).verified : false);
-  const radius = borderRadius ?? size * 0.22;
-  const badgeSize = Math.max(12, size * 0.3);
-  const showImage = !!resolvedUri && !imgError;
-  const initials = getInitials(resolvedName);
-  const fontSize = size <= 32 ? 11 : size <= 48 ? 14 : size <= 64 ? 18 : 22;
+  // Reset error state when URI changes
+  useEffect(() => {
+    setImgError(false);
+    setLoading(true);
+  }, [resolvedUri]);
+
+  const resolvedName  = nameOverride ?? entity?.name ?? null;
+  const showVerified  = verified ?? (entity && 'verified' in entity ? (entity as any).verified : false);
+  const radius        = borderRadius ?? size * 0.22;
+  const badgeSize     = Math.max(12, size * 0.3);
+  const showImage     = !!resolvedUri && !imgError;
+  const initials      = getInitials(resolvedName);
+  const fontSize      = size <= 32 ? 11 : size <= 48 ? 14 : size <= 64 ? 18 : 22;
 
   return (
     <Animated.View style={[{ width: size, height: size, opacity: fadeAnim }, style]}>
@@ -84,29 +110,38 @@ export const Avatar = memo<AvatarProps>(({
         <>
           <Image
             source={{ uri: resolvedUri! }}
-            style={[styles.image, { width: size, height: size, borderRadius: radius, borderColor: colors.borderPrimary }]}
+            style={[
+              styles.image,
+              { width: size, height: size, borderRadius: radius, borderColor: c.borderPrimary },
+            ]}
             resizeMode="cover"
-            onError={() => setImgError(true)}
+            onError={() => { setImgError(true); setLoading(false); }}
             onLoadStart={() => setLoading(true)}
             onLoadEnd={() => setLoading(false)}
           />
           {showLoader && loading && (
             <View style={[styles.loaderOverlay, { borderRadius: radius, backgroundColor: 'rgba(0,0,0,0.25)' }]}>
-              <ActivityIndicator size="small" color={colors.accent} />
+              <ActivityIndicator size="small" color={c.accent} />
             </View>
           )}
         </>
       ) : (
-        <View style={[styles.fallback, { width: size, height: size, borderRadius: radius, backgroundColor: colors.accentBg }]}>
-          <Text style={[styles.initials, { fontSize, color: colors.accent }]}>
+        <View style={[
+          styles.fallback,
+          { width: size, height: size, borderRadius: radius, backgroundColor: c.accentBg || c.primary + '15' },
+        ]}>
+          <Text style={[styles.initials, { fontSize, color: c.accent || c.primary }]}>
             {initials}
           </Text>
         </View>
       )}
 
       {showVerified && (
-        <View style={[styles.verifiedBadge, { width: badgeSize, height: badgeSize, borderRadius: badgeSize / 2, bottom: -2, right: -2, backgroundColor: colors.success, borderColor: colors.bgCard }]}>
-          <Text style={[styles.verifiedIcon, { fontSize: badgeSize * 0.7, color: colors.textInverse }]}>✓</Text>
+        <View style={[
+          styles.verifiedBadge,
+          { width: badgeSize, height: badgeSize, borderRadius: badgeSize / 2, bottom: -2, right: -2, backgroundColor: c.success, borderColor: c.bgCard },
+        ]}>
+          <Ionicons name="checkmark" size={badgeSize * 0.65} color={c.textInverse || '#FFFFFF'} />
         </View>
       )}
     </Animated.View>
@@ -115,40 +150,96 @@ export const Avatar = memo<AvatarProps>(({
 
 Avatar.displayName = 'Avatar';
 
+// ─── Entity converters ──────────────────────────────────────────────────────
+
+/**
+ * FIXED: Now uses resolveLogoUrl() which covers every field name the backend
+ * might use — mirrors the same priority chain as ProductController.
+ *
+ * Also accepts the new `ownerPreview` field added by the fixed jobController.
+ */
 export function jobOwnerToEntity(job: {
   jobType?: 'company' | 'organization';
-  company?: { name?: string; logoUrl?: string; logo?: string; verified?: boolean } | null;
-  organization?: { name?: string; logoUrl?: string; logo?: string; verified?: boolean } | null;
+  company?: {
+    name?: string; logoUrl?: string; logo?: string; avatar?: string;
+    avatarUrl?: string; profileImage?: string; avatarPublicId?: string;
+    verified?: boolean;
+  } | null;
+  organization?: {
+    name?: string; logoUrl?: string; logo?: string; avatar?: string;
+    avatarUrl?: string; profileImage?: string; avatarPublicId?: string;
+    verified?: boolean;
+  } | null;
+  /** New field added by fixed jobController — preferred when present */
+  ownerPreview?: {
+    name?: string; logoUrl?: string; avatarUrl?: string;
+    verified?: boolean; type?: string;
+  } | null;
 }): AvatarEntity {
   const isOrg = job.jobType === 'organization';
+  const type  = isOrg ? 'organization' : 'company';
+
+  // Prefer the backend-synthesised ownerPreview (Profile-backed, always correct)
+  if (job.ownerPreview) {
+    return {
+      type:     type as 'company' | 'organization',
+      name:     job.ownerPreview.name,
+      // resolveLogoUrl covers both logoUrl and avatarUrl on ownerPreview
+      logoUrl:  resolveLogoUrl(job.ownerPreview as Record<string, any>),
+      verified: job.ownerPreview.verified,
+    };
+  }
+
   const owner = isOrg ? job.organization : job.company;
   return {
-    type: isOrg ? 'organization' : 'company',
-    name: owner?.name,
-    logoUrl: owner?.logoUrl,
-    logo: owner?.logo,
+    type:     type as 'company' | 'organization',
+    name:     owner?.name,
+    // FIXED: was `owner?.logoUrl || owner?.logo || owner?.avatar`
+    // now uses the shared resolver that checks all field names
+    logoUrl:  resolveLogoUrl(owner as Record<string, any>),
     verified: owner?.verified,
   };
 }
 
-export function candidateToEntity(candidate?: {
-  name?: string;
-  avatar?: string;
-  profileImage?: string;
-} | null, userInfo?: { name?: string } | null): AvatarEntity {
+export function candidateToEntity(
+  candidate?: { name?: string; avatar?: string; profileImage?: string } | null,
+  userInfo?: { name?: string } | null,
+): AvatarEntity {
   return {
-    type: 'candidate',
-    name: userInfo?.name ?? candidate?.name,
-    avatar: candidate?.avatar,
+    type:         'candidate',
+    name:         userInfo?.name ?? candidate?.name,
+    avatar:       candidate?.avatar,
     profileImage: candidate?.profileImage,
   };
 }
 
+// ─── Styles ─────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  image: { borderWidth: 1.5 },
-  fallback: { alignItems: 'center', justifyContent: 'center' },
-  initials: { fontWeight: '800', letterSpacing: 0.5 },
-  loaderOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  verifiedBadge: { position: 'absolute', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
-  verifiedIcon: { fontWeight: '900', lineHeight: undefined },
+  image: {
+    borderWidth: 1.5,
+  },
+  fallback: {
+    alignItems:     'center',
+    justifyContent: 'center',
+    borderWidth:    1.5,
+    borderColor:    'transparent',
+  },
+  initials: {
+    fontWeight:    '800',
+    letterSpacing: 0.5,
+  },
+  loaderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems:     'center',
+    justifyContent: 'center',
+  },
+  verifiedBadge: {
+    position:       'absolute',
+    alignItems:     'center',
+    justifyContent: 'center',
+    borderWidth:    1.5,
+  },
 });
+
+export default Avatar;

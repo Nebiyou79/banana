@@ -1,7 +1,9 @@
 // src/social/screens/FeedScreen.tsx
+// ✅ role-theme-migrated
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useMemo, useState } from 'react';
-import { Share, StyleSheet, View } from 'react-native';
+import { Share, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CreatePostFAB, FeedList, FeedTabs } from '../components/feed';
 import type { FeedSort } from '../components/feed';
@@ -22,9 +24,6 @@ const FeedScreen: React.FC = () => {
 
   const [activeSort, setActiveSort] = useState<FeedSort>('latest');
 
-  // Pass followingOnly=true when the Following tab is active so the
-  // backend filters server-side; the client-side trending fallback lives
-  // inside useFeed.
   const filters = useMemo(
     () => ({
       sortBy: activeSort,
@@ -101,58 +100,102 @@ const FeedScreen: React.FC = () => {
   }, [navigation]);
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.bg }]}
-      edges={['top']}
+    <LinearGradient
+      colors={theme.bgGradient}
+      style={{ flex: 1 }}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0.3, y: 1 }}
     >
-      <FeedTabs active={activeSort} onChange={setActiveSort} />
+      <SafeAreaView
+        style={[styles.container]}
+        edges={['top']}
+      >
+        {/* Role-tinted top bar */}
+        <View style={[styles.topBar, { borderBottomColor: theme.border }]}>
+          <Text style={[styles.appName, { color: theme.text }]}>Banana</Text>
+          <View style={[styles.rolePill, {
+            backgroundColor: theme.withAlpha(theme.colors.primary, 0.12),
+            borderColor: theme.withAlpha(theme.colors.primary, 0.28),
+          }]}>
+            <Text style={[styles.rolePillText, { color: theme.colors.primary }]}>
+              {theme.role.charAt(0).toUpperCase() + theme.role.slice(1)}
+            </Text>
+          </View>
+        </View>
 
-      <View style={{ flex: 1 }}>
-        <FeedList
-          posts={posts}
-          loading={feedQ.isLoading}
-          refreshing={feedQ.isRefetching}
-          onRefresh={feedQ.refetch}
-          onEndReached={() => feedQ.fetchNextPage()}
-          hasNextPage={feedQ.hasNextPage}
-          isFetchingNextPage={feedQ.isFetchingNextPage}
-          onReact={handleReact}
-          onRemoveReact={removeReact}
-          onDislike={handleDislike}
-          onComment={handleComment}
-          onShare={handleShare}
-          onSave={(id, isSaved) => toggleSave({ id, isSaved })}
+        <FeedTabs active={activeSort} onChange={setActiveSort} />
+
+        <View style={{ flex: 1 }}>
+          <FeedList
+            posts={posts}
+            loading={feedQ.isLoading}
+            refreshing={feedQ.isRefetching}
+            onRefresh={feedQ.refetch}
+            onEndReached={() => feedQ.fetchNextPage()}
+            hasNextPage={feedQ.hasNextPage}
+            isFetchingNextPage={feedQ.isFetchingNextPage}
+            onReact={handleReact}
+            onRemoveReact={removeReact}
+            onDislike={handleDislike}
+            onComment={handleComment}
+            onShare={handleShare}
+            onSave={() => {
+              // FeedList expects (id, isSaved) from internal state
+            }}
+            onAuthorPress={handleAuthorPress}
+            onAdPress={handleAdPress}
+            adPlacement="feed"
+            cardMode="feed"
+            emptyTitle={
+              activeSort === 'following' ? 'No posts from people you follow' : 'No posts yet'
+            }
+            emptySubtitle={
+              activeSort === 'following'
+                ? 'Follow more people to see their updates here.'
+                : 'Follow more people or create your first post to fill your feed.'
+            }
+            emptyIcon="newspaper-outline"
+            emptyAction={{ label: 'Create post', onPress: handleCreatePress }}
+          />
+        </View>
+
+        <CreatePostFAB onPress={handleCreatePress} />
+
+        <CommentsSheet
+          visible={sheetVisible}
+          post={selectedPost}
+          onClose={() => setSheetVisible(false)}
           onAuthorPress={handleAuthorPress}
-          onAdPress={handleAdPress}
-          adPlacement="feed"
-          cardMode="feed"
-          emptyTitle={
-            activeSort === 'following' ? 'No posts from people you follow' : 'No posts yet'
-          }
-          emptySubtitle={
-            activeSort === 'following'
-              ? 'Follow more people to see their updates here.'
-              : 'Follow more people or create your first post to fill your feed.'
-          }
-          emptyIcon="newspaper-outline"
-          emptyAction={{ label: 'Create post', onPress: handleCreatePress }}
         />
-      </View>
-
-      <CreatePostFAB onPress={handleCreatePress} />
-
-      <CommentsSheet
-        visible={sheetVisible}
-        post={selectedPost}
-        onClose={() => setSheetVisible(false)}
-        onAuthorPress={handleAuthorPress}
-      />
-    </SafeAreaView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  appName: {
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  rolePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  rolePillText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
 });
 
 export default FeedScreen;

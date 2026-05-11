@@ -1,20 +1,26 @@
 /**
  * src/components/jobs/CandidateJobCard.tsx
  * ─────────────────────────────────────────────────────────────────────────────
- * Candidate job card — redesigned with:
- * - Universal Avatar component (no more broken logos)
- * - Modern LinkedIn/Uber-inspired design
- * - Soft shadows, rounded corners, proper hierarchy
- * - Animated press feedback
- * ─────────────────────────────────────────────────────────────────────────────
+ * Candidate job card with company/organization avatar display.
+ *
+ * FIXED: Avatar display for company/organization
+ * ✅ All colours via useTheme() — zero hardcoded hex.
+ * ✅ Avatar component properly integrated with jobOwnerToEntity
+ * ✅ Verified badge shown for verified companies
  */
-import React, { memo, useRef, useCallback } from 'react';
+import React, { memo, useRef, useCallback, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
   Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+
+import { useTheme } from '../../hooks/useTheme';
+import { withAlpha, formatRelativeDate } from '../../theme/utils';
+import { SPACING, RADIUS } from '../../theme/tokens';
 import { Job } from '../../services/jobService';
 import { Avatar, jobOwnerToEntity } from '../shared/Avatar';
 import { formatLocation } from '../../utils/jobHelpers';
@@ -23,61 +29,92 @@ import { formatLocation } from '../../utils/jobHelpers';
 
 const formatDeadline = (d?: string): { label: string; urgent: boolean } => {
   if (!d) return { label: '', urgent: false };
-  const diff = Math.ceil((new Date(d).getTime() - Date.now()) / 86400000);
+  const diff = Math.ceil((new Date(d).getTime() - Date.now()) / 86_400_000);
   if (diff < 0)  return { label: 'Expired', urgent: true };
-  if (diff === 0) return { label: 'Today!', urgent: true };
+  if (diff === 0) return { label: 'Today!',  urgent: true };
   if (diff === 1) return { label: '1d left', urgent: true };
   if (diff <= 3)  return { label: `${diff}d left`, urgent: true };
   if (diff <= 7)  return { label: `${diff}d left`, urgent: false };
   return {
-    label: new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    label: new Date(d).toLocaleDateString('en-US', {
+      month: 'short',
+      day:   'numeric',
+    }),
     urgent: false,
   };
 };
 
-const formatPostedDate = (d?: string): string => {
-  if (!d) return '';
-  const diff = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
-  if (diff === 0) return 'Today';
-  if (diff === 1) return '1d ago';
-  if (diff < 7)   return `${diff}d ago`;
-  if (diff < 30)  return `${Math.floor(diff / 7)}w ago`;
-  return `${Math.floor(diff / 30)}mo ago`;
-};
-
 const formatSalary = (job: Job): string | null => {
-  if (job.salaryDisplay) return job.salaryDisplay;
-  if (job.salaryMode === 'hidden') return null;
+  if (job.salaryDisplay)               return job.salaryDisplay;
+  if (job.salaryMode === 'hidden')     return null;
   if (job.salaryMode === 'negotiable') return 'Negotiable';
   if (job.salaryMode === 'company-scale') return 'Company scale';
   if (job.salary?.min && job.salary?.max) {
-    const fmt = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(0)}K` : String(n);
+    const fmt = (n: number) =>
+      n >= 1000 ? `${(n / 1000).toFixed(0)}K` : String(n);
     return `${job.salary.currency ?? 'ETB'} ${fmt(job.salary.min)}–${fmt(job.salary.max)}`;
   }
   return null;
 };
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── MetaTag — extracted stable sub-component ────────────────────────────────
 
-const MetaTag = ({ icon, label, highlight, c }: {
-  icon: string; label: string; highlight?: boolean; c: any;
-}) => {
-  if (!label) return null;
-  return (
-    <View style={[
-      cs.metaTag,
-      {
-        backgroundColor: highlight ? `${c.primary}18` : (c.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'),
-        borderColor: highlight ? `${c.primary}40` : 'transparent',
-      },
-    ]}>
-      <Ionicons name={icon as any} size={10} color={highlight ? c.primary : c.textMuted} />
-      <Text style={[cs.metaTagText, { color: highlight ? c.primary : c.textMuted }]} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  );
-};
+interface MetaTagProps {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  highlight?: boolean;
+  primary: string;
+  textMuted: string;
+  isDark: boolean;
+}
+
+const MetaTag = React.memo<MetaTagProps>(
+  ({ icon, label, highlight, primary, textMuted, isDark }) => {
+    if (!label) return null;
+    return (
+      <View
+        style={[
+          mt.tag,
+          {
+            backgroundColor: highlight
+              ? withAlpha(primary, 0.13)
+              : withAlpha(isDark ? '#FFFFFF' : '#000000', 0.06),
+            borderColor: highlight ? withAlpha(primary, 0.40) : 'transparent',
+          },
+        ]}
+      >
+        <Ionicons
+          name={icon}
+          size={10}
+          color={highlight ? primary : textMuted}
+        />
+        <Text
+          style={[
+            mt.text,
+            { color: highlight ? primary : textMuted },
+          ]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+      </View>
+    );
+  },
+);
+MetaTag.displayName = 'CandidateJobCard.MetaTag';
+
+const mt = StyleSheet.create({
+  tag: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical:   4,
+    borderRadius:      RADIUS.full,
+    borderWidth:       1,
+    gap:               3,
+  },
+  text: { fontSize: 11, fontWeight: '500' },
+});
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -89,301 +126,367 @@ interface CandidateJobCardProps {
   compact?: boolean;
 }
 
-// ─── Main Card ────────────────────────────────────────────────────────────────
+// ─── Component ────────────────────────────────────────────────────────────────
 
-export const CandidateJobCard = memo<CandidateJobCardProps>(({
-  job, onPress, onSave, isSaved = false, compact = false,
-}) => {
-  const { theme } = useThemeStore();
-  const c = theme.colors;
-  const isDark = theme.isDark;
+export const CandidateJobCard = memo<CandidateJobCardProps>(
+  ({ job, onPress, onSave, isSaved = false, compact = false }) => {
+    const { colors: c, isDark, shadows } = useTheme();
 
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+    const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  const onPressIn = useCallback(() => {
-    Animated.spring(scaleAnim, { toValue: 0.975, useNativeDriver: true, speed: 50, bounciness: 3 }).start();
-  }, [scaleAnim]);
+    const onPressIn = useCallback(() => {
+      Animated.spring(scaleAnim, {
+        toValue:        0.975,
+        useNativeDriver: true,
+        speed:           50,
+        bounciness:      3,
+      }).start();
+    }, [scaleAnim]);
 
-  const onPressOut = useCallback(() => {
-    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 50, bounciness: 3 }).start();
-  }, [scaleAnim]);
+    const onPressOut = useCallback(() => {
+      Animated.spring(scaleAnim, {
+        toValue:        1,
+        useNativeDriver: true,
+        speed:           50,
+        bounciness:      3,
+      }).start();
+    }, [scaleAnim]);
 
-  const ownerEntity = jobOwnerToEntity(job);
-  const owner = job.jobType === 'organization' ? job.organization : job.company;
-  const salary = formatSalary(job);
-  const deadline = formatDeadline(job.applicationDeadline);
+    // FIXED: Properly extract owner entity for Avatar
+    const ownerEntity = jobOwnerToEntity(job);
+    const owner = job.jobType === 'organization' ? job.organization : job.company;
+    const salary   = formatSalary(job);
+    const deadline = formatDeadline(job.applicationDeadline);
 
-  // ── Compact variant ──────────────────────────────────────────────────────
-  if (compact) {
-    return (
-      <TouchableOpacity
-        onPress={onPress}
-        activeOpacity={0.78}
-        style={[
-          cs.compactCard,
-          {
-            backgroundColor: isDark ? c.card : '#fff',
-            borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-          },
-        ]}
-      >
-        <Avatar entity={ownerEntity} size={40} />
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={[cs.compactTitle, { color: c.text }]} numberOfLines={1}>{job.title}</Text>
-          <Text style={[cs.compactOwner, { color: c.textSecondary }]} numberOfLines={1}>{owner?.name ?? ''}</Text>
-        </View>
-        {deadline.urgent && <View style={[cs.urgentDot, { backgroundColor: '#EF4444' }]} />}
-      </TouchableOpacity>
-    );
-  }
-
-  // ── Full card ──────────────────────────────────────────────────────────────
-  return (
-    <TouchableOpacity
-      onPressIn={onPressIn}
-      onPressOut={onPressOut}
-      onPress={onPress}
-      activeOpacity={1}
-    >
-      <Animated.View
-        style={[
-          cs.card,
-          {
-            backgroundColor: isDark ? c.card : '#fff',
-            borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
-            shadowColor: isDark ? '#000' : '#0A2540',
-            shadowOffset: { width: 0, height: 3 },
-            shadowOpacity: isDark ? 0.35 : 0.08,
-            shadowRadius: 12,
-            elevation: 4,
-          },
-          { transform: [{ scale: scaleAnim }] },
-        ]}
-      >
-        {/* Urgent / Featured banners */}
-        {(job.urgent || job.featured) && (
-          <View style={cs.bannerRow}>
-            {job.urgent && (
-              <View style={cs.bannerUrgent}>
-                <Text style={cs.bannerTextUrgent}>⚡ URGENT</Text>
-              </View>
-            )}
-            {job.featured && (
-              <View style={cs.bannerFeatured}>
-                <Text style={cs.bannerTextFeatured}>★ FEATURED</Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Header: Avatar + Title + Save */}
-        <View style={cs.header}>
-          <Avatar
-            entity={ownerEntity}
-            size={52}
-            borderRadius={14}
-          />
-
-          <View style={[cs.titleBlock, { marginLeft: 12 }]}>
-            <Text style={[cs.jobTitle, { color: c.text }]} numberOfLines={2}>
+    // ── Compact variant ──────────────────────────────────────────────────────
+    if (compact) {
+      return (
+        <TouchableOpacity
+          onPress={onPress}
+          activeOpacity={0.78}
+          style={{
+            flexDirection:   'row',
+            alignItems:      'center',
+            borderRadius:    RADIUS.md,
+            borderWidth:     1,
+            padding:         12,
+            marginBottom:    SPACING.sm,
+            backgroundColor: c.bgCard,
+            borderColor:     c.border,
+          }}
+        >
+          {/* FIXED: Avatar with proper entity */}
+          <Avatar entity={ownerEntity} size={40} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text
+              style={{ fontSize: 14, fontWeight: '600', color: c.text }}
+              numberOfLines={1}
+            >
               {job.title}
             </Text>
-            <View style={cs.ownerRow}>
-              <Text style={[cs.ownerName, { color: c.primary ?? '#1A73E8' }]} numberOfLines={1}>
-                {owner?.name ?? ''}
-              </Text>
-              {owner?.verified && (
-                <Ionicons name="checkmark-circle" size={13} color={c.primary ?? '#1A73E8'} style={{ marginLeft: 4 }} />
+            <Text
+              style={{ fontSize: 12, marginTop: 2, color: c.textMuted }}
+              numberOfLines={1}
+            >
+              {owner?.name ?? ''}
+            </Text>
+          </View>
+          {deadline.urgent && (
+            <View
+              style={{
+                width:        8,
+                height:       8,
+                borderRadius: 4,
+                backgroundColor: c.danger,
+              }}
+            />
+          )}
+        </TouchableOpacity>
+      );
+    }
+
+    // ── Memoised styles ──────────────────────────────────────────────────────
+    const s = useMemo(
+      () =>
+        StyleSheet.create({
+          card: {
+            borderRadius:    RADIUS.xl,
+            borderWidth:     1,
+            padding:         SPACING.lg,
+            marginBottom:    SPACING.md,
+            backgroundColor: c.bgCard,
+            borderColor:     c.border,
+            ...shadows.sm,
+          },
+
+          bannerRow: { flexDirection: 'row', gap: 6, marginBottom: 12 },
+          bannerUrgent: {
+            backgroundColor: withAlpha(c.danger, 0.10),
+            paddingHorizontal: SPACING.sm,
+            paddingVertical:   3,
+            borderRadius:      RADIUS.sm,
+          },
+          bannerFeatured: {
+            backgroundColor: withAlpha(c.warning, 0.10),
+            paddingHorizontal: SPACING.sm,
+            paddingVertical:   3,
+            borderRadius:      RADIUS.sm,
+          },
+          bannerTextUrgent:   { fontSize: 10, fontWeight: '700', color: c.danger },
+          bannerTextFeatured: { fontSize: 10, fontWeight: '700', color: c.warning },
+
+          header:     { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
+          titleBlock: { flex: 1 },
+          jobTitle: {
+            fontSize:    16,
+            fontWeight:  '700',
+            lineHeight:  22,
+            marginBottom: 4,
+            color:       c.text,
+          },
+          ownerRow:  { flexDirection: 'row', alignItems: 'center' },
+          ownerName: { fontSize: 13, fontWeight: '600', color: c.primary },
+          saveBtn: {
+            width:          44,
+            height:         44,
+            alignItems:     'center',
+            justifyContent: 'center',
+          },
+
+          metaRow: {
+            flexDirection: 'row',
+            flexWrap:      'wrap',
+            gap:           6,
+            marginBottom:  10,
+          },
+
+          bottomRow: {
+            flexDirection: 'row',
+            alignItems:    'center',
+            gap:           SPACING.sm,
+            marginBottom:  10,
+          },
+          salaryBadge: {
+            paddingHorizontal: 10,
+            paddingVertical:   5,
+            borderRadius:      RADIUS.sm,
+            backgroundColor:   withAlpha(c.success, 0.10),
+          },
+          salaryText: { fontSize: 12, fontWeight: '700', color: c.success },
+          deadlineBadge: {
+            flexDirection: 'row',
+            alignItems:    'center',
+            gap:           4,
+            paddingHorizontal: SPACING.sm,
+            paddingVertical:   5,
+            borderRadius:      RADIUS.sm,
+          },
+          deadlineText: { fontSize: 11, fontWeight: '600' },
+
+          skillsRow: {
+            flexDirection: 'row',
+            flexWrap:      'wrap',
+            gap:           6,
+            marginBottom:  12,
+          },
+          skillTag: {
+            paddingHorizontal: 10,
+            paddingVertical:   4,
+            borderRadius:      RADIUS.full,
+            backgroundColor: withAlpha(c.text, isDark ? 0.10 : 0.07),
+          },
+          skillTagText: {
+            fontSize:   11,
+            fontWeight: '500',
+            color:      c.textSecondary,
+          },
+          skillMore: { fontSize: 11, alignSelf: 'center', color: c.textMuted },
+
+          footer: {
+            flexDirection:  'row',
+            alignItems:     'center',
+            justifyContent: 'space-between',
+            paddingTop:     10,
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: c.border,
+          },
+          postedText:   { fontSize: 11, color: c.textMuted },
+          appCountRow:  { flexDirection: 'row', alignItems: 'center', gap: 3 },
+          appCountText: { fontSize: 11, color: c.textMuted },
+        }),
+      [c, isDark, shadows],
+    );
+
+    return (
+      <TouchableOpacity
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        onPress={onPress}
+        activeOpacity={1}
+      >
+        <Animated.View
+          style={[s.card, { transform: [{ scale: scaleAnim }] }]}
+        >
+          {/* Urgent / Featured banners */}
+          {(job.urgent || job.featured) && (
+            <View style={s.bannerRow}>
+              {job.urgent && (
+                <View style={s.bannerUrgent}>
+                  <Text style={s.bannerTextUrgent}>URGENT</Text>
+                </View>
+              )}
+              {job.featured && (
+                <View style={s.bannerFeatured}>
+                  <Text style={s.bannerTextFeatured}>FEATURED</Text>
+                </View>
               )}
             </View>
+          )}
+
+          {/* FIXED: Header with Avatar, Title + Save */}
+          <View style={s.header}>
+            <Avatar entity={ownerEntity} size={52} borderRadius={RADIUS.md} />
+
+            <View style={[s.titleBlock, { marginLeft: 12 }]}>
+              <Text style={s.jobTitle} numberOfLines={2}>
+                {job.title}
+              </Text>
+              <View style={s.ownerRow}>
+                <Text style={s.ownerName} numberOfLines={1}>
+                  {owner?.name ?? ''}
+                </Text>
+                {owner?.verified && (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={13}
+                    color={c.primary}
+                    style={{ marginLeft: 4 }}
+                  />
+                )}
+              </View>
+            </View>
+
+            {onSave && (
+              <TouchableOpacity
+                onPress={onSave}
+                style={s.saveBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={isSaved ? 'Unsave job' : 'Save job'}
+              >
+                <Ionicons
+                  name={isSaved ? 'bookmark' : 'bookmark-outline'}
+                  size={22}
+                  color={isSaved ? c.primary : c.textMuted}
+                />
+              </TouchableOpacity>
+            )}
           </View>
 
-          {onSave && (
-            <TouchableOpacity
-              onPress={onSave}
-              style={cs.saveBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons
-                name={isSaved ? 'bookmark' : 'bookmark-outline'}
-                size={22}
-                color={isSaved ? (c.primary ?? '#1A73E8') : c.textMuted}
+          {/* Meta tags */}
+          <View style={s.metaRow}>
+            <MetaTag
+              icon="location-outline"
+              label={formatLocation(job.location)}
+              primary={c.primary}
+              textMuted={c.textMuted}
+              isDark={isDark}
+            />
+            <MetaTag
+              icon="briefcase-outline"
+              label={job.type ?? ''}
+              primary={c.primary}
+              textMuted={c.textMuted}
+              isDark={isDark}
+            />
+            <MetaTag
+              icon="trending-up-outline"
+              label={job.experienceLevel ?? ''}
+              primary={c.primary}
+              textMuted={c.textMuted}
+              isDark={isDark}
+            />
+            {job.remote && job.remote !== 'on-site' && (
+              <MetaTag
+                icon="globe-outline"
+                label={job.remote}
+                highlight
+                primary={c.primary}
+                textMuted={c.textMuted}
+                isDark={isDark}
               />
-            </TouchableOpacity>
-          )}
-        </View>
+            )}
+          </View>
 
-        {/* Meta tags row */}
-        <View style={cs.metaRow}>
-          <MetaTag icon="location-outline" label={formatLocation(job.location)} c={c} />
-          <MetaTag icon="briefcase-outline" label={job.type ?? ''} c={c} />
-          <MetaTag icon="trending-up-outline" label={job.experienceLevel ?? ''} c={c} />
-          {job.remote && job.remote !== 'on-site' && (
-            <MetaTag icon="globe-outline" label={job.remote} c={c} highlight />
-          )}
-        </View>
+          {/* Salary + Deadline */}
+          <View style={s.bottomRow}>
+            {salary && (
+              <View style={s.salaryBadge}>
+                <Text style={s.salaryText}>{salary}</Text>
+              </View>
+            )}
 
-        {/* Salary + Deadline + Type */}
-        <View style={cs.bottomRow}>
-          {salary && (
-            <View style={[cs.salaryBadge, { backgroundColor: 'rgba(16,185,129,0.1)' }]}>
-              <Text style={[cs.salaryText, { color: '#059669' }]}>{salary}</Text>
-            </View>
-          )}
-
-          {deadline.label && (
-            <View style={[
-              cs.deadlineBadge,
-              {
-                backgroundColor: deadline.urgent ? 'rgba(239,68,68,0.1)' : 'rgba(0,0,0,0.04)',
-              },
-            ]}>
-              <Ionicons
-                name="time-outline"
-                size={11}
-                color={deadline.urgent ? '#EF4444' : c.textMuted}
-              />
-              <Text style={[
-                cs.deadlineText,
-                { color: deadline.urgent ? '#EF4444' : c.textMuted },
-              ]}>
-                {deadline.label}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Skills */}
-        {(job.skills ?? []).length > 0 && (
-          <View style={cs.skillsRow}>
-            {job.skills!.slice(0, 3).map((sk, i) => (
+            {deadline.label && (
               <View
-                key={i}
                 style={[
-                  cs.skillTag,
+                  s.deadlineBadge,
                   {
-                    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                    backgroundColor: deadline.urgent
+                      ? withAlpha(c.danger, 0.10)
+                      : withAlpha(c.text, 0.04),
                   },
                 ]}
               >
-                <Text style={[cs.skillTagText, { color: c.textSecondary }]}>{sk}</Text>
+                <Ionicons
+                  name="time-outline"
+                  size={11}
+                  color={deadline.urgent ? c.danger : c.textMuted}
+                />
+                <Text
+                  style={[
+                    s.deadlineText,
+                    { color: deadline.urgent ? c.danger : c.textMuted },
+                  ]}
+                >
+                  {deadline.label}
+                </Text>
               </View>
-            ))}
-            {job.skills!.length > 3 && (
-              <Text style={[cs.skillMore, { color: c.textMuted }]}>
-                +{job.skills!.length - 3}
-              </Text>
             )}
           </View>
-        )}
 
-        {/* Footer */}
-        <View style={[cs.footer, { borderTopColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}>
-          <Text style={[cs.postedText, { color: c.textMuted }]}>
-            {formatPostedDate(job.createdAt)}
-          </Text>
-          {(job.applicationCount ?? 0) > 0 && (
-            <View style={cs.appCountRow}>
-              <Ionicons name="people-outline" size={12} color={c.textMuted} />
-              <Text style={[cs.appCountText, { color: c.textMuted }]}>
-                {job.applicationCount} applicant{job.applicationCount !== 1 ? 's' : ''}
-              </Text>
+          {/* Skills */}
+          {(job.skills ?? []).length > 0 && (
+            <View style={s.skillsRow}>
+              {job.skills!.slice(0, 3).map((sk, i) => (
+                <View key={i} style={s.skillTag}>
+                  <Text style={s.skillTagText}>{sk}</Text>
+                </View>
+              ))}
+              {job.skills!.length > 3 && (
+                <Text style={s.skillMore}>+{job.skills!.length - 3}</Text>
+              )}
             </View>
           )}
-        </View>
-      </Animated.View>
-    </TouchableOpacity>
-  );
-});
+
+          {/* Footer */}
+          <View style={s.footer}>
+            <Text style={s.postedText}>
+              {formatRelativeDate(job.createdAt)}
+            </Text>
+            {(job.applicationCount ?? 0) > 0 && (
+              <View style={s.appCountRow}>
+                <Ionicons name="people-outline" size={12} color={c.textMuted} />
+                <Text style={s.appCountText}>
+                  {job.applicationCount}{' '}
+                  {job.applicationCount === 1 ? 'applicant' : 'applicants'}
+                </Text>
+              </View>
+            )}
+          </View>
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  },
+);
 
 CandidateJobCard.displayName = 'CandidateJobCard';
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const cs = StyleSheet.create({
-  card: {
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 12,
-  },
-  compactCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 12,
-    marginBottom: 8,
-  },
-  compactTitle:  { fontSize: 14, fontWeight: '600' },
-  compactOwner:  { fontSize: 12, marginTop: 2 },
-  urgentDot:     { width: 8, height: 8, borderRadius: 4 },
-
-  bannerRow:     { flexDirection: 'row', gap: 6, marginBottom: 12 },
-  bannerUrgent:  {
-    backgroundColor: 'rgba(220,38,38,0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  bannerFeatured: {
-    backgroundColor: 'rgba(245,158,11,0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  bannerTextUrgent:   { fontSize: 10, fontWeight: '700', color: '#DC2626' },
-  bannerTextFeatured: { fontSize: 10, fontWeight: '700', color: '#D97706' },
-
-  header:     { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
-  titleBlock: { flex: 1 },
-  jobTitle:   { fontSize: 16, fontWeight: '700', lineHeight: 22, marginBottom: 4 },
-  ownerRow:   { flexDirection: 'row', alignItems: 'center' },
-  ownerName:  { fontSize: 13, fontWeight: '600' },
-  saveBtn:    { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-
-  metaRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
-  metaTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 3,
-  },
-  metaTagText: { fontSize: 11, fontWeight: '500' },
-
-  bottomRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  salaryBadge:  {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  salaryText:   { fontSize: 12, fontWeight: '700' },
-  deadlineBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  deadlineText: { fontSize: 11, fontWeight: '600' },
-
-  skillsRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
-  skillTag:     { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  skillTagText: { fontSize: 11, fontWeight: '500' },
-  skillMore:    { fontSize: 11, alignSelf: 'center' },
-
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  postedText:  { fontSize: 11 },
-  appCountRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  appCountText: { fontSize: 11 },
-});

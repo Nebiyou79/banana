@@ -9,19 +9,50 @@ const organizationSchema = new mongoose.Schema({
     maxlength: [100, 'Organization name cannot exceed 100 characters'],
     index: true
   },
-  registrationNumber: {
-    type: String,
-    trim: true,
-    unique: true,
-    sparse: true,
-    index: true,
-    validate: {
-      validator: function (v) {
-        return /^[0-9]{10}$/.test(v);
-      },
-      message: 'TIN number must be exactly 10 digits'
-    }
-  },
+// server/src/models/Organization.js
+
+// Find the registrationNumber field and update it:
+registrationNumber: {
+  type: String,
+  trim: true,
+  validate: {
+    validator: function(v) {
+      // Allow empty or null values
+      if (!v || v.length === 0) return true;
+      // If provided, must be exactly 10 digits
+      return /^\d{10}$/.test(v);
+    },
+    message: 'TIN number must be exactly 10 digits'
+  }
+},
+
+// Find the phone field and update it:
+phone: {
+  type: String,
+  trim: true,
+  validate: {
+    validator: function(v) {
+      // Allow empty or null values
+      if (!v || v.length === 0) return true;
+      // If provided, must be 7-15 digits
+      return /^\d{7,15}$/.test(v);
+    },
+    message: 'Phone number must contain only digits (7–15 digits allowed)'
+  }
+},
+
+// Same for secondaryPhone if it exists
+secondaryPhone: {
+  type: String,
+  trim: true,
+  validate: {
+    validator: function(v) {
+      if (!v || v.length === 0) return true;
+      return /^\d{7,15}$/.test(v);
+    },
+    message: 'Phone number must contain only digits (7–15 digits allowed)'
+  }
+},
   organizationType: {
     type: String,
     trim: true,
@@ -68,16 +99,16 @@ const organizationSchema = new mongoose.Schema({
     country: String,
     zipCode: String
   },
-  phone: {
-    type: String,
-    trim: true,
-    validate: {
-      validator: function (v) {
-        return /^\+?[0-9]{7,15}$/.test(v);
-      },
-      message: 'Phone number must contain only digits (7–15 digits allowed)'
-    }
-  },
+  // phone: {
+  //   type: String,
+  //   trim: true,
+  //   validate: {
+  //     validator: function (v) {
+  //       return /^\+?[0-9]{7,15}$/.test(v);
+  //     },
+  //     message: 'Phone number must contain only digits (7–15 digits allowed)'
+  //   }
+  // },
   website: {
     type: String,
     trim: true,
@@ -87,16 +118,16 @@ const organizationSchema = new mongoose.Schema({
     trim: true,
     lowercase: true,
   },
-  secondaryPhone: {
-    type: String,
-    trim: true,
-    validate: {
-      validator: function (v) {
-        return /^\+?[0-9]{7,15}$/.test(v);
-      },
-      message: 'Phone number must contain only digits (7–15 digits allowed)'
-    }
-  },
+  // secondaryPhone: {
+  //   type: String,
+  //   trim: true,
+  //   validate: {
+  //     validator: function (v) {
+  //       return /^\+?[0-9]{7,15}$/.test(v);
+  //     },
+  //     message: 'Phone number must contain only digits (7–15 digits allowed)'
+  //   }
+  // },
   mission: {
     type: String,
     trim: true,

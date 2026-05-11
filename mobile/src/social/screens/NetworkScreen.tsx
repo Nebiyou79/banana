@@ -15,6 +15,7 @@
  *   └──────────────────────────────────────────────┘
  */
 
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import React, { useCallback, useMemo, useState } from 'react';
@@ -47,7 +48,7 @@ import {
 } from '../hooks';
 import { getAdForPlacement } from '../theme/adsConfig';
 import { useSocialTheme } from '../theme/socialTheme';
-import type { FollowTarget, SearchResult } from '../types';
+import type { FollowTarget, SearchResult, UserRole } from '../types';
 import { useBulkConnectionStatus, useConnections } from '../hooks/useFollow';
 
 type NetworkTab = 'followers' | 'following' | 'connections';
@@ -68,14 +69,15 @@ const toSearchResult = (entry: any): SearchResult | null => {
   const id = u?._id ?? entry?._id;
   if (!id) return null;
   return {
-    _id: id,
-    name: u?.name ?? 'Unknown',
-    avatar: u?.avatar,
-    role: u?.role ?? 'candidate',
-    headline: u?.headline,
-    followerCount: u?.socialStats?.followerCount,
-    verificationStatus: u?.verificationStatus,
-  };
+  _id: id,
+  name: u?.name ?? 'Unknown',
+  avatar: u?.avatar,
+  role: u?.role ?? 'candidate',
+  headline: u?.headline,
+  followerCount: u?.socialStats?.followerCount,
+  verificationStatus: u?.verificationStatus,
+  type: 'candidate',
+};
 };
 
 const NetworkScreen: React.FC = () => {
@@ -110,7 +112,7 @@ const NetworkScreen: React.FC = () => {
   );
   const suggestionStatus = useBulkConnectionStatus(suggestionIds);
 
-  const ad = getAdForPlacement(theme.role, 'network');
+  const ad = getAdForPlacement(theme.role as UserRole, 'network');
 
   // ── List data normalisation ─────────────────────────────────────────
   const listData: SearchResult[] = useMemo(() => {
@@ -179,6 +181,14 @@ const NetworkScreen: React.FC = () => {
         ) : null}
 
         <SectionHeader title="Your network" />
+        {/* Role-tinted horizontal rule under section header */}
+        <View style={{
+          height: 1,
+          marginHorizontal: 16,
+          marginBottom: 8,
+          backgroundColor: theme.withAlpha(theme.colors.primary, 0.15),
+        }} />
+
         <View style={styles.tabs}>
           <Chip
             label={`Connections${
@@ -256,44 +266,50 @@ const NetworkScreen: React.FC = () => {
 
   // ── Render ──────────────────────────────────────────────────────────
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.bg }]}
-      edges={['top']}
+    // Tab root — LinearGradient background
+    <LinearGradient
+      colors={theme.bgGradient}
+      style={{ flex: 1 }}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0.3, y: 1 }}
     >
-      <FlashList
-        data={listData}
-        keyExtractor={(u) => u._id}
-        ListHeaderComponent={ListHeader}
-        ListEmptyComponent={listQ.isLoading ? null : renderEmpty()}
-        onEndReached={() => listQ.hasNextPage && listQ.fetchNextPage()}
-        onEndReachedThreshold={0.5}
-        refreshControl={
-          <RefreshControl
-            refreshing={listQ.isRefetching}
-            onRefresh={onRefresh}
-            tintColor={theme.primary}
-          />
-        }
-        renderItem={({ item }) => (
-          <SearchResultCard
-            result={item}
-            status={listStatus.statusMap[item._id] ?? 'none'}
-            onPress={() => goToProfile(item._id)}
-            onFollowPress={() => handleToggle(item._id)}
-            followLoading={pendingFollowId === item._id}
-          />
-        )}
-        ListFooterComponent={
-          listQ.isFetchingNextPage ? (
-            <ActivityIndicator
-              color={theme.primary}
-              style={{ padding: 20 }}
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <FlashList
+          data={listData}
+          keyExtractor={(u) => u._id}
+          ListHeaderComponent={ListHeader}
+          ListEmptyComponent={listQ.isLoading ? null : renderEmpty()}
+          onEndReached={() => listQ.hasNextPage && listQ.fetchNextPage()}
+          onEndReachedThreshold={0.5}
+          refreshControl={
+            <RefreshControl
+              refreshing={listQ.isRefetching}
+              onRefresh={onRefresh}
+              tintColor={theme.colors.primary}
+              colors={[theme.colors.primary]}
             />
-          ) : null
-        }
-        contentContainerStyle={{ paddingBottom: 32 }}
-      />
-    </SafeAreaView>
+          }
+          renderItem={({ item }) => (
+            <SearchResultCard
+              result={item}
+              status={listStatus.statusMap[item._id] ?? 'none'}
+              onPress={() => goToProfile(item._id)}
+              onFollowPress={() => handleToggle(item._id)}
+              followLoading={pendingFollowId === item._id}
+            />
+          )}
+          ListFooterComponent={
+            listQ.isFetchingNextPage ? (
+              <ActivityIndicator
+                color={theme.colors.primary}
+                style={{ padding: 20 }}
+              />
+            ) : null
+          }
+          contentContainerStyle={{ paddingBottom: 32 }}
+        />
+      </SafeAreaView>
+    </LinearGradient>
   );
 };
 
@@ -309,3 +325,4 @@ const makeStyles = (_theme: ReturnType<typeof useSocialTheme>) =>
   });
 
 export default NetworkScreen;
+// ✅ role-theme-migrated

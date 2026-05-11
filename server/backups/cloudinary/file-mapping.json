@@ -1419,5 +1419,54 @@
     "uploadedAt": "2026-05-02T11:28:30.929Z",
     "fileType": "image",
     "size": 179297
+  },
+  "bananalink/images/covers/69ff4fd2f67e406fd1adb9cb/cover-1778340053904": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\cover-1778340053904_11c1c904_2026-05-09T15-21-00-853Z.jpg",
+    "originalName": "cover-1778340053904.jpg",
+    "uploadedAt": "2026-05-09T15:21:00.858Z",
+    "fileType": "image",
+    "size": 423801
+  },
+  "bananalink/images/avatars/69ff4fd2f67e406fd1adb9cb/avatar-1778340074892": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\avatar-1778340074892_c5d15faf_2026-05-09T15-21-20-943Z.jpg",
+    "originalName": "avatar-1778340074892.jpg",
+    "uploadedAt": "2026-05-09T15:21:20.945Z",
+    "fileType": "image",
+    "size": 267744
+  },
+  "bananalink/products/Parking-space-in-the-basement-of-an-apartment-building_0_1200": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\Parking-space-in-the-basement-of-an-apartment-building_0_1200_da514cf9_2026-05-10T12-05-58-954Z.jpg",
+    "originalName": "Parking-space-in-the-basement-of-an-apartment-building_0_1200.jpg",
+    "uploadedAt": "2026-05-10T12:05:58.957Z",
+    "fileType": "image",
+    "size": 29066
+  },
+  "bananalink/products/ee951dc09f9fd5407a3c1eafe78d73de": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\ee951dc09f9fd5407a3c1eafe78d73de_5339aaf5_2026-05-10T12-05-59-302Z.jpg",
+    "originalName": "ee951dc09f9fd5407a3c1eafe78d73de.jpg",
+    "uploadedAt": "2026-05-10T12:05:59.303Z",
+    "fileType": "image",
+    "size": 77649
+  },
+  "bananalink/products/B23F4I2AYZSMASS3T6VJRKNDPY": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\B23F4I2AYZSMASS3T6VJRKNDPY_b065cc63_2026-05-10T12-05-59-302Z.jpg",
+    "originalName": "B23F4I2AYZSMASS3T6VJRKNDPY.jpg",
+    "uploadedAt": "2026-05-10T12:05:59.304Z",
+    "fileType": "image",
+    "size": 177388
+  },
+  "bananalink/images/covers/6a0090d6c919c45b19573a88/cover-1778422600163": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\cover-1778422600163_b47f1f9c_2026-05-10T14-16-51-414Z.jpg",
+    "originalName": "cover-1778422600163.jpg",
+    "uploadedAt": "2026-05-10T14:16:51.415Z",
+    "fileType": "image",
+    "size": 38956
+  },
+  "bananalink/images/avatars/6a0090d6c919c45b19573a88/avatar-1778422629303": {
+    "localBackup": "C:\\Users\\nebaw\\Documents\\Websites\\banana2.0\\server\\backups\\cloudinary\\images\\avatar-1778422629303_8d04470c_2026-05-10T14-17-20-444Z.jpg",
+    "originalName": "avatar-1778422629303.jpg",
+    "uploadedAt": "2026-05-10T14:17:20.445Z",
+    "fileType": "image",
+    "size": 25391
   }
 }

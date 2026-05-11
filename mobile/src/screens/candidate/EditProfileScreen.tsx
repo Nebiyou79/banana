@@ -1,17 +1,19 @@
 /**
  * screens/candidate/EditProfileScreen.tsx
+ * P0: beforeRemove navigation listener for dirty form guard.
+ * Refactor: useTheme() for all design tokens, color aliases corrected.
  */
 import React, { useEffect, useCallback, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator,
-  Switch, TextInput,
+  Switch, TextInput, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 
-import { useTheme }          from '../../hooks/useTheme';
+import { useTheme } from '../../hooks/useTheme';
 import {
   useProfile, useUpdateProfile,
   useCandidateRoleProfile, useUpdateCandidateRoleProfile,
@@ -21,8 +23,6 @@ import { ProfileImageUploader } from '../../components/shared/ProfileImageUpload
 import { SkeletonCard } from '../../components/shared/ProfileAtoms';
 import { toast } from '../../lib/toast';
 import * as DocumentPicker from 'expo-document-picker';
-
-const ACCENT = '#3B82F6';
 
 interface FormValues {
   headline: string;
@@ -81,7 +81,7 @@ const LabeledInput: React.FC<{
         {
           backgroundColor: colors.inputBg,
           borderColor: colors.inputBorder,
-          color: colors.textPrimary,
+          color: colors.text,
           height: multiline ? (numberOfLines ?? 4) * 22 : 44,
           textAlignVertical: multiline ? 'top' : 'center',
         },
@@ -130,7 +130,7 @@ const TagEditor: React.FC<{
         <TextInput
           style={[
             inputStyles.input,
-            { flex: 1, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.textPrimary, height: 44 },
+            { flex: 1, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text, height: 44 },
           ]}
           value={input}
           onChangeText={setInput}
@@ -166,7 +166,7 @@ const TagEditor: React.FC<{
 
 export const CandidateEditProfileScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { colors, type, spacing, isDark } = useTheme();
+  const { colors, spacing } = useTheme();
 
   const { data: profile, isLoading: pLoading } = useProfile();
   const { data: roleProfile, isLoading: rLoading } = useCandidateRoleProfile();
@@ -177,7 +177,7 @@ export const CandidateEditProfileScreen: React.FC = () => {
   const deleteCV = useDeleteCV();
   const setPrimaryCV = useSetPrimaryCV();
 
-  const { control, handleSubmit, reset, watch, setValue } = useForm<FormValues>({
+  const { control, handleSubmit, reset, watch, setValue, formState } = useForm<FormValues>({
     defaultValues: {
       headline: '', bio: '', location: '', phone: '', website: '',
       skills: [], education: [], experience: [], certifications: [],
@@ -188,7 +188,6 @@ export const CandidateEditProfileScreen: React.FC = () => {
   const { fields: expFields, append: appendExp, remove: removeExp } = useFieldArray({ control, name: 'experience' });
   const { fields: certFields, append: appendCert, remove: removeCert } = useFieldArray({ control, name: 'certifications' });
 
-  // Fix: populate form only after data resolves
   useEffect(() => {
     if (!profile) return;
     reset({
@@ -227,6 +226,27 @@ export const CandidateEditProfileScreen: React.FC = () => {
       })),
     });
   }, [profile, roleProfile, reset]);
+
+  // ── P0: beforeRemove guard ────────────────────────────────────────────────
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
+      if (!formState.isDirty) return;
+      e.preventDefault();
+      Alert.alert(
+        'Discard changes?',
+        'You have unsaved changes. Are you sure you want to leave?',
+        [
+          { text: 'Keep editing', style: 'cancel' },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: () => navigation.dispatch(e.data.action),
+          },
+        ],
+      );
+    });
+    return unsubscribe;
+  }, [navigation, formState.isDirty]);
 
   const isSaving = updateProfile.isPending || updateRoleProfile.isPending;
   const isLoading = pLoading || rLoading;
@@ -269,7 +289,7 @@ export const CandidateEditProfileScreen: React.FC = () => {
         toast.error(err instanceof Error ? err.message : 'Failed to save');
       }
     }),
-    [handleSubmit, updateProfile, updateRoleProfile, navigation]
+    [handleSubmit, updateProfile, updateRoleProfile, navigation],
   );
 
   const handlePickCV = useCallback(async () => {
@@ -291,28 +311,28 @@ export const CandidateEditProfileScreen: React.FC = () => {
 
   if (isLoading) {
     return (
-      <ScrollView style={{ flex: 1, backgroundColor: colors.bgPrimary }} contentContainerStyle={{ padding: 16 }}>
-        <SkeletonCard  />
+      <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg }}>
+        <SkeletonCard />
         <SkeletonCard />
       </ScrollView>
     );
   }
 
   const avatarUrl = profile?.avatar?.secure_url ?? profile?.user?.avatar ?? null;
-  const coverUrl = profile?.cover?.secure_url ?? null;
+  const coverUrl  = profile?.cover?.secure_url ?? null;
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       {/* Sticky header */}
-      <View style={[styles.header, { backgroundColor: colors.bgCard, borderBottomColor: colors.borderPrimary }]}>
+      <View style={[styles.header, { backgroundColor: colors.bgCard, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }}>
-          <Ionicons name="close-outline" size={22} color={colors.textPrimary} />
+          <Ionicons name="close-outline" size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 16 }}>
+        <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16 }}>
           Edit Profile
         </Text>
         <TouchableOpacity
-          style={[styles.saveBtn, { backgroundColor: ACCENT, opacity: isSaving ? 0.65 : 1 }]}
+          style={[styles.saveBtn, { backgroundColor: colors.candidate, opacity: isSaving ? 0.65 : 1 }]}
           onPress={onSave}
           disabled={isSaving}
         >
@@ -323,7 +343,7 @@ export const CandidateEditProfileScreen: React.FC = () => {
       </View>
 
       <ScrollView
-        style={{ flex: 1, backgroundColor: colors.bgPrimary }}
+        style={{ flex: 1, backgroundColor: colors.bg }}
         contentContainerStyle={{ paddingTop: 64 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -332,12 +352,12 @@ export const CandidateEditProfileScreen: React.FC = () => {
         <ProfileImageUploader
           currentAvatarUrl={avatarUrl}
           currentCoverUrl={coverUrl}
-          accentColor={ACCENT}
+          accentColor={colors.candidate}
           type="both"
           avatarShape="circle"
         />
 
-        <View style={{ padding: 16, gap: 14 }}>
+        <View style={{ padding: spacing.lg, gap: 14 }}>
           {/* ── Basic Info ─────────────────────────────────────────── */}
           <View style={[styles.section, { backgroundColor: colors.bgCard }]}>
             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>BASIC INFO</Text>
@@ -392,7 +412,7 @@ export const CandidateEditProfileScreen: React.FC = () => {
               onAdd={t => setValue('skills', [...skillsValue, t])}
               onRemove={i => setValue('skills', skillsValue.filter((_, idx) => idx !== i))}
               placeholder="Add a skill..."
-              accentColor={ACCENT}
+              accentColor={colors.candidate}
               colors={colors}
             />
           </View>
@@ -406,22 +426,22 @@ export const CandidateEditProfileScreen: React.FC = () => {
                   institution: '', degree: '', field: '', startDate: '',
                   endDate: '', current: false, description: '',
                 })}
-                style={[styles.addBtn, { backgroundColor: ACCENT + '18' }]}
+                style={[styles.addBtn, { backgroundColor: colors.candidate + '18' }]}
               >
-                <Ionicons name="add" size={16} color={ACCENT} />
-                <Text style={{ color: ACCENT, fontSize: 12, fontWeight: '700' }}>Add</Text>
+                <Ionicons name="add" size={16} color={colors.candidate} />
+                <Text style={{ color: colors.candidate, fontSize: 12, fontWeight: '700' }}>Add</Text>
               </TouchableOpacity>
             </View>
             {eduFields.map((field, i) => {
               const isCurrent = watch(`education.${i}.current`);
               return (
-                <View key={field.id} style={[styles.arrayItem, { borderColor: colors.borderPrimary }]}>
+                <View key={field.id} style={[styles.arrayItem, { borderColor: colors.border }]}>
                   <View style={styles.arrayItemHeader}>
-                    <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: '700' }}>
+                    <Text style={{ color: colors.text, fontSize: 13, fontWeight: '700' }}>
                       Education {i + 1}
                     </Text>
                     <TouchableOpacity onPress={() => removeEdu(i)}>
-                      <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                      <Ionicons name="trash-outline" size={16} color={colors.danger} />
                     </TouchableOpacity>
                   </View>
                   <Controller control={control} name={`education.${i}.institution`}
@@ -450,7 +470,7 @@ export const CandidateEditProfileScreen: React.FC = () => {
                         <Switch
                           value={f.value}
                           onValueChange={f.onChange}
-                          trackColor={{ true: ACCENT }}
+                          trackColor={{ true: colors.candidate }}
                         />
                         <Text style={{ color: colors.textSecondary, fontSize: 13 }}>Currently studying</Text>
                       </View>
@@ -482,23 +502,23 @@ export const CandidateEditProfileScreen: React.FC = () => {
                   company: '', position: '', startDate: '',
                   endDate: '', current: false, description: '', skills: [],
                 })}
-                style={[styles.addBtn, { backgroundColor: ACCENT + '18' }]}
+                style={[styles.addBtn, { backgroundColor: colors.candidate + '18' }]}
               >
-                <Ionicons name="add" size={16} color={ACCENT} />
-                <Text style={{ color: ACCENT, fontSize: 12, fontWeight: '700' }}>Add</Text>
+                <Ionicons name="add" size={16} color={colors.candidate} />
+                <Text style={{ color: colors.candidate, fontSize: 12, fontWeight: '700' }}>Add</Text>
               </TouchableOpacity>
             </View>
             {expFields.map((field, i) => {
               const isCurrent = watch(`experience.${i}.current`);
               const expSkills = watch(`experience.${i}.skills`) ?? [];
               return (
-                <View key={field.id} style={[styles.arrayItem, { borderColor: colors.borderPrimary }]}>
+                <View key={field.id} style={[styles.arrayItem, { borderColor: colors.border }]}>
                   <View style={styles.arrayItemHeader}>
-                    <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: '700' }}>
+                    <Text style={{ color: colors.text, fontSize: 13, fontWeight: '700' }}>
                       Experience {i + 1}
                     </Text>
                     <TouchableOpacity onPress={() => removeExp(i)}>
-                      <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                      <Ionicons name="trash-outline" size={16} color={colors.danger} />
                     </TouchableOpacity>
                   </View>
                   <Controller control={control} name={`experience.${i}.company`}
@@ -519,7 +539,7 @@ export const CandidateEditProfileScreen: React.FC = () => {
                   <Controller control={control} name={`experience.${i}.current`}
                     render={({ field: f }) => (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                        <Switch value={f.value} onValueChange={f.onChange} trackColor={{ true: ACCENT }} />
+                        <Switch value={f.value} onValueChange={f.onChange} trackColor={{ true: colors.candidate }} />
                         <Text style={{ color: colors.textSecondary, fontSize: 13 }}>Current position</Text>
                       </View>
                     )} />
@@ -542,7 +562,7 @@ export const CandidateEditProfileScreen: React.FC = () => {
                     onAdd={t => setValue(`experience.${i}.skills`, [...expSkills, t])}
                     onRemove={idx => setValue(`experience.${i}.skills`, expSkills.filter((_, ii) => ii !== idx))}
                     placeholder="Add skill..."
-                    accentColor={ACCENT}
+                    accentColor={colors.candidate}
                     colors={colors}
                   />
                 </View>
@@ -559,20 +579,20 @@ export const CandidateEditProfileScreen: React.FC = () => {
                   name: '', issuer: '', issueDate: '', expiryDate: '',
                   credentialId: '', credentialUrl: '', description: '',
                 })}
-                style={[styles.addBtn, { backgroundColor: ACCENT + '18' }]}
+                style={[styles.addBtn, { backgroundColor: colors.candidate + '18' }]}
               >
-                <Ionicons name="add" size={16} color={ACCENT} />
-                <Text style={{ color: ACCENT, fontSize: 12, fontWeight: '700' }}>Add</Text>
+                <Ionicons name="add" size={16} color={colors.candidate} />
+                <Text style={{ color: colors.candidate, fontSize: 12, fontWeight: '700' }}>Add</Text>
               </TouchableOpacity>
             </View>
             {certFields.map((field, i) => (
-              <View key={field.id} style={[styles.arrayItem, { borderColor: colors.borderPrimary }]}>
+              <View key={field.id} style={[styles.arrayItem, { borderColor: colors.border }]}>
                 <View style={styles.arrayItemHeader}>
-                  <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: '700' }}>
+                  <Text style={{ color: colors.text, fontSize: 13, fontWeight: '700' }}>
                     Certification {i + 1}
                   </Text>
                   <TouchableOpacity onPress={() => removeCert(i)}>
-                    <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                    <Ionicons name="trash-outline" size={16} color={colors.danger} />
                   </TouchableOpacity>
                 </View>
                 <Controller control={control} name={`certifications.${i}.name`}
@@ -618,13 +638,13 @@ export const CandidateEditProfileScreen: React.FC = () => {
               <TouchableOpacity
                 onPress={handlePickCV}
                 disabled={uploadCV.isPending}
-                style={[styles.addBtn, { backgroundColor: ACCENT + '18' }]}
+                style={[styles.addBtn, { backgroundColor: colors.candidate + '18' }]}
               >
                 {uploadCV.isPending
-                  ? <ActivityIndicator size="small" color={ACCENT} />
+                  ? <ActivityIndicator size="small" color={colors.candidate} />
                   : <>
-                    <Ionicons name="add" size={16} color={ACCENT} />
-                    <Text style={{ color: ACCENT, fontSize: 12, fontWeight: '700' }}>Upload</Text>
+                    <Ionicons name="add" size={16} color={colors.candidate} />
+                    <Text style={{ color: colors.candidate, fontSize: 12, fontWeight: '700' }}>Upload</Text>
                   </>
                 }
               </TouchableOpacity>
@@ -632,11 +652,11 @@ export const CandidateEditProfileScreen: React.FC = () => {
             {(cvData?.cvs ?? []).map(cv => (
               <View
                 key={cv._id}
-                style={[styles.cvRow, { borderColor: colors.borderPrimary }]}
+                style={[styles.cvRow, { borderColor: colors.border }]}
               >
-                <Ionicons name="document-text-outline" size={20} color={ACCENT} />
+                <Ionicons name="document-text-outline" size={20} color={colors.candidate} />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: '600' }}>
+                  <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>
                     {cv.originalName}
                   </Text>
                   <Text style={{ color: colors.textMuted, fontSize: 11 }}>
@@ -646,11 +666,11 @@ export const CandidateEditProfileScreen: React.FC = () => {
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   {!cv.isPrimary && (
                     <TouchableOpacity onPress={() => setPrimaryCV.mutate(cv._id)}>
-                      <Ionicons name="star-outline" size={18} color={ACCENT} />
+                      <Ionicons name="star-outline" size={18} color={colors.candidate} />
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity onPress={() => deleteCV.mutate(cv._id)}>
-                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                    <Ionicons name="trash-outline" size={18} color={colors.danger} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -667,9 +687,7 @@ export const CandidateEditProfileScreen: React.FC = () => {
 const styles = StyleSheet.create({
   header: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+    top: 0, left: 0, right: 0,
     zIndex: 100,
     flexDirection: 'row',
     alignItems: 'center',
@@ -685,48 +703,29 @@ const styles = StyleSheet.create({
     minWidth: 68,
     alignItems: 'center',
   },
-  section: {
-    borderRadius: 14,
-    padding: 16,
-  },
+  section: { borderRadius: 14, padding: 16 },
   sectionTitle: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    marginBottom: 14,
+    fontSize: 10, fontWeight: '700', letterSpacing: 0.8,
+    textTransform: 'uppercase', marginBottom: 14,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 14,
   },
   addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    flexDirection: 'row', alignItems: 'center',
+    gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
   },
   arrayItem: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
+    borderRadius: 12, padding: 12, marginBottom: 12,
   },
   arrayItemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 12,
   },
   cvRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth,
   },
 });

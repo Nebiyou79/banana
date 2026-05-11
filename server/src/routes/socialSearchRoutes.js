@@ -1,40 +1,62 @@
+// =============================================================================
+// FILE 6: socialSearchRoutes.js — CORRECTED WITH OPTIONAL AUTH
+// =============================================================================
+
+/**
+ * server/src/routes/socialSearchRoutes.js
+ * ────────────────────────────────────────────────────────────────────────────
+ * BananaLink Social System v4 — Social Search Routes (CORRECTED)
+ * 
+ * Uses optionalAuth middleware to allow both authenticated and
+ * unauthenticated users to search, while providing enhanced results
+ * (follow state, mutual status) for authenticated users.
+ * ────────────────────────────────────────────────────────────────────────────
+ */
+
 const express = require('express');
 const router = express.Router();
 const searchController = require('../controllers/socialSearchController');
 const { optionalAuth } = require('../middleware/authMiddleware');
 
-// Apply optional authentication middleware
+// Apply optional authentication to all search routes
 router.use(optionalAuth);
 
-// Search profiles (users, candidates, freelancers, companies, organizations)
+// ── Core search endpoints ──────────────────────────────────────────────
+
+// Profile/user search with filters
 router.get('/profiles', searchController.searchProfiles);
 
-// Search posts
+// Post search
 router.get('/posts', searchController.searchPosts);
 
-// Global search across all content types
-router.get('/global', searchController.globalSearch);
+// Hashtag search (prefix match)
+router.get('/hashtags', searchController.searchHashtags);
 
-// Get trending hashtags
-router.get('/trending/hashtags', searchController.getTrendingHashtags);
+// Trending hashtags (separate endpoint for clarity)
+router.get('/trending', searchController.getTrendingHashtags);
 
-// Get search suggestions for all entity types
+// Typeahead suggestions for search bars
 router.get('/suggestions', searchController.getSearchSuggestions);
 
-// Advanced search endpoints
+// ── Advanced role-specific search shortcuts ─────────────────────────────
+
 router.get('/advanced/users', searchController.searchProfiles);
+
 router.get('/advanced/companies', (req, res, next) => {
   req.query.type = 'company';
   searchController.searchProfiles(req, res, next);
 });
+
 router.get('/advanced/organizations', (req, res, next) => {
   req.query.type = 'organization';
   searchController.searchProfiles(req, res, next);
 });
+
 router.get('/advanced/freelancers', (req, res, next) => {
   req.query.type = 'freelancer';
   searchController.searchProfiles(req, res, next);
 });
+
 router.get('/advanced/candidates', (req, res, next) => {
   req.query.type = 'candidate';
   searchController.searchProfiles(req, res, next);

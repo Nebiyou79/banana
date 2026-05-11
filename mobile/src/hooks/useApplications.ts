@@ -13,6 +13,7 @@ import {
   CompanyResponseData,
   CV,
   ApplicationStats,
+  Application,
 } from '../services/applicationService';
 
 // ─── Query Key factory ────────────────────────────────────────────────────────
@@ -212,3 +213,14 @@ export const useAddCompanyResponse = () => {
     },
   });
 };
+/**
+ * P0 FIX: Fetch a single application by ID directly from the service.
+ * Replaces the previous pattern of loading 50 apps then filtering client-side.
+ */
+export const useApplicationById = (applicationId: string) =>
+  useQuery<Application>({
+    queryKey: ['application', applicationId],
+    queryFn:  () => applicationService.getById(applicationId),
+    enabled:  !!applicationId,
+    staleTime: 60 * 1000,
+  });

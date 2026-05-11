@@ -1,61 +1,172 @@
-// EmptyState.tsx
-import React, { useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+// src/components/ui/EmptyState.tsx
+// Usage: <EmptyState title="No results" subtitle="Try a different search" actionLabel="Clear" onAction={clear} />
+
+import React, { useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
+import { Button } from './Button';
 
 interface EmptyStateProps {
-  icon?: string;
+  icon?: keyof typeof Ionicons.glyphMap;
   title: string;
   subtitle?: string;
-  description?: string;
   actionLabel?: string;
   onAction?: () => void;
+  illustration?: React.ReactNode;
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({
-  icon = 'search-outline',
+  icon = 'document-outline',
   title,
   subtitle,
   actionLabel,
   onAction,
+  illustration,
 }) => {
-  const { colors, radius, type, spacing } = useTheme();
+  const { colors: c, spacing, type } = useTheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(10)).current;
+  const slideAnim = useRef(new Animated.Value(12)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 280, useNativeDriver: true }),
     ]).start();
   }, []);
 
   return (
-    <Animated.View style={[s.wrap, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-      <View style={[s.iconWrap, { backgroundColor: colors.accentBg, borderRadius: radius.lg }]}>
-        <Ionicons name={icon as any} size={40} color={colors.accent} />
-      </View>
-      <Text style={[s.title, type.h4, { color: colors.textPrimary }]}>{title}</Text>
-      {subtitle && <Text style={[s.subtitle, type.body, { color: colors.textMuted }]}>{subtitle}</Text>}
-      {actionLabel && onAction && (
-        <TouchableOpacity
-          style={[s.btn, { backgroundColor: colors.accent, borderRadius: radius.md }]}
-          onPress={onAction}
-          activeOpacity={0.8}
+    <Animated.View
+      style={[
+        styles.container,
+        { padding: spacing.xxl, opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+      ]}
+    >
+      {illustration ?? (
+        <View
+          style={[
+            styles.iconRing,
+            { backgroundColor: withAlpha(c.primary, 0.12) },
+          ]}
         >
-          <Text style={[s.btnText, type.bodySm, { color: colors.textInverse }]}>{actionLabel}</Text>
-        </TouchableOpacity>
+          <Ionicons name={icon} size={36} color={c.primary} />
+        </View>
+      )}
+
+      <Text style={[styles.title, type.h3, { color: c.text }]}>
+        {title}
+      </Text>
+
+      {subtitle && (
+        <Text style={[styles.subtitle, type.body, { color: c.textMuted }]}>
+          {subtitle}
+        </Text>
+      )}
+
+      {actionLabel && onAction && (
+        <Button
+          label={actionLabel}
+          onPress={onAction}
+          variant="outline"
+          size="md"
+          style={styles.action}
+        />
       )}
     </Animated.View>
   );
 };
 
-const s = StyleSheet.create({
-  wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, minHeight: 300 },
-  iconWrap: { width: 80, height: 80, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  title: { textAlign: 'center', marginBottom: 8, fontWeight: '700' },
-  subtitle: { textAlign: 'center', marginBottom: 24 },
-  btn: { paddingHorizontal: 24, paddingVertical: 12 },
-  btnText: { fontWeight: '600' },
+// ─── ErrorState ────────────────────────────────────────────────────────────────
+
+interface ErrorStateProps {
+  title?: string;
+  message?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}
+
+export const ErrorState: React.FC<ErrorStateProps> = ({
+  title = 'Something went wrong',
+  message = 'An unexpected error occurred. Please try again.',
+  actionLabel = 'Try again',
+  onAction,
+}) => {
+  const { colors: c, spacing, type } = useTheme();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(12)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 280, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={[
+        styles.container,
+        { padding: spacing.xxl, opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+      ]}
+    >
+      <View
+        style={[
+          styles.iconRing,
+          { backgroundColor: withAlpha(c.danger, 0.12) },
+        ]}
+      >
+        <Ionicons name="alert-circle-outline" size={36} color={c.danger} />
+      </View>
+
+      <Text style={[styles.title, type.h3, { color: c.text }]}>
+        {title}
+      </Text>
+
+      <Text style={[styles.subtitle, type.body, { color: c.textMuted }]}>
+        {message}
+      </Text>
+
+      {onAction && (
+        <Button
+          label={actionLabel}
+          onPress={onAction}
+          variant="outline"
+          size="md"
+          style={styles.action}
+        />
+      )}
+    </Animated.View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  iconRing: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  title: {
+    textAlign: 'center',
+    fontWeight: '700',
+    maxWidth: 280,
+  },
+  subtitle: {
+    textAlign: 'center',
+    marginTop: 8,
+    maxWidth: 280,
+  },
+  action: {
+    marginTop: 24,
+  },
 });
+
+export default EmptyState;

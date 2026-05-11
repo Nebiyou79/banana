@@ -17,6 +17,7 @@
  * Connection statuses are bulk-fetched in one round-trip.
  */
 
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
@@ -25,6 +26,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -121,119 +123,145 @@ const SearchScreen: React.FC = () => {
 
   // ── Render ───────────────────────────────────────────────────────────
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.bg }]}
-      edges={['top']}
+    // Tab root — LinearGradient background
+    <LinearGradient
+      colors={theme.bgGradient}
+      style={{ flex: 1 }}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0.3, y: 1 }}
     >
-      <View style={styles.headerWrap}>
-        <SearchBar
-          value={query}
-          onChangeText={setQuery}
-          onFocus={() => setFocused(true)}
-          onCancel={() => {
-            setFocused(false);
-            setQuery('');
-          }}
-          showCancel={focused || query.length > 0}
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.headerWrap}>
+          {/* "Discover People" identity strip */}
+          {!focused && query.length === 0 ? (
+            <Text style={[styles.discoverLabel, { color: theme.muted }]}>
+              Discover People
+            </Text>
+          ) : null}
+          <SearchBar
+            value={query}
+            onChangeText={setQuery}
+            onFocus={() => setFocused(true)}
+            onCancel={() => {
+              setFocused(false);
+              setQuery('');
+            }}
+            showCancel={focused || query.length > 0}
+          />
+        </View>
+
+        <SearchFilters
+          type={type}
+          sortBy={sortBy}
+          onTypeChange={setType}
+          onSortChange={setSortBy}
         />
-      </View>
 
-      <SearchFilters
-        type={type}
-        sortBy={sortBy}
-        onTypeChange={setType}
-        onSortChange={setSortBy}
-      />
+        {/* Result count pill — shown when results are ready */}
+        {isSearching && !searchQ.isLoading && results.length > 0 ? (
+          <View style={[styles.resultCount, {
+            backgroundColor: theme.withAlpha(theme.colors.primary, 0.08),
+            borderRadius: theme.radius.pill,
+            borderColor: theme.withAlpha(theme.colors.primary, 0.20),
+            borderWidth: 1,
+          }]}>
+            <Text style={{ color: theme.colors.primary, fontSize: 12, fontWeight: '700' }}>
+              {results.length} result{results.length !== 1 ? 's' : ''}
+            </Text>
+          </View>
+        ) : null}
 
-      {isSearching ? (
-        <FlashList
-          data={results}
-          keyExtractor={(item) => item._id}
-          renderItem={({ item }) => (
-            <SearchResultCard
-              result={item}
-              status={statusMap[item._id] ?? 'none'}
-              onPress={() => goToProfile(item._id, item.name)}
-              onFollowPress={() => handleFollow(item._id)}
-            />
-          )}
-          refreshControl={
-            <RefreshControl
-              refreshing={searchQ.isRefetching}
-              onRefresh={() => searchQ.refetch()}
-              tintColor={theme.primary}
-            />
-          }
-          ListEmptyComponent={
-            searchQ.isLoading ? (
-              <View style={styles.centered}>
-                <ActivityIndicator color={theme.primary} />
-              </View>
-            ) : (
-              <EmptyState
-                icon="search-outline"
-                title={
-                  hasQuery
-                    ? `No matches for "${trimmed}"`
-                    : 'Refine your filters'
-                }
-                subtitle={
-                  hasQuery
-                    ? 'Try a different name, role, or keyword.'
-                    : 'Start typing or pick a different category.'
-                }
+        {isSearching ? (
+          <FlashList
+            data={results}
+            keyExtractor={(item) => item._id}
+            renderItem={({ item }) => (
+              <SearchResultCard
+                result={item}
+                status={statusMap[item._id] ?? 'none'}
+                onPress={() => goToProfile(item._id, item.name)}
+                onFollowPress={() => handleFollow(item._id)}
               />
-            )
-          }
-          ListFooterComponent={
-            searchQ.isFetching && results.length > 0 ? (
-              <ActivityIndicator
-                color={theme.primary}
-                style={{ paddingVertical: 16 }}
+            )}
+            refreshControl={
+              <RefreshControl
+                refreshing={searchQ.isRefetching}
+                onRefresh={() => searchQ.refetch()}
+                tintColor={theme.colors.primary}
+                colors={[theme.colors.primary]}
               />
-            ) : null
-          }
-          contentContainerStyle={{ paddingBottom: 32 }}
-        />
-      ) : (
-        <FlashList
-          data={[] as never[]}
-          renderItem={() => null}
-          ListHeaderComponent={
-            <View>
-              <SearchHistoryList
-                history={history}
-                onPressEntry={(e) => {
-                  setQuery(e.query);
-                  if (e.type) setType(e.type as SearchType);
-                }}
-                onRemoveEntry={(e) => removeHistoryM.mutate(e.query)}
-                onClearAll={() => clearHistoryM.mutate()}
-              />
-
-              {trending.length > 0 ? (
-                <View>
-                  <SectionHeader title="Trending" />
-                  <TrendingHashtags
-                    hashtags={trending}
-                    onPress={handleHashtagPress}
-                  />
+            }
+            ListEmptyComponent={
+              searchQ.isLoading ? (
+                <View style={styles.centered}>
+                  <ActivityIndicator color={theme.colors.primary} />
                 </View>
-              ) : null}
-
-              {history.length === 0 && trending.length === 0 ? (
+              ) : (
                 <EmptyState
                   icon="search-outline"
-                  title="Discover people"
-                  subtitle="Search by name, role, or skill to find people to follow and message."
+                  title={
+                    hasQuery
+                      ? `No matches for "${trimmed}"`
+                      : 'Refine your filters'
+                  }
+                  subtitle={
+                    hasQuery
+                      ? 'Try a different name, role, or keyword.'
+                      : 'Start typing or pick a different category.'
+                  }
                 />
-              ) : null}
-            </View>
-          }
-          contentContainerStyle={{ paddingBottom: 32 }}
-        />
-      )}
-    </SafeAreaView>
+              )
+            }
+            ListFooterComponent={
+              searchQ.isFetching && results.length > 0 ? (
+                <ActivityIndicator
+                  color={theme.colors.primary}
+                  style={{ paddingVertical: 16 }}
+                />
+              ) : null
+            }
+            contentContainerStyle={{ paddingBottom: 32 }}
+          />
+        ) : (
+          <FlashList
+            data={[] as never[]}
+            renderItem={() => null}
+            ListHeaderComponent={
+              <View>
+                <SearchHistoryList
+                  history={history}
+                  onPressEntry={(e) => {
+                    setQuery(e.query);
+                    if (e.type) setType(e.type as SearchType);
+                  }}
+                  onRemoveEntry={(e) => removeHistoryM.mutate(e.query)}
+                  onClearAll={() => clearHistoryM.mutate()}
+                />
+
+                {trending.length > 0 ? (
+                  <View>
+                    <SectionHeader title="Trending" />
+                    <TrendingHashtags
+                      hashtags={trending}
+                      onPress={handleHashtagPress}
+                    />
+                  </View>
+                ) : null}
+
+                {history.length === 0 && trending.length === 0 ? (
+                  <EmptyState
+                    icon="search-outline"
+                    title="Discover people"
+                    subtitle="Search by name, role, or skill to find people to follow and message."
+                  />
+                ) : null}
+              </View>
+            }
+            contentContainerStyle={{ paddingBottom: 32 }}
+          />
+        )}
+      </SafeAreaView>
+    </LinearGradient>
   );
 };
 
@@ -241,6 +269,13 @@ const makeStyles = (_theme: ReturnType<typeof useSocialTheme>) =>
   StyleSheet.create({
     container: { flex: 1 },
     headerWrap: { paddingHorizontal: 12, paddingVertical: 10 },
+    discoverLabel: { fontSize: 12, marginBottom: 6, paddingHorizontal: 2 },
+    resultCount: {
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+      alignSelf: 'center',
+      marginBottom: 4,
+    },
     centered: {
       alignItems: 'center',
       justifyContent: 'center',
@@ -249,3 +284,4 @@ const makeStyles = (_theme: ReturnType<typeof useSocialTheme>) =>
   });
 
 export default SearchScreen;
+// ✅ role-theme-migrated

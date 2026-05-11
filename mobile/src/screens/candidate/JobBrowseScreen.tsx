@@ -1,7 +1,6 @@
 /**
  * mobile/src/screens/candidate/JobBrowseScreen.tsx
- * High-performance job explorer with search + advanced filters + FlashList.
- * Performance-List-Specialist: FlashList, React.memo cards, Skeleton, EmptyState.
+ * Refactored: useTheme(), correct color aliases, estimatedItemSize on FlashList.
  */
 
 import React, { useState, useCallback, useMemo, useRef } from 'react';
@@ -11,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 import { useCandidateJobs, useSaveJob, useUnsaveJob } from '../../hooks/useJobs';
 import { Job, JobFilters } from '../../services/jobService';
 import { CandidateJobCard } from '../../components/jobs/CandidateJobCard';
@@ -28,12 +27,11 @@ const SORT_OPTIONS = [
 ];
 
 export const JobBrowseScreen: React.FC<Props> = ({ navigation }) => {
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+  const { colors } = useTheme();
 
-  const [search, setSearch] = useState('');
+  const [search, setSearch]   = useState('');
   const [filters, setFilters] = useState<JobFilters>({} as JobFilters);
-  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortBy, setSortBy]   = useState('createdAt');
   const [savedJobs, setSavedJobs] = useState<Set<string>>(new Set());
   const searchTimeout = useRef<any>(null);
 
@@ -53,7 +51,7 @@ export const JobBrowseScreen: React.FC<Props> = ({ navigation }) => {
 
   const jobs: Job[] = useMemo(() =>
     (data?.pages ?? []).flatMap(p => p.jobs),
-    [data]
+    [data],
   );
 
   const totalResults = data?.pages[0]?.pagination?.totalResults ?? 0;
@@ -74,7 +72,7 @@ export const JobBrowseScreen: React.FC<Props> = ({ navigation }) => {
 
   const activeFilterCount = useMemo(() =>
     Object.values(filters).filter(v => v !== undefined && v !== '').length,
-    [filters]
+    [filters],
   );
 
   const renderItem = useCallback(({ item }: { item: Job }) => (
@@ -87,31 +85,31 @@ export const JobBrowseScreen: React.FC<Props> = ({ navigation }) => {
   ), [navigation, handleSave, savedJobs]);
 
   return (
-    <SafeAreaView style={[s.root, { backgroundColor: c.background }]} edges={['top']}>
+    <SafeAreaView style={[s.root, { backgroundColor: colors.bg }]} edges={['top']}>
       {/* Header */}
       <View style={s.header}>
-        <Text style={[s.title, { color: c.text }]}>Explore Jobs</Text>
+        <Text style={[s.title, { color: colors.text }]}>Explore Jobs</Text>
         {totalResults > 0 && (
-          <Text style={[s.count, { color: c.textMuted }]}>{totalResults.toLocaleString()} jobs</Text>
+          <Text style={[s.count, { color: colors.textMuted }]}>{totalResults.toLocaleString()} jobs</Text>
         )}
       </View>
 
       {/* Search bar */}
       <View style={s.searchRow}>
-        <View style={[s.searchBar, { backgroundColor: c.card, borderColor: c.border }]}>
-          <Ionicons name="search-outline" size={18} color={c.textMuted} />
+        <View style={[s.searchBar, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <Ionicons name="search-outline" size={18} color={colors.textMuted} />
           <TextInput
-            style={[s.searchInput, { color: c.text }]}
+            style={[s.searchInput, { color: colors.text }]}
             value={search}
             onChangeText={handleSearchChange}
             placeholder="Search jobs, companies, skills…"
-            placeholderTextColor={c.placeholder}
+            placeholderTextColor={colors.inputPlaceholder}
             returnKeyType="search"
             clearButtonMode="while-editing"
           />
           {search.length > 0 && (
             <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-              <Ionicons name="close-circle" size={16} color={c.textMuted} />
+              <Ionicons name="close-circle" size={16} color={colors.textMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -119,16 +117,16 @@ export const JobBrowseScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       {/* Sort tabs */}
-      <View style={[s.sortRow, { borderBottomColor: c.border }]}>
+      <View style={[s.sortRow, { borderBottomColor: colors.border }]}>
         {SORT_OPTIONS.map(opt => {
           const active = sortBy === opt.key;
           return (
             <TouchableOpacity
               key={opt.key}
-              style={[s.sortTab, active && { borderBottomColor: c.primary, borderBottomWidth: 2 }]}
+              style={[s.sortTab, active && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
               onPress={() => setSortBy(opt.key)}
             >
-              <Text style={[s.sortText, { color: active ? c.primary : c.textMuted, fontWeight: active ? '700' : '400' }]}>
+              <Text style={[s.sortText, { color: active ? colors.primary : colors.textMuted, fontWeight: active ? '700' : '400' }]}>
                 {opt.label}
               </Text>
             </TouchableOpacity>
@@ -167,15 +165,15 @@ export const JobBrowseScreen: React.FC<Props> = ({ navigation }) => {
 };
 
 const s = StyleSheet.create({
-  root:        { flex: 1 },
-  header:      { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10 },
-  title:       { fontSize: 24, fontWeight: '800' },
-  count:       { fontSize: 13 },
-  searchRow:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 10, marginBottom: 10 },
-  searchBar:   { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 11, gap: 8 },
-  searchInput: { flex: 1, fontSize: 15 },
-  sortRow:     { flexDirection: 'row', paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth, marginBottom: 4 },
-  sortTab:     { paddingVertical: 10, marginRight: 20 },
-  sortText:    { fontSize: 14 },
-  list:        { padding: 16 },
+  root:      { flex: 1 },
+  header:    { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10 },
+  title:     { fontSize: 24, fontWeight: '800' },
+  count:     { fontSize: 13 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 10, marginBottom: 10 },
+  searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 11, gap: 8 },
+  searchInput:{ flex: 1, fontSize: 15 },
+  sortRow:   { flexDirection: 'row', paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth, marginBottom: 4 },
+  sortTab:   { paddingVertical: 10, marginRight: 20 },
+  sortText:  { fontSize: 14 },
+  list:      { padding: 16 },
 });

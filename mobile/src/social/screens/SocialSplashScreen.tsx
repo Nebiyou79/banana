@@ -1,157 +1,219 @@
 // src/social/screens/SocialSplashScreen.tsx
-// Uses the real Banana logo from assets/logo.png
-// Shows "Banana Social" branding with role-based gradient + smooth animations
+// ─── Banana Social Splash Screen ──────────────────────────────────────────────
+// sociallogo.png has transparent background (black removed).
+// Logo composites directly on the dark background — no card wrapper.
+// Role-based accent colors. Full dark/light mode support.
+// Auto-navigates to SocialTabs after SPLASH_MS.
 
 import React, { useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, StatusBar, Animated,
-  Dimensions, Image,
+  View,
+  Text,
+  StyleSheet,
+  StatusBar,
+  Animated,
+  Dimensions,
+  Image,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuthStore } from '../../store/authStore';
+import { useThemeStore } from '../../store/themeStore';
 import type { SocialStackParamList } from '../navigation/types';
 
 const { width, height } = Dimensions.get('window');
+const SPLASH_MS = 2100;
 
 type Nav = NativeStackNavigationProp<SocialStackParamList>;
 
-// Role → gradient pair (top-color / bottom-color)
-const ROLE_GRADIENT: Record<string, [string, string, string]> = {
-  candidate:    ['#050D1A', '#0D2137', '#1D3557'],
-  freelancer:   ['#050D1A', '#062E1F', '#0A4B31'],
-  company:      ['#050D1A', '#2A1D00', '#4A3200'],
-  organization: ['#050D1A', '#1A0D35', '#2D1657'],
+// Role config — all use dark bg so transparent logo shows correctly
+const ROLE_CONFIG: Record<string, {
+  accent: string;
+  accentDim: string;
+  tagline: string;
+  label: string;
+}> = {
+  candidate: {
+    accent:    '#3B82F6',
+    accentDim: 'rgba(59,130,246,0.14)',
+    tagline:   'Your Career Network',
+    label:     'Candidate Network',
+  },
+  freelancer: {
+    accent:    '#10B981',
+    accentDim: 'rgba(16,185,129,0.14)',
+    tagline:   'Your Freelance Hub',
+    label:     'Freelancer Network',
+  },
+  company: {
+    accent:    '#F1BB03',
+    accentDim: 'rgba(241,187,3,0.14)',
+    tagline:   'Your Hiring Platform',
+    label:     'Company Network',
+  },
+  organization: {
+    accent:    '#8B5CF6',
+    accentDim: 'rgba(139,92,246,0.14)',
+    tagline:   'Your Professional Circle',
+    label:     'Organization Network',
+  },
 };
 
-const ROLE_ACCENT: Record<string, string> = {
-  candidate:    '#3B82F6',
-  freelancer:   '#10B981',
-  company:      '#F1BB03',
-  organization: '#8B5CF6',
-};
+// Constellation dots
+const DOTS: [number, number][] = [
+  [22, 100], [100, 50], [200, 130], [310, 60], [360, 200],
+  [60, 280], [280, 320], [150, 430], [330, 490],
+  [45, 580], [185, 640], [345, 710], [85, 760],
+  [250, 90], [325, 250], [65, 410], [295, 600],
+];
 
-const ROLE_TAGLINE: Record<string, string> = {
-  candidate:    'Your Career Network',
-  freelancer:   'Your Freelance Hub',
-  company:      'Your Hiring Network',
-  organization: 'Your Professional Circle',
-};
+// Constellation line connections
+const LINES = [
+  { x1: 22,  y1: 100, x2: 100, y2: 50  },
+  { x1: 100, y1: 50,  x2: 200, y2: 130 },
+  { x1: 200, y1: 130, x2: 310, y2: 60  },
+  { x1: 280, y1: 320, x2: 330, y2: 490 },
+  { x1: 150, y1: 430, x2: 280, y2: 320 },
+];
 
-const SPLASH_MS = 1900;
+const PARTICLE_COUNT  = 8;
+const PARTICLE_RADIUS = 115;
+
+// Always dark background so transparent logo composites correctly
+const BG = '#050D1A';
 
 export const SocialSplashScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
-  const role = (useAuthStore(s => s.role) ?? 'candidate') as string;
+  const isDark     = useThemeStore((s) => s.theme.isDark);
+  const role       = (useAuthStore((s) => s.role) ?? 'candidate') as string;
+  const cfg        = ROLE_CONFIG[role] ?? ROLE_CONFIG.candidate;
 
-  const accent  = ROLE_ACCENT[role]   ?? '#F1BB03';
-  const tagline = ROLE_TAGLINE[role]  ?? 'Your Professional Network';
-  const grad    = ROLE_GRADIENT[role] ?? ROLE_GRADIENT.candidate;
+  const muted = 'rgba(255,255,255,0.45)';
 
-  // Animated values
+  // Animations
   const logoScale   = useRef(new Animated.Value(0.5)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const glowScale   = useRef(new Animated.Value(0.8)).current;
   const glowOpacity = useRef(new Animated.Value(0)).current;
-  const titleY      = useRef(new Animated.Value(20)).current;
+  const ringScale   = useRef(new Animated.Value(0.7)).current;
+  const ringOpacity = useRef(new Animated.Value(0)).current;
+  const titleY      = useRef(new Animated.Value(22)).current;
   const titleOp     = useRef(new Animated.Value(0)).current;
-  const tagY        = useRef(new Animated.Value(16)).current;
-  const tagOp       = useRef(new Animated.Value(0)).current;
+  const taglineY    = useRef(new Animated.Value(16)).current;
+  const taglineOp   = useRef(new Animated.Value(0)).current;
   const badgeOp     = useRef(new Animated.Value(0)).current;
+  const dotsOp      = useRef(new Animated.Value(0)).current;
   const outro       = useRef(new Animated.Value(0)).current;
 
-  // Particle dots (decorative bubbles around logo)
   const particleAnims = useRef(
-    Array.from({ length: 6 }, () => ({
+    Array.from({ length: PARTICLE_COUNT }, () => ({
       scale:   new Animated.Value(0),
       opacity: new Animated.Value(0),
-    }))
+    })),
   ).current;
 
   useEffect(() => {
-    // Particles burst
+    // Constellation + lines
+    Animated.timing(dotsOp, { toValue: 1, duration: 700, useNativeDriver: true }).start();
+
+    // Particle burst
     particleAnims.forEach((p, i) => {
       setTimeout(() => {
         Animated.parallel([
-          Animated.spring(p.scale,   { toValue:1, tension:80, friction:6, useNativeDriver:true }),
-          Animated.timing(p.opacity, { toValue:0.6, duration:400, useNativeDriver:true }),
+          Animated.spring(p.scale,   { toValue: 1, tension: 80, friction: 6, useNativeDriver: true }),
+          Animated.timing(p.opacity, { toValue: 0.65, duration: 400, useNativeDriver: true }),
         ]).start();
-      }, 300 + i*80);
+      }, 300 + i * 65);
     });
 
-    // Main sequence
+    // Main entrance sequence
     Animated.sequence([
-      // Logo spring in
       Animated.parallel([
-        Animated.spring(logoScale,   { toValue:1, tension:70, friction:6, useNativeDriver:true }),
-        Animated.timing(logoOpacity, { toValue:1, duration:400, useNativeDriver:true }),
-        Animated.timing(glowOpacity, { toValue:1, duration:600, useNativeDriver:true }),
-        Animated.spring(glowScale,   { toValue:1, tension:50, friction:8, useNativeDriver:true }),
+        Animated.spring(ringScale,   { toValue: 1, tension: 45, friction: 8, useNativeDriver: true }),
+        Animated.timing(ringOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(glowOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.spring(glowScale,   { toValue: 1, tension: 50, friction: 8, useNativeDriver: true }),
+        Animated.spring(logoScale,   { toValue: 1, tension: 65, friction: 6, useNativeDriver: true }),
+        Animated.timing(logoOpacity, { toValue: 1, duration: 420, useNativeDriver: true }),
       ]),
-      // Title slides up
       Animated.parallel([
-        Animated.spring(titleY, { toValue:0, tension:60, friction:8, useNativeDriver:true }),
-        Animated.timing(titleOp, { toValue:1, duration:350, useNativeDriver:true }),
+        Animated.spring(titleY,  { toValue: 0, tension: 60, friction: 8, useNativeDriver: true }),
+        Animated.timing(titleOp, { toValue: 1, duration: 340, useNativeDriver: true }),
       ]),
-      // Tagline + badge
       Animated.parallel([
-        Animated.spring(tagY,   { toValue:0, tension:55, friction:8, useNativeDriver:true }),
-        Animated.timing(tagOp,  { toValue:1, duration:320, useNativeDriver:true }),
-        Animated.timing(badgeOp,{ toValue:1, duration:380, useNativeDriver:true }),
+        Animated.spring(taglineY,  { toValue: 0, tension: 55, friction: 8, useNativeDriver: true }),
+        Animated.timing(taglineOp, { toValue: 1, duration: 320, useNativeDriver: true }),
+        Animated.timing(badgeOp,   { toValue: 1, duration: 380, useNativeDriver: true }),
       ]),
     ]).start();
 
-    // Outro + navigate
+    // Glow pulse loop
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowScale, { toValue: 1.12, duration: 1600, useNativeDriver: true }),
+        Animated.timing(glowScale, { toValue: 0.95, duration: 1600, useNativeDriver: true }),
+      ]),
+    ).start();
+
+    // Navigate out with fade
     const timer = setTimeout(() => {
-      Animated.timing(outro, { toValue:1, duration:300, useNativeDriver:true }).start(() => {
+      Animated.timing(outro, { toValue: 1, duration: 280, useNativeDriver: true }).start(() => {
         navigation.replace('SocialTabs');
       });
     }, SPLASH_MS);
 
-    // Glow pulse
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowScale, { toValue:1.08, duration:1400, useNativeDriver:true }),
-        Animated.timing(glowScale, { toValue:0.96, duration:1400, useNativeDriver:true }),
-      ])
-    ).start();
-
     return () => clearTimeout(timer);
   }, []);
 
-  const outerOpacity = outro.interpolate({ inputRange:[0,1], outputRange:[1,0] });
-
-  // Particle positions (circle around logo)
-  const PARTICLE_ANGLES = [0, 60, 120, 180, 240, 300];
-  const PARTICLE_RADIUS = 90;
+  const outerOpacity = outro.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
 
   return (
-    <Animated.View style={[S.root, { opacity: outerOpacity, backgroundColor: grad[0] }]}>
-      <StatusBar barStyle="light-content" backgroundColor={grad[0]} />
+    <Animated.View style={[S.root, { opacity: outerOpacity, backgroundColor: BG }]}>
+      <StatusBar barStyle="light-content" backgroundColor={BG} />
 
-      {/* Layered background */}
-      <View style={[S.bgLayer1, { backgroundColor: grad[1] }]} />
-      <View style={[S.bgLayer2, { backgroundColor: grad[2] }]} />
+      {/* Constellation dots + lines */}
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity: dotsOp }]}>
+        {DOTS.map(([x, y], i) => (
+          <View key={`d${i}`} style={[S.dot, {
+            left: x, top: y,
+            backgroundColor: cfg.accent,
+            opacity: 0.16 + (i % 3) * 0.06,
+            width: i % 5 === 0 ? 5 : 3,
+            height: i % 5 === 0 ? 5 : 3,
+          }]} />
+        ))}
+        {LINES.map((l, i) => {
+          const dx    = l.x2 - l.x1;
+          const dy    = l.y2 - l.y1;
+          const len   = Math.sqrt(dx * dx + dy * dy);
+          const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+          return (
+            <View key={`l${i}`} style={[S.line, {
+              width: len, left: l.x1, top: l.y1,
+              backgroundColor: `${cfg.accent}20`,
+              transform: [{ rotate: `${angle}deg` }],
+            }]} />
+          );
+        })}
+      </Animated.View>
 
-      {/* Grid pattern overlay */}
-      <View style={S.gridOverlay} />
+      {/* Atmosphere corner blobs */}
+      <View style={[S.blob, { top: -100, right: -90, backgroundColor: cfg.accentDim }]} />
+      <View style={[S.blob, { bottom: -120, left: -100, backgroundColor: cfg.accentDim, width: 360, height: 360 }]} />
 
-      {/* Particles */}
+      {/* Particles burst around logo */}
       {particleAnims.map((p, i) => {
-        const angle = (PARTICLE_ANGLES[i] * Math.PI) / 180;
-        const px = Math.cos(angle) * PARTICLE_RADIUS;
-        const py = Math.sin(angle) * PARTICLE_RADIUS;
+        const angle = (i / PARTICLE_COUNT) * Math.PI * 2;
+        const px    = Math.cos(angle) * PARTICLE_RADIUS;
+        const py    = Math.sin(angle) * PARTICLE_RADIUS;
         return (
-          <Animated.View
-            key={i}
-            style={[S.particle, {
-              backgroundColor: accent,
-              left: width/2 + px - 5,
-              top: height/2 - 60 + py - 5,
-              opacity: p.opacity,
-              transform: [{ scale: p.scale }],
-            }]}
-          />
+          <Animated.View key={i} style={[S.particle, {
+            backgroundColor: cfg.accent,
+            left: width / 2 + px - 5,
+            top:  height / 2 - 90 + py - 5,
+            opacity:   p.opacity,
+            transform: [{ scale: p.scale }],
+          }]} />
         );
       })}
 
@@ -160,100 +222,160 @@ export const SocialSplashScreen: React.FC = () => {
 
         {/* Glow halo */}
         <Animated.View style={[S.halo, {
-          backgroundColor: accent,
+          backgroundColor: cfg.accent,
           transform: [{ scale: glowScale }],
           opacity: glowOpacity,
-          shadowColor: accent,
+          shadowColor: cfg.accent,
         }]} />
 
-        {/* Ring */}
+        {/* Outer ring */}
         <Animated.View style={[S.ring, {
-          borderColor: accent,
-          transform: [{ scale: glowScale }],
-          opacity: Animated.multiply(glowOpacity, 0.4 as any),
+          borderColor: `${cfg.accent}55`,
+          transform: [{ scale: ringScale }],
+          opacity: ringOpacity,
         }]} />
 
-        {/* Logo */}
-        <Animated.Image
-          source={require('../../../assets/logo.png')}
-          style={[S.logo, { opacity: logoOpacity, transform: [{ scale: logoScale }] }]}
-          resizeMode="contain"
-        />
+        {/* Inner ring */}
+        <Animated.View style={[S.ringInner, {
+          borderColor: `${cfg.accent}28`,
+          transform: [{ scale: ringScale }],
+          opacity: ringOpacity,
+        }]} />
+
+        {/*
+          Logo — transparent background, plain Image inside Animated.View.
+          No card, no backgroundColor — composites directly on dark navy.
+        */}
+        <Animated.View style={[S.logoWrap, {
+          opacity:   logoOpacity,
+          transform: [{ scale: logoScale }],
+        }]}>
+          <Image
+            source={require('../../../assets/sociallogo.png')}
+            style={S.logoImg}
+            resizeMode="contain"
+          />
+        </Animated.View>
 
         {/* "Banana Social" title */}
-        <Animated.View style={{ opacity: titleOp, transform: [{ translateY: titleY }], alignItems:'center', marginTop:20 }}>
-          <Text style={S.titleBanana}>Banana</Text>
-          <Text style={[S.titleSocial, { color: accent }]}>Social</Text>
+        <Animated.View style={[S.titleBlock, {
+          opacity:   titleOp,
+          transform: [{ translateY: titleY }],
+        }]}>
+          <Text style={S.titleMain}>Banana</Text>
+          <Text style={[S.titleAccent, { color: cfg.accent }]}>Social</Text>
         </Animated.View>
 
         {/* Tagline */}
-        <Animated.Text style={[S.tagline, { opacity: tagOp, transform:[{translateY:tagY}] }]}>
-          {tagline}
+        <Animated.Text style={[S.tagline, {
+          opacity:   taglineOp,
+          transform: [{ translateY: taglineY }],
+        }]}>
+          {cfg.tagline}
         </Animated.Text>
 
       </View>
 
-      {/* Bottom badge */}
+      {/* Bottom role badge */}
       <Animated.View style={[S.badgeWrap, { opacity: badgeOp }]}>
-        <View style={[S.badge, { borderColor: `${accent}40` }]}>
-          <View style={[S.badgeDot, { backgroundColor: accent }]} />
-          <Text style={[S.badgeTxt, { color: `${accent}DD` }]}>
-            {role.charAt(0).toUpperCase() + role.slice(1)} Network
-          </Text>
+        <View style={[S.badge, {
+          borderColor:     `${cfg.accent}45`,
+          backgroundColor: 'rgba(255,255,255,0.05)',
+        }]}>
+          <View style={[S.badgeDot, { backgroundColor: cfg.accent }]} />
+          <Text style={[S.badgeText, { color: `${cfg.accent}EE` }]}>{cfg.label}</Text>
         </View>
       </Animated.View>
-
     </Animated.View>
   );
 };
 
 const S = StyleSheet.create({
-  root: { flex:1, alignItems:'center', justifyContent:'center' },
+  root: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  bgLayer1: { position:'absolute', top:0, left:0, right:0, bottom:0, opacity:0.7 },
-  bgLayer2: { position:'absolute', bottom:0, left:0, right:0, height:height*0.4, opacity:0.5 },
+  dot:      { position: 'absolute', borderRadius: 3 },
+  line:     { position: 'absolute', height: 1 },
+  blob:     { position: 'absolute', width: 300, height: 300, borderRadius: 999 },
+  particle: { position: 'absolute', width: 10, height: 10, borderRadius: 5 },
 
-  gridOverlay: {
-    position:'absolute', top:0, left:0, right:0, bottom:0,
-    opacity:0.04,
-    // Visual grid via repeated background
-  },
-
-  particle: { position:'absolute', width:10, height:10, borderRadius:5 },
-
-  centre: { alignItems:'center', flex:1, justifyContent:'center' },
+  centre: { alignItems: 'center', flex: 1, justifyContent: 'center' },
 
   halo: {
-    position:'absolute', width:200, height:200, borderRadius:100,
-    opacity:0.15,
-    shadowOffset:{width:0,height:0}, shadowOpacity:1, shadowRadius:60, elevation:25,
+    position: 'absolute',
+    width: 250, height: 250,
+    borderRadius: 125,
+    opacity: 0.13,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 60,
+    elevation: 20,
   },
   ring: {
-    position:'absolute', width:230, height:230, borderRadius:115,
-    borderWidth:1,
+    position: 'absolute',
+    width: 270, height: 270,
+    borderRadius: 135,
+    borderWidth: 1.5,
+  },
+  ringInner: {
+    position: 'absolute',
+    width: 228, height: 228,
+    borderRadius: 114,
+    borderWidth: 1,
   },
 
-  logo: { width:160, height:160, zIndex:1 },
+  // No background, no border-radius clip — just size + center
+  logoWrap: {
+    width: 200,
+    height: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  logoImg: {
+    width: 200,
+    height: 200,
+  },
 
-  titleBanana: { fontSize:40, fontWeight:'900', color:'#F8FAFC', letterSpacing:-0.5 },
-  titleSocial: { fontSize:36, fontWeight:'900', letterSpacing:2, marginTop:-6 },
+  titleBlock: { alignItems: 'center', marginTop: 20, gap: 0 },
+  titleMain: {
+    fontSize: 40,
+    fontWeight: '900',
+    color: '#F8FAFC',
+    letterSpacing: -0.5,
+    lineHeight: 44,
+  },
+  titleAccent: {
+    fontSize: 36,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    lineHeight: 40,
+  },
 
   tagline: {
-    marginTop:12, fontSize:15,
-    color:'rgba(255,255,255,0.55)',
-    letterSpacing:0.5,
-    textAlign:'center',
+    marginTop: 12,
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.50)',
+    letterSpacing: 0.4,
+    textAlign: 'center',
   },
 
-  badgeWrap: { position:'absolute', bottom:56, left:0, right:0, alignItems:'center' },
-  badge: {
-    flexDirection:'row', alignItems:'center', gap:8,
-    borderWidth:1, borderRadius:24,
-    paddingHorizontal:18, paddingVertical:9,
-    backgroundColor:'rgba(255,255,255,0.05)',
+  badgeWrap: {
+    position: 'absolute',
+    bottom: 58,
+    left: 0, right: 0,
+    alignItems: 'center',
   },
-  badgeDot: { width:8, height:8, borderRadius:4 },
-  badgeTxt: { fontSize:13, fontWeight:'700', letterSpacing:0.5 },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 30,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  badgeDot:  { width: 8, height: 8, borderRadius: 4 },
+  badgeText: { fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
 });
 
 export default SocialSplashScreen;

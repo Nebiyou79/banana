@@ -1,75 +1,224 @@
-// Input.tsx
-import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Animated, TextInputProps, ViewStyle } from 'react-native';
+// src/components/ui/Input.tsx
+// Usage: <Input label="Email" value={email} onChangeText={setEmail} leftIcon="mail-outline" />
+
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TextInputProps,
+  StyleSheet,
+  TouchableOpacity,
+  Platform,
+  ViewStyle,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
 
 interface InputProps extends Omit<TextInputProps, 'style'> {
   label?: string;
   error?: string;
-  leftIcon?: React.ReactNode;
-  rightIcon?: React.ReactNode;
-  secureTextEntry?: boolean;
+  helperText?: string;
+  leftIcon?: keyof typeof Ionicons.glyphMap;
+  rightSlot?: React.ReactNode;
+  required?: boolean;
+  showCounter?: boolean;
   style?: ViewStyle;
-  inputStyle?: ViewStyle;
+  containerStyle?: ViewStyle;
 }
 
 export const Input: React.FC<InputProps> = ({
   label,
   error,
+  helperText,
   leftIcon,
-  rightIcon,
-  secureTextEntry,
+  rightSlot,
+  required = false,
+  showCounter = false,
   editable = true,
+  secureTextEntry,
+  multiline = false,
+  maxLength,
+  value = '',
   style,
-  inputStyle,
+  containerStyle,
   ...rest
 }) => {
-  const { colors, radius, type } = useTheme();
-  const [secure, setSecure] = useState(secureTextEntry ?? false);
+  const { colors: c, radius, type, spacing } = useTheme();
   const [focused, setFocused] = useState(false);
+  const [secure, setSecure] = useState(secureTextEntry ?? false);
+  const inputRef = useRef<TextInput>(null);
 
-  const borderColor = error ? colors.error : focused ? colors.accent : colors.borderPrimary;
+  // Android autoFocus fix
+  useEffect(() => {
+    if (rest.autoFocus && Platform.OS === 'android') {
+      const timer = setTimeout(() => inputRef.current?.focus(), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [rest.autoFocus]);
+
+  const borderColor = useMemo(() => {
+    if (error) return c.danger;
+    if (focused) return c.inputBorderFocus;
+    return c.inputBorder;
+  }, [error, focused, c]);
+
+  const backgroundColor = useMemo(() => {
+    if (error) return withAlpha(c.danger, 0.04);
+    if (!editable) return withAlpha(c.textDisabled, 0.08);
+    return c.inputBg;
+  }, [error, editable, c]);
+
+  const charCount = typeof value === 'string' ? value.length : 0;
+  const nearLimit = maxLength ? charCount / maxLength >= 0.9 : false;
 
   return (
-    <View style={[styles.wrapper, style]}>
-      {label && <Text style={[styles.label, type.caption, { color: colors.textSecondary }]}>{label}</Text>}
+    <View style={[styles.wrapper, containerStyle]}>
+      {label && (
+        <Text style={[styles.label, type.caption, { color: c.textSecondary }]}>
+          {label}
+          {required && (
+            <Text style={{ color: c.danger }}> *</Text>
+          )}
+        </Text>
+      )}
+
       <View
-        style={[styles.container, {
-          borderColor,
-          borderRadius: radius.lg,
-          backgroundColor: editable ? colors.bgCard : colors.bgSecondary,
-        }, inputStyle]}
+        style={[
+          styles.container,
+          {
+            borderColor,
+            backgroundColor,
+            borderRadius: radius.md,
+            minHeight: multiline ? 90 : 48,
+            ...(multiline ? { maxHeight: 200 } : { height: 48 }),
+          },
+          style,
+        ]}
       >
-        {leftIcon && <View style={styles.leftIcon}>{leftIcon}</View>}
+        {leftIcon && (
+          <Ionicons
+            name={leftIcon}
+            size={18}
+            color={focused ? c.primary : c.textMuted}
+            style={styles.leftIcon}
+          />
+        )}
+
         <TextInput
-          style={[styles.input, type.body, { color: colors.textPrimary, flex: 1 }, !editable && { color: colors.textMuted }]}
-          placeholderTextColor={colors.textMuted}
-          secureTextEntry={secure}
+          ref={inputRef}
+          value={value}
+          multiline={multiline}
           editable={editable}
+          secureTextEntry={secure}
+          maxLength={maxLength}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
+          placeholderTextColor={c.inputPlaceholder}
+          style={[
+            styles.input,
+            type.body,
+            {
+              color: c.text,
+              flex: 1,
+              paddingHorizontal: spacing.lg,
+              ...(multiline
+                ? { textAlignVertical: 'top', paddingVertical: spacing.md }
+                : {}),
+            },
+            leftIcon && { paddingLeft: spacing.xs },
+          ]}
           {...rest}
         />
-        {secureTextEntry ? (
-          <TouchableOpacity onPress={() => setSecure((v) => !v)} style={styles.rightIcon} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name={secure ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
+
+        {secureTextEntry && (
+          <TouchableOpacity
+            onPress={() => setSecure(v => !v)}
+            style={styles.rightSlot}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons
+              name={secure ? 'eye-off-outline' : 'eye-outline'}
+              size={20}
+              color={c.textMuted}
+            />
           </TouchableOpacity>
-        ) : rightIcon ? (
-          <View style={styles.rightIcon}>{rightIcon}</View>
-        ) : null}
+        )}
+
+        {rightSlot && !secureTextEntry && (
+          <View style={styles.rightSlot}>{rightSlot}</View>
+        )}
       </View>
-      {error && <Text style={[styles.errorText, type.caption, { color: colors.error }]}>{error}</Text>}
+
+      <View style={styles.footer}>
+        {error ? (
+          <Text style={[styles.helperText, type.caption, { color: c.danger }]}>
+            {error}
+          </Text>
+        ) : helperText ? (
+          <Text style={[styles.helperText, type.caption, { color: c.textMuted }]}>
+            {helperText}
+          </Text>
+        ) : (
+          <View />
+        )}
+
+        {showCounter && maxLength && (
+          <Text
+            style={[
+              styles.counter,
+              type.caption,
+              { color: nearLimit ? c.warning : c.textMuted },
+            ]}
+          >
+            {charCount}/{maxLength}
+          </Text>
+        )}
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  wrapper: { marginBottom: 4 },
-  label: { fontWeight: '500', marginBottom: 6 },
-  container: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, paddingHorizontal: 12, minHeight: 48 },
-  input: { paddingVertical: 10 },
-  leftIcon: { marginRight: 10 },
-  rightIcon: { marginLeft: 8 },
-  errorText: { marginTop: 4, marginLeft: 2 },
+  wrapper: {
+    marginBottom: 4,
+  },
+  label: {
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    overflow: 'hidden',
+  },
+  input: {
+    paddingVertical: 0,
+  },
+  leftIcon: {
+    marginLeft: 12,
+  },
+  rightSlot: {
+    paddingHorizontal: 12,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+    minHeight: 16,
+  },
+  helperText: {
+    flex: 1,
+  },
+  counter: {
+    marginLeft: 8,
+  },
 });
+
+export default Input;

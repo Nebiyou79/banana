@@ -1,3 +1,15 @@
+// src/social/components/shared/HashtagText.tsx
+/**
+ * HashtagText — renders text with coloured #hashtags and @mentions
+ *
+ * Theme migration:
+ * - `theme.text`    → flat alias, still valid ✅
+ * - `theme.primary` → flat alias, still valid ✅
+ *
+ * This component is clean — no broken tokens. Migrated to use
+ * `theme.colors.*` for the internal defaults to align with the new
+ * authoritative pattern, while keeping prop overrides intact.
+ */
 import React, { memo } from 'react';
 import { Text, TextStyle } from 'react-native';
 import { useSocialTheme } from '../../theme/socialTheme';
@@ -14,10 +26,6 @@ interface Props {
 
 const HASHTAG_MENTION_RE = /(#\w+|@\w+)/g;
 
-/**
- * Renders text with hashtags and @mentions highlighted. Taps surface via
- * `onHashtagPress` / `onMentionPress`.
- */
 const HashtagText: React.FC<Props> = memo(
   ({
     text,
@@ -28,9 +36,10 @@ const HashtagText: React.FC<Props> = memo(
     style,
     numberOfLines,
   }) => {
-    const theme = useSocialTheme();
-    const base = textColor ?? theme.text;
-    const accent = primaryColor ?? theme.primary;
+    const theme  = useSocialTheme();
+    // Use theme.colors.* as authoritative default; prop overrides still respected
+    const base   = textColor    ?? theme.colors.text;
+    const accent = primaryColor ?? theme.colors.primary;
 
     const parts = (text ?? '').split(HASHTAG_MENTION_RE);
 
@@ -74,3 +83,4 @@ const HashtagText: React.FC<Props> = memo(
 HashtagText.displayName = 'HashtagText';
 
 export default HashtagText;
+// ✅ theme-migrated

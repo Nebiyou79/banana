@@ -1,4 +1,5 @@
 // src/social/screens/ProfileScreen.tsx
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import React, { useCallback, useMemo } from 'react';
 import {
@@ -76,7 +77,7 @@ const ProfileScreen: React.FC = () => {
   const companyInfo =
     (roleSpecific as any).companyInfo ?? profile?.roleSpecific?.companyInfo;
 
-  const ad = getAdForPlacement(theme.role, 'profile');
+  const ad = getAdForPlacement(theme.role as UserRole, 'profile');
 
   const onEdit = useCallback(() => {
     navigation.navigate('EditProfile');
@@ -92,17 +93,18 @@ const ProfileScreen: React.FC = () => {
 
   if (profileQ.isLoading) {
     return (
+      // Loading gate — solid bg is fine before gradient mounts
       <SafeAreaView
-        style={[styles.center, { backgroundColor: theme.bg }]}
+        style={[styles.center, theme.getPageBgStyle()]}
       >
-        <ActivityIndicator color={theme.primary} />
+        <ActivityIndicator color={theme.colors.primary} />
       </SafeAreaView>
     );
   }
 
   if (profileQ.isError || !profile) {
     return (
-      <SafeAreaView style={[styles.center, { backgroundColor: theme.bg }]}>
+      <SafeAreaView style={[styles.center, theme.getPageBgStyle()]}>
         <ErrorState
           message="Couldn't load your profile"
           onRetry={profileQ.refetch}
@@ -119,7 +121,13 @@ const ProfileScreen: React.FC = () => {
       : null;
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+    // Tab root — LinearGradient background
+    <LinearGradient
+      colors={theme.bgGradient}
+      style={{ flex: 1 }}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0.3, y: 1 }}
+    >
       <ScrollView
         contentContainerStyle={{ paddingBottom: 32 }}
         showsVerticalScrollIndicator={false}
@@ -135,12 +143,14 @@ const ProfileScreen: React.FC = () => {
         />
 
         {completionPct !== null ? (
+          // Completion card: getCardStyle() + left accent border
           <View
             style={[
               styles.completionCard,
+              theme.getCardStyle(),
               {
-                backgroundColor: theme.card,
-                borderColor: theme.border,
+                borderLeftWidth: 3,
+                borderLeftColor: theme.colors.primary,
               },
             ]}
           >
@@ -166,13 +176,22 @@ const ProfileScreen: React.FC = () => {
                   { backgroundColor: theme.primary },
                 ]}
               >
-                <Text style={styles.completionBtnText}>Complete now</Text>
+                <Text style={[styles.completionBtnText, { color: theme.colors.white }]}>
+                  Complete now
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
         ) : null}
 
-        <View style={{ paddingHorizontal: 16 }}>
+        {/* SocialLinksRow with top border separator */}
+        <View style={[
+          styles.linksWrap,
+          {
+            borderTopColor: theme.border,
+            borderTopWidth: StyleSheet.hairlineWidth,
+          },
+        ]}>
           <SocialLinksRow links={profile.socialLinks} />
         </View>
 
@@ -265,7 +284,7 @@ const ProfileScreen: React.FC = () => {
           </>
         ) : null}
       </ScrollView>
-    </View>
+    </LinearGradient>
   );
 };
 
@@ -278,7 +297,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 14,
     borderRadius: 14,
-    borderWidth: 1,
   },
   completionTitle: { fontSize: 14, fontWeight: '700' },
   completionSub: { fontSize: 12, lineHeight: 17, marginTop: 4 },
@@ -292,11 +310,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   completionBtnText: {
-    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
   },
+  linksWrap: { paddingHorizontal: 16 },
   section: { paddingHorizontal: 16, paddingBottom: 8 },
 });
 
 export default ProfileScreen;
+// ✅ role-theme-migrated

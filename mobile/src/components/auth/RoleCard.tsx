@@ -1,19 +1,19 @@
 // src/components/auth/RoleCard.tsx
-// Usage: <RoleCard role="candidate" label="Job Seeker" emoji="🎯" selected onPress={...} primaryColor="#3B82F6" />
+// Usage: <RoleCard role="candidate" label="Job Seeker" emoji="🎯" description="..." selected onPress={...} primaryColor={c.candidate} />
 
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../hooks/useThemes';
+import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
 
 interface RoleCardProps {
-  role:         string;
-  label:        string;
-  description:  string;
-  icon:         string;
-  emoji:        string;
-  selected:     boolean;
-  onPress:      () => void;
+  role: string;
+  label: string;
+  description: string;
+  emoji: string;
+  selected: boolean;
+  onPress: () => void;
   primaryColor: string;
 }
 
@@ -25,7 +25,7 @@ export const RoleCard: React.FC<RoleCardProps> = ({
   onPress,
   primaryColor,
 }) => {
-  const { colors, type, spacing, radius, shadows } = useTheme();
+  const { colors: c, type, spacing, radius, shadows } = useTheme();
 
   return (
     <Pressable
@@ -38,14 +38,14 @@ export const RoleCard: React.FC<RoleCardProps> = ({
         shadows.sm,
         {
           backgroundColor: selected
-            ? `${primaryColor}14`
-            : colors.bgCard,
-          borderColor:  selected ? primaryColor : colors.borderPrimary,
-          borderWidth:  selected ? 2 : 1.5,
+            ? withAlpha(primaryColor, 0.08)
+            : c.bgCard,
+          borderColor: selected ? primaryColor : c.border,
+          borderWidth: selected ? 2 : 1.5,
           borderRadius: radius.lg,
-          padding:      spacing.lg,
+          padding: spacing.lg,
           marginBottom: spacing.sm,
-          opacity:      pressed ? 0.88 : 1,
+          opacity: pressed ? 0.88 : 1,
         },
       ]}
     >
@@ -54,8 +54,8 @@ export const RoleCard: React.FC<RoleCardProps> = ({
         style={[
           styles.iconBox,
           {
-            backgroundColor: `${primaryColor}18`,
-            borderRadius:    radius.md,
+            backgroundColor: withAlpha(primaryColor, 0.12),
+            borderRadius: radius.md,
           },
         ]}
       >
@@ -64,9 +64,14 @@ export const RoleCard: React.FC<RoleCardProps> = ({
 
       {/* Label + description */}
       <View style={styles.content}>
-        <Text style={[type.h4, { color: colors.textPrimary }]}>{label}</Text>
         <Text
-          style={[type.bodySm, { color: colors.textMuted, marginTop: 2 }]}
+          style={[type.bodySm, { color: c.text, fontWeight: '700' }]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+        <Text
+          style={[type.caption, { color: c.textMuted, marginTop: 2 }]}
           numberOfLines={2}
         >
           {description}
@@ -79,13 +84,13 @@ export const RoleCard: React.FC<RoleCardProps> = ({
           styles.check,
           {
             backgroundColor: selected ? primaryColor : 'transparent',
-            borderColor:     selected ? primaryColor : colors.borderPrimary,
-            borderRadius:    radius.full,
+            borderColor: selected ? primaryColor : c.border,
+            borderRadius: radius.full,
           },
         ]}
       >
         {selected && (
-          <Ionicons name="checkmark" size={13} color="#fff" />
+          <Ionicons name="checkmark" size={13} color={c.textInverse} />
         )}
       </View>
     </Pressable>
@@ -95,15 +100,15 @@ export const RoleCard: React.FC<RoleCardProps> = ({
 const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
-    alignItems:    'center',
-    gap:           14,
+    alignItems: 'center',
+    gap: 14,
   },
   iconBox: {
-    width:          48,
-    height:         48,
-    alignItems:     'center',
+    width: 48,
+    height: 48,
+    alignItems: 'center',
     justifyContent: 'center',
-    flexShrink:     0,
+    flexShrink: 0,
   },
   emoji: {
     fontSize: 22,
@@ -112,12 +117,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   check: {
-    width:       26,
-    height:      26,
+    width: 26,
+    height: 26,
     borderWidth: 1.5,
-    alignItems:  'center',
+    alignItems: 'center',
     justifyContent: 'center',
-    flexShrink:  0,
+    flexShrink: 0,
   },
 });
 

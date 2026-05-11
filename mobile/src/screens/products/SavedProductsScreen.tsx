@@ -1,39 +1,33 @@
-/**
- * mobile/src/screens/products/SavedProductsScreen.tsx
- *
- * UPDATED:
- *  - useTheme() (was useThemeStore with the wrong theme shape)
- *  - Fixed broken JSX in renderItem (variant prop missing, malformed indentation,
- *    isSaved with no value)
- *  - Optimistic unsave with rollback on error
- *  - Skeleton loading state
- *  - Pull-to-refresh works on initial load too
- */
+// src/screens/products/SavedProductsScreen.tsx
+// MIGRATED: useTheme() only, AppHeader, FlashList, spacing/radius tokens, Ionicons only
+
 import React, { useMemo, useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity,
-  StyleSheet, SafeAreaView, RefreshControl,
+  View, Text, TouchableOpacity,
+  StyleSheet, RefreshControl,
   ActivityIndicator, StatusBar, Dimensions,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-
+import { FlashList } from '@shopify/flash-list';
 import { useTheme } from '../../hooks/useTheme';
 import { useSavedProducts, useUnsaveProduct } from '../../hooks/useProducts';
-
 import { PublicProductCard } from '../../components/products/PublicProductCard';
-import { ProductSkeleton } from '../../components/products/ProductSkeleton';
-
-import { Product } from '../../services/productService';
+import { ProductSkeleton }   from '../../components/products/ProductSkeleton';
+import { AppHeader }         from '../../components/ui/AppHeader';
+import { Product }           from '../../services/productService';
 import type { ProductsStackParamList } from './ProductMarketplaceScreen';
 
 type Props = NativeStackScreenProps<ProductsStackParamList, 'SavedProducts'>;
 
 const { width: SCREEN_W } = Dimensions.get('window');
-const NUM_COLUMNS = SCREEN_W >= 375 ? 2 : 1;
+const NUM_COLUMNS = 2;
+const ITEM_WIDTH  = (SCREEN_W - 16 * 2 - 10) / 2;
 
 export const SavedProductsScreen: React.FC<Props> = ({ navigation }) => {
-  const { colors, spacing, isDark } = useTheme();
+  const { colors: c, spacing, radius, type, shadows } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const {
     data, fetchNextPage, hasNextPage, isFetchingNextPage,
@@ -41,10 +35,6 @@ export const SavedProductsScreen: React.FC<Props> = ({ navigation }) => {
   } = useSavedProducts();
 
   const unsave = useUnsaveProduct();
-
-  // Local "removed" set — gives the user immediate visual feedback when they
-  // tap unsave. The card still exists on the next page until refetch, so we
-  // hide it eagerly.
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
 
   const products: Product[] = useMemo(() => {
@@ -53,7 +43,7 @@ export const SavedProductsScreen: React.FC<Props> = ({ navigation }) => {
   }, [data, removedIds]);
 
   const handleUnsave = useCallback((productId: string) => {
-    setRemovedIds(prev => new Set([...prev, productId])); // optimistic
+    setRemovedIds(prev => new Set([...prev, productId]));
     unsave.mutate(productId, {
       onError: () => {
         setRemovedIds(prev => {
@@ -65,12 +55,24 @@ export const SavedProductsScreen: React.FC<Props> = ({ navigation }) => {
     });
   }, [unsave]);
 
-  // ── Sub-views ──────────────────────────────────────────────────────────────
+  const renderItem = useCallback(({ item }: { item: Product }) => (
+    <View style={{ flex: 1, maxWidth: ITEM_WIDTH }}>
+      <PublicProductCard
+        product={item}
+        onPress={() => navigation.navigate('ProductDetails', { productId: item._id })}
+        onSave={(id) => handleUnsave(id)}
+        isSaved
+        size="md"
+      />
+    </View>
+  ), [navigation, handleUnsave]);
+
+  const keyExtractor = useCallback((item: Product) => item._id, []);
 
   const SkeletonGrid = () => (
-    <View style={[s.skeletonGrid, { paddingHorizontal: spacing.lg }]}>
+    <View style={[S.skeletonGrid, { paddingHorizontal: spacing.lg }]}>
       {Array.from({ length: 4 }).map((_, i) => (
-        <View key={`sk-${i}`} style={{ width: NUM_COLUMNS === 2 ? '48%' : '100%' }}>
+        <View key={`sk-${i}`} style={{ width: '48%' }}>
           <ProductSkeleton size="md" />
         </View>
       ))}
@@ -78,139 +80,95 @@ export const SavedProductsScreen: React.FC<Props> = ({ navigation }) => {
   );
 
   const EmptyState = () => (
-    <View style={s.empty}>
-      <View
-        style={[
-          s.emptyIcon,
-          { backgroundColor: colors.accentBg, borderColor: colors.borderAccent },
-        ]}
-      >
-        <Ionicons name="bookmark-outline" size={36} color={colors.accent} />
+    <View style={S.empty}>
+      <View style={[S.emptyIcon, { backgroundColor: c.primaryBg, borderColor: withAlpha(c.primary, 0.3), borderRadius: radius.full }]}>
+        <Ionicons name="bookmark-outline" size={36} color={c.primary} />
       </View>
-      <Text style={[s.emptyTitle, { color: colors.textPrimary }]}>
-        No saved products
-      </Text>
-      <Text style={[s.emptyBody, { color: colors.textMuted }]}>
+      <Text style={[type.bodySm, { color: c.text, fontWeight: '700', textAlign: 'center' }]}>No saved products</Text>
+      <Text style={[type.caption, { color: c.textMuted, textAlign: 'center', maxWidth: 280, lineHeight: 19 }]}>
         Tap the bookmark icon on any product to save it here for later.
       </Text>
       <TouchableOpacity
         onPress={() => navigation.navigate('ProductMarketplace')}
-        style={[s.browseBtn, { backgroundColor: colors.accent }]}
+        style={[S.browseBtn, { backgroundColor: c.primary, borderRadius: radius.md }]}
         activeOpacity={0.85}
       >
-        <Ionicons name="bag-outline" size={18} color={colors.textInverse} />
-        <Text style={{ color: colors.textInverse, fontWeight: '700', fontSize: 14 }}>
-          Browse Marketplace
-        </Text>
+        <Ionicons name="bag-outline" size={18} color={c.bg} />
+        <Text style={[type.body, { color: c.bg, fontWeight: '700' }]}>Browse Marketplace</Text>
       </TouchableOpacity>
     </View>
   );
 
   const ErrorState = () => (
-    <View style={s.empty}>
-      <Ionicons name="cloud-offline-outline" size={48} color={colors.error} />
-      <Text style={[s.emptyTitle, { color: colors.textPrimary }]}>
-        Couldn’t load saved products
+    <View style={S.empty}>
+      <Ionicons name="cloud-offline-outline" size={48} color={c.danger} />
+      <Text style={[type.bodySm, { color: c.text, fontWeight: '700', textAlign: 'center' }]}>
+        Couldn't load saved products
       </Text>
       <TouchableOpacity
         onPress={() => refetch()}
-        style={[s.browseBtn, { backgroundColor: colors.accent }]}
+        style={[S.browseBtn, { backgroundColor: c.primary, borderRadius: radius.md }]}
       >
-        <Text style={{ color: colors.textInverse, fontWeight: '700', fontSize: 14 }}>
-          Retry
-        </Text>
+        <Text style={[type.body, { color: c.bg, fontWeight: '700' }]}>Retry</Text>
       </TouchableOpacity>
     </View>
   );
 
   return (
-    <SafeAreaView style={[s.safe, { backgroundColor: colors.bgPrimary }]}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-
-      <View style={[s.header, { borderBottomColor: colors.borderPrimary }]}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={[s.headerTitle, { color: colors.textPrimary }]}>
-          Saved Products
-        </Text>
-        <View style={{ width: 22 }} />
-      </View>
+    <SafeAreaView style={[S.safe, { backgroundColor: c.bg }]} edges={['top']}>
+      <StatusBar barStyle="light-content" />
+      <AppHeader title="Saved Products" showBack onBack={() => navigation.goBack()} />
 
       {isError && products.length === 0 ? (
         <ErrorState />
       ) : (
-        <FlatList
+        <FlashList
           data={isLoading ? [] : products}
-          keyExtractor={item => item._id}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
           numColumns={NUM_COLUMNS}
-          columnWrapperStyle={NUM_COLUMNS > 1 ? { gap: 10 } : undefined}
-          contentContainerStyle={{ padding: spacing.lg, gap: 10 }}
+          contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: insets.bottom + 24 }}
+          ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
-              onRefresh={() => {
-                setRemovedIds(new Set());
-                refetch();
-              }}
-              tintColor={colors.accent}
+              onRefresh={() => { setRemovedIds(new Set()); refetch(); }}
+              tintColor={c.primary}
             />
           }
-          onEndReached={() => {
-            if (hasNextPage && !isFetchingNextPage) fetchNextPage();
-          }}
+          onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage(); }}
           onEndReachedThreshold={0.4}
           ListEmptyComponent={isLoading ? <SkeletonGrid /> : <EmptyState />}
           ListFooterComponent={
             isFetchingNextPage
-              ? <ActivityIndicator color={colors.accent} style={{ paddingVertical: 20 }} />
+              ? <ActivityIndicator color={c.primary} style={{ paddingVertical: 20 }} />
               : null
           }
-          renderItem={({ item }) => (
-            <View style={{ flex: NUM_COLUMNS > 1 ? 1 : undefined }}>
-              <PublicProductCard
-                product={item}
-                onPress={() =>
-                  navigation.navigate('ProductDetails', { productId: item._id })
-                }
-                onSave={(id) => handleUnsave(id)}
-                isSaved
-                size="md"
-              />
-            </View>
-          )}
         />
       )}
     </SafeAreaView>
   );
 };
 
-const s = StyleSheet.create({
-  safe: { flex: 1 },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  headerTitle:  { fontSize: 20, fontWeight: '700' },
-  skeletonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+// Need withAlpha locally since it's used in EmptyState
+const withAlpha = (hex: string, alpha: number): string => {
+  const a = Math.round(Math.max(0, Math.min(1, alpha)) * 255).toString(16).padStart(2, '0');
+  return `#${hex.replace('#', '').slice(0, 6)}${a}`.toUpperCase();
+};
+
+const S = StyleSheet.create({
+  safe:        { flex: 1 },
+  skeletonGrid:{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   empty: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
     paddingTop: 80, gap: 14, paddingHorizontal: 32,
   },
-  emptyIcon: {
-    width: 88, height: 88, borderRadius: 44,
-    alignItems: 'center', justifyContent: 'center', borderWidth: 1,
-  },
-  emptyTitle: { fontSize: 18, fontWeight: '700', textAlign: 'center' },
-  emptyBody:  { fontSize: 13, textAlign: 'center', lineHeight: 19, maxWidth: 280 },
+  emptyIcon: { width: 88, height: 88, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   browseBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 20, paddingVertical: 12,
-    borderRadius: 12, marginTop: 4,
+    paddingHorizontal: 20, paddingVertical: 12, marginTop: 4,
   },
 });
+
+export default SavedProductsScreen;

@@ -42,11 +42,13 @@ const PATHS = {
   create:        `${BASE}/create`,
   browse:        `${BASE}`,
   myTenders:     `${BASE}/my-tenders`,
+  saved:         `${BASE}/saved`,
   detail:        (id: string) => `${BASE}/${id}`,
   editData:      (id: string) => `${BASE}/${id}/edit-data`,
   update:        (id: string) => `${BASE}/${id}`,
   remove:        (id: string) => `${BASE}/${id}`,
   publish:       (id: string) => `${BASE}/${id}/publish`,
+  toggleSave:    (id: string) => `${BASE}/${id}/toggle-save`,
   /** ⚠ Backend exposes `/reveal-bids` (not `/reveal`).  Source of truth: routes file. */
   revealBids:    (id: string) => `${BASE}/${id}/reveal-bids`,
   addendum:      (id: string) => `${BASE}/${id}/addendum`,
@@ -419,6 +421,33 @@ const professionalTenderService = {
   getBidsForTender: async (id: string): Promise<ProfessionalTenderBid[]> => {
     const response = await api.get<ApiEnvelope<ProfessionalTenderBid[]>>(PATHS.getBids(id));
     return unwrap(response.data, 'Failed to fetch bids');
+  },
+
+  // ─── SAVED TENDERS ───────────────────────────────────────────────────────────
+  /**
+   * Fetches saved professional tenders for the current user.
+   */
+  getSavedProfessionalTenders: async (params?: {
+    page?: number;
+    limit?: number;
+  }): Promise<ProfessionalTenderListResponse> => {
+    const response = await api.get<ApiEnvelope<ProfessionalTenderListResponse>>(
+      `${PATHS.saved}${buildQueryString(params)}`
+    );
+    return unwrap(response.data, 'Failed to fetch saved professional tenders');
+  },
+
+  /**
+   * Toggles save status for a professional tender (save/unsave).
+   * Returns the updated save status and total count.
+   */
+  toggleSaveProfessionalTender: async (
+    id: string
+  ): Promise<{ saved: boolean; totalSaves: number }> => {
+    const response = await api.post<ApiEnvelope<{ saved: boolean; totalSaves: number }>>(
+      PATHS.toggleSave(id)
+    );
+    return unwrap(response.data, 'Failed to toggle save status');
   },
 
   // ─── CATEGORIES ────────────────────────────────────────────────────────────

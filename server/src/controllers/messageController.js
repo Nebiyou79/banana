@@ -1,219 +1,280 @@
+// =============================================================================
+// FILE 2: messageController.js — COMPLETE PROFESSIONAL REWRITE
+// =============================================================================
+
 /**
  * server/src/controllers/messageController.js
- * ────────────────────────────────────────────────────────────────────────────
- * BananaLink Social System v2.0 — Message Controller (NEW)
- *
- * Endpoints (wired in messageRoutes.js):
- *   POST   /messages                  → sendMessage
- *   GET    /messages/:conversationId  → getMessages  (?page, ?limit, ?before)
- *   DELETE /messages/:messageId       → deleteMessage ({ deleteFor: 'me'|'everyone' })
- * ────────────────────────────────────────────────────────────────────────────
+ * ─────────────────────────────────────────────────────────────────────────────
+ * BananaLink Chat Backend v4 — Message Controller
+ * 
+ * Production-grade message handling with:
+ * - Request acceptance enforcement before replying
+ * - Unread count management across participants
+ * - Soft-delete (per-user) and delete-for-everyone (time-limited)
+ * - Socket broadcasting for real-time delivery
+ * - Read receipts with proper status transitions
+ * - Reply-to support with populated parent message
+ * - Content validation with length limits
+ * 
+ * Routes handled:
+ *  POST   /messages                    sendMessage
+ *  GET    /messages/:conversationId    getMessages
+ *  DELETE /messages/:messageId         deleteMessage
+ * ─────────────────────────────────────────────────────────────────────────────
  */
+
+'use strict';
+
 const mongoose = require('mongoose');
 const Message = require('../models/Message');
 const Conversation = require('../models/Conversation');
 
-const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
+const { isValidObjectId } = mongoose;
 
-/* ──────────────────────────────────────────────────────────────────────────
- * POST /messages
- * body: { conversationId, content, type?, replyTo? }
- * ────────────────────────────────────────────────────────────────────────── */
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const MAX_CONTENT_LENGTH = 2000; // Must match Message model maxlength
+const DELETE_EVERYONE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+
+const ERROR_MESSAGES = {
+  INVALID_CONVERSATION_ID: 'Invalid conversation ID',
+  INVALID_MESSAGE_ID: 'Invalid message ID',
+  CONTENT_REQUIRED: 'Message content is required',
+  CONTENT_TOO_LONG: `Message too long (max ${MAX_CONTENT_LENGTH} characters)`,
+  CONVERSATION_NOT_FOUND: 'Conversation not found',
+  NOT_PARTICIPANT: 'You are not a participant in this conversation',
+  DECLINED: 'This conversation has been declined',
+  ACCEPT_FIRST: 'You must accept the message request before replying',
+  MESSAGE_NOT_FOUND: 'Message not found',
+  NOT_SENDER: 'Only the sender can delete this message for everyone',
+  DELETE_WINDOW_EXPIRED: 'Delete window has expired (10 minutes)',
+  SERVER_ERROR: 'Failed to process message',
+};
+
+// ─── Helper: Broadcast socket event safely ───────────────────────────────────
+
+function safeEmit(io, room, event, data) {
+  try {
+    if (io) {
+      io.to(room).emit(event, data);
+    }
+  } catch (err) {
+    console.warn(`Socket emit failed for ${event}:`, err.message);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /messages
+// Sends a new message in a conversation.
+//
+// Business Rules:
+// - Must be a participant in the conversation
+// - If conversation is 'request' status:
+//   - The REQUESTER (requestedBy) can send messages
+//   - The RECIPIENT must accept before they can reply
+// - Conversation is restored if previously soft-deleted by sender
+// - Unread counts are incremented for all OTHER participants
+// - Socket events broadcast for real-time delivery
+// ─────────────────────────────────────────────────────────────────────────────
 exports.sendMessage = async (req, res) => {
   try {
     const senderId = req.user.userId;
-    const {
-      conversationId,
-      content,
-      type = 'text',
-      replyTo = null,
-    } = req.body || {};
+    const { conversationId, content, type = 'text', replyTo } = req.body;
 
+    // Validate conversation ID
     if (!isValidObjectId(conversationId)) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'Invalid conversationId' });
-    }
-    const trimmed = (content || '').toString().trim();
-    if (!trimmed) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'Message content is required' });
-    }
-    if (trimmed.length > 2000) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'Message exceeds 2000 characters' });
-    }
-    if (replyTo && !isValidObjectId(replyTo)) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'Invalid replyTo id' });
+      return res.status(400).json({ 
+        success: false, 
+        message: ERROR_MESSAGES.INVALID_CONVERSATION_ID 
+      });
     }
 
+    // Validate content
+    const trimmed = String(content ?? '').trim();
+    if (!trimmed) {
+      return res.status(400).json({ 
+        success: false, 
+        message: ERROR_MESSAGES.CONTENT_REQUIRED 
+      });
+    }
+    if (trimmed.length > MAX_CONTENT_LENGTH) {
+      return res.status(400).json({ 
+        success: false, 
+        message: ERROR_MESSAGES.CONTENT_TOO_LONG 
+      });
+    }
+
+    // Find and validate conversation
     const conversation = await Conversation.findOne({
       _id: conversationId,
       participants: senderId,
     });
-    if (!conversation) {
-      return res
-        .status(404)
-        .json({ success: false, message: 'Conversation not found' });
-    }
 
-    if (conversation.status === 'declined') {
-      return res.status(403).json({
-        success: false,
-        message: 'This conversation has been declined',
+    if (!conversation) {
+      return res.status(404).json({ 
+        success: false, 
+        message: ERROR_MESSAGES.CONVERSATION_NOT_FOUND 
       });
     }
 
-    // If sender is the REQUESTED (recipient of a request) and they send,
-    // that implicitly accepts the request.
+    if (conversation.status === 'declined') {
+      return res.status(403).json({ 
+        success: false, 
+        message: ERROR_MESSAGES.DECLINED 
+      });
+    }
+
+    // Enforce request acceptance: Recipient cannot reply until they accept
     if (
       conversation.status === 'request' &&
       conversation.requestedBy &&
       conversation.requestedBy.toString() !== senderId.toString()
     ) {
-      conversation.status = 'active';
+      return res.status(403).json({ 
+        success: false, 
+        message: ERROR_MESSAGES.ACCEPT_FIRST 
+      });
     }
 
-    // Create message.
+    // Validate replyTo if provided
+    let replyToId = null;
+    if (replyTo && isValidObjectId(replyTo)) {
+      const parentMessage = await Message.findOne({
+        _id: replyTo,
+        conversationId: conversationId,
+      });
+      if (parentMessage) {
+        replyToId = replyTo;
+      }
+    }
+
+    // Create the message
     const message = await Message.create({
       conversationId,
       sender: senderId,
       content: trimmed,
       type,
-      replyTo: replyTo || null,
+      status: 'sent',
+      replyTo: replyToId,
     });
 
-    // Update conversation's lastMessage + bump unread for other participants.
+    // Update conversation metadata
     conversation.lastMessage = message._id;
     conversation.lastMessageAt = message.createdAt;
 
-    // Un-delete for sender (they clearly want it back).
-    conversation.deletedFor = (conversation.deletedFor || []).filter(
-      (u) => u.toString() !== senderId.toString()
-    );
+    // Restore if previously soft-deleted by sender
+    if (conversation.deletedFor) {
+      conversation.deletedFor = conversation.deletedFor.filter(
+        (u) => u.toString() !== senderId.toString()
+      );
+    }
 
-    // Increment unread for every OTHER participant.
+    // Increment unread counts for all OTHER participants
     if (!conversation.unreadCounts) conversation.unreadCounts = new Map();
-    for (const participant of conversation.participants) {
-      const pid = participant.toString();
-      if (pid === senderId.toString()) continue;
-      const prev = conversation.unreadCounts.get(pid) || 0;
-      conversation.unreadCounts.set(pid, prev + 1);
+    for (const participantId of conversation.participants) {
+      if (participantId.toString() === senderId.toString()) continue;
+      const current = conversation.unreadCounts.get(participantId.toString()) ?? 0;
+      conversation.unreadCounts.set(participantId.toString(), current + 1);
     }
     conversation.markModified('unreadCounts');
     await conversation.save();
 
-    // Populate sender for the outgoing payload.
+    // Populate the message for response
     const populated = await Message.findById(message._id)
       .populate('sender', 'name avatar role')
       .populate({
         path: 'replyTo',
         select: 'content type sender createdAt',
-        populate: { path: 'sender', select: 'name avatar role' },
+        populate: { path: 'sender', select: 'name avatar' },
       })
       .lean();
 
-    // Socket emits.
-    try {
-      if (req.io) {
-        // To all in the conversation room (active viewers).
-        req.io
-          .to(`conv:${conversationId}`)
-          .emit('chat:new_message', {
-            message: populated,
-            conversationId,
-          });
+    // Broadcast via sockets for real-time delivery
+    const convRoom = `conv:${conversationId}`;
+    const messageData = {
+      message: populated,
+      conversationId,
+    };
 
-        // To each participant's personal room (for inbox badge updates),
-        // except the sender (their client already knows).
-        conversation.participants.forEach((p) => {
-          if (p.toString() === senderId.toString()) return;
-          req.io.to(`user:${p}`).emit('chat:new_message', {
-            message: populated,
-            conversationId,
-          });
-        });
-      }
-    } catch (_) {
-      /* socket optional */
+    // Emit to conversation room (all active viewers)
+    safeEmit(req.io, convRoom, 'chat:new_message', messageData);
+
+    // Emit to each participant's personal inbox room
+    for (const participantId of conversation.participants) {
+      if (participantId.toString() === senderId.toString()) continue;
+      safeEmit(req.io, `user:${participantId}`, 'chat:new_message', messageData);
     }
 
-    return res.status(201).json({ success: true, data: populated });
+    return res.status(201).json({ 
+      success: true, 
+      data: populated 
+    });
   } catch (err) {
     console.error('sendMessage error:', err);
-    return res
-      .status(500)
-      .json({ success: false, message: 'Failed to send message' });
+    return res.status(500).json({ 
+      success: false, 
+      message: ERROR_MESSAGES.SERVER_ERROR 
+    });
   }
 };
 
-/* ──────────────────────────────────────────────────────────────────────────
- * GET /messages/:conversationId
- * Returns messages in DESC order (newest first). The client reverses for
- * display. Supports ?page=&limit= and ?before=<messageId> cursor.
- * ────────────────────────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /messages/:conversationId
+// Returns paginated messages for a conversation.
+// Sorted newest-first for efficient pagination (client reverses for display).
+// ─────────────────────────────────────────────────────────────────────────────
 exports.getMessages = async (req, res) => {
   try {
     const userId = req.user.userId;
     const { conversationId } = req.params;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 30));
+    const skip = (page - 1) * limit;
 
     if (!isValidObjectId(conversationId)) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'Invalid conversationId' });
+      return res.status(400).json({ 
+        success: false, 
+        message: ERROR_MESSAGES.INVALID_CONVERSATION_ID 
+      });
     }
 
-    // Confirm the user is a participant.
-    const conv = await Conversation.findOne({
+    // Verify user is a participant
+    const conversation = await Conversation.exists({
       _id: conversationId,
       participants: userId,
-    })
-      .select('_id')
-      .lean();
-    if (!conv) {
-      return res
-        .status(404)
-        .json({ success: false, message: 'Conversation not found' });
+    });
+
+    if (!conversation) {
+      return res.status(403).json({ 
+        success: false, 
+        message: ERROR_MESSAGES.NOT_PARTICIPANT 
+      });
     }
 
-    const limit = Math.min(parseInt(req.query.limit, 10) || 30, 100);
-    const page = parseInt(req.query.page, 10) || 1;
-    const skip = (page - 1) * limit;
-    const before = req.query.before;
-
-    const filter = {
+    // Build query: exclude messages soft-deleted by this user
+    const query = {
       conversationId,
       deletedFor: { $ne: userId },
     };
-    if (before && isValidObjectId(before)) {
-      filter._id = { $lt: new mongoose.Types.ObjectId(before) };
-    }
 
-    const [docs, total] = await Promise.all([
-      Message.find(filter)
+    const [messages, total] = await Promise.all([
+      Message.find(query)
         .populate('sender', 'name avatar role')
         .populate({
           path: 'replyTo',
-          select: 'content type sender createdAt',
-          populate: { path: 'sender', select: 'name avatar role' },
+          select: 'content type sender createdAt deletedAt',
+          populate: { path: 'sender', select: 'name avatar' },
         })
-        .sort({ createdAt: -1 })
-        .skip(before ? 0 : skip)
+        .sort({ createdAt: -1 }) // Newest first for efficient pagination
+        .skip(skip)
         .limit(limit)
         .lean(),
-      Message.countDocuments({
-        conversationId,
-        deletedFor: { $ne: userId },
-      }),
+      Message.countDocuments(query),
     ]);
 
     return res.json({
       success: true,
-      data: docs,
+      data: messages,
       pagination: {
         page,
         limit,
@@ -223,87 +284,101 @@ exports.getMessages = async (req, res) => {
     });
   } catch (err) {
     console.error('getMessages error:', err);
-    return res
-      .status(500)
-      .json({ success: false, message: 'Failed to load messages' });
+    return res.status(500).json({ 
+      success: false, 
+      message: ERROR_MESSAGES.SERVER_ERROR 
+    });
   }
 };
 
-/* ──────────────────────────────────────────────────────────────────────────
- * DELETE /messages/:messageId
- * body: { deleteFor?: 'me' | 'everyone' }  (default 'me')
- * ────────────────────────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE /messages/:messageId
+// Supports two delete modes:
+//  - 'me': Soft-deletes only for the requesting user (adds to deletedFor array)
+//  - 'everyone': Marks as deleted for all (only sender, within 10-min window)
+// ─────────────────────────────────────────────────────────────────────────────
 exports.deleteMessage = async (req, res) => {
   try {
     const userId = req.user.userId;
     const { messageId } = req.params;
-    const { deleteFor = 'me' } = req.body || {};
+    const { deleteFor = 'me' } = req.body;
 
     if (!isValidObjectId(messageId)) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'Invalid messageId' });
-    }
-    if (!['me', 'everyone'].includes(deleteFor)) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'deleteFor must be "me" or "everyone"' });
+      return res.status(400).json({ 
+        success: false, 
+        message: ERROR_MESSAGES.INVALID_MESSAGE_ID 
+      });
     }
 
     const message = await Message.findById(messageId);
+
     if (!message) {
-      return res
-        .status(404)
-        .json({ success: false, message: 'Message not found' });
+      return res.status(404).json({ 
+        success: false, 
+        message: ERROR_MESSAGES.MESSAGE_NOT_FOUND 
+      });
     }
 
-    // Make sure the user is a participant of the parent conversation.
-    const conv = await Conversation.findOne({
+    // Verify the user is a participant in the conversation
+    const isParticipant = await Conversation.exists({
       _id: message.conversationId,
       participants: userId,
-    })
-      .select('_id')
-      .lean();
-    if (!conv) {
-      return res
-        .status(403)
-        .json({ success: false, message: 'Not a participant' });
+    });
+
+    if (!isParticipant) {
+      return res.status(403).json({ 
+        success: false, 
+        message: ERROR_MESSAGES.NOT_PARTICIPANT 
+      });
     }
 
     if (deleteFor === 'everyone') {
-      if (!message.canBeDeletedBy(userId)) {
-        return res.status(400).json({
-          success: false,
-          message:
-            'You can only delete your own messages within 2 hours of sending',
+      // Only the sender can delete for everyone
+      if (message.sender.toString() !== userId.toString()) {
+        return res.status(403).json({ 
+          success: false, 
+          message: ERROR_MESSAGES.NOT_SENDER 
         });
       }
-      await message.markDeletedForEveryone(userId);
 
-      try {
-        if (req.io) {
-          req.io
-            .to(`conv:${message.conversationId}`)
-            .emit('chat:message_deleted', {
-              messageId: message._id,
-              conversationId: message.conversationId,
-              deletedBy: userId,
-              scope: 'everyone',
-            });
-        }
-      } catch (_) {
-        /* socket optional */
+      // Check time window
+      const ageMs = Date.now() - new Date(message.createdAt).getTime();
+      if (ageMs > DELETE_EVERYONE_WINDOW_MS) {
+        return res.status(400).json({ 
+          success: false, 
+          message: ERROR_MESSAGES.DELETE_WINDOW_EXPIRED 
+        });
       }
+
+      // Perform delete for everyone
+      message.type = 'deleted';
+      message.content = null;
+      message.deletedAt = new Date();
+      message.deletedBy = userId;
+      await message.save();
+
+      // Broadcast deletion to conversation room
+      safeEmit(req.io, `conv:${message.conversationId}`, 'chat:message_deleted', {
+        messageId: messageId,
+        conversationId: message.conversationId.toString(),
+        deletedFor: 'everyone',
+      });
+
     } else {
-      // delete for me only
-      await message.markDeletedForMe(userId);
+      // Delete for me only
+      if (!message.deletedFor) message.deletedFor = [];
+      if (!message.deletedFor.some((u) => u.toString() === userId.toString())) {
+        message.deletedFor.push(userId);
+      }
+      await message.save();
     }
 
-    return res.json({ success: true });
+    return res.json({ success: true, message: 'Message deleted' });
   } catch (err) {
     console.error('deleteMessage error:', err);
-    return res
-      .status(500)
-      .json({ success: false, message: 'Failed to delete message' });
+    return res.status(500).json({ 
+      success: false, 
+      message: ERROR_MESSAGES.SERVER_ERROR 
+    });
   }
 };

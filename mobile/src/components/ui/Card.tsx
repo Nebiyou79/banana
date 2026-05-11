@@ -1,50 +1,68 @@
-// Card.tsx
-import React, { useRef, useEffect } from 'react';
+// src/components/ui/Card.tsx
+// Usage: <Card variant="elevated" onPress={...}>{children}</Card>
+
+import React, { useRef, useEffect, useMemo } from 'react';
 import {
+  Pressable,
   View,
-  TouchableOpacity,
   StyleSheet,
   Animated,
   ViewStyle,
 } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
+import { SPACING } from '../../theme/tokens';
+
+type Variant = 'default' | 'elevated' | 'outlined';
+type PaddingKey = keyof typeof SPACING;
 
 interface CardProps {
   children: React.ReactNode;
   onPress?: () => void;
-  shadow?: boolean;
-  padding?: number;
+  variant?: Variant;
+  padding?: PaddingKey;
+  stripeColor?: string;
   style?: ViewStyle;
 }
 
 export const Card: React.FC<CardProps> = ({
   children,
   onPress,
-  shadow = true,
-  padding,
+  variant = 'default',
+  padding = 'lg',
+  stripeColor,
   style,
 }) => {
-  const { colors, shadows, radius, spacing } = useTheme();
+  const { colors: c, radius, shadows, spacing } = useTheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(6)).current;
+  const translateY = useRef(new Animated.Value(6)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 0, duration: 220, useNativeDriver: true }),
     ]).start();
   }, []);
 
-  const onPressIn = () => {
+  const cardStyle = useMemo<ViewStyle>(() => {
+    const base: ViewStyle = {
+      backgroundColor: c.bgCard,
+      borderRadius: radius.lg,
+      padding: spacing[padding],
+      overflow: stripeColor ? undefined : 'hidden',
+    };
+
+    switch (variant) {
+      case 'elevated':
+        return { ...base, ...shadows.md };
+      case 'outlined':
+        return { ...base, borderWidth: 1, borderColor: c.border };
+      default:
+        return { ...base, borderWidth: 1, borderColor: c.border };
+    }
+  }, [variant, c, radius, shadows, spacing, padding, stripeColor]);
+
+  const handlePressIn = () => {
     if (!onPress) return;
     Animated.spring(scaleAnim, {
       toValue: 0.97,
@@ -54,7 +72,7 @@ export const Card: React.FC<CardProps> = ({
     }).start();
   };
 
-  const onPressOut = () => {
+  const handlePressOut = () => {
     if (!onPress) return;
     Animated.spring(scaleAnim, {
       toValue: 1,
@@ -64,34 +82,58 @@ export const Card: React.FC<CardProps> = ({
     }).start();
   };
 
-  const cardStyle: ViewStyle = {
-    backgroundColor: colors.bgCard,
-    borderRadius: radius.xl,
-    padding: padding ?? spacing.card,
-    borderWidth: 1,
-    borderColor: colors.borderPrimary,
-    ...(shadow ? shadows.sm : {}),
-  };
-
-  if (onPress) {
-    return (
-      <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale: scaleAnim }] }}>
-        <TouchableOpacity
-          onPress={onPress}
-          onPressIn={onPressIn}
-          onPressOut={onPressOut}
-          activeOpacity={1}
-          style={[cardStyle, style]}
-        >
-          {children}
-        </TouchableOpacity>
-      </Animated.View>
-    );
-  }
+  const inner = (
+    <View style={[cardStyle, style]}>
+      {/* Android-safe colored stripe — uses absolute position, not overflow:hidden */}
+      {stripeColor && (
+        <View
+          style={[
+            styles.stripe,
+            {
+              backgroundColor: stripeColor,
+              borderTopLeftRadius: radius.lg,
+              borderBottomLeftRadius: radius.lg,
+            },
+          ]}
+        />
+      )}
+      <View style={stripeColor ? { paddingLeft: 12 } : undefined}>
+        {children}
+      </View>
+    </View>
+  );
 
   return (
-    <Animated.View style={[{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }, cardStyle, style]}>
-      {children}
+    <Animated.View
+      style={{
+        opacity: fadeAnim,
+        transform: [{ translateY }, { scale: scaleAnim }],
+      }}
+    >
+      {onPress ? (
+        <Pressable
+          onPress={onPress}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          style={({ pressed }) => [pressed && { opacity: 0.85 }]}
+        >
+          {inner}
+        </Pressable>
+      ) : (
+        inner
+      )}
     </Animated.View>
   );
 };
+
+const styles = StyleSheet.create({
+  stripe: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+  },
+});
+
+export default Card;

@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useTheme } from '../../hooks/useThemes';
+import { useTheme } from '../../hooks/useTheme';
 
 interface AuthDividerProps {
   label?: string;
@@ -12,27 +12,38 @@ interface AuthDividerProps {
 export const AuthDivider: React.FC<AuthDividerProps> = ({
   label = 'or continue with',
 }) => {
-  const { colors, type, spacing } = useTheme();
+  const { colors: c, type, spacing } = useTheme();
 
   return (
     <View style={[styles.row, { marginVertical: spacing.xl }]}>
-      <View style={[styles.line, { backgroundColor: colors.borderPrimary }]} />
+      <View style={[styles.line, { backgroundColor: c.border }]} />
       <Text
         style={[
           type.caption,
-          { color: colors.textMuted, marginHorizontal: spacing.sm },
+          {
+            color: c.textMuted,
+            marginHorizontal: spacing.sm,
+            fontWeight: '500',
+          },
         ]}
       >
         {label}
       </Text>
-      <View style={[styles.line, { backgroundColor: colors.borderPrimary }]} />
+      <View style={[styles.line, { backgroundColor: c.border }]} />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  row:  { flexDirection: 'row', alignItems: 'center' },
-  line: { flex: 1, height: 1 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+  },
+  line: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+  },
 });
 
 export default AuthDivider;

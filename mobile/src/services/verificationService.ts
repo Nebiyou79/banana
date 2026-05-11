@@ -1,10 +1,6 @@
 /**
  * src/services/verificationService.ts
- * ─────────────────────────────────────────────────────────────────────────────
- * Parity: Mirrors frontend/src/services/verificationService.ts exactly.
- * Additions: mobile-specific helpers (getBadgeConfig, calculateProgress,
- *            canRequestVerification) and the appointment booking flow that
- *            mirrors AppointmentModal.tsx on web.
+ * Updated with correct appointment endpoints and better error handling
  */
 
 import { apiGet, apiPost, apiPatch } from '../lib/api';
@@ -29,7 +25,8 @@ export interface VerificationStatusResponse {
   verificationDetails: VerificationDetails;
   verificationMessage: string;
   user: {
-    id:        string;
+    _id?:      string;
+    id?:       string;
     name:      string;
     email:     string;
     role:      string;
@@ -80,6 +77,7 @@ export interface AppointmentRequest {
   appointmentDate:  string;   // ISO date string "YYYY-MM-DD"
   appointmentTime:  string;   // "HH:MM"
   additionalNotes?: string;
+   role?: string;
 }
 
 export interface AppointmentResponse {
@@ -123,7 +121,12 @@ export const VERIFICATION_FALLBACK: VerificationStatusResponse = {
     phoneVerified:     false,
   },
   verificationMessage: 'Not yet verified',
-  user: { id: '', name: '', email: '', role: '' },
+  user: { name: '', email: '', role: '' },
+};
+
+// Helper to get user ID from auth store user object
+export const getUserId = (user: any): string | undefined => {
+  return user?._id ?? user?.id ?? user?.userId;
 };
 
 // ─── Service ──────────────────────────────────────────────────────────────────
@@ -133,14 +136,29 @@ export const verificationService = {
 
   /** GET /verification/my-status */
   getMyStatus: async (): Promise<VerificationStatusResponse> => {
-    const res = await apiGet<VerificationStatusResponse>(VERIFICATION.MY_STATUS);
-    return res.data ?? VERIFICATION_FALLBACK;
+    try {
+      const res = await apiGet<VerificationStatusResponse>(VERIFICATION.MY_STATUS);
+      return res.data ?? VERIFICATION_FALLBACK;
+    } catch (err: any) {
+      // If 404 or 401, return fallback instead of throwing
+      if (err?.response?.status === 404 || err?.response?.status === 401) {
+        return VERIFICATION_FALLBACK;
+      }
+      throw err;
+    }
   },
 
   /** GET /verification/status/:userId  (public) */
   getPublicStatus: async (userId: string): Promise<VerificationStatusResponse> => {
-    const res = await apiGet<VerificationStatusResponse>(VERIFICATION.PUBLIC_STATUS(userId));
-    return res.data ?? VERIFICATION_FALLBACK;
+    try {
+      const res = await apiGet<VerificationStatusResponse>(VERIFICATION.PUBLIC_STATUS(userId));
+      return res.data ?? VERIFICATION_FALLBACK;
+    } catch (err: any) {
+      if (err?.response?.status === 404) {
+        return VERIFICATION_FALLBACK;
+      }
+      throw err;
+    }
   },
 
   // ── Request endpoints ───────────────────────────────────────────────────────
@@ -160,24 +178,41 @@ export const verificationService = {
     date: string,
     verificationType: string,
   ): Promise<AppointmentSlotsResponse> => {
-    const res = await apiGet<AppointmentSlotsResponse>(
-      `/verification/appointment/slots?date=${date}&type=${verificationType}`,
-    );
-    return res.data;
+    try {
+      const res = await apiGet<AppointmentSlotsResponse>(
+        `/verification/appointment/slots?date=${date}&type=${verificationType}`,
+      );
+      return res.data;
+    } catch (err: any) {
+      // If 404, return empty slots (will trigger mock fallback)
+      if (err?.response?.status === 404) {
+        return { success: true, slots: [] };
+      }
+      throw err;
+    }
   },
 
   /** GET /verification/appointment/office-location */
   getOfficeLocation: async (): Promise<OfficeLocation> => {
-    const res = await apiGet<{ success: boolean; location: OfficeLocation }>(
-      '/verification/appointment/office-location',
-    );
-    return (
-      res.data?.location ?? {
-        address:      'Head Office, Verification Department',
-        workingHours: 'Mon–Fri, 9:00 AM – 5:00 PM',
-        contactPhone: '+251 11 000 0000',
-      }
-    );
+    try {
+      const res = await apiGet<{ success: boolean; location: OfficeLocation }>(
+        '/verification/appointment/office-location',
+      );
+      return (
+        res.data?.location ?? {
+          address:      'Head Office, Verification Department\nBole Road, Addis Ababa, Ethiopia',
+          workingHours: 'Monday – Friday, 9:00 AM – 5:00 PM',
+          contactPhone: '+251 11 558 0000',
+        }
+      );
+    } catch (err) {
+      // Return default office location on error
+      return {
+        address:      'Head Office, Verification Department\nBole Road, Addis Ababa, Ethiopia',
+        workingHours: 'Monday – Friday, 9:00 AM – 5:00 PM',
+        contactPhone: '+251 11 558 0000',
+      };
+    }
   },
 
   /** POST /verification/appointment/book  — exact shape from AppointmentModal.tsx */

@@ -1,28 +1,38 @@
 /**
  * screens/freelancer/CertificationsListScreen.tsx
- * Aligned to backend GET/POST/PUT/DELETE /freelancer/certifications endpoints.
  */
 import React, { useState } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity,
-  StyleSheet, Alert, Linking, RefreshControl,
+  View, Text, TouchableOpacity,
+  StyleSheet, Alert, Linking, Platform,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useThemeStore } from '../../store/themeStore';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
+import { FONT_SIZE } from '../../theme/tokens';
+import { formatShortDate } from '../../theme/utils';
 import {
   useFreelancerCertifications,
   useDeleteCertification,
 } from '../../hooks/useFreelancer';
 import {
-  ScreenWrapper, ScreenHeader, LoadingState, EmptyState,
+  ScreenWrapper, LoadingState, EmptyState,
 } from '../../components/shared/UIComponents';
 import CertificationFormModal from '../../components/freelancer/CertificationFormModal';
 import type { FreelancerCertification } from '../../types/freelancer';
 import type { FreelancerStackParamList } from '../../navigation/FreelancerNavigator';
+import { ScreenHeader } from '../../components/freelancer/ScreenHeader';
 
 type Nav = NativeStackNavigationProp<FreelancerStackParamList>;
+
+const shadow = (color: string) =>
+  Platform.OS === 'ios'
+    ? { shadowColor: color, shadowOpacity: 0.12, shadowOffset: { width: 0, height: 3 }, shadowRadius: 8 }
+    : { elevation: 4 };
 
 // ─── Cert Card ────────────────────────────────────────────────────────────────
 
@@ -31,42 +41,38 @@ const CertCard: React.FC<{
   onEdit: () => void;
   onDelete: () => void;
 }> = ({ cert, onEdit, onDelete }) => {
-  const { theme } = useThemeStore();
-  const { colors, borderRadius, typography, spacing, shadows } = theme;
+  const { colors, radius, spacing } = useTheme();
 
-  const now        = new Date();
-  const isExpired  = cert.expiryDate ? new Date(cert.expiryDate) < now : false;
+  const now = new Date();
+  const isExpired = cert.expiryDate ? new Date(cert.expiryDate) < now : false;
   const expiringSoon = cert.expiryDate && !isExpired
     ? new Date(cert.expiryDate) <= new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
     : false;
 
-  const statusColor = isExpired ? colors.error : expiringSoon ? colors.warning : colors.success;
-  const statusBg    = isExpired ? colors.errorLight : expiringSoon ? colors.warningLight : colors.successLight;
+  const statusColor = isExpired ? colors.danger : expiringSoon ? colors.warning : colors.success;
+  const statusBg = isExpired ? colors.dangerBg : expiringSoon ? colors.warningBg : colors.successBg;
   const statusLabel = isExpired ? 'Expired' : expiringSoon ? 'Expiring Soon' : 'Active';
-
-  const fmtDate = (d?: string) =>
-    d ? new Date(d).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : null;
 
   return (
     <View style={[styles.certCard, {
-      backgroundColor: colors.card,
-      borderRadius: borderRadius.xl,
+      backgroundColor: colors.bgCard,
+      borderRadius: radius.xl,
       borderColor: colors.border,
-      ...shadows.sm,
+      ...shadow(colors.shadowColor),
     }]}>
       {/* Header */}
       <View style={styles.certHeader}>
         <View style={[styles.certIcon, {
-          backgroundColor: colors.primaryLight,
-          borderRadius: borderRadius.md,
+          backgroundColor: withAlpha(colors.freelancer, 0.10),
+          borderRadius: radius.md,
         }]}>
-          <Ionicons name="ribbon-outline" size={24} color={colors.primary} />
+          <Ionicons name="ribbon-outline" size={24} color={colors.freelancer} />
         </View>
-        <View style={{ flex: 1, marginLeft: spacing[3] }}>
-          <Text style={{ fontSize: typography.base, fontWeight: '700', color: colors.text }} numberOfLines={2}>
+        <View style={{ flex: 1, marginLeft: spacing.md }}>
+          <Text style={{ fontSize: FONT_SIZE.base, fontWeight: '700', color: colors.text }} numberOfLines={2}>
             {cert.name}
           </Text>
-          <Text style={{ fontSize: typography.sm, color: colors.primary, fontWeight: '600', marginTop: 2 }}>
+          <Text style={{ fontSize: FONT_SIZE.sm, color: colors.freelancer, fontWeight: '600', marginTop: 2 }}>
             {cert.issuer}
           </Text>
         </View>
@@ -76,35 +82,35 @@ const CertCard: React.FC<{
       </View>
 
       {/* Dates */}
-      <View style={[styles.datesRow, { marginTop: spacing[3] }]}>
+      <View style={[styles.datesRow, { marginTop: spacing.md }]}>
         <View style={styles.dateItem}>
           <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
-          <Text style={{ fontSize: typography.xs, color: colors.textMuted, marginLeft: 4 }}>
-            Issued {fmtDate(cert.issueDate)}
+          <Text style={{ fontSize: FONT_SIZE.xs, color: colors.textMuted, marginLeft: 4 }}>
+            Issued {formatShortDate(cert.issueDate)}
           </Text>
         </View>
         {cert.expiryDate && (
           <View style={styles.dateItem}>
-            <Ionicons name="calendar-outline" size={13} color={isExpired ? colors.error : colors.textMuted} />
-            <Text style={{ fontSize: typography.xs, color: isExpired ? colors.error : colors.textMuted, marginLeft: 4 }}>
-              Expires {fmtDate(cert.expiryDate)}
+            <Ionicons name="calendar-outline" size={13} color={isExpired ? colors.danger : colors.textMuted} />
+            <Text style={{ fontSize: FONT_SIZE.xs, color: isExpired ? colors.danger : colors.textMuted, marginLeft: 4 }}>
+              Expires {formatShortDate(cert.expiryDate)}
             </Text>
           </View>
         )}
       </View>
 
       {cert.credentialId && (
-        <Text style={{ fontSize: typography.xs, color: colors.textMuted, marginTop: spacing[2] }}>
+        <Text style={{ fontSize: FONT_SIZE.xs, color: colors.textMuted, marginTop: spacing.sm }}>
           ID: {cert.credentialId}
         </Text>
       )}
 
       {/* Skills */}
       {cert.skills && cert.skills.length > 0 && (
-        <View style={[styles.skillsRow, { marginTop: spacing[3] }]}>
+        <View style={[styles.skillsRow, { marginTop: spacing.md }]}>
           {cert.skills.slice(0, 4).map((sk, i) => (
-            <View key={i} style={[styles.skillTag, { backgroundColor: colors.primaryLight, borderRadius: 8 }]}>
-              <Text style={{ fontSize: 9, fontWeight: '600', color: colors.primary }}>{sk}</Text>
+            <View key={i} style={[styles.skillTag, { backgroundColor: withAlpha(colors.freelancer, 0.10), borderRadius: 8 }]}>
+              <Text style={{ fontSize: 9, fontWeight: '600', color: colors.freelancer }}>{sk}</Text>
             </View>
           ))}
           {cert.skills.length > 4 && (
@@ -116,33 +122,33 @@ const CertCard: React.FC<{
       )}
 
       {/* Actions */}
-      <View style={[styles.certActions, { borderTopColor: colors.border, marginTop: spacing[3], paddingTop: spacing[3] }]}>
+      <View style={[styles.certActions, { borderTopColor: colors.border, marginTop: spacing.md, paddingTop: spacing.md }]}>
         {cert.credentialUrl && (
           <TouchableOpacity
             onPress={() => Linking.openURL(cert.credentialUrl!)}
-            style={[styles.certActionBtn, { backgroundColor: colors.primaryLight, borderRadius: borderRadius.md }]}
+            style={[styles.certActionBtn, { backgroundColor: withAlpha(colors.freelancer, 0.10), borderRadius: radius.md }]}
           >
-            <Ionicons name="open-outline" size={14} color={colors.primary} />
-            <Text style={{ fontSize: typography.xs, color: colors.primary, fontWeight: '700', marginLeft: 4 }}>
+            <Ionicons name="open-outline" size={14} color={colors.freelancer} />
+            <Text style={{ fontSize: FONT_SIZE.xs, color: colors.freelancer, fontWeight: '700', marginLeft: 4 }}>
               Verify
             </Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity
           onPress={onEdit}
-          style={[styles.certActionBtn, { backgroundColor: colors.surface, borderRadius: borderRadius.md }]}
+          style={[styles.certActionBtn, { backgroundColor: colors.bgCard, borderRadius: radius.md }]}
         >
           <Ionicons name="pencil-outline" size={14} color={colors.textSecondary} />
-          <Text style={{ fontSize: typography.xs, color: colors.textSecondary, fontWeight: '700', marginLeft: 4 }}>
+          <Text style={{ fontSize: FONT_SIZE.xs, color: colors.textSecondary, fontWeight: '700', marginLeft: 4 }}>
             Edit
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={onDelete}
-          style={[styles.certActionBtn, { backgroundColor: colors.errorLight, borderRadius: borderRadius.md }]}
+          style={[styles.certActionBtn, { backgroundColor: colors.dangerBg, borderRadius: radius.md }]}
         >
-          <Ionicons name="trash-outline" size={14} color={colors.error} />
-          <Text style={{ fontSize: typography.xs, color: colors.error, fontWeight: '700', marginLeft: 4 }}>
+          <Ionicons name="trash-outline" size={14} color={colors.danger} />
+          <Text style={{ fontSize: FONT_SIZE.xs, color: colors.danger, fontWeight: '700', marginLeft: 4 }}>
             Delete
           </Text>
         </TouchableOpacity>
@@ -155,11 +161,11 @@ const CertCard: React.FC<{
 
 export const CertificationsListScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
-  const { theme }  = useThemeStore();
-  const { colors, spacing } = theme;
+  const { colors, spacing } = useTheme();
+  const insets = useSafeAreaInsets();
 
-  const [formVisible, setFormVisible]   = useState(false);
-  const [editingCert, setEditingCert]   = useState<FreelancerCertification | null>(null);
+  const [formVisible, setFormVisible] = useState(false);
+  const [editingCert, setEditingCert] = useState<FreelancerCertification | null>(null);
 
   const { data: certs = [], isLoading, refetch, isRefetching } = useFreelancerCertifications();
   const deleteMutation = useDeleteCertification();
@@ -197,11 +203,16 @@ export const CertificationsListScreen: React.FC = () => {
         rightAction={{ icon: 'add', onPress: handleAdd }}
       />
 
-      <FlatList
+      <FlashList
         data={certs}
         keyExtractor={c => c._id}
-        contentContainerStyle={{ paddingHorizontal: spacing[4], paddingTop: spacing[4], paddingBottom: 100 }}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />}
+        contentContainerStyle={{
+          paddingHorizontal: spacing.lg,
+          paddingTop: spacing.lg,
+          paddingBottom: insets.bottom + spacing.xxl,
+        }}
+        refreshing={isRefetching}
+        onRefresh={refetch}
         ListEmptyComponent={
           <EmptyState
             icon="ribbon-outline"
@@ -221,7 +232,10 @@ export const CertificationsListScreen: React.FC = () => {
 
       <TouchableOpacity
         onPress={handleAdd}
-        style={[styles.fab, { backgroundColor: colors.primary }]}
+        style={[styles.fab, {
+          backgroundColor: colors.primary,
+          bottom: insets.bottom + spacing.lg,
+        }]}
       >
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
@@ -246,5 +260,5 @@ const styles = StyleSheet.create({
   skillTag:      { paddingHorizontal: 8, paddingVertical: 3 },
   certActions:   { flexDirection: 'row', gap: 8, borderTopWidth: 1 },
   certActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 36 },
-  fab:           { position: 'absolute', bottom: 24, right: 24, width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', elevation: 6, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
+  fab:           { position: 'absolute', right: 24, width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', elevation: 6, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
 });

@@ -19,7 +19,6 @@ import type {
 } from '../types/freelanceTender';
 
 // ─── Query key factory ────────────────────────────────────────────────────────
-// (categories key added below)
 
 export const freelanceTenderKeys = {
   categories: ['freelanceTenders', 'categories'] as const,
@@ -42,14 +41,19 @@ export const freelanceTenderKeys = {
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
 /**
+ * BUG 1 FIX — was only defined as a local stub inside FreelanceTenderFormShell.
+ * Now properly exported from the hook file.
+ *
  * Fetch procurement categories (used by the create/edit form step 1).
  * staleTime: 1 hour — categories rarely change.
+ * placeholderData: {} so Step1Basics never receives undefined.
  */
 export const useFreelanceTenderCategories = () =>
   useQuery({
     queryKey: freelanceTenderKeys.categories,
     queryFn: () => freelanceTenderService.getCategories(),
     staleTime: 60 * 60 * 1000,
+    placeholderData: {} as Record<string, string[]>,
   });
 
 /**
@@ -60,7 +64,11 @@ export const useFreelanceTenders = (filters?: Omit<FreelanceTenderFilters, 'page
   useInfiniteQuery({
     queryKey: freelanceTenderKeys.list(filters),
     queryFn: ({ pageParam = 1 }) =>
-      freelanceTenderService.getFreelanceTenders({ ...filters, page: pageParam as number, limit: 15 }),
+      freelanceTenderService.getFreelanceTenders({
+        ...filters,
+        page: pageParam as number,
+        limit: 15,
+      }),
     getNextPageParam: (last) =>
       last.pagination.page < last.pagination.totalPages
         ? last.pagination.page + 1
@@ -152,8 +160,8 @@ export const useCreateFreelanceTender = () => {
     },
     onError: (err: unknown) => {
       const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        'Failed to create tender';
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? 'Failed to create tender';
       Toast.show({ type: 'error', text1: msg });
     },
   });
@@ -179,8 +187,8 @@ export const useUpdateFreelanceTender = () => {
     },
     onError: (err: unknown) => {
       const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        'Failed to update tender';
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? 'Failed to update tender';
       Toast.show({ type: 'error', text1: msg });
     },
   });
@@ -192,7 +200,6 @@ export const useDeleteFreelanceTender = () => {
     mutationFn: (id: string) => freelanceTenderService.deleteFreelanceTender(id),
     onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: freelanceTenderKeys.mine() });
-      // Optimistic removal from 'mine' lists
       const snapshots: Array<[readonly unknown[], unknown]> = [];
       qc.getQueriesData<{ tenders: FreelanceTenderListItem[] }>({
         queryKey: freelanceTenderKeys.mine(),
@@ -230,8 +237,8 @@ export const usePublishFreelanceTender = () => {
     },
     onError: (err: unknown) => {
       const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        'Failed to publish tender';
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? 'Failed to publish tender';
       Toast.show({ type: 'error', text1: msg });
     },
   });
@@ -248,8 +255,8 @@ export const useCloseFreelanceTender = () => {
     },
     onError: (err: unknown) => {
       const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        'Failed to close tender';
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? 'Failed to close tender';
       Toast.show({ type: 'error', text1: msg });
     },
   });
@@ -261,10 +268,13 @@ export const useCloseFreelanceTender = () => {
 export const useSaveUnsaveTender = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => freelanceTenderService.toggleSaveFreelanceTender(id),
+    mutationFn: (id: string) =>
+      freelanceTenderService.toggleSaveFreelanceTender(id),
     onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: freelanceTenderKeys.detail(id) });
-      const prev = qc.getQueryData<FreelanceTender>(freelanceTenderKeys.detail(id));
+      const prev = qc.getQueryData<FreelanceTender>(
+        freelanceTenderKeys.detail(id)
+      );
       if (prev) {
         qc.setQueryData<FreelanceTender>(freelanceTenderKeys.detail(id), {
           ...prev,
@@ -300,15 +310,22 @@ export const useUpdateApplicationStatus = () => {
       status: ApplicationStatus;
       notes?: string;
     }) =>
-      freelanceTenderService.updateApplicationStatus(tenderId, appId, status, notes),
+      freelanceTenderService.updateApplicationStatus(
+        tenderId,
+        appId,
+        status,
+        notes
+      ),
     onSuccess: (_updated, { tenderId }) => {
-      qc.invalidateQueries({ queryKey: freelanceTenderKeys.applications(tenderId) });
+      qc.invalidateQueries({
+        queryKey: freelanceTenderKeys.applications(tenderId),
+      });
       qc.invalidateQueries({ queryKey: freelanceTenderKeys.detail(tenderId) });
     },
     onError: (err: unknown) => {
       const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        'Failed to update status';
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? 'Failed to update status';
       Toast.show({ type: 'error', text1: msg });
     },
   });
@@ -330,8 +347,8 @@ export const useSubmitApplication = () => {
     },
     onError: (err: unknown) => {
       const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        'Failed to submit application';
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? 'Failed to submit application';
       Toast.show({ type: 'error', text1: msg });
     },
   });

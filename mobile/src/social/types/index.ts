@@ -53,6 +53,7 @@ export interface PostMedia {
 
 // ── 3. Post ──────────────────────────────────────────────────────────
 export interface PostStats {
+  reactionBreakdown: {};
   likes: number;
   dislikes: number;
   comments: number;
@@ -421,6 +422,7 @@ export interface Profile {
 }
 
 export interface PublicProfile extends Profile {
+  skills: any;
   isFollowing?: boolean;
   isMutualFollow?: boolean;
 }
@@ -451,19 +453,31 @@ export interface SearchParams {
   limit?: number;
   sortBy?: SearchSortBy;
 }
-
 export interface SearchResult {
   _id: string;
+  type: SearchType;
   name: string;
-  avatar?: string;
+  avatar?: string | null;
   role: UserRole;
-  headline?: string;
-  location?: string;
+  headline?: string | null;
+  bio?: string | null;
+  location?: string | null;
+  skills?: string[];
   followerCount?: number;
+  followingCount?: number;
+  postCount?: number;
   verificationStatus?: VerificationStatus;
+  isOnline?: boolean;
+  lastSeen?: string | null;
+  /** Current viewer's follow state toward this user */
+  followState?: 'following' | 'not_following' | 'blocked';
+  /** True if both users follow each other */
+  isMutual?: boolean;
+  joinedDate?: string;
+  // Keep legacy field for backwards compatibility
+  /** @deprecated Use followState instead */
   isFollowing?: boolean;
   industry?: string;
-  skills?: string[];
 }
 
 export interface SearchResponse {

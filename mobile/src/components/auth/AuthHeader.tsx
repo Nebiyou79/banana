@@ -3,10 +3,11 @@
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useTheme } from '../../hooks/useThemes';
+import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
 
 interface AuthHeaderProps {
-  title:     string;
+  title: string;
   subtitle?: string;
   showLogo?: boolean;
 }
@@ -16,18 +17,19 @@ export const AuthHeader: React.FC<AuthHeaderProps> = ({
   subtitle,
   showLogo = true,
 }) => {
-  const { colors, type, spacing } = useTheme();
+  const { colors: c, spacing, type, radius } = useTheme();
 
   return (
-    <View style={[styles.container, { marginBottom: spacing['2xl'] }]}>
+    <View style={[styles.container, { marginBottom: spacing.xl }]}>
       {showLogo && (
         <View
           style={[
             styles.logoBg,
             {
-              backgroundColor: colors.accentBg,
-              borderColor:     colors.borderAccent,
-              marginBottom:    spacing.lg,
+              backgroundColor: c.primaryBg,
+              borderColor: c.borderAccent,
+              borderRadius: radius.xl,
+              marginBottom: spacing.lg,
             },
           ]}
         >
@@ -35,25 +37,30 @@ export const AuthHeader: React.FC<AuthHeaderProps> = ({
         </View>
       )}
 
-      <Text style={[type.display, { color: colors.textPrimary, textAlign: 'center' }]}>
+      <Text
+        style={[
+          type.h1,
+          { color: c.text, textAlign: 'center', fontWeight: '700' },
+        ]}
+      >
         {title}
       </Text>
 
-      {subtitle ? (
+      {subtitle && (
         <Text
           style={[
-            type.bodyLg,
+            type.body,
             {
-              color:           colors.textMuted,
-              textAlign:       'center',
-              marginTop:       spacing.sm,
+              color: c.textMuted,
+              textAlign: 'center',
+              marginTop: spacing.sm,
               paddingHorizontal: spacing.xl,
             },
           ]}
         >
           {subtitle}
         </Text>
-      ) : null}
+      )}
     </View>
   );
 };
@@ -63,12 +70,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoBg: {
-    width:           76,
-    height:          76,
-    borderRadius:    22,
-    borderWidth:     1.5,
-    alignItems:      'center',
-    justifyContent:  'center',
+    width: 76,
+    height: 76,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   logoEmoji: {
     fontSize: 40,

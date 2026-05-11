@@ -1,169 +1,288 @@
 /**
- * mobile/src/screens/company/EditProductScreen.tsx
- *
- * UPDATED:
- *  - useIsCompanyOwner(product) guard — only the owner of THIS product can edit
- *  - useTheme(), no hardcoded colors
- *  - Adds an explicit "Forbidden" state when product loads but user is not owner
- *  - Save returns user to the detail screen instead of just goBack(), so the
- *    refreshed product data is what they see next
+ * src/screens/company/EditProfileScreen.tsx
  */
-import React from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
-  ActivityIndicator, StatusBar,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  KeyboardAvoidingView, Platform, ActivityIndicator, TextInput,
 } from 'react-native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { useForm, Controller } from 'react-hook-form';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 
-import { useTheme } from '../../hooks/useTheme';
-import { useIsCompanyOwner } from '../../hooks/useIsCompanyOwner';
-import { useProduct, useUpdateProduct } from '../../hooks/useProducts';
-
-import { ProductForm } from '../../components/products/ProductForm';
 import {
-  CreateProductData, ImageAsset, UpdateProductData,
-} from '../../services/productService';
-import { CompanyStackParamList } from '../../navigation/CompanyNavigator';
+  useProfile, useCompanyProfile, useUpdateCompanyProfile,
+} from '../../hooks/useProfile';
+import { ProfileImageUploader } from '../../components/shared/ProfileImageUploader';
+import { SkeletonCard } from '../../components/shared/ProfileAtoms';
+import { toast } from '../../lib/toast';
+import { useTheme } from '../../hooks/useTheme';
+import { FONT_SIZE } from '../../theme/tokens';
 
-type Props = NativeStackScreenProps<CompanyStackParamList, 'EditProduct'>;
+const inputStyles = StyleSheet.create({
+  label: {
+    fontSize: FONT_SIZE.xs, fontWeight: '700', letterSpacing: 0.8,
+    textTransform: 'uppercase', marginBottom: 6,
+  },
+  input: {
+    borderWidth: 1, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: FONT_SIZE.base,
+  },
+});
 
-export const EditProductScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { productId } = route.params;
-  const { colors, isDark } = useTheme();
+const LabeledInput: React.FC<{
+  label: string; value: string; onChangeText: (t: string) => void;
+  placeholder?: string; multiline?: boolean; numberOfLines?: number;
+  keyboardType?: any; maxLength?: number; colors: any;
+}> = ({ label, value, onChangeText, placeholder, multiline, numberOfLines, keyboardType, maxLength, colors }) => (
+  <View style={{ marginBottom: 12 }}>
+    <Text style={[inputStyles.label, { color: colors.textMuted }]}>{label}</Text>
+    <TextInput
+      style={[
+        inputStyles.input,
+        {
+          backgroundColor: colors.inputBg, borderColor: colors.inputBorder,
+          color: colors.text,
+          height: multiline ? (numberOfLines ?? 4) * 22 : 44,
+          textAlignVertical: multiline ? 'top' : 'center',
+        },
+      ]}
+      value={value} onChangeText={onChangeText} placeholder={placeholder}
+      placeholderTextColor={colors.inputPlaceholder}
+      multiline={multiline} numberOfLines={numberOfLines}
+      keyboardType={keyboardType} maxLength={maxLength}
+    />
+  </View>
+);
 
-  const { data: product, isLoading, isError, refetch } = useProduct(productId);
-  const updateProduct = useUpdateProduct();
-  const isOwner = useIsCompanyOwner(product);
+const TagEditor: React.FC<{
+  tags: string[]; onAdd: (t: string) => void; onRemove: (i: number) => void;
+  placeholder?: string; colors: any;
+}> = ({ tags, onAdd, onRemove, placeholder = 'Add...', colors }) => {
+  const [input, setInput] = useState('');
+  return (
+    <View>
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+        <TextInput
+          style={[inputStyles.input, { flex: 1, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text, height: 44 }]}
+          value={input} onChangeText={setInput} placeholder={placeholder}
+          placeholderTextColor={colors.inputPlaceholder} returnKeyType="done"
+          onSubmitEditing={() => { if (input.trim()) { onAdd(input.trim()); setInput(''); } }}
+        />
+        <TouchableOpacity
+          style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}
+          onPress={() => { if (input.trim()) { onAdd(input.trim()); setInput(''); } }}
+        >
+          <Ionicons name="add" size={22} color={colors.textInverse} />
+        </TouchableOpacity>
+      </View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        {tags.map((tag, i) => (
+          <TouchableOpacity
+            key={i} onPress={() => onRemove(i)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: `${colors.primary}18`, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 99 }}
+          >
+            <Text style={{ color: colors.primary, fontSize: FONT_SIZE.sm, fontWeight: '600' }}>{tag}</Text>
+            <Ionicons name="close" size={12} color={colors.primary} />
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+};
 
-  const handleSubmit = (
-    data: CreateProductData,
-    imageAssets: ImageAsset[],
-    existingIds: string[],
-  ) => {
-    const originalIds    = product?.images.map(img => img.public_id) ?? [];
-    const imagesToDelete = originalIds.filter(id => !existingIds.includes(id));
+interface FormValues {
+  name: string; tin: string; industry: string; description: string;
+  address: string; phone: string; website: string;
+  specialties: string[];
+}
 
-    updateProduct.mutate(
-      {
-        id: productId,
-        data: data as UpdateProductData,
-        imageAssets,
-        existingImages: existingIds,
-        imagesToDelete,
-      },
-      { onSuccess: () => navigation.goBack() },
-    );
-  };
+export const CompanyEditProfileScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
+  const { colors, spacing } = useTheme();
+  const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
 
-  // ── Loading ────────────────────────────────────────────────────────────────
+  const { data: profile, isLoading: pLoading } = useProfile();
+  const { data: company, isLoading: cLoading } = useCompanyProfile();
+  const updateCompany = useUpdateCompanyProfile();
+
+  const { control, handleSubmit, reset, watch, setValue } = useForm<FormValues>({
+    defaultValues: {
+      name: '', tin: '', industry: '', description: '',
+      address: '', phone: '', website: '', specialties: [],
+    },
+  });
+
+  useEffect(() => {
+    if (!company) return;
+    reset({
+      name:        company.name        ?? '',
+      tin:         company.tin         ?? '',
+      industry:    company.industry    ?? '',
+      description: company.description ?? '',
+      address:     company.address     ?? '',
+      phone:       company.phone       ?? '',
+      website:     company.website     ?? '',
+      specialties: [],
+    });
+  }, [company, reset]);
+
+  const isSaving  = updateCompany.isPending;
+  const isLoading = pLoading || cLoading;
+  const specialties = watch('specialties');
+
+  const onSave = useCallback(
+    handleSubmit(async (values) => {
+      try {
+        await updateCompany.mutateAsync({
+          name:        values.name        || undefined,
+          tin:         values.tin         || undefined,
+          industry:    values.industry    || undefined,
+          description: values.description || undefined,
+          address:     values.address     || undefined,
+          phone:       values.phone       || undefined,
+          website:     values.website     || undefined,
+        });
+        await queryClient.invalidateQueries({ queryKey: ['company', 'profileGate'] });
+        navigation.goBack();
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : 'Failed to save');
+      }
+    }),
+    [handleSubmit, updateCompany, navigation, queryClient],
+  );
+
   if (isLoading) {
     return (
-      <SafeAreaView style={[s.safe, { backgroundColor: colors.bgPrimary }]}>
-        <ActivityIndicator color={colors.accent} size="large" style={{ marginTop: 80 }} />
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+        <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
+          <SkeletonCard />
+          <SkeletonCard />
+        </ScrollView>
       </SafeAreaView>
     );
   }
 
-  // ── Error / not-found ──────────────────────────────────────────────────────
-  if (isError || !product) {
-    return (
-      <SafeAreaView style={[s.safe, { backgroundColor: colors.bgPrimary }]}>
-        <View style={s.center}>
-          <Ionicons name="alert-circle-outline" size={48} color={colors.textMuted} />
-          <Text style={[s.centerTitle, { color: colors.textPrimary }]}>
-            {isError ? 'Failed to load product' : 'Product not found'}
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 16 }}>
-            {isError && (
-              <TouchableOpacity onPress={() => refetch()}>
-                <Text style={{ color: colors.accent, fontWeight: '600' }}>Retry</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={() => navigation.goBack()}>
-              <Text style={{ color: colors.accent, fontWeight: '600' }}>Go back</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // ── Forbidden — product exists but user doesn't own it ─────────────────────
-  if (!isOwner) {
-    return (
-      <SafeAreaView style={[s.safe, { backgroundColor: colors.bgPrimary }]}>
-        <View style={s.center}>
-          <Ionicons name="lock-closed-outline" size={48} color={colors.error} />
-          <Text style={[s.centerTitle, { color: colors.textPrimary }]}>
-            You can’t edit this product
-          </Text>
-          <Text style={[s.centerBody, { color: colors.textMuted }]}>
-            Only the company that owns this product can edit it.
-          </Text>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={{ color: colors.accent, fontWeight: '600' }}>Go back</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const priceNum = product.price?.amount ?? 0;
-  const currency = product.price?.currency ?? 'USD';
-  const unit     = product.price?.unit     ?? 'unit';
+  const avatarUrl = profile?.avatar?.secure_url ?? profile?.user?.avatar ?? null;
+  const coverUrl = profile?.cover?.secure_url ?? null;
 
   return (
-    <SafeAreaView style={[s.safe, { backgroundColor: colors.bgPrimary }]}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {/* In-flow header */}
+        <View style={[styles.header, { backgroundColor: colors.bgCard, borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }}>
+            <Ionicons name="close-outline" size={22} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={{ color: colors.text, fontWeight: '700', fontSize: FONT_SIZE.md }}>Edit Company</Text>
+          <TouchableOpacity
+            style={[styles.saveBtn, { backgroundColor: colors.primary, opacity: isSaving ? 0.65 : 1 }]}
+            onPress={onSave}
+            disabled={isSaving}
+          >
+            {isSaving
+              ? <ActivityIndicator size="small" color={colors.textInverse} />
+              : <Text style={{ color: colors.textInverse, fontSize: FONT_SIZE.base, fontWeight: '700' }}>Save</Text>}
+          </TouchableOpacity>
+        </View>
 
-      <View style={[s.header, { borderBottomColor: colors.borderPrimary }]}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Ionicons name="close" size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={[s.title, { color: colors.textPrimary }]} numberOfLines={1}>
-          Edit Product
-        </Text>
-        <View style={{ width: 24 }} />
-      </View>
+          <View style={{ padding: spacing.lg, paddingBottom: 0 }}>
+            <ProfileImageUploader
+              currentAvatarUrl={avatarUrl}
+              currentCoverUrl={coverUrl}
+              accentColor={colors.primary}
+              type="both"
+              avatarShape="square"
+            />
+          </View>
 
-      <ProductForm
-        mode="edit"
-        initialData={{
-          name:             product.name,
-          description:      product.description,
-          shortDescription: product.shortDescription,
-          price:            priceNum,
-          currency,
-          unit,
-          category:         product.category,
-          subcategory:      product.subcategory,
-          tags:             product.tags,
-          featured:         product.featured,
-          inventory:        product.inventory,
-          sku:              product.sku,
-          specifications:   product.specifications,
-          images:           product.images,
-        }}
-        onSubmit={handleSubmit}
-        isLoading={updateProduct.isPending}
-      />
+          <View style={{ padding: spacing.lg, gap: 14 }}>
+            {/* Company info */}
+            <View style={[styles.section, { backgroundColor: colors.bgCard }]}>
+              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>COMPANY INFO</Text>
+              <Controller control={control} name="name"
+                render={({ field }) => (
+                  <LabeledInput label="Company Name *" value={field.value} onChangeText={field.onChange}
+                    placeholder="Your company name" colors={colors} />
+                )} />
+              <Controller control={control} name="tin"
+                render={({ field }) => (
+                  <LabeledInput label="TIN Number" value={field.value} onChangeText={field.onChange}
+                    placeholder="10-digit TIN" keyboardType="number-pad" maxLength={10} colors={colors} />
+                )} />
+              <Controller control={control} name="industry"
+                render={({ field }) => (
+                  <LabeledInput label="Industry" value={field.value} onChangeText={field.onChange}
+                    placeholder="e.g. Technology, Finance" colors={colors} />
+                )} />
+              <Controller control={control} name="description"
+                render={({ field }) => (
+                  <LabeledInput label="Description" value={field.value} onChangeText={field.onChange}
+                    placeholder="Describe your company..." multiline numberOfLines={5}
+                    maxLength={1000} colors={colors} />
+                )} />
+            </View>
+
+            {/* Contact */}
+            <View style={[styles.section, { backgroundColor: colors.bgCard }]}>
+              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>CONTACT</Text>
+              <Controller control={control} name="phone"
+                render={({ field }) => (
+                  <LabeledInput label="Phone" value={field.value} onChangeText={field.onChange}
+                    placeholder="+1 555 000 0000" keyboardType="phone-pad" colors={colors} />
+                )} />
+              <Controller control={control} name="website"
+                render={({ field }) => (
+                  <LabeledInput label="Website" value={field.value} onChangeText={field.onChange}
+                    placeholder="https://yourcompany.com" keyboardType="url" colors={colors} />
+                )} />
+              <Controller control={control} name="address"
+                render={({ field }) => (
+                  <LabeledInput label="Address" value={field.value} onChangeText={field.onChange}
+                    placeholder="Company address" colors={colors} />
+                )} />
+            </View>
+
+            {/* Specialties */}
+            <View style={[styles.section, { backgroundColor: colors.bgCard }]}>
+              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>SPECIALTIES</Text>
+              <TagEditor
+                tags={specialties}
+                onAdd={t => setValue('specialties', [...specialties, t])}
+                onRemove={i => setValue('specialties', specialties.filter((_, idx) => idx !== i))}
+                placeholder="e.g. Cloud Computing, AI, SaaS..."
+                colors={colors}
+              />
+            </View>
+
+            <View style={{ height: 60 }} />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
 
-const s = StyleSheet.create({
-  safe:   { flex: 1 },
+const styles = StyleSheet.create({
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14,
+    paddingHorizontal: 16, paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  title:       { fontSize: 18, fontWeight: '700', flex: 1, textAlign: 'center', marginHorizontal: 12 },
-  center:      { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
-  centerTitle: { fontSize: 17, fontWeight: '700', textAlign: 'center' },
-  centerBody:  { fontSize: 13, textAlign: 'center', lineHeight: 19, maxWidth: 280 },
+  saveBtn: {
+    paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20,
+    minWidth: 68, alignItems: 'center',
+  },
+  section:      { borderRadius: 14, padding: 16 },
+  sectionTitle: { fontSize: FONT_SIZE.xs, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 14 },
 });

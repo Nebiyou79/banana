@@ -1,9 +1,5 @@
 /**
  * src/screens/company/EmployerApplicationDetailScreen.tsx
- * ─────────────────────────────────────────────────────────────────────────────
- * Company / Org application detail screen.
- * Shows ApplicationHeader + 3-tab CompanyApplicationDetails.
- * ─────────────────────────────────────────────────────────────────────────────
  */
 import React, { useState } from 'react';
 import {
@@ -11,7 +7,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 import { useAuthStore } from '../../store/authStore';
 import {
   useCompanyApplicationDetails,
@@ -21,6 +17,7 @@ import { ApplicationHeader } from '../../components/application/ApplicationHeade
 import { CompanyApplicationDetails } from '../../components/application/CompanyApplicationDetails';
 import { Application } from '../../services/applicationService';
 import { ListSkeleton } from '../../components/skeletons';
+import { FONT_SIZE } from '../../theme/tokens';
 
 interface Props {
   navigation: any;
@@ -29,15 +26,13 @@ interface Props {
 
 export const EmployerApplicationDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const { applicationId } = route.params;
-  const { theme } = useThemeStore();
-  const { user }  = useAuthStore();
-  const c         = theme.colors;
-  const isDark    = theme.isDark ?? false;
-  const isOrg     = user?.role === 'organization';
+  const { colors, isDark } = useTheme();
+  const { user } = useAuthStore();
+  const isOrg    = user?.role === 'organization';
 
-  const companyQ  = useCompanyApplicationDetails(!isOrg ? applicationId : undefined);
-  const orgQ      = useOrgApplicationDetails(isOrg ? applicationId : undefined);
-  const appQ      = isOrg ? orgQ : companyQ;
+  const companyQ = useCompanyApplicationDetails(!isOrg ? applicationId : undefined);
+  const orgQ     = useOrgApplicationDetails(isOrg ? applicationId : undefined);
+  const appQ     = isOrg ? orgQ : companyQ;
 
   const [localApp, setLocalApp] = useState<Application | null>(null);
   const application: Application | undefined = localApp ?? appQ.data;
@@ -52,7 +47,7 @@ export const EmployerApplicationDetailScreen: React.FC<Props> = ({ navigation, r
 
   if (appQ.isLoading) {
     return (
-      <SafeAreaView style={[s.root, { backgroundColor: c.background }]} edges={['top']}>
+      <SafeAreaView style={[s.root, { backgroundColor: colors.bg }]} edges={['top']}>
         <ListSkeleton count={6} />
       </SafeAreaView>
     );
@@ -60,15 +55,15 @@ export const EmployerApplicationDetailScreen: React.FC<Props> = ({ navigation, r
 
   if (appQ.isError || !application) {
     return (
-      <SafeAreaView style={[s.root, { backgroundColor: c.background }]} edges={['top']}>
+      <SafeAreaView style={[s.root, { backgroundColor: colors.bg }]} edges={['top']}>
         <View style={s.center}>
-          <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
-          <Text style={[s.errorTitle, { color: c.text }]}>Could not load application</Text>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.danger} />
+          <Text style={[s.errorTitle, { color: colors.text }]}>Could not load application</Text>
           <TouchableOpacity
-            style={[s.retryBtn, { backgroundColor: c.primary }]}
+            style={[s.retryBtn, { backgroundColor: colors.primary }]}
             onPress={() => appQ.refetch()}
           >
-            <Text style={s.retryText}>Retry</Text>
+            <Text style={[s.retryText, { color: colors.textInverse }]}>Retry</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -76,8 +71,7 @@ export const EmployerApplicationDetailScreen: React.FC<Props> = ({ navigation, r
   }
 
   return (
-    <SafeAreaView style={[s.root, { backgroundColor: c.background }]} edges={['top']}>
-      {/* Gradient header */}
+    <SafeAreaView style={[s.root, { backgroundColor: colors.bg }]} edges={['top']}>
       <ApplicationHeader
         application={application}
         role="employer"
@@ -85,11 +79,9 @@ export const EmployerApplicationDetailScreen: React.FC<Props> = ({ navigation, r
         onShare={handleShare}
         isDark={isDark}
       />
-
-      {/* 3-tab detail */}
       <CompanyApplicationDetails
         application={application}
-        colors={c}
+        colors={colors}
         onUpdated={(updated) => setLocalApp(updated)}
       />
     </SafeAreaView>
@@ -99,7 +91,7 @@ export const EmployerApplicationDetailScreen: React.FC<Props> = ({ navigation, r
 const s = StyleSheet.create({
   root:       { flex: 1 },
   center:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
-  errorTitle: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  errorTitle: { fontSize: FONT_SIZE.md, fontWeight: '700', textAlign: 'center' },
   retryBtn:   { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10 },
-  retryText:  { color: '#fff', fontWeight: '700' },
+  retryText:  { fontWeight: '700' },
 });

@@ -3,30 +3,32 @@
  */
 import React, { useState } from 'react';
 import {
-  View, FlatList, Alert, RefreshControl,
-  TouchableOpacity, StyleSheet,
+  View, Alert, TouchableOpacity, StyleSheet,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useThemeStore } from '../../store/themeStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../hooks/useTheme';
 import { useFreelancerServices, useDeleteService } from '../../hooks/useFreelancer';
 import { ServiceCard } from '../../components/freelancer/ServiceCard';
 import {
-  ScreenWrapper, ScreenHeader, LoadingState, EmptyState,
+  ScreenWrapper, LoadingState, EmptyState,
 } from '../../components/shared/UIComponents';
 import ServiceFormModal from '../../components/freelancer/ServiceFormModal';
 import type { FreelancerServiceItem } from '../../types/freelancer';
 import type { FreelancerStackParamList } from '../../navigation/FreelancerNavigator';
+import { ScreenHeader } from '../../components/freelancer/ScreenHeader';
 
 type Nav = NativeStackNavigationProp<FreelancerStackParamList>;
 
 export const ServicesListScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
-  const { theme }  = useThemeStore();
-  const { colors, spacing } = theme;
+  const { colors, spacing } = useTheme();
+  const insets = useSafeAreaInsets();
 
-  const [formVisible, setFormVisible]     = useState(false);
+  const [formVisible, setFormVisible] = useState(false);
   const [editingService, setEditingService] = useState<FreelancerServiceItem | null>(null);
 
   const { data: services = [], isLoading, refetch, isRefetching } = useFreelancerServices();
@@ -49,11 +51,6 @@ export const ServicesListScreen: React.FC = () => {
     setFormVisible(true);
   };
 
-  const handleFormClose = () => {
-    setFormVisible(false);
-    setEditingService(null);
-  };
-
   if (isLoading) return (
     <ScreenWrapper>
       <ScreenHeader title="My Services" onBack={() => navigation.goBack()} />
@@ -70,11 +67,16 @@ export const ServicesListScreen: React.FC = () => {
         rightAction={{ icon: 'add', onPress: handleAdd }}
       />
 
-      <FlatList
+      <FlashList
         data={services}
         keyExtractor={s => s._id}
-        contentContainerStyle={{ paddingHorizontal: spacing[4], paddingTop: spacing[4], paddingBottom: 100 }}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />}
+        contentContainerStyle={{
+          paddingHorizontal: spacing.lg,
+          paddingTop: spacing.lg,
+          paddingBottom: insets.bottom + spacing.xxl,
+        }}
+        refreshing={isRefetching}
+        onRefresh={refetch}
         ListEmptyComponent={
           <EmptyState
             icon="construct-outline"
@@ -96,7 +98,10 @@ export const ServicesListScreen: React.FC = () => {
       {/* FAB */}
       <TouchableOpacity
         onPress={handleAdd}
-        style={[styles.fab, { backgroundColor: colors.primary }]}
+        style={[styles.fab, {
+          backgroundColor: colors.primary,
+          bottom: insets.bottom + spacing.lg,
+        }]}
         activeOpacity={0.85}
       >
         <Ionicons name="add" size={28} color="#fff" />
@@ -104,8 +109,8 @@ export const ServicesListScreen: React.FC = () => {
 
       <ServiceFormModal
         visible={formVisible}
-        service={editingService}
-        onClose={handleFormClose}
+        service={editingService ? { ...editingService, deliveryTime: typeof editingService.deliveryTime === 'string' ? parseInt(editingService.deliveryTime, 10) : editingService.deliveryTime } : null}
+        onClose={() => { setFormVisible(false); setEditingService(null); }}
       />
     </ScreenWrapper>
   );
@@ -113,7 +118,7 @@ export const ServicesListScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   fab: {
-    position: 'absolute', bottom: 24, right: 24,
+    position: 'absolute', right: 24,
     width: 56, height: 56, borderRadius: 28,
     alignItems: 'center', justifyContent: 'center',
     elevation: 6, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8,

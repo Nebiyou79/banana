@@ -68,3 +68,4 @@ const styles = StyleSheet.create({
 });
 
 export default SkillChips;
+// ✅ theme-migrated

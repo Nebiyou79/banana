@@ -1,19 +1,18 @@
 // src/components/auth/PasswordStrength.tsx
-// Dark navy compatible password strength meter
+// Usage: <PasswordStrength password={pw} />
 
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-
-const TEXT_MUT = '#64748B';
+import { useTheme } from '../../hooks/useTheme';
 
 interface PasswordStrengthProps {
   password: string;
 }
 
 interface StrengthResult {
-  score: number;
+  score: number;     // 0..4
   label: string;
-  color: string;
+  colorKey: 'danger' | 'warning' | 'info' | 'success';
 }
 
 const analyze = (pw: string): StrengthResult => {
@@ -24,44 +23,65 @@ const analyze = (pw: string): StrengthResult => {
   if (/[^A-Za-z0-9]/.test(pw)) score++;
 
   const map: StrengthResult[] = [
-    { score: 0, label: '',       color: '' },
-    { score: 1, label: 'Weak',   color: '#EF4444' },
-    { score: 2, label: 'Fair',   color: '#F59E0B' },
-    { score: 3, label: 'Good',   color: '#3B82F6' },
-    { score: 4, label: 'Strong', color: '#10B981' },
+    { score: 0, label: '',       colorKey: 'danger' },
+    { score: 1, label: 'Weak',   colorKey: 'danger' },
+    { score: 2, label: 'Fair',   colorKey: 'warning' },
+    { score: 3, label: 'Good',   colorKey: 'info' },
+    { score: 4, label: 'Strong', colorKey: 'success' },
   ];
   return map[score];
 };
 
 export const PasswordStrength: React.FC<PasswordStrengthProps> = ({ password }) => {
-  const { score, label, color } = useMemo(() => analyze(password), [password]);
+  const { colors: c, spacing } = useTheme();
+  const { score, label, colorKey } = useMemo(() => analyze(password), [password]);
+
   if (!password) return null;
 
+  const activeColor = c[colorKey];
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { marginBottom: spacing.sm }]}>
       <View style={styles.bars}>
         {[1, 2, 3, 4].map(bar => (
           <View
             key={bar}
             style={[
               styles.bar,
-              { backgroundColor: bar <= score ? color : 'rgba(255,255,255,0.08)' },
+              {
+                backgroundColor: bar <= score ? activeColor : c.border,
+              },
             ]}
           />
         ))}
       </View>
       {label ? (
-        <Text style={[styles.label, { color }]}>{label} password</Text>
+        <Text style={[styles.label, { color: activeColor }]}>
+          {label} password
+        </Text>
       ) : null}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { marginTop: -6, marginBottom: 12 },
-  bars:  { flexDirection: 'row', gap: 4 },
-  bar:   { flex: 1, height: 3, borderRadius: 2 },
-  label: { fontSize: 11, marginTop: 5 },
+  container: {
+    marginTop: -4,
+  },
+  bars: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  bar: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 5,
+  },
 });
 
 export default PasswordStrength;
