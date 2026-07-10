@@ -1,8 +1,5 @@
 // src/screens/company/proposals/TenderProposalsScreen.tsx
-// Banana Mobile App — Module 6B: Proposals
-// Company / Organization view: all non-draft proposals for a specific tender.
-// Features: stats bar, status filter tabs, sort sheet, shortlist toggle per card,
-// compare selection (up to 4), pull-to-refresh, pagination.
+// Updated to accept props directly
 
 import React, { useState, useCallback, useMemo, useLayoutEffect } from 'react';
 import {
@@ -18,8 +15,7 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useNavigation } from '@react-navigation/native';
 import { useThemeStore } from '../../../store/themeStore';
 import {
   useTenderProposals,
@@ -37,20 +33,13 @@ import type {
   ProposalStats,
 } from '../../../types/proposal';
 
-// ─── Navigation types ─────────────────────────────────────────────────────────
+// ─── Props interface ──────────────────────────────────────────────────────────
 
-// These param list types should match your navigator definitions.
-// Using a generic type here so this screen works for both Company and Org navigators.
-type ScreenRouteProp = RouteProp<
-  {
-    TenderProposals: {
-      tenderId: string;
-      tenderTitle: string;
-      role: 'company' | 'organization';
-    };
-  },
-  'TenderProposals'
->;
+export interface TenderProposalsScreenProps {
+  tenderId: string;
+  tenderTitle: string;
+  role: 'company' | 'organization';
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -273,13 +262,14 @@ const sortStyles = StyleSheet.create({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export const TenderProposalsScreen: React.FC = () => {
-  const route = useRoute<ScreenRouteProp>();
+export const TenderProposalsScreen: React.FC<TenderProposalsScreenProps> = ({
+  tenderId,
+  tenderTitle,
+  role,
+}) => {
   const navigation = useNavigation<any>();
   const { theme } = useThemeStore();
   const { colors } = theme;
-
-  const { tenderId, tenderTitle, role } = route.params;
 
   const [activeTab, setActiveTab] = useState<StatusFilter>('all');
   const [sortBy, setSortBy] = useState<ProposalSortBy>('newest');
@@ -356,7 +346,7 @@ export const TenderProposalsScreen: React.FC = () => {
   };
 
   const handleShortlistToggle = (proposalId: string) => {
-    toggleShortlistMutation.mutate(proposalId, {
+    toggleShortlistMutation.mutate({ proposalId, tenderId }, {
       onError: () => Alert.alert('Error', 'Could not update shortlist. Please try again.'),
     });
   };
@@ -387,7 +377,6 @@ export const TenderProposalsScreen: React.FC = () => {
   const renderItem = useCallback(
     ({ item }: { item: ProposalListItem }) => (
       <View style={styles.cardWrapper}>
-        {/* Compare checkbox */}
         <TouchableOpacity
           onPress={() => handleSelectToggle(item._id)}
           style={[
@@ -413,7 +402,7 @@ export const TenderProposalsScreen: React.FC = () => {
         />
       </View>
     ),
-    [selectedIds, colors, navigation, toggleShortlistMutation],
+    [selectedIds, colors, handleSelectToggle, handleCardPress, handleShortlistToggle],
   );
 
   const renderEmpty = () => {
@@ -444,8 +433,6 @@ export const TenderProposalsScreen: React.FC = () => {
     </View>
   );
 
-  // ── Status tab counts from stats ──────────────────────────────────────────
-
   const getTabCount = (tab: StatusFilter): number | null => {
     if (!statsData) return null;
     if (tab === 'all') return statsData.total;
@@ -455,7 +442,6 @@ export const TenderProposalsScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      {/* Sort sheet overlay */}
       {showSort && (
         <SortSheet
           current={sortBy}
@@ -465,12 +451,10 @@ export const TenderProposalsScreen: React.FC = () => {
         />
       )}
 
-      {/* Stats bar */}
       {statsData && (
         <StatsBar stats={statsData} colors={colors as any} />
       )}
 
-      {/* Status filter tabs */}
       <View
         style={[
           styles.tabBarWrapper,
@@ -508,9 +492,7 @@ export const TenderProposalsScreen: React.FC = () => {
                     style={[
                       styles.tabBadge,
                       {
-                        backgroundColor: active
-                          ? '#F1BB03'
-                          : colors.surface ?? colors.card,
+                        backgroundColor: active ? '#F1BB03' : colors.surface ?? colors.card,
                       },
                     ]}
                   >
@@ -530,21 +512,13 @@ export const TenderProposalsScreen: React.FC = () => {
         </ScrollView>
       </View>
 
-      {/* Shortlisted-only toggle pill */}
-      <View
-        style={[
-          styles.filterPillRow,
-          { backgroundColor: colors.background },
-        ]}
-      >
+      <View style={[styles.filterPillRow, { backgroundColor: colors.background }]}>
         <TouchableOpacity
           onPress={() => { setShortlistedOnly(!shortlistedOnly); setPage(1); }}
           style={[
             styles.filterPill,
             {
-              backgroundColor: shortlistedOnly
-                ? 'rgba(241,187,3,0.12)'
-                : colors.card,
+              backgroundColor: shortlistedOnly ? 'rgba(241,187,3,0.12)' : colors.card,
               borderColor: shortlistedOnly ? '#F1BB03' : colors.border,
             },
           ]}
@@ -554,7 +528,6 @@ export const TenderProposalsScreen: React.FC = () => {
           </Text>
         </TouchableOpacity>
 
-        {/* Proposal count */}
         {pagination && (
           <Text style={[styles.countText, { color: colors.textMuted }]}>
             {pagination.total} proposal{pagination.total !== 1 ? 's' : ''}
@@ -562,7 +535,6 @@ export const TenderProposalsScreen: React.FC = () => {
         )}
       </View>
 
-      {/* Main list */}
       {isLoading ? (
         renderSkeleton()
       ) : (
@@ -570,10 +542,7 @@ export const TenderProposalsScreen: React.FC = () => {
           data={proposals}
           keyExtractor={(item) => item._id}
           renderItem={renderItem}
-          contentContainerStyle={[
-            styles.listContent,
-            proposals.length === 0 && styles.emptyContent,
-          ]}
+          contentContainerStyle={[styles.listContent, proposals.length === 0 && styles.emptyContent]}
           ListEmptyComponent={renderEmpty}
           ListFooterComponent={renderFooter}
           onEndReached={handleLoadMore}
@@ -590,7 +559,6 @@ export const TenderProposalsScreen: React.FC = () => {
         />
       )}
 
-      {/* Compare bar (appears when items are selected) */}
       {selectedIds.size > 0 && (
         <CompareBar
           count={selectedIds.size}

@@ -1,5 +1,5 @@
 // src/social/screens/FeedScreen.tsx
-// ✅ role-theme-migrated
+// ✅ role-theme-migrated — FIXED
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useMemo, useState } from 'react';
@@ -29,7 +29,7 @@ const FeedScreen: React.FC = () => {
       sortBy: activeSort,
       ...(activeSort === 'following' ? { followingOnly: true } : {}),
     }),
-    [activeSort]
+    [activeSort],
   );
 
   const feedQ = useFeed(filters);
@@ -46,18 +46,14 @@ const FeedScreen: React.FC = () => {
   const handleReact = useCallback(
     (postId: string, reaction: ReactionType) => {
       const current = posts.find((p) => p._id === postId);
-      react({
-        postId,
-        reaction,
-        hasInteraction: !!current?.userInteraction,
-      });
+      react({ postId, reaction, hasInteraction: !!current?.userInteraction });
     },
-    [posts, react]
+    [posts, react],
   );
 
   const handleDislike = useCallback(
     (postId: string) => dislike({ postId }),
-    [dislike]
+    [dislike],
   );
 
   const handleShare = useCallback(async (post: Post) => {
@@ -65,29 +61,21 @@ const FeedScreen: React.FC = () => {
       await Share.share({
         message: post.content?.slice(0, 180) ?? 'Check this out on Banana',
       });
-    } catch {
-      /* noop */
-    }
+    } catch { /* noop */ }
   }, []);
 
   const handleAuthorPress = useCallback(
-    (userId: string) => {
-      navigation.navigate('PublicProfile', { userId });
-    },
-    [navigation]
+    (userId: string) => navigation.navigate('PublicProfile', { userId }),
+    [navigation],
   );
 
   const handleAdPress = useCallback(
     (ad: AdConfig) => {
       if (ad.ctaRoute) {
-        try {
-          navigation.navigate(ad.ctaRoute as any);
-        } catch {
-          /* noop */
-        }
+        try { navigation.navigate(ad.ctaRoute as any); } catch { /* noop */ }
       }
     },
-    [navigation]
+    [navigation],
   );
 
   const handleComment = useCallback((post: Post) => {
@@ -102,21 +90,23 @@ const FeedScreen: React.FC = () => {
   return (
     <LinearGradient
       colors={theme.bgGradient}
-      style={{ flex: 1 }}
+      style={styles.gradient}
       start={{ x: 0, y: 0 }}
       end={{ x: 0.3, y: 1 }}
     >
-      <SafeAreaView
-        style={[styles.container]}
-        edges={['top']}
-      >
+      <SafeAreaView style={styles.container} edges={['top']}>
         {/* Role-tinted top bar */}
         <View style={[styles.topBar, { borderBottomColor: theme.border }]}>
           <Text style={[styles.appName, { color: theme.text }]}>Banana</Text>
-          <View style={[styles.rolePill, {
-            backgroundColor: theme.withAlpha(theme.colors.primary, 0.12),
-            borderColor: theme.withAlpha(theme.colors.primary, 0.28),
-          }]}>
+          <View
+            style={[
+              styles.rolePill,
+              {
+                backgroundColor: theme.withAlpha(theme.colors.primary, 0.12),
+                borderColor: theme.withAlpha(theme.colors.primary, 0.28),
+              },
+            ]}
+          >
             <Text style={[styles.rolePillText, { color: theme.colors.primary }]}>
               {theme.role.charAt(0).toUpperCase() + theme.role.slice(1)}
             </Text>
@@ -125,7 +115,7 @@ const FeedScreen: React.FC = () => {
 
         <FeedTabs active={activeSort} onChange={setActiveSort} />
 
-        <View style={{ flex: 1 }}>
+        <View style={styles.listWrap}>
           <FeedList
             posts={posts}
             loading={feedQ.isLoading}
@@ -139,9 +129,7 @@ const FeedScreen: React.FC = () => {
             onDislike={handleDislike}
             onComment={handleComment}
             onShare={handleShare}
-            onSave={() => {
-              // FeedList expects (id, isSaved) from internal state
-            }}
+            onSave={(id, isSaved) => toggleSave({ id, isSaved })}
             onAuthorPress={handleAuthorPress}
             onAdPress={handleAdPress}
             adPlacement="feed"
@@ -159,6 +147,7 @@ const FeedScreen: React.FC = () => {
           />
         </View>
 
+        {/* FAB sits inside SafeAreaView so it respects bottom insets */}
         <CreatePostFAB onPress={handleCreatePress} />
 
         <CommentsSheet
@@ -173,7 +162,9 @@ const FeedScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  gradient: { flex: 1 },
   container: { flex: 1 },
+  listWrap: { flex: 1 },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',

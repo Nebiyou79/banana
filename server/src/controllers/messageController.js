@@ -1,40 +1,21 @@
 // =============================================================================
-// FILE 2: messageController.js — COMPLETE PROFESSIONAL REWRITE
+// FILE 2: messageController.js — WITH NOTIFICATIONS
 // =============================================================================
-
-/**
- * server/src/controllers/messageController.js
- * ─────────────────────────────────────────────────────────────────────────────
- * BananaLink Chat Backend v4 — Message Controller
- * 
- * Production-grade message handling with:
- * - Request acceptance enforcement before replying
- * - Unread count management across participants
- * - Soft-delete (per-user) and delete-for-everyone (time-limited)
- * - Socket broadcasting for real-time delivery
- * - Read receipts with proper status transitions
- * - Reply-to support with populated parent message
- * - Content validation with length limits
- * 
- * Routes handled:
- *  POST   /messages                    sendMessage
- *  GET    /messages/:conversationId    getMessages
- *  DELETE /messages/:messageId         deleteMessage
- * ─────────────────────────────────────────────────────────────────────────────
- */
 
 'use strict';
 
 const mongoose = require('mongoose');
 const Message = require('../models/Message');
 const Conversation = require('../models/Conversation');
+// 🔔 NOTIFICATION
+const notificationService = require('../services/notificationService');
 
 const { isValidObjectId } = mongoose;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const MAX_CONTENT_LENGTH = 2000; // Must match Message model maxlength
-const DELETE_EVERYONE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const MAX_CONTENT_LENGTH = 2000;
+const DELETE_EVERYONE_WINDOW_MS = 10 * 60 * 1000;
 
 const ERROR_MESSAGES = {
   INVALID_CONVERSATION_ID: 'Invalid conversation ID',
@@ -65,23 +46,12 @@ function safeEmit(io, room, event, data) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /messages
-// Sends a new message in a conversation.
-//
-// Business Rules:
-// - Must be a participant in the conversation
-// - If conversation is 'request' status:
-//   - The REQUESTER (requestedBy) can send messages
-//   - The RECIPIENT must accept before they can reply
-// - Conversation is restored if previously soft-deleted by sender
-// - Unread counts are incremented for all OTHER participants
-// - Socket events broadcast for real-time delivery
 // ─────────────────────────────────────────────────────────────────────────────
 exports.sendMessage = async (req, res) => {
   try {
     const senderId = req.user.userId;
     const { conversationId, content, type = 'text', replyTo } = req.body;
 
-    // Validate conversation ID
     if (!isValidObjectId(conversationId)) {
       return res.status(400).json({ 
         success: false, 
@@ -89,7 +59,6 @@ exports.sendMessage = async (req, res) => {
       });
     }
 
-    // Validate content
     const trimmed = String(content ?? '').trim();
     if (!trimmed) {
       return res.status(400).json({ 
@@ -104,7 +73,6 @@ exports.sendMessage = async (req, res) => {
       });
     }
 
-    // Find and validate conversation
     const conversation = await Conversation.findOne({
       _id: conversationId,
       participants: senderId,
@@ -124,7 +92,6 @@ exports.sendMessage = async (req, res) => {
       });
     }
 
-    // Enforce request acceptance: Recipient cannot reply until they accept
     if (
       conversation.status === 'request' &&
       conversation.requestedBy &&
@@ -136,7 +103,6 @@ exports.sendMessage = async (req, res) => {
       });
     }
 
-    // Validate replyTo if provided
     let replyToId = null;
     if (replyTo && isValidObjectId(replyTo)) {
       const parentMessage = await Message.findOne({
@@ -148,7 +114,6 @@ exports.sendMessage = async (req, res) => {
       }
     }
 
-    // Create the message
     const message = await Message.create({
       conversationId,
       sender: senderId,
@@ -158,18 +123,15 @@ exports.sendMessage = async (req, res) => {
       replyTo: replyToId,
     });
 
-    // Update conversation metadata
     conversation.lastMessage = message._id;
     conversation.lastMessageAt = message.createdAt;
 
-    // Restore if previously soft-deleted by sender
     if (conversation.deletedFor) {
       conversation.deletedFor = conversation.deletedFor.filter(
         (u) => u.toString() !== senderId.toString()
       );
     }
 
-    // Increment unread counts for all OTHER participants
     if (!conversation.unreadCounts) conversation.unreadCounts = new Map();
     for (const participantId of conversation.participants) {
       if (participantId.toString() === senderId.toString()) continue;
@@ -179,7 +141,6 @@ exports.sendMessage = async (req, res) => {
     conversation.markModified('unreadCounts');
     await conversation.save();
 
-    // Populate the message for response
     const populated = await Message.findById(message._id)
       .populate('sender', 'name avatar role')
       .populate({
@@ -189,21 +150,45 @@ exports.sendMessage = async (req, res) => {
       })
       .lean();
 
-    // Broadcast via sockets for real-time delivery
     const convRoom = `conv:${conversationId}`;
     const messageData = {
       message: populated,
       conversationId,
     };
 
-    // Emit to conversation room (all active viewers)
     safeEmit(req.io, convRoom, 'chat:new_message', messageData);
 
-    // Emit to each participant's personal inbox room
     for (const participantId of conversation.participants) {
       if (participantId.toString() === senderId.toString()) continue;
       safeEmit(req.io, `user:${participantId}`, 'chat:new_message', messageData);
     }
+
+    // 🔔 NOTIFICATION: Send push to other participants
+    (async () => {
+      try {
+        for (const participantId of conversation.participants) {
+          if (participantId.toString() === senderId.toString()) continue;
+          await notificationService.create({
+            recipient: participantId,
+            actor: senderId,
+            type: 'new_message',
+            title: 'New message',
+            body: trimmed.length > 60 ? trimmed.slice(0, 57) + '...' : trimmed,
+            data: {
+              entityType: 'Conversation',
+              entityId: conversationId,
+              screen: 'ChatDetail',
+              params: { conversationId }
+            },
+            priority: 'high',
+            channels: { inApp: false, push: true, email: false }
+          });
+        }
+      } catch (notifErr) {
+        console.warn('[Notification] Non-critical error:', notifErr.message);
+      }
+    })();
+    // END NOTIFICATION
 
     return res.status(201).json({ 
       success: true, 
@@ -220,8 +205,6 @@ exports.sendMessage = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /messages/:conversationId
-// Returns paginated messages for a conversation.
-// Sorted newest-first for efficient pagination (client reverses for display).
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getMessages = async (req, res) => {
   try {
@@ -238,7 +221,6 @@ exports.getMessages = async (req, res) => {
       });
     }
 
-    // Verify user is a participant
     const conversation = await Conversation.exists({
       _id: conversationId,
       participants: userId,
@@ -251,7 +233,6 @@ exports.getMessages = async (req, res) => {
       });
     }
 
-    // Build query: exclude messages soft-deleted by this user
     const query = {
       conversationId,
       deletedFor: { $ne: userId },
@@ -265,7 +246,7 @@ exports.getMessages = async (req, res) => {
           select: 'content type sender createdAt deletedAt',
           populate: { path: 'sender', select: 'name avatar' },
         })
-        .sort({ createdAt: -1 }) // Newest first for efficient pagination
+        .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
@@ -293,9 +274,6 @@ exports.getMessages = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DELETE /messages/:messageId
-// Supports two delete modes:
-//  - 'me': Soft-deletes only for the requesting user (adds to deletedFor array)
-//  - 'everyone': Marks as deleted for all (only sender, within 10-min window)
 // ─────────────────────────────────────────────────────────────────────────────
 exports.deleteMessage = async (req, res) => {
   try {
@@ -319,7 +297,6 @@ exports.deleteMessage = async (req, res) => {
       });
     }
 
-    // Verify the user is a participant in the conversation
     const isParticipant = await Conversation.exists({
       _id: message.conversationId,
       participants: userId,
@@ -333,7 +310,6 @@ exports.deleteMessage = async (req, res) => {
     }
 
     if (deleteFor === 'everyone') {
-      // Only the sender can delete for everyone
       if (message.sender.toString() !== userId.toString()) {
         return res.status(403).json({ 
           success: false, 
@@ -341,7 +317,6 @@ exports.deleteMessage = async (req, res) => {
         });
       }
 
-      // Check time window
       const ageMs = Date.now() - new Date(message.createdAt).getTime();
       if (ageMs > DELETE_EVERYONE_WINDOW_MS) {
         return res.status(400).json({ 
@@ -350,14 +325,12 @@ exports.deleteMessage = async (req, res) => {
         });
       }
 
-      // Perform delete for everyone
       message.type = 'deleted';
       message.content = null;
       message.deletedAt = new Date();
       message.deletedBy = userId;
       await message.save();
 
-      // Broadcast deletion to conversation room
       safeEmit(req.io, `conv:${message.conversationId}`, 'chat:message_deleted', {
         messageId: messageId,
         conversationId: message.conversationId.toString(),
@@ -365,7 +338,6 @@ exports.deleteMessage = async (req, res) => {
       });
 
     } else {
-      // Delete for me only
       if (!message.deletedFor) message.deletedFor = [];
       if (!message.deletedFor.some((u) => u.toString() === userId.toString())) {
         message.deletedFor.push(userId);

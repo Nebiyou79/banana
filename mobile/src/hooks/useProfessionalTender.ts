@@ -15,6 +15,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -38,8 +39,12 @@ import type {
   ProfessionalTenderType,
   ProfessionalTenderWorkflowType,
   UpdateProfessionalTenderData,
+    MyInvitationsResponse,
+  InvitationRespondValue,
+  TenderInvitation,
 } from '../types/professionalTender';
 import { CompanyProfile, CompanySearchResult, companyService } from '../services/companyService';
+import { Alert } from 'react-native';
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  QUERY KEYS
@@ -529,6 +534,108 @@ export const useToggleSavedProfessionalTender = () => {
           }
         );
       }
+    },
+  });
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  useMyInvitations
+// ═════════════════════════════════════════════════════════════════════════════
+ 
+interface UseMyInvitationsParams {
+  /** Filter by invitation status. Omit (or pass undefined) for all statuses. */
+  status?: 'pending' | 'accepted' | 'declined' | 'expired';
+  limit?:  number;
+}
+ 
+/**
+ * Infinite-paginated list of professional tender invitations received by the
+ * current company/user.
+ *
+ * Endpoint: GET /professional-tenders/my-invitations
+ *
+ * Usage:
+ *   const { data, fetchNextPage, hasNextPage, isLoading } =
+ *     useMyInvitations({ status: 'pending' });
+ *
+ *   const invitations = data?.pages.flatMap(p => p.invitations) ?? [];
+ */
+export const useMyInvitations = (params?: UseMyInvitationsParams) => {
+  return useInfiniteQuery<MyInvitationsResponse, Error>({
+    queryKey: ['professionalTenders', 'invitations', params ?? {}],
+    queryFn:  ({ pageParam = 1 }) =>
+      professionalTenderService.getMyInvitations({
+        status: params?.status,
+        page:   pageParam as number,
+        limit:  params?.limit ?? 15,
+      }),
+    getNextPageParam: (last) =>
+      last.pagination.page < last.pagination.totalPages
+        ? last.pagination.page + 1
+        : undefined,
+    initialPageParam: 1,
+    staleTime: 30_000,
+  });
+};
+ 
+// ═════════════════════════════════════════════════════════════════════════════
+//  useRespondToInvitation
+// ═════════════════════════════════════════════════════════════════════════════
+ 
+interface RespondVars {
+  tenderId:  string;
+  inviteId:  string;
+  response:  InvitationRespondValue;
+}
+ 
+/**
+ * Accept or decline a specific tender invitation.
+ *
+ * Endpoint: POST /professional-tenders/:tenderId/invitations/:inviteId/respond
+ *
+ * On success:
+ *   • Invalidates all invitation list queries so the UI reflects the new status.
+ *   • Optionally invalidates the tender detail cache (for the invited tender).
+ *
+ * Usage:
+ *   const { mutate, isPending } = useRespondToInvitation();
+ *   mutate({ tenderId, inviteId, response: 'accepted' });
+ */
+export const useRespondToInvitation = () => {
+  const qc = useQueryClient();
+ 
+  return useMutation<TenderInvitation, Error, RespondVars>({
+    mutationFn: ({ tenderId, inviteId, response }) =>
+      professionalTenderService.respondToInvitation(tenderId, inviteId, response),
+ 
+    onSuccess: (_result, { tenderId, response }) => {
+      // ── Invalidate every invitation list variant in the cache ────────────
+      qc.invalidateQueries({
+        queryKey: ['professionalTenders', 'invitations'],
+      });
+ 
+      // ── Also refresh the tender detail so `isInvited` / invitation
+      //    status reflects the change if the user navigates there ──────────
+      qc.invalidateQueries({
+        queryKey: ['professionalTenders', 'detail', tenderId],
+      });
+ 
+      // ── Toast feedback ────────────────────────────────────────────────────
+      const msg = response === 'accepted'
+        ? 'Invitation accepted! You can now submit a bid.'
+        : 'Invitation declined.';
+      Alert.alert(
+        response === 'accepted' ? '✓ Accepted' : 'Declined',
+        msg,
+      );
+    },
+ 
+    onError: (error) => {
+      const message =
+        (error as any)?.response?.data?.message ??
+        (error as Error)?.message ??
+        'Failed to respond to invitation.';
+      Alert.alert('Error', message);
     },
   });
 };

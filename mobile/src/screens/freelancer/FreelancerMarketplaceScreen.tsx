@@ -1,6 +1,10 @@
 /**
  * screens/freelancers/FreelancerMarketplaceScreen.tsx
+ * 
+ * FIX: Conditionally hide shortlist button for freelancer role
+ * since the /company/shortlist/:id endpoint requires company/organization auth.
  */
+
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, StatusBar, ActivityIndicator,
@@ -12,19 +16,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../hooks/useTheme';
 import { withAlpha } from '../../theme/utils';
 import { FONT_SIZE } from '../../theme/tokens';
+import { useAuthStore } from '../../store/authStore';
 import {
   useListFreelancers,
   useToggleShortlist,
 } from '../../hooks/useFreelancerMarketplace';
-import {
-  FreelancerCard,
-  FreelancerCardSkeleton,
-} from '../../components/freelancer/FreelancerCard';
+
 import {
   FreelancerListItem,
   AvailabilityStatus,
   ExperienceLevel,
 } from '../../services/freelancerMarketplaceService';
+import { FreelancerCard, FreelancerCardSkeleton } from '../../components/freelancer/FreelancerCard';
 
 const AVAILABILITY_OPTIONS: { label: string; value: AvailabilityStatus | 'all' }[] = [
   { label: 'All', value: 'all' },
@@ -43,6 +46,10 @@ const EXPERIENCE_OPTIONS: { label: string; value: ExperienceLevel | 'all' }[] = 
 export const FreelancerMarketplaceScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { colors, spacing, radius, isDark } = useTheme();
+  const { role } = useAuthStore() as any;
+
+  // FIX: Only companies and organizations can use shortlist
+  const canUseShortlist = role === 'company' || role === 'organization';
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -85,15 +92,29 @@ export const FreelancerMarketplaceScreen: React.FC = () => {
       <FreelancerCard
         freelancer={item}
         onPress={() => navigation.navigate('FreelancerDetail', { freelancerId: item._id })}
-        onToggleShortlist={() => toggleShortlist(item._id)}
+        // FIX: Only pass onToggleShortlist if user can use shortlist
+        onToggleShortlist={canUseShortlist ? () => toggleShortlist(item._id) : undefined}
         style={{ margin: 6 }}
       />
     ),
-    [navigation, toggleShortlist],
+    [navigation, toggleShortlist, canUseShortlist],
   );
 
   const ListHeader = (
     <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.sm }}>
+      {/* Title + shortlist row */}
+      <View style={styles.inlineHeader}>
+        <Text style={[styles.title, { color: colors.text }]}>Find Freelancers</Text>
+        {/* FIX: Only show shortlist icon if user can use shortlist */}
+        {canUseShortlist && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('FreelancerShortlist')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="bookmark-outline" size={22} color={colors.primary} />
+          </TouchableOpacity>
+        )}
+      </View>
       {/* Search */}
       <View style={[styles.searchRow, {
         backgroundColor: colors.inputBg,
@@ -129,7 +150,7 @@ export const FreelancerMarketplaceScreen: React.FC = () => {
           borderColor: colors.border,
           borderRadius: radius.lg,
         }]}>
-          <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>Availability</Text>
+          <Text style={[styles.filterLabel, { color: colors.textMuted }]}>Availability</Text>
           <View style={styles.chipRow}>
             {AVAILABILITY_OPTIONS.map(opt => {
               const active = availability === opt.value;
@@ -142,7 +163,7 @@ export const FreelancerMarketplaceScreen: React.FC = () => {
                     borderColor: active ? colors.primary : colors.border,
                   }]}
                 >
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#fff' : colors.textSecondary }}>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#fff' : colors.textMuted }}>
                     {opt.label}
                   </Text>
                 </TouchableOpacity>
@@ -150,7 +171,7 @@ export const FreelancerMarketplaceScreen: React.FC = () => {
             })}
           </View>
 
-          <Text style={[styles.filterLabel, { color: colors.textSecondary, marginTop: 10 }]}>Experience</Text>
+          <Text style={[styles.filterLabel, { color: colors.textMuted, marginTop: 10 }]}>Experience</Text>
           <View style={styles.chipRow}>
             {EXPERIENCE_OPTIONS.map(opt => {
               const active = experienceLevel === opt.value;
@@ -163,7 +184,7 @@ export const FreelancerMarketplaceScreen: React.FC = () => {
                     borderColor: active ? colors.primary : colors.border,
                   }]}
                 >
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#fff' : colors.textSecondary }}>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#fff' : colors.textMuted }}>
                     {opt.label}
                   </Text>
                 </TouchableOpacity>
@@ -195,20 +216,7 @@ export const FreelancerMarketplaceScreen: React.FC = () => {
   );
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.bgCard, borderBottomColor: colors.border }]}>
-        <Text style={[styles.title, { color: colors.text }]}>Find Freelancers</Text>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('FreelancerShortlist')}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="bookmark-outline" size={24} color={colors.primary} />
-        </TouchableOpacity>
-      </View>
-
+    <View style={[styles.safe, { backgroundColor: colors.bg }]}>
       {/* List */}
       {isLoading ? (
         <View style={styles.skeletonGrid}>
@@ -226,7 +234,7 @@ export const FreelancerMarketplaceScreen: React.FC = () => {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="people-outline" size={52} color={colors.textMuted} />
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No freelancers found</Text>
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>No freelancers found</Text>
               <Text style={[styles.emptyHint, { color: colors.textMuted }]}>Try adjusting your filters</Text>
             </View>
           }
@@ -242,17 +250,17 @@ export const FreelancerMarketplaceScreen: React.FC = () => {
           contentContainerStyle={{ paddingBottom: 20 }}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  header: {
+  inlineHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1,
+    paddingBottom: 10,
   },
-  title: { fontSize: 20, fontWeight: '700' },
+  title: { fontSize: 20, fontWeight: '800', letterSpacing: -0.3 },
   searchRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 12, paddingVertical: 9, borderWidth: 1, gap: 8, marginBottom: 8,

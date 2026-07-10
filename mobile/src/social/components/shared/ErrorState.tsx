@@ -1,12 +1,4 @@
 // src/social/components/shared/ErrorState.tsx
-/**
- * ErrorState — centred error icon + message + retry button
- *
- * Theme migration:
- * - `type.btnSm`           → `type.bodySm`
- * - `colors.textSecondary` → `colors.textMuted`
- * All other tokens ✅
- */
 import { Ionicons } from '@expo/vector-icons';
 import React, { memo } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity } from 'react-native';
@@ -21,21 +13,29 @@ interface Props {
 const ErrorState: React.FC<Props> = memo(({
   message = 'Something went wrong', onRetry,
 }) => {
-  const { colors, spacing, radius, type } = useSocialTheme();
+  const theme = useSocialTheme();
+  const { colors, spacing, radius, type, dark } = theme;
   const opacity = useFadeIn(0, 250);
+
+  // Dark mode: muted red-orange icon
+  // Light mode: standard muted color
+  const iconColor = dark ? colors.textMuted : colors.textMuted;
 
   return (
     <Animated.View style={[styles.wrap, { opacity, padding: spacing.xl }]}>
-      {/* colors.textSecondary → colors.textMuted */}
       <Ionicons
         name="alert-circle-outline"
         size={40}
-        color={colors.textMuted}
+        color={iconColor}
       />
       <Text
         style={[
           type.body,
-          { color: colors.text, marginTop: spacing.sm, textAlign: 'center' },
+          { 
+            color: colors.text, 
+            marginTop: spacing.sm, 
+            textAlign: 'center' 
+          },
         ]}
       >
         {message}
@@ -57,7 +57,6 @@ const ErrorState: React.FC<Props> = memo(({
           ]}
         >
           <Ionicons name="refresh" size={14} color={colors.primary} />
-          {/* type.btnSm → type.bodySm */}
           <Text style={[type.bodySm, { color: colors.primary }]}>
             Try again
           </Text>
@@ -67,12 +66,9 @@ const ErrorState: React.FC<Props> = memo(({
   );
 });
 
-ErrorState.displayName = 'ErrorState';
-
 const styles = StyleSheet.create({
-  wrap:  { alignItems: 'center' },
+  wrap: { alignItems: 'center' },
   retry: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1.5 },
 });
 
 export default ErrorState;
-// ✅ theme-migrated

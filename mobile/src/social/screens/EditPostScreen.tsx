@@ -1,5 +1,5 @@
 // src/social/screens/EditPostScreen.tsx
-// ✅ role-theme-migrated
+// ✅ role-theme-migrated — FIXED
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
@@ -28,9 +28,9 @@ import type { PostMedia, PostVisibility, UpdatePostData } from '../types';
 type MediaFile = { uri: string; type: string; name: string };
 
 const VISIBILITIES: { key: PostVisibility; label: string }[] = [
-  { key: 'public', label: 'Public' },
+  { key: 'public',      label: 'Public' },
   { key: 'connections', label: 'Connections' },
-  { key: 'private', label: 'Only me' },
+  { key: 'private',     label: 'Only me' },
 ];
 
 type EditPostRoute = RouteProp<SocialStackParamList, 'EditPost'>;
@@ -51,6 +51,11 @@ const EditPostScreen: React.FC = () => {
   const canSubmit =
     (content.trim().length > 0 || existingMedia.length > 0 || newMedia.length > 0) &&
     !updateM.isPending;
+
+  // FIX: gradient colors must always be a valid 2-element tuple
+  const gradientColors: [string, string] = canSubmit
+    ? [theme.colors.primary, theme.colors.primaryDark]
+    : [theme.colors.cardAlt, theme.colors.cardAlt];
 
   const pickMedia = useCallback(async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -90,30 +95,28 @@ const EditPostScreen: React.FC = () => {
     };
     updateM.mutate(
       { id: post._id, data: payload },
-      { onSuccess: () => navigation.goBack() }
+      { onSuccess: () => navigation.goBack() },
     );
-  }, [
-    canSubmit,
-    content,
-    visibility,
-    existingMedia,
-    mediaToRemove,
-    newMedia,
-    updateM,
-    post._id,
-    navigation,
-  ]);
+  }, [canSubmit, content, visibility, existingMedia, mediaToRemove, newMedia, updateM, post._id, navigation]);
 
   return (
-    <SafeAreaView style={[styles.container, theme.getPageBgStyle()]} edges={['top']}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.bg }]}
+      edges={['top', 'bottom']}
+    >
       {/* Role-tinted accent strip */}
       <View style={[styles.accentStrip, { backgroundColor: theme.colors.primary }]} />
 
       {/* Header */}
-      <View style={[styles.header, {
-        backgroundColor: theme.withAlpha(theme.colors.primary, 0.03),
-        borderBottomColor: theme.border,
-      }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor: theme.withAlpha(theme.colors.primary, 0.03),
+            borderBottomColor: theme.border,
+          },
+        ]}
+      >
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -123,6 +126,7 @@ const EditPostScreen: React.FC = () => {
         >
           <Ionicons name="close" size={26} color={theme.text} />
         </TouchableOpacity>
+
         <Text style={[styles.headerTitle, { color: theme.text }]}>Edit post</Text>
 
         {/* Gradient save button */}
@@ -135,11 +139,7 @@ const EditPostScreen: React.FC = () => {
           style={{ opacity: canSubmit ? 1 : 0.4 }}
         >
           <LinearGradient
-            colors={
-              canSubmit
-                ? [theme.colors.primary, theme.colors.primaryDark]
-                : [theme.colors.cardAlt, theme.colors.cardAlt]
-            }
+            colors={gradientColors}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.saveBtn}
@@ -154,12 +154,13 @@ const EditPostScreen: React.FC = () => {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 40 }}
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
           {/* Text input */}
@@ -175,10 +176,13 @@ const EditPostScreen: React.FC = () => {
           />
 
           {/* Media preview row */}
-          {(existingMedia.length > 0 || newMedia.length > 0) ? (
-            <View style={[styles.mediaContainer, {
-              backgroundColor: theme.withAlpha(theme.colors.primary, 0.04),
-            }]}>
+          {(existingMedia.length > 0 || newMedia.length > 0) && (
+            <View
+              style={[
+                styles.mediaContainer,
+                { backgroundColor: theme.withAlpha(theme.colors.primary, 0.04) },
+              ]}
+            >
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -220,11 +224,10 @@ const EditPostScreen: React.FC = () => {
                 ))}
               </ScrollView>
             </View>
-          ) : null}
+          )}
 
           {/* Visibility section */}
           <View style={[styles.section, { borderTopColor: theme.border }]}>
-            {/* Primary-colored label */}
             <Text style={[styles.sectionLabel, { color: theme.colors.primary }]}>
               Visibility
             </Text>
@@ -242,10 +245,15 @@ const EditPostScreen: React.FC = () => {
         </ScrollView>
 
         {/* Toolbar */}
-        <View style={[styles.toolbar, {
-          backgroundColor: theme.withAlpha(theme.colors.primary, 0.03),
-          borderTopColor: theme.border,
-        }]}>
+        <View
+          style={[
+            styles.toolbar,
+            {
+              backgroundColor: theme.withAlpha(theme.colors.primary, 0.03),
+              borderTopColor: theme.border,
+            },
+          ]}
+        >
           <TouchableOpacity
             onPress={pickMedia}
             disabled={existingMedia.length + newMedia.length >= 5}
@@ -272,10 +280,9 @@ const EditPostScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  accentStrip: {
-    height: 2,
-    opacity: 0.7,
-  },
+  keyboardView: { flex: 1 },
+  scrollContent: { paddingBottom: 24 },
+  accentStrip: { height: 2, opacity: 0.7 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

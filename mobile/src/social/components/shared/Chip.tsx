@@ -1,13 +1,4 @@
 // src/social/components/shared/Chip.tsx
-/**
- * Chip — filterable selection pill
- *
- * Theme migration:
- * - `colors.bgAlt`         → `colors.cardAlt`
- * - `spacing['1']`         → `spacing.xs`
- * - `type.labelSm`         → `type.bodySm`  (spread .fontWeight only; fontSize
- *                             is overridden inline so only fontWeight is used)
- */
 import React, { memo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, ViewStyle } from 'react-native';
 import { useSocialTheme } from '../../theme/socialTheme';
@@ -24,8 +15,18 @@ interface Props {
 const Chip: React.FC<Props> = memo(({
   label, selected, onPress, iconRight, style, compact,
 }) => {
-  const { colors, spacing, radius, type, withAlpha } = useSocialTheme();
+  const theme = useSocialTheme();
+  const { colors, spacing, radius, type, withAlpha, dark } = theme;
 
+  // Selected: role-primary with tint
+  // Unselected: cardAlt background (dark: subtle, light: soft)
+  const bg = selected 
+    ? withAlpha(colors.primary, dark ? 0.25 : 0.12)
+    : colors.cardAlt;
+  
+  const border = selected ? colors.primary : colors.border;
+  const textColor = selected ? colors.primary : colors.text;
+  
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -34,13 +35,9 @@ const Chip: React.FC<Props> = memo(({
       style={[
         styles.chip,
         {
-          backgroundColor: selected
-            ? withAlpha(colors.primary, 0.12)
-            // colors.bgAlt → colors.cardAlt
-            : colors.cardAlt,
-          borderColor: selected ? colors.primary : colors.border,
+          backgroundColor: bg,
+          borderColor: border,
           paddingHorizontal: compact ? spacing.sm + 2 : spacing.md - 2,
-          // spacing['1'] → spacing.xs
           paddingVertical: compact ? spacing.xs + 1 : spacing.sm,
           minHeight: compact ? 30 : 36,
           borderRadius: radius.pill,
@@ -54,9 +51,8 @@ const Chip: React.FC<Props> = memo(({
         style={[
           styles.label,
           {
-            color: selected ? colors.primary : colors.text,
+            color: textColor,
             fontSize: compact ? 11 : 12,
-            // type.labelSm → type.bodySm (use only fontWeight)
             fontWeight: type.bodySm.fontWeight,
           },
         ]}
@@ -69,12 +65,9 @@ const Chip: React.FC<Props> = memo(({
   );
 });
 
-Chip.displayName = 'Chip';
-
 const styles = StyleSheet.create({
-  chip:  { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1 },
   label: {},
 });
 
 export default Chip;
-// ✅ theme-migrated

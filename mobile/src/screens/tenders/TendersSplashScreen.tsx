@@ -1,280 +1,440 @@
-// src/screens/tenders/TendersSplashScreen.tsx
-// ─── Banana Tenders Splash Screen ─────────────────────────────────────────────
-// tenderlogo.png has a transparent background (black removed).
-// Logo is displayed directly — no card wrapper — so it composites cleanly
-// over the dark navy background. Tap anywhere to skip.
+/**
+ * src/screens/tenders/TendersSplashScreen.tsx
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Tenders splash screen — gold/navy palette, animated entrance.
+ * Auto-navigates to TendersHome after the entrance sequence completes.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
-  Animated,
-  Dimensions,
-  Easing,
-  Image,
-  Pressable,
-  StatusBar,
-  StyleSheet,
-  Text,
   View,
+  Image,
+  Text,
+  StyleSheet,
+  Animated,
+  Easing,
+  Dimensions,
+  StatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { TendersStackParamList } from '../../navigation/TendersNavigator';
 import { useThemeStore } from '../../store/themeStore';
 
 const { width, height } = Dimensions.get('window');
 
-const AUTO_DISMISS_MS = 1300;
-const PROGRESS_MS     = 1100;
+// ─── Design tokens (self-contained, no external import needed) ───────────────
+const GOLD         = '#F1BB03';
+const GOLD_SOFT    = 'rgba(241,187,3,0.18)';
+const GOLD_RING    = 'rgba(241,187,3,0.08)';
+const NAVY_DEEP    = '#050D1A';
+const NAVY_MID     = '#0A1628';
+const NAVY_SURFACE = '#0F2040';
 
-const DARK = {
-  bg:      '#050D1A',
-  gold:    '#F1BB03',
-  goldDim: 'rgba(241,187,3,0.16)',
-  goldBdr: 'rgba(241,187,3,0.30)',
-  track:   'rgba(255,255,255,0.10)',
-  text:    '#F8FAFC',
-  muted:   '#64748B',
-  dot:     'rgba(241,187,3,0.22)',
-};
+type Nav = NativeStackNavigationProp<TendersStackParamList, 'TendersSplash'>;
 
-const LIGHT = {
-  bg:      '#0D1B2E',   // keep dark even in "light" mode so transparent logo shows
-  gold:    '#F1BB03',
-  goldDim: 'rgba(241,187,3,0.16)',
-  goldBdr: 'rgba(241,187,3,0.30)',
-  track:   'rgba(255,255,255,0.10)',
-  text:    '#F8FAFC',
-  muted:   '#94A3B8',
-  dot:     'rgba(241,187,3,0.22)',
-};
+// ─── Animated ring component ─────────────────────────────────────────────────
 
-const DOTS: [number, number, number][] = [
-  [24, 85, 3],  [112, 38, 4], [298, 68, 3], [352, 188, 4],
-  [48, 315, 3], [268, 295, 4],[128, 495, 3],[318, 525, 4],
-  [78, 685, 3], [248, 705, 3],[42, 205, 2], [382, 405, 2],
-  [170, 150, 3],[330, 360, 2],[60, 540, 3], [200, 620, 2],
-];
+interface RingProps {
+  size: number;
+  delay: number;
+  opacity: number;
+}
 
-// Constellation lines
-const LINES = [
-  { x1: 24,  y1: 85,  x2: 112, y2: 38  },
-  { x1: 112, y1: 38,  x2: 298, y2: 68  },
-  { x1: 298, y1: 68,  x2: 352, y2: 188 },
-  { x1: 268, y1: 295, x2: 318, y2: 525 },
-  { x1: 128, y1: 495, x2: 268, y2: 295 },
-];
-
-export const TendersSplashScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
-  const isDark     = useThemeStore((s) => s.theme.isDark);
-  const p          = isDark ? DARK : LIGHT;
-
-  const logoScale   = useRef(new Animated.Value(0.65)).current;
-  const logoOpacity = useRef(new Animated.Value(0)).current;
-  const glowScale   = useRef(new Animated.Value(0.8)).current;
-  const glowOpacity = useRef(new Animated.Value(0)).current;
-  const tagY        = useRef(new Animated.Value(18)).current;
-  const tagOpacity  = useRef(new Animated.Value(0)).current;
-  const progress    = useRef(new Animated.Value(0)).current;
-  const dotsOpacity = useRef(new Animated.Value(0)).current;
-  const fadeIn      = useRef(new Animated.Value(0)).current;
-  const dismissed   = useRef(false);
-
-  const goHome = useCallback(() => {
-    if (dismissed.current) return;
-    dismissed.current = true;
-    navigation.replace?.('TendersHome');
-  }, [navigation]);
+const PulseRing: React.FC<RingProps> = ({ size, delay, opacity }) => {
+  const scale   = useRef(new Animated.Value(0.6)).current;
+  const fadeVal = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(dotsOpacity, { toValue: 1, duration: 700, useNativeDriver: true }).start();
-
-    Animated.sequence([
-      Animated.parallel([
-        Animated.spring(logoScale,   { toValue: 1, tension: 60, friction: 7, useNativeDriver: true }),
-        Animated.timing(logoOpacity, { toValue: 1, duration: 420, useNativeDriver: true }),
-        Animated.timing(glowOpacity, { toValue: 1, duration: 550, useNativeDriver: true }),
-        Animated.spring(glowScale,   { toValue: 1, tension: 50, friction: 8, useNativeDriver: true }),
-        Animated.timing(fadeIn,      { toValue: 1, duration: 320, useNativeDriver: true }),
-      ]),
-      Animated.parallel([
-        Animated.spring(tagY,       { toValue: 0, tension: 58, friction: 8, useNativeDriver: true }),
-        Animated.timing(tagOpacity, { toValue: 1, duration: 340, useNativeDriver: true }),
-      ]),
-    ]).start();
-
-    Animated.loop(
+    const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(glowScale, { toValue: 1.12, duration: 1700, useNativeDriver: true }),
-        Animated.timing(glowScale, { toValue: 0.94, duration: 1700, useNativeDriver: true }),
-      ]),
-    ).start();
-
-    Animated.timing(progress, {
-      toValue: 1,
-      duration: PROGRESS_MS,
-      useNativeDriver: false,
-      easing: Easing.out(Easing.cubic),
-    }).start();
-
-    const timer = setTimeout(goHome, AUTO_DISMISS_MS);
-    return () => clearTimeout(timer);
+        Animated.delay(delay),
+        Animated.parallel([
+          Animated.timing(scale, {
+            toValue: 1.4,
+            duration: 2200,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.sequence([
+            Animated.timing(fadeVal, {
+              toValue: opacity,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+            Animated.timing(fadeVal, {
+              toValue: 0,
+              duration: 1800,
+              easing: Easing.in(Easing.ease),
+              useNativeDriver: true,
+            }),
+          ]),
+        ]),
+        Animated.parallel([
+          Animated.timing(scale,   { toValue: 0.6, duration: 0, useNativeDriver: true }),
+          Animated.timing(fadeVal, { toValue: 0,   duration: 0, useNativeDriver: true }),
+        ]),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
   }, []);
 
-  const progressWidth = progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
-
   return (
-    <Pressable onPress={goHome} style={{ flex: 1 }} accessibilityLabel="Skip splash">
-      <View style={[S.root, { backgroundColor: p.bg }]}>
-        <StatusBar barStyle="light-content" backgroundColor={p.bg} />
-
-        {/* Constellation dots */}
-        <Animated.View style={[StyleSheet.absoluteFill, { opacity: dotsOpacity }]}>
-          {DOTS.map(([x, y, size], i) => (
-            <View key={`d${i}`} style={[S.dot, {
-              left: x, top: y,
-              width: size, height: size,
-              borderRadius: size / 2,
-              backgroundColor: p.dot,
-            }]} />
-          ))}
-          {LINES.map((l, i) => {
-            const dx    = l.x2 - l.x1;
-            const dy    = l.y2 - l.y1;
-            const len   = Math.sqrt(dx * dx + dy * dy);
-            const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-            return (
-              <View key={`l${i}`} style={[S.line, {
-                width: len, left: l.x1, top: l.y1,
-                backgroundColor: 'rgba(241,187,3,0.12)',
-                transform: [{ rotate: `${angle}deg` }],
-              }]} />
-            );
-          })}
-        </Animated.View>
-
-        {/* Corner atmosphere blobs */}
-        <View style={[S.blob, { top: -80, right: -80, backgroundColor: p.goldDim }]} />
-        <View style={[S.blob, {
-          bottom: -100, left: -80,
-          backgroundColor: 'rgba(241,187,3,0.08)',
-          width: 340, height: 340,
-        }]} />
-
-        <View style={S.center}>
-
-          {/* Pulsing gold glow halo — sits behind logo */}
-          <Animated.View style={[S.halo, {
-            backgroundColor: p.gold,
-            transform: [{ scale: glowScale }],
-            opacity: glowOpacity,
-          }]} />
-
-          {/* Ring border around logo area */}
-          <Animated.View style={[S.ring, {
-            borderColor: p.goldBdr,
-            transform: [{ scale: glowScale }],
-            opacity: Animated.multiply(glowOpacity, 0.5 as any),
-          }]} />
-
-          {/*
-            Logo — transparent background, displayed directly on dark bg.
-            Animated.View wraps plain Image (avoids Android Animated.Image clip bug).
-          */}
-          <Animated.View style={[S.logoWrap, {
-            opacity: logoOpacity,
-            transform: [{ scale: logoScale }],
-          }]}>
-            <Image
-              source={require('../../../assets/tenderlogo.png')}
-              style={S.logoImg}
-              resizeMode="contain"
-            />
-          </Animated.View>
-
-          {/* Text block */}
-          <Animated.View style={[S.textBlock, {
-            opacity: tagOpacity,
-            transform: [{ translateY: tagY }],
-          }]}>
-            <View style={[S.chip, { backgroundColor: p.goldDim, borderColor: p.goldBdr }]}>
-              <View style={[S.chipDot, { backgroundColor: p.gold }]} />
-              <Text style={[S.chipText, { color: p.gold }]}>TENDER CENTER</Text>
-            </View>
-            <Text style={[S.title, { color: p.text }]}>Banana Tenders</Text>
-            <Text style={[S.subtitle, { color: p.muted }]}>
-              Procurement · Professional · Freelance
-            </Text>
-          </Animated.View>
-
-          {/* Progress bar + skip hint */}
-          <Animated.View style={[S.progressWrap, { opacity: fadeIn }]}>
-            <View style={[S.track, { backgroundColor: p.track }]}>
-              <Animated.View style={[S.bar, { width: progressWidth, backgroundColor: p.gold }]} />
-            </View>
-            <Text style={[S.skip, { color: p.muted }]}>Tap anywhere to skip</Text>
-          </Animated.View>
-
-        </View>
-      </View>
-    </Pressable>
+    <Animated.View
+      style={{
+        position: 'absolute',
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        borderWidth: 1.5,
+        borderColor: GOLD,
+        opacity: fadeVal,
+        transform: [{ scale }],
+      }}
+    />
   );
 };
 
-const S = StyleSheet.create({
-  root: { flex: 1 },
-  dot:  { position: 'absolute' },
-  line: { position: 'absolute', height: 1 },
-  blob: { position: 'absolute', width: 280, height: 280, borderRadius: 999 },
+// ─── Main component ──────────────────────────────────────────────────────────
 
-  center: {
+export const TendersSplashScreen: React.FC = () => {
+  const navigation = useNavigation<Nav>();
+  const isDark     = useThemeStore((s) => s.theme.isDark);
+
+  // ── Animation values ──────────────────────────────────────────────────────
+  const bgOpacity      = useRef(new Animated.Value(0)).current;
+  const logoScale      = useRef(new Animated.Value(0.72)).current;
+  const logoOpacity    = useRef(new Animated.Value(0)).current;
+  const glowOpacity    = useRef(new Animated.Value(0)).current;
+  const taglineY       = useRef(new Animated.Value(18)).current;
+  const taglineOpacity = useRef(new Animated.Value(0)).current;
+  const lineWidth      = useRef(new Animated.Value(0)).current;
+  const subtitleY      = useRef(new Animated.Value(10)).current;
+  const subtitleOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    StatusBar.setBarStyle('light-content');
+
+    Animated.sequence([
+      // 1. Background fades in
+      Animated.timing(bgOpacity, {
+        toValue: 1,
+        duration: 350,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+      // 2. Logo scale-in with glow bloom
+      Animated.parallel([
+        Animated.spring(logoScale, {
+          toValue: 1,
+          friction: 6,
+          tension: 120,
+          useNativeDriver: true,
+        }),
+        Animated.timing(logoOpacity, {
+          toValue: 1,
+          duration: 420,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowOpacity, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]),
+      // 3. Divider line draws across
+      Animated.timing(lineWidth, {
+        toValue: 1, // we scale via scaleX
+        duration: 380,
+        easing: Easing.out(Easing.exp),
+        useNativeDriver: true,
+      }),
+      // 4. Tagline slides up
+      Animated.parallel([
+        Animated.timing(taglineY, {
+          toValue: 0,
+          duration: 340,
+          easing: Easing.out(Easing.exp),
+          useNativeDriver: true,
+        }),
+        Animated.timing(taglineOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]),
+      // 5. Subtitle fades
+      Animated.parallel([
+        Animated.timing(subtitleY, {
+          toValue: 0,
+          duration: 280,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(subtitleOpacity, {
+          toValue: 1,
+          duration: 260,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start(() => {
+      // Navigate after a short pause so the screen is fully visible
+      setTimeout(() => {
+        navigation.replace('TendersHome');
+      }, 900);
+    });
+  }, []);
+
+  return (
+    <Animated.View style={[styles.root, { opacity: bgOpacity }]}>
+      <StatusBar barStyle="light-content" backgroundColor={NAVY_DEEP} />
+
+      {/* ── Background gradient layers ── */}
+      <View style={styles.bgLayer1} />
+      <View style={styles.bgLayer2} />
+
+      {/* ── Decorative corner accent (top-right) ── */}
+      <View style={styles.cornerAccentTR} />
+      <View style={styles.cornerAccentBL} />
+
+      {/* ── Subtle diagonal grid lines ── */}
+      {[...Array(6)].map((_, i) => (
+        <View
+          key={i}
+          style={[
+            styles.gridLine,
+            {
+              top: -80 + i * 120,
+              transform: [{ rotate: '-28deg' }],
+              opacity: 0.025 + i * 0.005,
+            },
+          ]}
+        />
+      ))}
+
+      {/* ── Radial glow behind logo ── */}
+      <Animated.View style={[styles.glow, { opacity: glowOpacity }]} />
+
+      {/* ── Pulse rings ── */}
+      <PulseRing size={220} delay={0}    opacity={0.18} />
+      <PulseRing size={300} delay={400}  opacity={0.12} />
+      <PulseRing size={380} delay={800}  opacity={0.07} />
+
+      {/* ── Central content ── */}
+      <View style={styles.centerContent}>
+
+        {/* Logo */}
+        <Animated.View
+          style={[
+            styles.logoWrap,
+            {
+              opacity: logoOpacity,
+              transform: [{ scale: logoScale }],
+            },
+          ]}
+        >
+          <Image
+            source={require('../../../assets/tenderlogo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </Animated.View>
+
+        {/* Divider */}
+        <Animated.View
+          style={[
+            styles.divider,
+            { transform: [{ scaleX: lineWidth }] },
+          ]}
+        />
+
+        {/* Tagline */}
+        <Animated.Text
+          style={[
+            styles.tagline,
+            {
+              opacity: taglineOpacity,
+              transform: [{ translateY: taglineY }],
+            },
+          ]}
+        >
+          TENDERS & PROCUREMENT
+        </Animated.Text>
+
+        {/* Subtitle */}
+        <Animated.Text
+          style={[
+            styles.subtitle,
+            {
+              opacity: subtitleOpacity,
+              transform: [{ translateY: subtitleY }],
+            },
+          ]}
+        >
+          Connecting opportunities with the right partners
+        </Animated.Text>
+      </View>
+
+      {/* ── Bottom wordmark ── */}
+      <Animated.View style={[styles.bottomBar, { opacity: subtitleOpacity }]}>
+        <View style={styles.bottomDot} />
+        <Text style={styles.bottomText}>BananaLink</Text>
+        <View style={styles.bottomDot} />
+      </Animated.View>
+    </Animated.View>
+  );
+};
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  root: {
     flex: 1,
+    backgroundColor: NAVY_DEEP,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
-    gap: 24,
   },
 
-  halo: {
-    position: 'absolute',
-    width: 260, height: 260,
-    borderRadius: 130,
-    opacity: 0.14,
+  // Background depth layers
+  bgLayer1: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: NAVY_MID,
+    opacity: 0.6,
   },
-  ring: {
+  bgLayer2: {
     position: 'absolute',
-    width: 280, height: 280,
-    borderRadius: 140,
+    top: -height * 0.3,
+    left: -width * 0.3,
+    width: width * 1.6,
+    height: width * 1.6,
+    borderRadius: width * 0.8,
+    backgroundColor: NAVY_SURFACE,
+    opacity: 0.45,
+  },
+
+  // Corner accents
+  cornerAccentTR: {
+    position: 'absolute',
+    top: -40,
+    right: -40,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
     borderWidth: 1,
+    borderColor: GOLD_SOFT,
+  },
+  cornerAccentBL: {
+    position: 'absolute',
+    bottom: -60,
+    left: -60,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    borderWidth: 1,
+    borderColor: GOLD_RING,
   },
 
-  // Outer animated view — no overflow clip, no background
+  // Grid lines
+  gridLine: {
+    position: 'absolute',
+    left: -width * 0.5,
+    width: width * 2,
+    height: 1,
+    backgroundColor: GOLD,
+  },
+
+  // Radial glow
+  glow: {
+    position: 'absolute',
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    backgroundColor: GOLD,
+    opacity: 0,
+    // Soft bloom via shadow trick on the View itself (not logo)
+    shadowColor: GOLD,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.22,
+    shadowRadius: 80,
+  },
+
+  // Center content stack
+  centerContent: {
+    alignItems: 'center',
+    gap: 0,
+  },
+
   logoWrap: {
-    width: 280,
-    height: 187,
+    width: 160,
+    height: 160,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 2,
+    marginBottom: 24,
+    // Glow halo on the logo itself
+    shadowColor: GOLD,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 32,
+    elevation: 16,
   },
-  logoImg: {
-    width: 280,
-    height: 187,
+  logo: {
+    width: 140,
+    height: 140,
   },
 
-  textBlock: { alignItems: 'center', gap: 8 },
-  chip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 14, paddingVertical: 6,
-    borderRadius: 999, borderWidth: 1,
+  divider: {
+    width: 120,
+    height: 1.5,
+    backgroundColor: GOLD,
+    marginBottom: 20,
+    opacity: 0.75,
   },
-  chipDot:  { width: 6, height: 6, borderRadius: 3 },
-  chipText: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
-  title:    { fontSize: 28, fontWeight: '900', letterSpacing: -0.3, textAlign: 'center' },
-  subtitle: { fontSize: 13, fontWeight: '500', textAlign: 'center', letterSpacing: 0.3 },
 
-  progressWrap: { alignItems: 'center', gap: 10 },
-  track: { width: 200, height: 3, borderRadius: 999, overflow: 'hidden' },
-  bar:   { height: '100%', borderRadius: 999 },
-  skip:  { fontSize: 11, fontStyle: 'italic' },
+  tagline: {
+    color: GOLD,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 3.5,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+    opacity: 0.9,
+  },
+
+  subtitle: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 13,
+    fontWeight: '400',
+    letterSpacing: 0.3,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+    lineHeight: 20,
+  },
+
+  // Bottom wordmark
+  bottomBar: {
+    position: 'absolute',
+    bottom: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bottomDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: GOLD,
+    opacity: 0.5,
+  },
+  bottomText: {
+    color: 'rgba(255,255,255,0.30)',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
 });
 
 export default TendersSplashScreen;

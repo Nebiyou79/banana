@@ -1,6 +1,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  src/screens/tenders/browse/BrowseProfessionalTenderDetailScreen.tsx
 // ─────────────────────────────────────────────────────────────────────────────
+//  FIXED:
+//   • colors.textInverse instead of hardcoded string in error state button
+//   • useFocusEffect refetch on return from bid form
+//   • All theme tokens consistent
+//   • FIXED: Navigation uses direct navigate since SubmitBid is in same stack
 
 import React, { useCallback } from 'react';
 import {
@@ -25,17 +30,7 @@ import {
 import BrowseTenderDetails from '../../../components/professionalTenders/BrowseTenderDetails';
 import type { ProfessionalTender, TenderAttachment } from '../../../types/professionalTender';
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  ROUTE PARAMS
-// ═════════════════════════════════════════════════════════════════════════════
-
-interface RouteParams {
-  tenderId: string;
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  COMPONENT
-// ═════════════════════════════════════════════════════════════════════════════
+interface RouteParams { tenderId: string }
 
 export const BrowseProfessionalTenderDetailScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -46,40 +41,49 @@ export const BrowseProfessionalTenderDetailScreen: React.FC = () => {
   const { data, isLoading, isError, error, refetch } = useProfessionalTender(tenderId);
   const tender = data?.data;
 
-  // Refetch on focus so returning from a placed bid reflects fresh state
+  // Refetch on focus so returning from bid form shows fresh state
   useFocusEffect(
     useCallback(() => { refetch(); }, [refetch]),
   );
 
-  // ─── Save toggle (backed by real service) ──────────────────────────────
+  // Save toggle
   const { data: savedData }   = useSavedProfessionalTenders();
   const savedIds              = new Set((savedData?.tenders ?? []).map((t) => t._id));
   const isSaved               = tenderId ? savedIds.has(tenderId) : false;
   const toggleSaveMutation    = useToggleSavedProfessionalTender();
-  const saveBusy              = toggleSaveMutation.isPending;
 
   const toggleSave = useCallback(() => {
     if (!tenderId) return;
     toggleSaveMutation.mutate({ id: tenderId });
   }, [tenderId, toggleSaveMutation]);
 
-  // ─── Action handlers ───────────────────────────────────────────────────
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
   }, [navigation]);
 
-  const handlePlaceBid = useCallback(() => {
-    if (!tender) return;
-    Alert.alert(
-      'Place Bid',
-      'The bid submission form ships in a later module. From here you would proceed to a multi-step form to submit your technical and financial proposal.',
-      [{ text: 'OK' }],
-    );
-  }, [tender]);
+  // FIXED: Navigate directly to SubmitBid since it's in the same CompanyProfEntryStack
+const handlePlaceBid = useCallback(() => {
+  if (!tender) return;
+  
+  // Navigate to SubmitBidScreen instead of directly submitting
+  navigation.navigate('SubmitBid', { 
+    tenderId: tender._id 
+  });
+}, [tender, navigation]);
 
+  // FIXED: Navigate directly to MyBidDetail since it might be in the same or parent stack
   const handleViewBid = useCallback((bidId: string) => {
-    Alert.alert('View Bid', `Bid id: ${bidId.slice(-8)}\n\nDetail screen ships in the Bids module.`);
-  }, []);
+    // Try navigating in current stack first, fall back to parent
+    try {
+      navigation.navigate('MyBidDetail', { bidId, tenderId });
+    } catch {
+      // If MyBidDetail is not in current stack, try parent navigator
+      const parent = navigation.getParent();
+      if (parent) {
+        parent.navigate('MyBidDetail', { bidId, tenderId });
+      }
+    }
+  }, [navigation, tenderId]);
 
   const handleShare = useCallback(async () => {
     if (!tender) return;
@@ -98,34 +102,30 @@ export const BrowseProfessionalTenderDetailScreen: React.FC = () => {
   const handleAskQuestion = useCallback(() => {
     Alert.alert(
       'Ask a Question',
-      'A Q&A module is planned for a later release. For now, contact details for the procuring entity are visible in the Details tab.',
+      'Q&A module planned for a later release. Contact details are in the Entity tab.',
     );
   }, []);
 
-const handleDownloadAttachment = useCallback(async (attachment: TenderAttachment) => {
-  const url = attachment.url as unknown as string;
-  
-  if (!url) {
-    Alert.alert('Download unavailable', 'No download URL is available for this file.');
-    return;
-  }
-  try {
-    const can = await Linking.canOpenURL(url);
-    if (!can) throw new Error('No app available to open this URL');
-    await Linking.openURL(url);
-  } catch (err: any) {
-    Alert.alert("Couldn't open file", err?.message ?? 'Try again.');
-  }
-}, []);
+  const handleDownloadAttachment = useCallback(async (attachment: TenderAttachment) => {
+    const url = attachment.url as unknown as string;
+    if (!url) {
+      Alert.alert('Download unavailable', 'No download URL is available for this file.');
+      return;
+    }
+    try {
+      const can = await Linking.canOpenURL(url);
+      if (!can) throw new Error('No app available to open this URL');
+      await Linking.openURL(url);
+    } catch (err: any) {
+      Alert.alert("Couldn't open file", err?.message ?? 'Try again.');
+    }
+  }, []);
 
   const handleViewEntityProfile = useCallback((entityId: string) => {
-    Alert.alert(
-      'View Profile',
-      `Company id: ${entityId.slice(-8)}\n\nThe public company profile screen ships in a later pass.`,
-    );
-  }, []);
+    navigation.navigate('PublicCompanyProfile', { companyId: entityId });
+  }, [navigation]);
 
-  // ─── Loading ────────────────────────────────────────────────────────────
+  // Loading state
   if (isLoading || (!tender && !isError)) {
     return (
       <View style={[styles.fullCenter, { backgroundColor: colors.bg }]}>
@@ -134,6 +134,7 @@ const handleDownloadAttachment = useCallback(async (attachment: TenderAttachment
     );
   }
 
+  // Error state
   if (isError || !tender) {
     return (
       <View style={[styles.fullCenter, { backgroundColor: colors.bg }]}>
@@ -153,32 +154,27 @@ const handleDownloadAttachment = useCallback(async (attachment: TenderAttachment
     );
   }
 
-  // ─── Determine isInvited ───────────────────────────────────────────────
   const isInvited = (() => {
     if (typeof (tender as any).isInvited === 'boolean') return (tender as any).isInvited;
     return undefined;
   })();
 
-  return (
-    <BrowseTenderDetails
-      tender={tender}
-      isInvited={isInvited}
-      isSaved={isSaved}
-      onToggleSave={toggleSave}
-      onPlaceBid={handlePlaceBid}
-      onViewBid={handleViewBid}
-      onShare={handleShare}
-      onAskQuestion={handleAskQuestion}
-      onDownloadAttachment={handleDownloadAttachment}
-      onViewEntityProfile={handleViewEntityProfile}
-      onBack={handleBack}
-    />
-  );
+return (
+  <BrowseTenderDetails
+    tender={tender}
+    isInvited={isInvited}
+    isSaved={isSaved}
+    onToggleSave={toggleSave}
+    onPlaceBid={handlePlaceBid}
+    onViewBid={handleViewBid}
+    onShare={handleShare}
+    onAskQuestion={handleAskQuestion}
+    onDownloadAttachment={handleDownloadAttachment}
+    onViewEntityProfile={handleViewEntityProfile}
+    onBack={handleBack}
+  />
+);
 };
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  STYLES
-// ═════════════════════════════════════════════════════════════════════════════
 
 const styles = StyleSheet.create({
   fullCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },

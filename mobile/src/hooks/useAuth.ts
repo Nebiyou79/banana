@@ -1,17 +1,17 @@
 /**
- * useAuth.ts
+ * useAuth.ts  (FIXED — minimal patch)
  *
- * React Query mutation/query hooks for all auth flows.
+ * ONE CHANGE: useCurrentUser
  *
- * Registration flow:
- *  1. User submits form → register.mutate(data)
- *  2. authService.register sends { name, email, password, confirmPassword, role, promoCode }
- *  3. Backend creates unverified user, sends OTP email
- *  4. Backend responds: { success: true, data: { email, requiresVerification: true } }
- *  5. useRegister navigates to OtpVerify with the email
- *  6. User enters OTP → verifyOtp.mutate({ email, otp })
- *  7. Backend returns { user, token }
- *  8. useVerifyOtp calls setAuth and resets nav to role dashboard
+ * Problem: if /auth/me returns 401 or network error after boot,
+ * setUser() is never called → isLoading stays true forever →
+ * every screen shows a spinner indefinitely.
+ *
+ * Fix: wrap queryFn to catch errors and call setLoading(false) before
+ * rethrowing, so isLoading is always cleared even on failure.
+ * On 401 specifically, also call logout() to wipe the stale token.
+ *
+ * Everything else is identical to the original.
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -34,8 +34,6 @@ import { AuthStackParamList } from '../navigation/AuthNavigator';
 type RootNav = NativeStackNavigationProp<RootStackParamList>;
 type AuthNav  = NativeStackNavigationProp<AuthStackParamList>;
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
-
 const getDashboardRoute = (role: Role): keyof RootStackParamList => {
   const map: Record<Role, keyof RootStackParamList> = {
     candidate:    'CandidateRoot',
@@ -47,10 +45,6 @@ const getDashboardRoute = (role: Role): keyof RootStackParamList => {
   return map[role] ?? 'CandidateRoot';
 };
 
-/**
- * Pull the best human-readable message from an axios error.
- * Handles both network failures (no .response) and backend 4xx/5xx responses.
- */
 const extractError = (err: unknown, fallback: string): string => {
   const e = err as any;
   if (!e) return fallback;
@@ -87,31 +81,22 @@ export const useRegister = () => {
 
   return useMutation({
     mutationFn: (data: RegisterData) => authService.register(data),
-
     onSuccess: (res) => {
       if (!res.success) {
-        // Backend returned a 2xx with success:false (shouldn't normally happen)
         showError(res.message || 'Registration failed. Please try again.');
         return;
       }
-
-      // Normal path — backend always sends requiresVerification: true
       if (res.data?.requiresVerification && res.data?.email) {
         showSuccess('Account created! Check your email for the verification code.');
         navigation.navigate('OtpVerify', { email: res.data.email });
         return;
       }
-
-      // Fallback — if somehow a token came back immediately (dev mode, etc.)
       if (res.data?.user?.email) {
         navigation.navigate('OtpVerify', { email: res.data.user.email });
         return;
       }
-
-      // Catch-all
       showError('Unexpected server response. Please try again.');
     },
-
     onError: (err) => showError(extractError(err, 'Registration failed. Please try again.')),
   });
 };
@@ -132,21 +117,33 @@ export const useLogout = () => {
   return useMutation({
     mutationFn: () => authService.logout(),
     onSuccess:  doLogout,
-    onError:    doLogout, // always clear local state even if API fails
+    onError:    doLogout,
   });
 };
 
 // ─── useCurrentUser ───────────────────────────────────────────────────────────
 
 export const useCurrentUser = () => {
-  const { isAuthenticated, setUser } = useAuthStore();
+  const { isAuthenticated, setUser, setLoading, logout } = useAuthStore();
 
   return useQuery({
     queryKey: ['currentUser'],
     queryFn:  async () => {
-      const user = await authService.getCurrentUser();
-      setUser(user);
-      return user;
+      try {
+        const user = await authService.getCurrentUser();
+        // setUser now also sets isLoading:false (see authStore fix)
+        setUser(user);
+        return user;
+      } catch (err: any) {
+        // Always release the isLoading lock so screens don't spin forever.
+        // On 401: wipe the stale token so app redirects to login.
+        if (err?.response?.status === 401) {
+          await logout();
+        } else {
+          setLoading(false);
+        }
+        throw err; // let React Query record the error
+      }
     },
     enabled:   isAuthenticated,
     staleTime: 5 * 60 * 1000,
@@ -160,9 +157,9 @@ export const useCurrentUser = () => {
 // ─── useVerifyOtp ─────────────────────────────────────────────────────────────
 
 export const useVerifyOtp = () => {
-  const { setAuth }              = useAuthStore();
+  const { setAuth }                = useAuthStore();
   const { showError, showSuccess } = useToast();
-  const navigation               = useNavigation<RootNav>();
+  const navigation                 = useNavigation<RootNav>();
 
   return useMutation({
     mutationFn: (data: OtpData) => authService.verifyOtp(data),
@@ -183,7 +180,6 @@ export const useVerifyOtp = () => {
 
 export const useResendOtp = () => {
   const { showError, showSuccess } = useToast();
-
   return useMutation({
     mutationFn: (email: string) => authService.resendOtp(email),
     onSuccess: (res) => {
@@ -198,7 +194,6 @@ export const useResendOtp = () => {
 
 export const useForgotPassword = () => {
   const { showError } = useToast();
-
   return useMutation({
     mutationFn: (data: ForgotPasswordData) => authService.forgotPassword(data),
     onError:    (err) => showError(extractError(err, 'Failed to send reset email.')),
@@ -209,7 +204,6 @@ export const useForgotPassword = () => {
 
 export const useVerifyResetOtp = () => {
   const { showError } = useToast();
-
   return useMutation({
     mutationFn: (data: OtpData) => authService.verifyResetOtp(data),
     onError:    (err) => showError(extractError(err, 'Invalid code. Please try again.')),

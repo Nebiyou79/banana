@@ -1,11 +1,10 @@
 /**
  * mobile/src/screens/candidate/SavedJobsScreen.tsx
- * Refactored: useTheme(), correct color aliases, estimatedItemSize on FlashList.
+ * FIXED: Removed SafeAreaView (handled by root navigator)
  */
 
 import React, { useCallback } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { useTheme } from '../../hooks/useTheme';
 import { useSavedJobs, useUnsaveJob } from '../../hooks/useJobs';
@@ -33,7 +32,7 @@ export const SavedJobsScreen: React.FC<Props> = ({ navigation }) => {
   ), [navigation, unsaveMut]);
 
   return (
-    <SafeAreaView style={[s.root, { backgroundColor: colors.bg }]} edges={['top']}>
+    <View style={[s.root, { backgroundColor: colors.bg }]}>
       <View style={[s.header, { borderBottomColor: colors.border }]}>
         <Text style={[s.title, { color: colors.text }]}>Saved Jobs</Text>
         <Text style={[s.count, { color: colors.textMuted }]}>{jobs.length} saved</Text>
@@ -61,7 +60,7 @@ export const SavedJobsScreen: React.FC<Props> = ({ navigation }) => {
           }
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 

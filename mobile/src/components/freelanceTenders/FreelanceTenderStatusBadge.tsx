@@ -4,28 +4,53 @@ import { useTheme } from '../../hooks/useTheme';
 import { withAlpha } from '../../theme/utils';
 import type { TenderStatus } from '../../types/freelanceTender';
 
-const LABELS: Record<TenderStatus, string> = {
-  draft: 'Draft', published: 'Published', closed: 'Closed',
+const META: Record<TenderStatus, { label: string; icon: string }> = {
+  draft:     { label: 'Draft',     icon: '○' },
+  published: { label: 'Published', icon: '●' },
+  closed:    { label: 'Closed',    icon: '✕' },
 };
 
-const FreelanceTenderStatusBadge: React.FC<{ status: TenderStatus }> = memo(({ status }) => {
-  const { colors: c, radius } = useTheme();
+export interface FreelanceTenderStatusBadgeProps {
+  status: TenderStatus;
+  showDot?: boolean;
+}
 
-  const color = status === 'published' ? c.success
-              : status === 'closed'    ? c.danger
-              : c.textMuted;
+const FreelanceTenderStatusBadge: React.FC<FreelanceTenderStatusBadgeProps> = memo(
+  ({ status, showDot = true }) => {
+    const { colors, radius } = useTheme();
 
-  return (
-    <View style={[styles.pill, { backgroundColor: withAlpha(color, 0.14), borderRadius: radius.full }]}>
-      <Text style={[styles.label, { color }]}>{LABELS[status]}</Text>
-    </View>
-  );
-});
+    const color =
+      status === 'published' ? colors.success
+      : status === 'closed'  ? colors.danger
+      : colors.textMuted;
+
+    const { label, icon } = META[status] ?? { label: status, icon: '●' };
+
+    return (
+      <View
+        style={[
+          styles.pill,
+          {
+            backgroundColor: withAlpha(color, 0.11),
+            borderColor:     withAlpha(color, 0.25),
+            borderRadius:    radius.full,
+          },
+        ]}
+      >
+        {showDot && (
+          <View style={[styles.dot, { backgroundColor: color }]} />
+        )}
+        <Text style={[styles.label, { color }]}>{label}</Text>
+      </View>
+    );
+  },
+);
 
 FreelanceTenderStatusBadge.displayName = 'FreelanceTenderStatusBadge';
 
 const styles = StyleSheet.create({
-  pill: { paddingVertical: 4, paddingHorizontal: 10, alignSelf: 'flex-start' },
+  pill:  { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4, paddingHorizontal: 10, borderWidth: 1, alignSelf: 'flex-start' },
+  dot:   { width: 6, height: 6, borderRadius: 3 },
   label: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
 });
 

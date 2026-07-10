@@ -272,7 +272,25 @@ const ENDPOINTS = {
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 const freelancerMarketplaceService = {
-
+/**
+ * GET /api/v1/freelancers/me - Get the logged-in freelancer's own marketplace profile
+ * 
+ * This is useful for freelancers who need to fetch their own profile ID
+ * to display their reviews, edit their profile, etc.
+ * 
+ * Returns null if the user is not a freelancer or doesn't have a marketplace profile yet.
+ */
+async getMyFreelancerProfile(): Promise<FreelancerPublicProfile | null> {
+  try {
+    const res = await api.get<any>('/freelancers/me');
+    const inner = res.data?.data ?? res.data;
+    return inner?.freelancer ?? inner;
+  } catch (err) {
+    // Freelancer might not have a marketplace profile yet
+    console.log('Failed to fetch own freelancer profile:', err);
+    return null;
+  }
+},
   /**
    * GET /api/v1/freelancers
    */

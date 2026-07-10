@@ -459,7 +459,194 @@ exports.submitReview = async (req, res) => {
     return sendError(res, 500, 'Failed to submit review');
   }
 };
+/**
+ * GET /api/v1/freelancers/me
+ * Get the logged-in freelancer's OWN marketplace profile.
+ * This allows freelancers to view and edit their own profile.
+ */
+exports.getMyFreelancerProfile = async (req, res) => {
+  try {
+    const userId = req.user._id;
 
+    // Find freelancer profile by user reference
+    let profile = await FreelancerProfile.findOne({ user: userId })
+      .populate({
+        path: 'user',
+        select:
+          'name email phone avatar location skills gender dateOfBirth website socialLinks portfolio experience education isActive bio',
+      })
+      .lean();
+
+    if (!profile) {
+      // Freelancer might not have created a marketplace profile yet
+      return res.json({
+        success: true,
+        data: null,
+        message: 'No marketplace profile found. Please complete your profile setup.',
+      });
+    }
+
+    if (!profile.user || profile.user?.isActive === false) {
+      return sendError(res, 404, 'Freelancer profile not found');
+    }
+
+    // Portfolio (Cloudinary only)
+    const portfolio = (profile.user.portfolio || [])
+      .filter((p) => p.visibility !== 'private')
+      .map((p) => ({
+        _id:         p._id,
+        title:       p.title,
+        description: p.description || null,
+        mediaUrls:   (p.mediaUrls || [p.mediaUrl].filter(Boolean)).filter(
+          (url) => url && url.includes('cloudinary.com')
+        ),
+        projectUrl:  p.projectUrl || null,
+        category:    p.category || null,
+        technologies:p.technologies || [],
+        client:      p.client || null,
+        featured:    p.featured || false,
+        createdAt:   p.createdAt,
+      }));
+
+    // Merge social links
+    const socialLinks = {
+      ...(profile.user.socialLinks || {}),
+      ...(profile.socialLinks || {}),
+    };
+
+    const responseData = {
+      _id: profile._id,
+      user: {
+        _id:        profile.user._id,
+        name:       profile.user.name,
+        email:      profile.user.email,
+        phone:      profile.user.phone || null,
+        avatar:     profile.user.avatar || null,
+        location:   profile.user.location || null,
+        gender:     profile.user.gender || null,
+        age:        computeAge(profile.user.dateOfBirth),
+        website:    profile.user.website || null,
+        skills:     profile.user.skills || [],
+        socialLinks,
+        portfolio,
+        experience: profile.user.experience || [],
+        education:  profile.user.education || [],
+      },
+      profession:         profile.profession || null,
+      headline:           profile.headline || null,
+      bio:                profile.bio || null,
+      hourlyRate:         profile.hourlyRate,
+      availability:       profile.availability,
+      experienceLevel:    profile.experienceLevel,
+      englishProficiency: profile.englishProficiency,
+      timezone:           profile.timezone || null,
+      specialization:     profile.specialization || [],
+      services:           profile.services || [],
+      certifications:     profile.certifications || [],
+      ratings:            profile.ratings,
+      badges:             profile.badges || [],
+      businessSize:       profile.businessSize,
+      workingHours:       profile.workingHours || null,
+      responseTime:       profile.responseTime,
+      successRate:        profile.successRate,
+      onTimeDelivery:     profile.onTimeDelivery,
+      totalEarnings:      profile.totalEarnings,
+      profileCompletion:  profile.profileCompletion,
+      profileViews:       profile.profileViews,
+      featured:           profile.featured,
+      membership:         profile.membership,
+      isSaved:            false, // Can't save own profile
+      recentReviews:      [],
+    };
+
+    return res.json({ success: true, data: responseData });
+  } catch (err) {
+    console.error('[getMyFreelancerProfile]', err);
+    return sendError(res, 500, 'Failed to fetch your freelancer profile');
+  }
+};
+
+/**
+ * GET /api/v1/freelancers/me/reviews
+ * Get reviews for the logged-in freelancer's own profile.
+ */
+exports.getMyReviews = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const page  = Math.max(1, parseInt(req.query.page  || '1', 10));
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || '10', 10)));
+    const skip  = (page - 1) * limit;
+
+    // Find the freelancer's marketplace profile
+    const profile = await FreelancerProfile.findOne({ user: userId }).select('_id').lean();
+    
+    if (!profile) {
+      return res.json({
+        success: true,
+        data: {
+          reviews: [],  // Ensure this is always an array
+          pagination: { total: 0, page, limit, totalPages: 0 },
+          summary: { average: 0, count: 0, breakdown: {} },
+        },
+      });
+    }
+
+    const filter = { freelancerId: profile._id, isVisible: true };
+
+    const [total, reviews, profileDoc] = await Promise.all([
+      FreelancerReview.countDocuments(filter),
+      FreelancerReview.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate({ path: 'companyId', select: 'name logo' })
+        .lean(),
+      FreelancerProfile.findById(profile._id).select('ratings').lean(),
+    ]);
+
+    // Ensure reviews is always an array
+    const reviewsArray = Array.isArray(reviews) ? reviews : [];
+    
+    // Transform reviews to match frontend expectations
+    const formattedReviews = reviewsArray.map(review => ({
+      _id: review._id,
+      rating: review.rating,
+      comment: review.comment || null,
+      subRatings: review.subRatings || {},
+      createdAt: review.createdAt,
+      companyId: review.companyId ? {
+        _id: review.companyId._id,
+        name: review.companyId.name,
+        logo: review.companyId.logo || null,
+      } : null,
+    }));
+
+    return res.json({
+      success: true,
+      data: {
+        reviews: formattedReviews,
+        pagination: {
+          total: total || 0,
+          page,
+          limit,
+          totalPages: Math.ceil((total || 0) / limit),
+        },
+        summary: profileDoc?.ratings || { average: 0, count: 0, breakdown: {} },
+      },
+    });
+  } catch (err) {
+    console.error('[getMyReviews]', err);
+    return res.json({
+      success: false,
+      message: 'Failed to fetch your reviews',
+      data: {
+        reviews: [],
+        pagination: { total: 0, page: 1, limit: 10, totalPages: 0 },
+        summary: { average: 0, count: 0, breakdown: {} },
+      },
+    });
+  }
+};
 /**
  * GET /api/v1/freelancers/:id/reviews
  */

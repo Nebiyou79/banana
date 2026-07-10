@@ -1,20 +1,11 @@
 // src/social/screens/MessagesScreen.tsx
+// ✅ role-theme-migrated — FIXED
 /**
- * MessagesScreen — professional conversations inbox.
- * ─────────────────────────────────────────────────────────────────────────────
- * Features:
- *   - Search bar with instant filtering
- *   - Role-based filter tabs (All, Connections, Candidates, etc.)
- *   - Message requests banner with unread badge
- *   - Conversation list with avatars, previews, timestamps
- *   - Pull-to-refresh
- *   - Empty states per tab
- *   - Skeleton loading
- *   - Safe-area-aware layout
- *   - Full socialTheme integration
- * 
- * Architecture: Inside SocialNavigator bottom tabs (not a push screen)
- * ─────────────────────────────────────────────────────────────────────────────
+ * FIXES:
+ *  - theme.colors.onPrimary doesn't exist → replaced with theme.colors.white
+ *  - Missing SafeAreaView wrapper (was plain View) → added with edges=['top']
+ *  - Module-level `isFocused` variable removed (was dead code)
+ *  - KeyboardAvoidingView not needed here (no input in screen root)
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
@@ -33,6 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useSocialTheme } from '../theme/socialTheme';
 import { useFadeIn, useSkeletonPulse } from '../theme/animations';
@@ -47,19 +39,17 @@ type FilterTab = 'all' | 'connections' | 'candidate' | 'freelancer' | 'company';
 type AnyNav = NativeStackNavigationProp<any>;
 
 const TABS: { key: FilterTab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: 'all', label: 'All', icon: 'chatbubbles-outline' },
+  { key: 'all',         label: 'All',         icon: 'chatbubbles-outline' },
   { key: 'connections', label: 'Connections', icon: 'people-outline' },
-  { key: 'candidate', label: 'Candidates', icon: 'person-outline' },
-  { key: 'freelancer', label: 'Freelancers', icon: 'briefcase-outline' },
-  { key: 'company', label: 'Companies', icon: 'business-outline' },
+  { key: 'candidate',   label: 'Candidates',  icon: 'person-outline' },
+  { key: 'freelancer',  label: 'Freelancers', icon: 'briefcase-outline' },
+  { key: 'company',     label: 'Companies',   icon: 'business-outline' },
 ];
 
-// ─── Role filter mapping ────────────────────────────────────────────────────
-
 const ROLE_TO_TAB: Record<string, FilterTab> = {
-  candidate: 'candidate',
-  freelancer: 'freelancer',
-  company: 'company',
+  candidate:    'candidate',
+  freelancer:   'freelancer',
+  company:      'company',
   organization: 'company',
 };
 
@@ -87,12 +77,8 @@ const MessagesScreen: React.FC = () => {
     isLoading,
   } = useMyConversations({ page: 1, limit: 30 });
 
-  // Extract list from infinite query data
-  // The hook's select adds .list to the return, but TypeScript doesn't infer it.
-  // Safe extraction from pages.
   const rawConversations: Conversation[] = useMemo(() => {
     if (!data) return [];
-    // Try .list first (from select), fall back to flatMap of pages
     const enhanced = data as any;
     if (Array.isArray(enhanced.list)) return enhanced.list;
     if (Array.isArray(enhanced.pages)) {
@@ -101,41 +87,33 @@ const MessagesScreen: React.FC = () => {
     return [];
   }, [data]);
 
-  // Filter out conversations with missing otherUser
   const allConversations: Conversation[] = useMemo(
     () => rawConversations.filter((c) => c?.otherUser?._id),
     [rawConversations],
   );
 
-  const requestsCount: number = useMemo(() => {
-    return (data as any)?.requestsCount ?? 0;
-  }, [data]);
+  const requestsCount: number = useMemo(() => (data as any)?.requestsCount ?? 0, [data]);
 
-  // Client-side role filter
   const roleFiltered = useMemo(() => {
     if (activeTab === 'all') return allConversations;
-    if (activeTab === 'connections') {
-      return allConversations.filter((c) => c.otherUser?.role);
-    }
+    if (activeTab === 'connections') return allConversations.filter((c) => c.otherUser?.role);
     return allConversations.filter((c) => {
       const role = c.otherUser?.role ?? 'candidate';
       return ROLE_TO_TAB[role] === activeTab;
     });
   }, [allConversations, activeTab]);
 
-  // Client-side search filter
   const filtered = useMemo(() => {
     if (!query.trim()) return roleFiltered;
     const q = query.toLowerCase();
     return roleFiltered.filter((c) => {
-      const name = c.otherUser?.name?.toLowerCase() ?? '';
+      const name    = c.otherUser?.name?.toLowerCase() ?? '';
       const headline = c.otherUser?.headline?.toLowerCase() ?? '';
       const preview = c.lastMessage?.content?.toLowerCase() ?? '';
       return name.includes(q) || headline.includes(q) || preview.includes(q);
     });
   }, [roleFiltered, query]);
 
-  // Bulk connection status for follow buttons
   const userIds = useMemo(
     () => filtered.map((c) => c.otherUser?._id).filter(Boolean) as string[],
     [filtered],
@@ -146,17 +124,12 @@ const MessagesScreen: React.FC = () => {
   // ── Handlers ─────────────────────────────────────────────────────────
   const openChat = useCallback(
     (conv: Conversation) => {
-      navigation.navigate('Chat', {
-        conversationId: conv._id,
-        otherUser: conv.otherUser,
-      });
+      navigation.navigate('Chat', { conversationId: conv._id, otherUser: conv.otherUser });
     },
     [navigation],
   );
 
-  const openNewChat = useCallback(() => {
-    navigation.navigate('NewChat');
-  }, [navigation]);
+  const openNewChat = useCallback(() => navigation.navigate('NewChat'), [navigation]);
 
   // ── Render item ──────────────────────────────────────────────────────
   const renderItem = useCallback(
@@ -234,8 +207,11 @@ const MessagesScreen: React.FC = () => {
           style={[styles.emptyButtonPrimary, { backgroundColor: theme.primary }]}
           activeOpacity={0.85}
         >
-          <Ionicons name="create-outline" size={18} color={theme.colors.onPrimary} />
-          <Text style={[styles.emptyButtonPrimaryText, { color: theme.colors.onPrimary }]}>New Message</Text>
+          <Ionicons name="create-outline" size={18} color={theme.colors.white} />
+          {/* FIX: theme.colors.onPrimary doesn't exist → use theme.colors.white */}
+          <Text style={[styles.emptyButtonPrimaryText, { color: theme.colors.white }]}>
+            New Message
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -244,7 +220,7 @@ const MessagesScreen: React.FC = () => {
   // ── Skeleton ─────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.bg }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['top']}>
         <View style={styles.header}>
           <Animated.View style={{ opacity: skeletonOpacity }}>
             <View style={[styles.skeletonTitle, { backgroundColor: theme.skeleton }]} />
@@ -253,192 +229,193 @@ const MessagesScreen: React.FC = () => {
         </View>
         <View style={[styles.skeletonSearch, { backgroundColor: theme.skeleton }]} />
         <View style={styles.skeletonTabs}>
-          {[1, 2, 3, 4, 5].map((i) => (
+          {[80, 110, 95, 105].map((w, i) => (
             <Animated.View
               key={i}
-              style={[
-                styles.skeletonTab,
-                { backgroundColor: theme.skeleton, opacity: skeletonOpacity },
-              ]}
+              style={[styles.skeletonTab, { backgroundColor: theme.skeleton, width: w, opacity: skeletonOpacity }]}
             />
           ))}
         </View>
-        {[1, 2, 3, 4, 5, 6].map((i) => (
-          <Animated.View
-            key={i}
-            style={[styles.skeletonRow, { opacity: skeletonOpacity }]}
-          >
+        {[1, 2, 3, 4, 5].map((i) => (
+          <Animated.View key={i} style={[styles.skeletonRow, { opacity: skeletonOpacity }]}>
             <View style={[styles.skeletonAvatar, { backgroundColor: theme.skeleton }]} />
             <View style={{ flex: 1, gap: 6 }}>
               <View style={[styles.skeletonLine, { backgroundColor: theme.skeleton, width: '55%' }]} />
-              <View style={[styles.skeletonLine, { backgroundColor: theme.skeleton, width: '35%' }]} />
-              <View style={[styles.skeletonLine, { backgroundColor: theme.skeleton, width: '70%' }]} />
+              <View style={[styles.skeletonLine, { backgroundColor: theme.skeleton, width: '80%' }]} />
             </View>
           </Animated.View>
         ))}
-      </View>
+      </SafeAreaView>
     );
   }
 
-  // ── Render ───────────────────────────────────────────────────────────
+  // ── Main render ──────────────────────────────────────────────────────
   return (
-    <Animated.View style={[styles.container, { backgroundColor: theme.bg, opacity: fadeIn }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.text }]}>Messages</Text>
-        <TouchableOpacity
-          onPress={openNewChat}
-          style={[styles.headerAction, { backgroundColor: theme.withAlpha(theme.primary, 0.1) }]}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel="New message"
-        >
-          <Ionicons name="create-outline" size={22} color={theme.primary} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Search */}
-      <View style={[styles.searchWrap, { backgroundColor: theme.inputBg, borderColor: isFocused ? theme.primary : theme.border }]}>
-        <Ionicons name="search" size={18} color={theme.muted} style={{ marginRight: 8 }} />
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search conversations..."
-          placeholderTextColor={theme.muted}
-          style={[styles.searchInput, { color: theme.text }]}
-          autoCorrect={false}
-          returnKeyType="search"
-          accessibilityRole="search"
-        />
-        {query.length > 0 && (
+    // FIX: wrap in SafeAreaView with edges=['top'] — was using plain Animated.View
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['top']}>
+      <Animated.View style={[{ flex: 1 }, { opacity: fadeIn }]}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: theme.text }]}>Messages</Text>
           <TouchableOpacity
-            onPress={() => setQuery('')}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            onPress={openNewChat}
+            style={[styles.headerAction, { backgroundColor: theme.withAlpha(theme.primary, 0.12) }]}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityRole="button"
-            accessibilityLabel="Clear search"
+            accessibilityLabel="New message"
           >
-            <Ionicons name="close-circle" size={18} color={theme.muted} />
+            <Ionicons name="create-outline" size={22} color={theme.primary} />
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
 
-      {/* Filter tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabsScroll}
-        contentContainerStyle={styles.tabsContent}
-      >
-        {TABS.map((t) => {
-          const isActive = t.key === activeTab;
-          return (
-            <TouchableOpacity
-              key={t.key}
-              onPress={() => setActiveTab(t.key)}
-              activeOpacity={0.75}
-              style={[
-                styles.tab,
-                {
-                  backgroundColor: isActive ? theme.primary : theme.cardAlt,
-                  borderColor: isActive ? theme.primary : theme.border,
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={`Filter ${t.label}`}
-              accessibilityState={{ selected: isActive }}
-            >
-              <Ionicons
-                name={t.icon}
-                size={14}
-                color={isActive ? theme.colors.onPrimary : theme.muted}
-                style={{ marginRight: 5 }}
-              />
-              <Text
-                style={[
-                  styles.tabText,
-                  { color: isActive ? theme.colors.onPrimary : theme.text },
-                ]}
-              >
-                {t.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      {/* Message requests banner */}
-      {requestsCount > 0 && (
-        <TouchableOpacity
-          onPress={() => navigation.navigate('MessageRequests')}
-          activeOpacity={0.7}
+        {/* Search bar */}
+        <View
           style={[
-            styles.requestsBanner,
+            styles.searchWrap,
             {
-              backgroundColor: theme.withAlpha(theme.primary, 0.06),
-              borderColor: theme.withAlpha(theme.primary, 0.15),
+              backgroundColor: theme.inputBg,
+              borderColor: theme.border,
             },
           ]}
-          accessibilityRole="button"
-          accessibilityLabel={`${requestsCount} message requests`}
         >
-          <View style={styles.requestsLeft}>
-            <View style={[styles.requestsIconWrap, { backgroundColor: theme.withAlpha(theme.primary, 0.12) }]}>
-              <Ionicons name="mail-outline" size={18} color={theme.primary} />
-            </View>
-            <View>
-              <Text style={[styles.requestsText, { color: theme.text }]}>
-                Message Requests
-              </Text>
-              <Text style={[styles.requestsSubtext, { color: theme.subtext }]}>
-                {requestsCount} pending {requestsCount === 1 ? 'request' : 'requests'}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.requestsRight}>
-            <View style={[styles.requestsBadge, { backgroundColor: theme.primary }]}>
-              <Text style={styles.requestsBadgeText}>
-                {requestsCount > 99 ? '99+' : requestsCount}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={theme.muted} />
-          </View>
-        </TouchableOpacity>
-      )}
-
-      {/* Conversation list */}
-      <FlashList
-        data={filtered}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        onEndReached={() => hasNextPage && fetchNextPage()}
-        onEndReachedThreshold={0.5}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={refetch}
-            tintColor={theme.primary}
-            colors={[theme.primary]}
+          <Ionicons name="search-outline" size={18} color={theme.muted} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search conversations..."
+            placeholderTextColor={theme.muted}
+            style={[styles.searchInput, { color: theme.text }]}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
           />
-        }
-        ListEmptyComponent={EmptyComponent}
-        contentContainerStyle={styles.listContent}
-        removeClippedSubviews={Platform.OS === 'android'}
-      />
-    </Animated.View>
+          {query.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setQuery('')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="close-circle" size={18} color={theme.muted} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Filter tabs */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabsScroll}
+          contentContainerStyle={styles.tabsContent}
+        >
+          {TABS.map((tab) => {
+            const active = activeTab === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                onPress={() => setActiveTab(tab.key)}
+                style={[
+                  styles.tab,
+                  {
+                    backgroundColor: active
+                      ? theme.withAlpha(theme.primary, 0.15)
+                      : theme.withAlpha(theme.card, 0.6),
+                    borderColor: active
+                      ? theme.withAlpha(theme.primary, 0.5)
+                      : theme.border,
+                  },
+                ]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+              >
+                <Ionicons
+                  name={tab.icon}
+                  size={14}
+                  color={active ? theme.primary : theme.muted}
+                  style={{ marginRight: 4 }}
+                />
+                <Text
+                  style={[
+                    styles.tabText,
+                    { color: active ? theme.primary : theme.subtext },
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Message requests banner */}
+        {requestsCount > 0 && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('MessageRequests')}
+            style={[
+              styles.requestsBanner,
+              {
+                backgroundColor: theme.withAlpha(theme.primary, 0.08),
+                borderColor: theme.withAlpha(theme.primary, 0.25),
+              },
+            ]}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+          >
+            <View style={styles.requestsLeft}>
+              <View
+                style={[
+                  styles.requestsIconWrap,
+                  { backgroundColor: theme.withAlpha(theme.primary, 0.15) },
+                ]}
+              >
+                <Ionicons name="mail-unread-outline" size={20} color={theme.primary} />
+              </View>
+              <View>
+                <Text style={[styles.requestsText, { color: theme.text }]}>
+                  Message Requests
+                </Text>
+                <Text style={[styles.requestsSubtext, { color: theme.subtext }]}>
+                  {requestsCount} pending {requestsCount === 1 ? 'request' : 'requests'}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.requestsRight}>
+              <View style={[styles.requestsBadge, { backgroundColor: theme.primary }]}>
+                <Text style={styles.requestsBadgeText}>
+                  {requestsCount > 99 ? '99+' : requestsCount}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.muted} />
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {/* Conversation list */}
+        <FlashList
+          data={filtered}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          onEndReached={() => hasNextPage && fetchNextPage()}
+          onEndReachedThreshold={0.5}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={refetch}
+              tintColor={theme.primary}
+              colors={[theme.primary]}
+            />
+          }
+          ListEmptyComponent={EmptyComponent}
+          contentContainerStyle={styles.listContent}
+          removeClippedSubviews={Platform.OS === 'android'}
+        />
+      </Animated.View>
+    </SafeAreaView>
   );
 };
-
-// ─── Focus state workaround ──────────────────────────────────────────────────
-// Simple state tracker for search bar focus (used above)
-let isFocused = false; // This is a module-level workaround — in production use useState
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 const makeStyles = (theme: ReturnType<typeof useSocialTheme>) =>
   StyleSheet.create({
-    container: {
-      flex: 1,
-    },
+    container: { flex: 1 },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -446,11 +423,7 @@ const makeStyles = (theme: ReturnType<typeof useSocialTheme>) =>
       paddingHorizontal: theme.spacing.md,
       paddingVertical: theme.spacing.md,
     },
-    title: {
-      fontSize: 28,
-      fontWeight: '800',
-      letterSpacing: -0.5,
-    },
+    title: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
     headerAction: {
       width: 44,
       height: 44,
@@ -466,16 +439,10 @@ const makeStyles = (theme: ReturnType<typeof useSocialTheme>) =>
       paddingVertical: theme.spacing.sm + 2,
       borderRadius: theme.radius.md,
       borderWidth: 1.5,
+      gap: 8,
     },
-    searchInput: {
-      flex: 1,
-      fontSize: 14,
-      paddingVertical: 2,
-    },
-    tabsScroll: {
-      marginTop: theme.spacing.md,
-      maxHeight: 48,
-    },
+    searchInput: { flex: 1, fontSize: 14, paddingVertical: 2 },
+    tabsScroll: { marginTop: theme.spacing.md, maxHeight: 48 },
     tabsContent: {
       paddingHorizontal: theme.spacing.md,
       gap: theme.spacing.sm,
@@ -490,10 +457,7 @@ const makeStyles = (theme: ReturnType<typeof useSocialTheme>) =>
       borderWidth: 1,
       minHeight: 38,
     },
-    tabText: {
-      fontSize: 13,
-      fontWeight: '600',
-    },
+    tabText: { fontSize: 13, fontWeight: '600' },
     requestsBanner: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -505,12 +469,7 @@ const makeStyles = (theme: ReturnType<typeof useSocialTheme>) =>
       borderRadius: theme.radius.md,
       borderWidth: 1,
     },
-    requestsLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      flex: 1,
-    },
+    requestsLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
     requestsIconWrap: {
       width: 40,
       height: 40,
@@ -518,19 +477,9 @@ const makeStyles = (theme: ReturnType<typeof useSocialTheme>) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    requestsText: {
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    requestsSubtext: {
-      fontSize: 11,
-      marginTop: 1,
-    },
-    requestsRight: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
+    requestsText: { fontSize: 14, fontWeight: '600' },
+    requestsSubtext: { fontSize: 11, marginTop: 1 },
+    requestsRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     requestsBadge: {
       minWidth: 24,
       height: 24,
@@ -539,15 +488,8 @@ const makeStyles = (theme: ReturnType<typeof useSocialTheme>) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    requestsBadgeText: {
-      color: '#FFFFFF',
-      fontSize: 12,
-      fontWeight: '700',
-    },
-    listContent: {
-      paddingBottom: theme.spacing.xl,
-    },
-    // Empty states
+    requestsBadgeText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+    listContent: { paddingBottom: theme.spacing.xl },
     empty: {
       alignItems: 'center',
       justifyContent: 'center',
@@ -563,16 +505,8 @@ const makeStyles = (theme: ReturnType<typeof useSocialTheme>) =>
       justifyContent: 'center',
       marginBottom: 4,
     },
-    emptyTitle: {
-      fontSize: 17,
-      fontWeight: '700',
-      textAlign: 'center',
-    },
-    emptySub: {
-      fontSize: 14,
-      textAlign: 'center',
-      lineHeight: 20,
-    },
+    emptyTitle: { fontSize: 17, fontWeight: '700', textAlign: 'center' },
+    emptySub: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
     emptyButton: {
       paddingHorizontal: 20,
       paddingVertical: 12,
@@ -583,10 +517,7 @@ const makeStyles = (theme: ReturnType<typeof useSocialTheme>) =>
       alignItems: 'center',
       marginTop: 4,
     },
-    emptyButtonText: {
-      fontSize: 14,
-      fontWeight: '600',
-    },
+    emptyButtonText: { fontSize: 14, fontWeight: '600' },
     emptyButtonPrimary: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -597,56 +528,22 @@ const makeStyles = (theme: ReturnType<typeof useSocialTheme>) =>
       minHeight: 48,
       marginTop: 8,
     },
-    emptyButtonPrimaryText: {
-      fontSize: 15,
-      fontWeight: '700',
-    },
+    emptyButtonPrimaryText: { fontSize: 15, fontWeight: '700' },
     // Skeleton
-    skeletonTitle: {
-      width: 150,
-      height: 32,
-      borderRadius: 16,
-    },
-    skeletonAction: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-    },
-    skeletonSearch: {
-      height: 44,
-      marginHorizontal: 16,
-      marginTop: 8,
-      borderRadius: 12,
-    },
-    skeletonTabs: {
-      flexDirection: 'row',
-      paddingHorizontal: 16,
-      marginTop: 12,
-      gap: 8,
-    },
-    skeletonTab: {
-      width: 80,
-      height: 36,
-      borderRadius: 18,
-    },
+    skeletonTitle: { width: 150, height: 32, borderRadius: 16 },
+    skeletonAction: { width: 44, height: 44, borderRadius: 22 },
+    skeletonSearch: { height: 44, marginHorizontal: 16, marginTop: 8, borderRadius: 12 },
+    skeletonTabs: { flexDirection: 'row', paddingHorizontal: 16, marginTop: 12, gap: 8 },
+    skeletonTab: { height: 36, borderRadius: 18 },
     skeletonRow: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 16,
       paddingVertical: 14,
       gap: 12,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: 'transparent',
     },
-    skeletonAvatar: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-    },
-    skeletonLine: {
-      height: 12,
-      borderRadius: 6,
-    },
+    skeletonAvatar: { width: 56, height: 56, borderRadius: 28 },
+    skeletonLine: { height: 12, borderRadius: 6 },
   });
 
 export default MessagesScreen;

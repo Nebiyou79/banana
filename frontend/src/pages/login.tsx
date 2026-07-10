@@ -25,6 +25,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import OTPVerification from '@/components/auth/OTPVerification';
+import GoogleSignIn from '@/components/auth/GoogleSignIn';
 import { SleekButton } from '@/components/ui/SleekButton';
 import { colors, lightTheme, darkTheme } from '@/utils/color';
 
@@ -200,7 +201,7 @@ export default function LoginPage() {
               className="text-xl mb-10 max-w-md text-center leading-relaxed font-light"
               style={{ color: colors.gray400 }}
             >
-              Where talent meets opportunity in the world's most innovative platform
+              Where talent meets opportunity in the world`s most innovative platform
             </p>
 
             {/* Stats Grid */}
@@ -533,12 +534,24 @@ export default function LoginPage() {
                 </SleekButton>
               </form>
             </Form>
+
+            {/* Google Sign-In */}
+            <GoogleSignIn
+              type="login"
+              onError={(error) => {
+                toast({
+                  title: 'Google Sign-In Failed',
+                  description: error.message || 'Could not sign in with Google',
+                  variant: 'destructive',
+                });
+              }}
+            />
           </div>
 
           {/* Register Link */}
           <div className="mt-8 text-center">
             <p style={{ color: theme.text.secondary }}>
-              Don't have an account?{' '}
+              Don`t have an account?{' '}
               <Link
                 href="/register"
                 className="font-semibold transition-colors hover:underline"

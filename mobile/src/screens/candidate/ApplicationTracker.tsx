@@ -1,12 +1,11 @@
 /**
  * src/screens/candidate/ApplicationTracker.tsx
- * Refactored: useTheme(), correct color aliases, estimatedItemSize on FlashList.
+ * FIXED: Removed SafeAreaView (handled by root navigator)
  */
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, RefreshControl,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
@@ -38,8 +37,6 @@ const STATUS_FILTERS: Array<{ key?: string; label: string; color: string }> = [
   { key: 'rejected',            label: 'Rejected',    color: '#EF4444' },
 ];
 
-// ─── Stats banner ─────────────────────────────────────────────────────────────
-
 const StatsBanner = ({ stats, total, colors: c }: { stats: any; total: number; colors: any }) => (
   <View style={[sb.container, { backgroundColor: c.bgCard, borderColor: c.border }]}>
     <StatItem label="Total"       value={total}                      color="#3B82F6" c={c} />
@@ -57,8 +54,6 @@ const StatItem = ({
     <Text style={[sb.label, { color: c.textMuted }]}>{label}</Text>
   </View>
 );
-
-// ─── Main screen ──────────────────────────────────────────────────────────────
 
 export const ApplicationTracker: React.FC<Props> = ({ navigation }) => {
   const { colors } = useTheme();
@@ -90,7 +85,7 @@ export const ApplicationTracker: React.FC<Props> = ({ navigation }) => {
   }, [refetch]);
 
   return (
-    <SafeAreaView style={[s.root, { backgroundColor: colors.bg }]} edges={['top']}>
+    <View style={[s.root, { backgroundColor: colors.bg }]}>
       {/* Header */}
       <View style={[s.header, { backgroundColor: colors.bgCard, borderBottomColor: colors.border }]}>
         <Text style={[s.headerTitle, { color: colors.text }]}>My Applications</Text>
@@ -149,7 +144,6 @@ export const ApplicationTracker: React.FC<Props> = ({ navigation }) => {
           renderItem={({ item }) => (
             <ApplicationCard
               application={item}
-              // colors={colors}
               onPress={() =>
                 navigation.navigate('ApplicationDetail', { applicationId: item._id })
               }
@@ -167,11 +161,9 @@ export const ApplicationTracker: React.FC<Props> = ({ navigation }) => {
           }
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 };
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
   root:        { flex: 1 },

@@ -1,381 +1,500 @@
-// src/social/screens/SocialSplashScreen.tsx
-// ─── Banana Social Splash Screen ──────────────────────────────────────────────
-// sociallogo.png has transparent background (black removed).
-// Logo composites directly on the dark background — no card wrapper.
-// Role-based accent colors. Full dark/light mode support.
-// Auto-navigates to SocialTabs after SPLASH_MS.
+/**
+ * src/social/screens/SocialSplashScreen.tsx
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Social splash screen — mint/dark palette, animated entrance.
+ * Auto-navigates to SocialTabs after the entrance sequence completes.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
 
 import React, { useEffect, useRef } from 'react';
 import {
   View,
+  Image,
   Text,
   StyleSheet,
-  StatusBar,
   Animated,
+  Easing,
   Dimensions,
-  Image,
+  StatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useAuthStore } from '../../store/authStore';
-import { useThemeStore } from '../../store/themeStore';
 import type { SocialStackParamList } from '../navigation/types';
 
 const { width, height } = Dimensions.get('window');
-const SPLASH_MS = 2100;
 
-type Nav = NativeStackNavigationProp<SocialStackParamList>;
+// ─── Design tokens ────────────────────────────────────────────────────────────
+const MINT         = '#2DD4A0';
+const MINT_SOFT    = 'rgba(45,212,160,0.16)';
+const MINT_RING    = 'rgba(45,212,160,0.07)';
+const DARK_BASE    = '#0C1A16';
+const DARK_MID     = '#132620';
+const DARK_SURFACE = '#1A322A';
+const VIOLET_HINT  = 'rgba(129,140,248,0.12)';
 
-// Role config — all use dark bg so transparent logo shows correctly
-const ROLE_CONFIG: Record<string, {
-  accent: string;
-  accentDim: string;
-  tagline: string;
-  label: string;
-}> = {
-  candidate: {
-    accent:    '#3B82F6',
-    accentDim: 'rgba(59,130,246,0.14)',
-    tagline:   'Your Career Network',
-    label:     'Candidate Network',
-  },
-  freelancer: {
-    accent:    '#10B981',
-    accentDim: 'rgba(16,185,129,0.14)',
-    tagline:   'Your Freelance Hub',
-    label:     'Freelancer Network',
-  },
-  company: {
-    accent:    '#F1BB03',
-    accentDim: 'rgba(241,187,3,0.14)',
-    tagline:   'Your Hiring Platform',
-    label:     'Company Network',
-  },
-  organization: {
-    accent:    '#8B5CF6',
-    accentDim: 'rgba(139,92,246,0.14)',
-    tagline:   'Your Professional Circle',
-    label:     'Organization Network',
-  },
-};
+type Nav = NativeStackNavigationProp<SocialStackParamList, 'SocialSplash'>;
 
-// Constellation dots
-const DOTS: [number, number][] = [
-  [22, 100], [100, 50], [200, 130], [310, 60], [360, 200],
-  [60, 280], [280, 320], [150, 430], [330, 490],
-  [45, 580], [185, 640], [345, 710], [85, 760],
-  [250, 90], [325, 250], [65, 410], [295, 600],
-];
+// ─── Floating particle component ─────────────────────────────────────────────
 
-// Constellation line connections
-const LINES = [
-  { x1: 22,  y1: 100, x2: 100, y2: 50  },
-  { x1: 100, y1: 50,  x2: 200, y2: 130 },
-  { x1: 200, y1: 130, x2: 310, y2: 60  },
-  { x1: 280, y1: 320, x2: 330, y2: 490 },
-  { x1: 150, y1: 430, x2: 280, y2: 320 },
-];
+interface ParticleProps {
+  x: number;
+  y: number;
+  size: number;
+  delay: number;
+  color: string;
+}
 
-const PARTICLE_COUNT  = 8;
-const PARTICLE_RADIUS = 115;
-
-// Always dark background so transparent logo composites correctly
-const BG = '#050D1A';
-
-export const SocialSplashScreen: React.FC = () => {
-  const navigation = useNavigation<Nav>();
-  const isDark     = useThemeStore((s) => s.theme.isDark);
-  const role       = (useAuthStore((s) => s.role) ?? 'candidate') as string;
-  const cfg        = ROLE_CONFIG[role] ?? ROLE_CONFIG.candidate;
-
-  const muted = 'rgba(255,255,255,0.45)';
-
-  // Animations
-  const logoScale   = useRef(new Animated.Value(0.5)).current;
-  const logoOpacity = useRef(new Animated.Value(0)).current;
-  const glowScale   = useRef(new Animated.Value(0.8)).current;
-  const glowOpacity = useRef(new Animated.Value(0)).current;
-  const ringScale   = useRef(new Animated.Value(0.7)).current;
-  const ringOpacity = useRef(new Animated.Value(0)).current;
-  const titleY      = useRef(new Animated.Value(22)).current;
-  const titleOp     = useRef(new Animated.Value(0)).current;
-  const taglineY    = useRef(new Animated.Value(16)).current;
-  const taglineOp   = useRef(new Animated.Value(0)).current;
-  const badgeOp     = useRef(new Animated.Value(0)).current;
-  const dotsOp      = useRef(new Animated.Value(0)).current;
-  const outro       = useRef(new Animated.Value(0)).current;
-
-  const particleAnims = useRef(
-    Array.from({ length: PARTICLE_COUNT }, () => ({
-      scale:   new Animated.Value(0),
-      opacity: new Animated.Value(0),
-    })),
-  ).current;
+const FloatingParticle: React.FC<ParticleProps> = ({ x, y, size, delay, color }) => {
+  const translateY = useRef(new Animated.Value(0)).current;
+  const opacity    = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Constellation + lines
-    Animated.timing(dotsOp, { toValue: 1, duration: 700, useNativeDriver: true }).start();
-
-    // Particle burst
-    particleAnims.forEach((p, i) => {
-      setTimeout(() => {
-        Animated.parallel([
-          Animated.spring(p.scale,   { toValue: 1, tension: 80, friction: 6, useNativeDriver: true }),
-          Animated.timing(p.opacity, { toValue: 0.65, duration: 400, useNativeDriver: true }),
-        ]).start();
-      }, 300 + i * 65);
-    });
-
-    // Main entrance sequence
-    Animated.sequence([
-      Animated.parallel([
-        Animated.spring(ringScale,   { toValue: 1, tension: 45, friction: 8, useNativeDriver: true }),
-        Animated.timing(ringOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
-        Animated.timing(glowOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
-        Animated.spring(glowScale,   { toValue: 1, tension: 50, friction: 8, useNativeDriver: true }),
-        Animated.spring(logoScale,   { toValue: 1, tension: 65, friction: 6, useNativeDriver: true }),
-        Animated.timing(logoOpacity, { toValue: 1, duration: 420, useNativeDriver: true }),
-      ]),
-      Animated.parallel([
-        Animated.spring(titleY,  { toValue: 0, tension: 60, friction: 8, useNativeDriver: true }),
-        Animated.timing(titleOp, { toValue: 1, duration: 340, useNativeDriver: true }),
-      ]),
-      Animated.parallel([
-        Animated.spring(taglineY,  { toValue: 0, tension: 55, friction: 8, useNativeDriver: true }),
-        Animated.timing(taglineOp, { toValue: 1, duration: 320, useNativeDriver: true }),
-        Animated.timing(badgeOp,   { toValue: 1, duration: 380, useNativeDriver: true }),
-      ]),
-    ]).start();
-
-    // Glow pulse loop
-    Animated.loop(
+    const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(glowScale, { toValue: 1.12, duration: 1600, useNativeDriver: true }),
-        Animated.timing(glowScale, { toValue: 0.95, duration: 1600, useNativeDriver: true }),
-      ]),
-    ).start();
-
-    // Navigate out with fade
-    const timer = setTimeout(() => {
-      Animated.timing(outro, { toValue: 1, duration: 280, useNativeDriver: true }).start(() => {
-        navigation.replace('SocialTabs');
-      });
-    }, SPLASH_MS);
-
-    return () => clearTimeout(timer);
+        Animated.delay(delay),
+        Animated.parallel([
+          Animated.timing(opacity, {
+            toValue: 0.7,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(translateY, {
+            toValue: -28,
+            duration: 2400,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(opacity, {
+            toValue: 0,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(translateY, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+        ]),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
   }, []);
 
-  const outerOpacity = outro.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
+  return (
+    <Animated.View
+      style={{
+        position: 'absolute',
+        left: x,
+        top: y,
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: color,
+        opacity,
+        transform: [{ translateY }],
+      }}
+    />
+  );
+};
+
+// ─── Particle data ────────────────────────────────────────────────────────────
+
+const PARTICLES = [
+  { x: width * 0.12, y: height * 0.18, size: 6,  delay: 0,    color: MINT },
+  { x: width * 0.82, y: height * 0.22, size: 4,  delay: 300,  color: MINT },
+  { x: width * 0.22, y: height * 0.70, size: 5,  delay: 600,  color: '#818CF8' },
+  { x: width * 0.75, y: height * 0.65, size: 7,  delay: 200,  color: MINT },
+  { x: width * 0.05, y: height * 0.45, size: 3,  delay: 900,  color: '#818CF8' },
+  { x: width * 0.90, y: height * 0.48, size: 4,  delay: 500,  color: MINT },
+  { x: width * 0.50, y: height * 0.12, size: 3,  delay: 700,  color: MINT },
+  { x: width * 0.35, y: height * 0.85, size: 5,  delay: 100,  color: '#818CF8' },
+];
+
+// ─── Connection arc (decorative SVG-like lines via Views) ────────────────────
+
+const ConnectArc: React.FC<{ opacity: Animated.Value }> = ({ opacity }) => (
+  <Animated.View style={[styles.arcWrap, { opacity }]}>
+    {/* Top-left arc */}
+    <View
+      style={{
+        position: 'absolute',
+        top: -20,
+        left: -20,
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        borderWidth: 1,
+        borderColor: MINT_SOFT,
+        borderStyle: 'dashed',
+      }}
+    />
+    {/* Bottom-right arc */}
+    <View
+      style={{
+        position: 'absolute',
+        bottom: -20,
+        right: -20,
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        borderWidth: 1,
+        borderColor: MINT_RING,
+        borderStyle: 'dashed',
+      }}
+    />
+  </Animated.View>
+);
+
+// ─── Main component ──────────────────────────────────────────────────────────
+
+const SocialSplashScreen: React.FC = () => {
+  const navigation = useNavigation<Nav>();
+
+  // ── Animation values ──────────────────────────────────────────────────────
+  const bgOpacity       = useRef(new Animated.Value(0)).current;
+  const logoScale       = useRef(new Animated.Value(0.68)).current;
+  const logoOpacity     = useRef(new Animated.Value(0)).current;
+  const glowOpacity     = useRef(new Animated.Value(0)).current;
+  const arcOpacity      = useRef(new Animated.Value(0)).current;
+  const taglineX        = useRef(new Animated.Value(-20)).current;
+  const taglineOpacity  = useRef(new Animated.Value(0)).current;
+  const subtitleOpacity = useRef(new Animated.Value(0)).current;
+  const pillScale       = useRef(new Animated.Value(0.8)).current;
+  const pillOpacity     = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    StatusBar.setBarStyle('light-content');
+
+    Animated.sequence([
+      // 1. Background
+      Animated.timing(bgOpacity, {
+        toValue: 1,
+        duration: 320,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+      // 2. Glow blooms, arcs appear, logo pops in
+      Animated.parallel([
+        Animated.timing(glowOpacity, {
+          toValue: 1,
+          duration: 550,
+          useNativeDriver: true,
+        }),
+        Animated.timing(arcOpacity, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.spring(logoScale, {
+          toValue: 1,
+          friction: 5,
+          tension: 110,
+          useNativeDriver: true,
+        }),
+        Animated.timing(logoOpacity, {
+          toValue: 1,
+          duration: 380,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+      // 3. Tagline slides in from left
+      Animated.parallel([
+        Animated.timing(taglineX, {
+          toValue: 0,
+          duration: 360,
+          easing: Easing.out(Easing.exp),
+          useNativeDriver: true,
+        }),
+        Animated.timing(taglineOpacity, {
+          toValue: 1,
+          duration: 320,
+          useNativeDriver: true,
+        }),
+      ]),
+      // 4. Subtitle + pill badge
+      Animated.parallel([
+        Animated.timing(subtitleOpacity, {
+          toValue: 1,
+          duration: 280,
+          useNativeDriver: true,
+        }),
+        Animated.spring(pillScale, {
+          toValue: 1,
+          friction: 6,
+          tension: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pillOpacity, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start(() => {
+      setTimeout(() => {
+        navigation.replace('SocialTabs');
+      }, 900);
+    });
+  }, []);
 
   return (
-    <Animated.View style={[S.root, { opacity: outerOpacity, backgroundColor: BG }]}>
-      <StatusBar barStyle="light-content" backgroundColor={BG} />
+    <Animated.View style={[styles.root, { opacity: bgOpacity }]}>
+      <StatusBar barStyle="light-content" backgroundColor={DARK_BASE} />
 
-      {/* Constellation dots + lines */}
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity: dotsOp }]}>
-        {DOTS.map(([x, y], i) => (
-          <View key={`d${i}`} style={[S.dot, {
-            left: x, top: y,
-            backgroundColor: cfg.accent,
-            opacity: 0.16 + (i % 3) * 0.06,
-            width: i % 5 === 0 ? 5 : 3,
-            height: i % 5 === 0 ? 5 : 3,
-          }]} />
-        ))}
-        {LINES.map((l, i) => {
-          const dx    = l.x2 - l.x1;
-          const dy    = l.y2 - l.y1;
-          const len   = Math.sqrt(dx * dx + dy * dy);
-          const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-          return (
-            <View key={`l${i}`} style={[S.line, {
-              width: len, left: l.x1, top: l.y1,
-              backgroundColor: `${cfg.accent}20`,
-              transform: [{ rotate: `${angle}deg` }],
-            }]} />
-          );
-        })}
-      </Animated.View>
+      {/* ── Background layers ── */}
+      <View style={styles.bgMid} />
+      <View style={styles.bgBlob} />
+      <View style={styles.bgVioletHint} />
 
-      {/* Atmosphere corner blobs */}
-      <View style={[S.blob, { top: -100, right: -90, backgroundColor: cfg.accentDim }]} />
-      <View style={[S.blob, { bottom: -120, left: -100, backgroundColor: cfg.accentDim, width: 360, height: 360 }]} />
+      {/* ── Floating particles ── */}
+      {PARTICLES.map((p, i) => (
+        <FloatingParticle key={i} {...p} />
+      ))}
 
-      {/* Particles burst around logo */}
-      {particleAnims.map((p, i) => {
-        const angle = (i / PARTICLE_COUNT) * Math.PI * 2;
-        const px    = Math.cos(angle) * PARTICLE_RADIUS;
-        const py    = Math.sin(angle) * PARTICLE_RADIUS;
-        return (
-          <Animated.View key={i} style={[S.particle, {
-            backgroundColor: cfg.accent,
-            left: width / 2 + px - 5,
-            top:  height / 2 - 90 + py - 5,
-            opacity:   p.opacity,
-            transform: [{ scale: p.scale }],
-          }]} />
-        );
-      })}
+      {/* ── Radial glow ── */}
+      <Animated.View style={[styles.glow, { opacity: glowOpacity }]} />
 
-      {/* Centre content */}
-      <View style={S.centre}>
+      {/* ── Decorative rings ── */}
+      <View style={styles.ring1} />
+      <View style={styles.ring2} />
 
-        {/* Glow halo */}
-        <Animated.View style={[S.halo, {
-          backgroundColor: cfg.accent,
-          transform: [{ scale: glowScale }],
-          opacity: glowOpacity,
-          shadowColor: cfg.accent,
-        }]} />
+      {/* ── Central content ── */}
+      <View style={styles.centerContent}>
 
-        {/* Outer ring */}
-        <Animated.View style={[S.ring, {
-          borderColor: `${cfg.accent}55`,
-          transform: [{ scale: ringScale }],
-          opacity: ringOpacity,
-        }]} />
-
-        {/* Inner ring */}
-        <Animated.View style={[S.ringInner, {
-          borderColor: `${cfg.accent}28`,
-          transform: [{ scale: ringScale }],
-          opacity: ringOpacity,
-        }]} />
-
-        {/*
-          Logo — transparent background, plain Image inside Animated.View.
-          No card, no backgroundColor — composites directly on dark navy.
-        */}
-        <Animated.View style={[S.logoWrap, {
-          opacity:   logoOpacity,
-          transform: [{ scale: logoScale }],
-        }]}>
+        {/* Logo card */}
+        <Animated.View
+          style={[
+            styles.logoCard,
+            {
+              opacity: logoOpacity,
+              transform: [{ scale: logoScale }],
+            },
+          ]}
+        >
+          <ConnectArc opacity={arcOpacity} />
           <Image
             source={require('../../../assets/sociallogo.png')}
-            style={S.logoImg}
+            style={styles.logo}
             resizeMode="contain"
           />
         </Animated.View>
 
-        {/* "Banana Social" title */}
-        <Animated.View style={[S.titleBlock, {
-          opacity:   titleOp,
-          transform: [{ translateY: titleY }],
-        }]}>
-          <Text style={S.titleMain}>Banana</Text>
-          <Text style={[S.titleAccent, { color: cfg.accent }]}>Social</Text>
-        </Animated.View>
-
         {/* Tagline */}
-        <Animated.Text style={[S.tagline, {
-          opacity:   taglineOp,
-          transform: [{ translateY: taglineY }],
-        }]}>
-          {cfg.tagline}
+        <Animated.Text
+          style={[
+            styles.tagline,
+            {
+              opacity: taglineOpacity,
+              transform: [{ translateX: taglineX }],
+            },
+          ]}
+        >
+          BANANALINK SOCIAL
         </Animated.Text>
 
+        {/* Subtitle */}
+        <Animated.Text
+          style={[
+            styles.subtitle,
+            { opacity: subtitleOpacity },
+          ]}
+        >
+          Connect, share, and grow your professional network
+        </Animated.Text>
+
+        {/* Feature pills */}
+        <Animated.View
+          style={[
+            styles.pillRow,
+            {
+              opacity: pillOpacity,
+              transform: [{ scale: pillScale }],
+            },
+          ]}
+        >
+          {['Posts', 'Network', 'Messages'].map((label) => (
+            <View key={label} style={styles.pill}>
+              <Text style={styles.pillText}>{label}</Text>
+            </View>
+          ))}
+        </Animated.View>
       </View>
 
-      {/* Bottom role badge */}
-      <Animated.View style={[S.badgeWrap, { opacity: badgeOp }]}>
-        <View style={[S.badge, {
-          borderColor:     `${cfg.accent}45`,
-          backgroundColor: 'rgba(255,255,255,0.05)',
-        }]}>
-          <View style={[S.badgeDot, { backgroundColor: cfg.accent }]} />
-          <Text style={[S.badgeText, { color: `${cfg.accent}EE` }]}>{cfg.label}</Text>
-        </View>
+      {/* ── Bottom wordmark ── */}
+      <Animated.View style={[styles.bottomBar, { opacity: subtitleOpacity }]}>
+        <View style={styles.bottomAccent} />
+        <Text style={styles.bottomText}>BananaLink</Text>
+        <View style={styles.bottomAccent} />
       </Animated.View>
     </Animated.View>
   );
 };
 
-const S = StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+// ─── Styles ──────────────────────────────────────────────────────────────────
 
-  dot:      { position: 'absolute', borderRadius: 3 },
-  line:     { position: 'absolute', height: 1 },
-  blob:     { position: 'absolute', width: 300, height: 300, borderRadius: 999 },
-  particle: { position: 'absolute', width: 10, height: 10, borderRadius: 5 },
-
-  centre: { alignItems: 'center', flex: 1, justifyContent: 'center' },
-
-  halo: {
-    position: 'absolute',
-    width: 250, height: 250,
-    borderRadius: 125,
-    opacity: 0.13,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 60,
-    elevation: 20,
-  },
-  ring: {
-    position: 'absolute',
-    width: 270, height: 270,
-    borderRadius: 135,
-    borderWidth: 1.5,
-  },
-  ringInner: {
-    position: 'absolute',
-    width: 228, height: 228,
-    borderRadius: 114,
-    borderWidth: 1,
-  },
-
-  // No background, no border-radius clip — just size + center
-  logoWrap: {
-    width: 200,
-    height: 200,
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: DARK_BASE,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 2,
-  },
-  logoImg: {
-    width: 200,
-    height: 200,
   },
 
-  titleBlock: { alignItems: 'center', marginTop: 20, gap: 0 },
-  titleMain: {
-    fontSize: 40,
-    fontWeight: '900',
-    color: '#F8FAFC',
-    letterSpacing: -0.5,
-    lineHeight: 44,
+  bgMid: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: DARK_MID,
+    opacity: 0.55,
   },
-  titleAccent: {
-    fontSize: 36,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    lineHeight: 40,
+  bgBlob: {
+    position: 'absolute',
+    bottom: -height * 0.25,
+    right: -width * 0.25,
+    width: width * 1.4,
+    height: width * 1.4,
+    borderRadius: width * 0.7,
+    backgroundColor: DARK_SURFACE,
+    opacity: 0.5,
+  },
+  bgVioletHint: {
+    position: 'absolute',
+    top: -height * 0.1,
+    left: -width * 0.2,
+    width: width * 0.9,
+    height: width * 0.9,
+    borderRadius: width * 0.45,
+    backgroundColor: VIOLET_HINT,
+  },
+
+  // Radial glow
+  glow: {
+    position: 'absolute',
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: MINT,
+    opacity: 0,
+    shadowColor: MINT,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 90,
+  },
+
+  // Decorative rings
+  ring1: {
+    position: 'absolute',
+    width: 340,
+    height: 340,
+    borderRadius: 170,
+    borderWidth: 1,
+    borderColor: MINT_SOFT,
+  },
+  ring2: {
+    position: 'absolute',
+    width: 440,
+    height: 440,
+    borderRadius: 220,
+    borderWidth: 1,
+    borderColor: MINT_RING,
+  },
+
+  // Center content
+  centerContent: {
+    alignItems: 'center',
+  },
+
+  logoCard: {
+    width: 156,
+    height: 156,
+    borderRadius: 40,
+    backgroundColor: DARK_SURFACE,
+    borderWidth: 1,
+    borderColor: 'rgba(45,212,160,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 28,
+    // Mint glow
+    shadowColor: MINT,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 28,
+    elevation: 14,
+  },
+
+  arcWrap: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+    borderRadius: 40,
+  },
+
+  logo: {
+    width: 120,
+    height: 120,
   },
 
   tagline: {
-    marginTop: 12,
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.50)',
-    letterSpacing: 0.4,
-    textAlign: 'center',
+    color: MINT,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 3.2,
+    textTransform: 'uppercase',
+    marginBottom: 10,
   },
 
-  badgeWrap: {
-    position: 'absolute',
-    bottom: 58,
-    left: 0, right: 0,
-    alignItems: 'center',
+  subtitle: {
+    color: 'rgba(228,251,242,0.40)',
+    fontSize: 13,
+    fontWeight: '400',
+    letterSpacing: 0.2,
+    textAlign: 'center',
+    paddingHorizontal: 44,
+    lineHeight: 20,
+    marginBottom: 24,
   },
-  badge: {
+
+  pillRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  pill: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: 'rgba(45,212,160,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(45,212,160,0.25)',
+  },
+  pillText: {
+    color: MINT,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.4,
+  },
+
+  // Bottom wordmark
+  bottomBar: {
+    position: 'absolute',
+    bottom: 44,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderRadius: 30,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    gap: 10,
   },
-  badgeDot:  { width: 8, height: 8, borderRadius: 4 },
-  badgeText: { fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
+  bottomAccent: {
+    width: 20,
+    height: 1,
+    backgroundColor: MINT,
+    opacity: 0.35,
+  },
+  bottomText: {
+    color: 'rgba(228,251,242,0.28)',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 2.2,
+    textTransform: 'uppercase',
+  },
 });
 
 export default SocialSplashScreen;

@@ -1,12 +1,12 @@
 /**
  * src/screens/company/EmployerApplicationsScreen.tsx
+ * FIXED: Removed SafeAreaView, removed useSafeAreaInsets manual padding
  */
+
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, RefreshControl, TextInput,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
@@ -18,9 +18,6 @@ import {
 import {
   Application,
   ApplicationFilters,
-  STATUS_LABELS,
-  STATUS_COLORS,
-  ApplicationStatus,
 } from '../../services/applicationService';
 import { ListSkeleton } from '../../components/skeletons';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -31,7 +28,6 @@ interface Props { navigation: any }
 
 export const EmployerApplicationsScreen: React.FC<Props> = ({ navigation }) => {
   const { colors, spacing } = useTheme();
-  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const isOrg    = user?.role === 'organization';
 
@@ -75,7 +71,7 @@ export const EmployerApplicationsScreen: React.FC<Props> = ({ navigation }) => {
   ], [colors]);
 
   return (
-    <SafeAreaView style={[s.root, { backgroundColor: colors.bg }]} edges={['top']}>
+    <View style={[s.root, { backgroundColor: colors.bg }]}>
       {/* Header */}
       <View style={[s.header, { backgroundColor: colors.bgCard, borderBottomColor: colors.border }]}>
         <View>
@@ -147,7 +143,7 @@ export const EmployerApplicationsScreen: React.FC<Props> = ({ navigation }) => {
         <FlashList
           data={apps}
           keyExtractor={(a) => a._id}
-          contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingTop: 12, paddingBottom: insets.bottom + spacing.xxl }}
+          contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingTop: 12, paddingBottom: spacing.xxl }}
           renderItem={({ item }) => (
             <ApplicantCard
               application={item}
@@ -168,7 +164,7 @@ export const EmployerApplicationsScreen: React.FC<Props> = ({ navigation }) => {
           }
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 

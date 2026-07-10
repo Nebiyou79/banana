@@ -1,20 +1,25 @@
 // src/components/bids/BidDocumentUploadSection.tsx
-// Per-type document picker slots.
-// Required types displayed first with red asterisk.
-// Each slot: label, pick button, filename+size after pick, remove, upload indicator.
-// Uses expo-document-picker.
+// UPDATED: FileUploadRow pattern from web - image preview, KB/MB size formatting,
+// required document badge, remove button, file type icons
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useCallback, useState } from 'react';
 import {
-  View, Text, Pressable, ActivityIndicator, StyleSheet, Alert,
+  View,
+  Text,
+  Pressable,
+  Image,
+  ActivityIndicator,
+  StyleSheet,
+  Alert,
+  ScrollView,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 import { BidDocumentType } from '../../types/bid';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface PickedFile {
   uri: string;
@@ -28,6 +33,7 @@ export interface DocSlot {
   label: string;
   required?: boolean;
   description?: string;
+  accept?: string[];
 }
 
 export interface FileEntry {
@@ -40,25 +46,41 @@ export interface FileEntry {
   pickedFile: PickedFile;
 }
 
-// ── Slot config — required types first ───────────────────────────────────────
+// ─── Icon & color mapping per document type ──────────────────────────────────
+
+const DOC_CONFIG: Record<string, { icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }> = {
+  business_license: { icon: 'business-outline', color: '#3B82F6', bg: '#EFF6FF' },
+  technical_proposal: { icon: 'document-text-outline', color: '#0EA5E9', bg: '#F0F9FF' },
+  financial_proposal: { icon: 'cash-outline', color: '#F59E0B', bg: '#FFFBEB' },
+  financial_breakdown: { icon: 'calculator-outline', color: '#F97316', bg: '#FFF7ED' },
+  tin_certificate: { icon: 'card-outline', color: '#8B5CF6', bg: '#F5F3FF' },
+  vat_certificate: { icon: 'receipt-outline', color: '#14B8A6', bg: '#F0FDFA' },
+  tax_clearance: { icon: 'checkmark-circle-outline', color: '#10B981', bg: '#ECFDF5' },
+  trade_registration: { icon: 'create-outline', color: '#F59E0B', bg: '#FFFBEB' },
+  company_profile: { icon: 'briefcase-outline', color: '#6366F1', bg: '#EEF2FF' },
+  cpo_document: { icon: 'shield-checkmark-outline', color: '#EF4444', bg: '#FEF2F2' },
+  performance_bond: { icon: 'lock-closed-outline', color: '#78716C', bg: '#FAFAF9' },
+  compliance: { icon: 'shield-checkmark-outline', color: '#10B981', bg: '#ECFDF5' },
+  opening_page: { icon: 'document-outline', color: '#6B7280', bg: '#F9FAFB' },
+  other: { icon: 'attach-outline', color: '#6B7280', bg: '#F9FAFB' },
+};
+
+// ─── Default slots ───────────────────────────────────────────────────────────
 
 export const DEFAULT_SLOTS: DocSlot[] = [
-  // Required
-  { documentType: BidDocumentType.BusinessLicense,    label: 'Business License',          required: true, description: 'Valid business registration certificate' },
-  // Optional but common
-  { documentType: BidDocumentType.TechnicalProposal,  label: 'Technical Proposal Doc',    description: 'PDF of your technical proposal' },
-  { documentType: BidDocumentType.FinancialProposal,  label: 'Financial Proposal Doc',    description: 'Excel or PDF with pricing details' },
+  { documentType: BidDocumentType.BusinessLicense, label: 'Business License', required: true, description: 'Valid business registration certificate' },
+  { documentType: BidDocumentType.TechnicalProposal, label: 'Technical Proposal Doc', description: 'PDF of your technical proposal' },
+  { documentType: BidDocumentType.FinancialProposal, label: 'Financial Proposal Doc', description: 'Pricing details document' },
   { documentType: BidDocumentType.FinancialBreakdown, label: 'Financial Breakdown Sheet', description: 'Detailed BOQ or price schedule' },
-  { documentType: BidDocumentType.TinCertificate,     label: 'TIN Certificate',           description: 'Tax Identification Number cert' },
-  { documentType: BidDocumentType.VatCertificate,     label: 'VAT Certificate',           description: 'VAT registration certificate' },
-  { documentType: BidDocumentType.TaxClearance,       label: 'Tax Clearance',             description: 'Tax compliance clearance document' },
-  { documentType: BidDocumentType.TradeRegistration,  label: 'Trade Registration',        description: 'Commerce or trade registration' },
-  { documentType: BidDocumentType.CompanyProfile,     label: 'Company Profile',           description: 'Company capabilities document' },
-  { documentType: BidDocumentType.CpoDocument,        label: 'CPO / Bid Security',        description: 'Bid security bond or CPO document' },
-  { documentType: BidDocumentType.PerformanceBond,    label: 'Performance Bond',          description: 'Performance guarantee document' },
+  { documentType: BidDocumentType.TinCertificate, label: 'TIN Certificate', description: 'Tax Identification Number certificate' },
+  { documentType: BidDocumentType.VatCertificate, label: 'VAT Certificate', description: 'VAT registration certificate' },
+  { documentType: BidDocumentType.TaxClearance, label: 'Tax Clearance', description: 'Tax compliance clearance' },
+  { documentType: BidDocumentType.TradeRegistration, label: 'Trade Registration', description: 'Commerce or trade registration' },
+  { documentType: BidDocumentType.CompanyProfile, label: 'Company Profile', description: 'Company capabilities document' },
+  { documentType: BidDocumentType.CpoDocument, label: 'CPO / Bid Security', description: 'Bid security bond document' },
 ];
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -66,19 +88,31 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// ── Single slot component ─────────────────────────────────────────────────────
+function getFileExt(name: string): string {
+  const parts = name.split('.');
+  return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : 'FILE';
+}
+
+function isImageFile(mimeType: string): boolean {
+  return mimeType.startsWith('image/');
+}
+
+// ─── Single slot component (FileUploadRow pattern) ──────────────────────────
 
 interface SlotProps {
   slot: DocSlot;
   entry?: FileEntry;
   onPick: (entry: FileEntry) => void;
   onRemove: (type: BidDocumentType) => void;
-  palette: ReturnType<typeof buildPalette>;
+  colors: any;
 }
 
-const DocSlotRow: React.FC<SlotProps> = ({ slot, entry, onPick, onRemove, palette }) => {
+const DocSlotRow: React.FC<SlotProps> = ({ slot, entry, onPick, onRemove, colors }) => {
   const [picking, setPicking] = useState(false);
   const hasPicked = !!entry;
+  const config = DOC_CONFIG[slot.documentType] ?? DOC_CONFIG.other;
+  const fileExt = entry ? getFileExt(entry.pickedFile.name) : '';
+  const isImage = entry ? isImageFile(entry.pickedFile.mimeType) : false;
 
   const handlePick = useCallback(async () => {
     setPicking(true);
@@ -103,13 +137,13 @@ const DocSlotRow: React.FC<SlotProps> = ({ slot, entry, onPick, onRemove, palett
       onPick({
         documentType: slot.documentType,
         pickedFile: {
-          uri:      asset.uri,
-          name:     asset.name,
-          size:     asset.size ?? 0,
+          uri: asset.uri,
+          name: asset.name,
+          size: asset.size ?? 0,
           mimeType: asset.mimeType ?? 'application/octet-stream',
         },
         file: {
-          uri:  asset.uri,
+          uri: asset.uri,
           name: asset.name,
           type: asset.mimeType ?? 'application/octet-stream',
         },
@@ -122,75 +156,99 @@ const DocSlotRow: React.FC<SlotProps> = ({ slot, entry, onPick, onRemove, palett
   }, [slot.documentType, onPick]);
 
   return (
-    <View style={[slotStyles.root, { borderColor: hasPicked ? palette.successBorder : palette.border }]}>
-      {/* Left accent */}
-      <View
-        style={[
-          slotStyles.leftBar,
-          { backgroundColor: hasPicked ? palette.successAccent : (slot.required ? palette.required : palette.border) },
-        ]}
-      />
-
-      <View style={slotStyles.content}>
-        {/* Label row */}
-        <View style={slotStyles.labelRow}>
-          <Text style={[slotStyles.label, { color: palette.text }]}>
-            {slot.label}
-            {slot.required && <Text style={{ color: palette.required }}> *</Text>}
-          </Text>
-          {hasPicked && (
-            <View style={[slotStyles.donePill, { backgroundColor: palette.successBg }]}>
-              <Ionicons name="checkmark-circle" size={12} color={palette.successAccent} />
-              <Text style={[slotStyles.doneText, { color: palette.successAccent }]}>Added</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Description */}
-        {!!slot.description && (
-          <Text style={[slotStyles.description, { color: palette.muted }]}>{slot.description}</Text>
+    <View
+      style={[
+        rowStyles.container,
+        {
+          borderColor: hasPicked ? colors.success : colors.border,
+          backgroundColor: hasPicked ? colors.successBg + '20' : colors.inputBg,
+        },
+      ]}
+    >
+      {/* Icon + Info */}
+      <View style={rowStyles.iconWrap}>
+        {isImage && entry ? (
+          <Image
+            source={{ uri: entry.pickedFile.uri }}
+            style={rowStyles.preview}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[rowStyles.iconBox, { backgroundColor: config.bg }]}>
+            {hasPicked ? (
+              <Text style={[rowStyles.fileExt, { color: config.color }]}>{fileExt.slice(0, 4)}</Text>
+            ) : (
+              <Ionicons name={config.icon} size={20} color={config.color} />
+            )}
+          </View>
         )}
 
-        {/* Picked file preview */}
-        {hasPicked && entry ? (
-          <View style={[slotStyles.filePreview, { backgroundColor: palette.fileBg, borderColor: palette.border }]}>
-            <Ionicons name="document-attach-outline" size={16} color={palette.successAccent} />
-            <View style={slotStyles.fileInfo}>
-              <Text style={[slotStyles.fileName, { color: palette.text }]} numberOfLines={1}>
+        <View style={rowStyles.info}>
+          <View style={rowStyles.labelRow}>
+            <Text style={[rowStyles.label, { color: colors.text }]}>
+              {slot.label}
+            </Text>
+            {slot.required && (
+              <View style={[rowStyles.requiredBadge, { backgroundColor: colors.dangerBg }]}>
+                <Text style={[rowStyles.requiredText, { color: colors.danger }]}>Required</Text>
+              </View>
+            )}
+            {!slot.required && (
+              <View style={[rowStyles.optionalBadge, { backgroundColor: colors.surface }]}>
+                <Text style={[rowStyles.optionalText, { color: colors.textMuted }]}>Optional</Text>
+              </View>
+            )}
+          </View>
+
+          {slot.description && !hasPicked && (
+            <Text style={[rowStyles.description, { color: colors.textMuted }]} numberOfLines={2}>
+              {slot.description}
+            </Text>
+          )}
+
+          {hasPicked && entry && (
+            <View style={rowStyles.fileInfo}>
+              <Ionicons name="document-attach-outline" size={14} color={colors.success} />
+              <Text style={[rowStyles.fileName, { color: colors.text }]} numberOfLines={1}>
                 {entry.pickedFile.name}
               </Text>
-              <Text style={[slotStyles.fileSize, { color: palette.muted }]}>
+              <Text style={[rowStyles.fileSize, { color: colors.textMuted }]}>
                 {formatBytes(entry.pickedFile.size)}
               </Text>
             </View>
-            <Pressable
-              onPress={() => onRemove(slot.documentType)}
-              style={[slotStyles.removeBtn, { backgroundColor: palette.removeBg }]}
-              accessibilityLabel={`Remove ${slot.label}`}
-            >
-              <Ionicons name="close" size={14} color={palette.required} />
-            </Pressable>
-          </View>
+          )}
+        </View>
+      </View>
+
+      {/* Action button */}
+      <View style={rowStyles.action}>
+        {hasPicked ? (
+          <Pressable
+            onPress={() => onRemove(slot.documentType)}
+            style={[rowStyles.removeBtn, { backgroundColor: colors.dangerBg }]}
+            accessibilityLabel={`Remove ${slot.label}`}
+          >
+            <Ionicons name="close" size={16} color={colors.danger} />
+          </Pressable>
         ) : (
-          /* Pick button */
           <Pressable
             onPress={handlePick}
             disabled={picking}
             style={({ pressed }) => [
-              slotStyles.pickBtn,
-              { backgroundColor: palette.pickBtnBg, borderColor: palette.pickBtnBorder, opacity: pressed ? 0.7 : 1 },
+              rowStyles.pickBtn,
+              {
+                borderColor: colors.primary,
+                opacity: pressed || picking ? 0.7 : 1,
+              },
             ]}
-            accessibilityRole="button"
-            accessibilityLabel={`Pick file for ${slot.label}`}
+            accessibilityLabel={`Upload ${slot.label}`}
           >
             {picking ? (
-              <ActivityIndicator size="small" color={palette.muted} />
+              <ActivityIndicator size="small" color={colors.primary} />
             ) : (
               <>
-                <Ionicons name="cloud-upload-outline" size={14} color={palette.pickBtnText} />
-                <Text style={[slotStyles.pickBtnText, { color: palette.pickBtnText }]}>
-                  Choose File
-                </Text>
+                <Ionicons name="cloud-upload-outline" size={14} color={colors.primary} />
+                <Text style={[rowStyles.pickText, { color: colors.primary }]}>Choose File</Text>
               </>
             )}
           </Pressable>
@@ -200,29 +258,7 @@ const DocSlotRow: React.FC<SlotProps> = ({ slot, entry, onPick, onRemove, palett
   );
 };
 
-// ── Palette ───────────────────────────────────────────────────────────────────
-
-function buildPalette(isDark: boolean) {
-  return {
-    card:          isDark ? '#1E293B' : '#FFFFFF',
-    headerBg:      isDark ? '#1A2540' : '#F1F5F9',
-    border:        isDark ? '#334155' : '#E2E8F0',
-    text:          isDark ? '#F1F5F9' : '#0F172A',
-    muted:         isDark ? '#94A3B8' : '#64748B',
-    required:      '#EF4444',
-    accent:        '#0A2540',
-    pickBtnBg:     isDark ? '#0F172A' : '#F1F5F9',
-    pickBtnBorder: isDark ? '#475569' : '#CBD5E1',
-    pickBtnText:   isDark ? '#94A3B8' : '#475569',
-    fileBg:        isDark ? '#0F172A' : '#F8FAFC',
-    removeBg:      isDark ? '#450A0A' : '#FEE2E2',
-    successBg:     isDark ? '#064E3B' : '#D1FAE5',
-    successAccent: '#10B981',
-    successBorder: isDark ? '#065F46' : '#A7F3D0',
-  };
-}
-
-// ── Main component ────────────────────────────────────────────────────────────
+// ─── Main Component ──────────────────────────────────────────────────────────
 
 interface Props {
   slots?: DocSlot[];
@@ -239,8 +275,7 @@ export const BidDocumentUploadSection: React.FC<Props> = ({
   onRemove,
   errors,
 }) => {
-  const isDark = useThemeStore((s) => s.theme.isDark);
-  const palette = buildPalette(isDark);
+  const { colors, spacing } = useTheme();
 
   const getEntry = (type: BidDocumentType) => entries.find((e) => e.documentType === type);
 
@@ -256,28 +291,36 @@ export const BidDocumentUploadSection: React.FC<Props> = ({
   const requiredFilled = slots.filter((s) => s.required && getEntry(s.documentType)).length;
 
   return (
-    <View style={[styles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
+    <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
       {/* Section header */}
-      <View style={[styles.header, { backgroundColor: palette.headerBg, borderBottomColor: palette.border }]}>
-        <Ionicons name="attach-outline" size={16} color={palette.accent} />
-        <Text style={[styles.title, { color: palette.text }]}>Documents</Text>
-        <View style={styles.countRow}>
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <Ionicons name="attach-outline" size={18} color={colors.primary} />
+        <Text style={[styles.title, { color: colors.text }]}>Documents</Text>
+        <View style={styles.badgesRow}>
           {requiredCount > 0 && (
-            <View style={[
-              styles.badge,
-              { backgroundColor: requiredFilled >= requiredCount ? '#D1FAE5' : '#FEE2E2' },
-            ]}>
-              <Text style={{
-                fontSize: 10, fontWeight: '700',
-                color: requiredFilled >= requiredCount ? '#065F46' : '#991B1B',
-              }}>
+            <View
+              style={[
+                styles.badge,
+                {
+                  backgroundColor:
+                    requiredFilled >= requiredCount ? colors.successBg : colors.warningBg,
+                },
+              ]}
+            >
+              <Text
+                style={{
+                  fontSize: 10,
+                  fontWeight: '700',
+                  color: requiredFilled >= requiredCount ? colors.success : colors.warning,
+                }}
+              >
                 {requiredFilled}/{requiredCount} required
               </Text>
             </View>
           )}
           {uploadedCount > 0 && (
-            <View style={[styles.badge, { backgroundColor: palette.headerBg }]}>
-              <Text style={{ fontSize: 10, fontWeight: '700', color: palette.muted }}>
+            <View style={[styles.badge, { backgroundColor: colors.surface }]}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: colors.textMuted }}>
                 {uploadedCount} file{uploadedCount !== 1 ? 's' : ''}
               </Text>
             </View>
@@ -286,32 +329,34 @@ export const BidDocumentUploadSection: React.FC<Props> = ({
       </View>
 
       {/* Slots */}
-      <View style={styles.body}>
-        {sortedSlots.map((slot) => (
-          <View key={slot.documentType}>
-            <DocSlotRow
-              slot={slot}
-              entry={getEntry(slot.documentType)}
-              onPick={onAdd}
-              onRemove={onRemove}
-              palette={palette}
-            />
-            {!!errors?.[slot.documentType] && (
-              <View style={styles.errorRow}>
-                <Ionicons name="alert-circle" size={12} color={palette.required} />
-                <Text style={[styles.errorText, { color: palette.required }]}>
-                  {errors[slot.documentType]}
-                </Text>
-              </View>
-            )}
-          </View>
-        ))}
-      </View>
+      <ScrollView nestedScrollEnabled style={{ maxHeight: 500 }}>
+        <View style={styles.body}>
+          {sortedSlots.map((slot) => (
+            <View key={slot.documentType}>
+              <DocSlotRow
+                slot={slot}
+                entry={getEntry(slot.documentType)}
+                onPick={onAdd}
+                onRemove={onRemove}
+                colors={colors}
+              />
+              {!!errors?.[slot.documentType] && (
+                <View style={styles.errorRow}>
+                  <Ionicons name="alert-circle" size={12} color={colors.danger} />
+                  <Text style={[styles.errorText, { color: colors.danger }]}>
+                    {errors[slot.documentType]}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ))}
+        </View>
+      </ScrollView>
     </View>
   );
 };
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ─── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   card: {
@@ -325,14 +370,14 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   title: {
     flex: 1,
     fontSize: 15,
     fontWeight: '800',
   },
-  countRow: {
+  badgesRow: {
     flexDirection: 'row',
     gap: 6,
   },
@@ -342,100 +387,134 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   body: {
-    padding: 12,
-    gap: 8,
+    padding: 10,
+    gap: 6,
   },
   errorRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 4,
-    marginTop: 3,
+    paddingHorizontal: 6,
+    marginTop: 2,
   },
   errorText: { fontSize: 11 },
 });
 
-const slotStyles = StyleSheet.create({
-  root: {
+const rowStyles = StyleSheet.create({
+  container: {
     flexDirection: 'row',
+    alignItems: 'center',
     borderRadius: 12,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  leftBar: {
-    width: 4,
-    alignSelf: 'stretch',
-  },
-  content: {
-    flex: 1,
+    borderWidth: 1.5,
     padding: 12,
-    gap: 6,
+    gap: 10,
+  },
+  iconWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  iconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  preview: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    flexShrink: 0,
+  },
+  fileExt: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  info: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0,
   },
   labelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
+    gap: 6,
+    flexWrap: 'wrap',
   },
   label: {
     fontSize: 13,
     fontWeight: '700',
     flex: 1,
   },
-  donePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 7,
+  requiredBadge: {
+    paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 999,
+    borderRadius: 4,
   },
-  doneText: {
-    fontSize: 10,
-    fontWeight: '700',
+  requiredText: {
+    fontSize: 9,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  optionalBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  optionalText: {
+    fontSize: 9,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   description: {
     fontSize: 11,
     lineHeight: 15,
   },
-  filePreview: {
+  fileInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderRadius: 9,
-    padding: 9,
+    gap: 5,
+    marginTop: 2,
   },
-  fileInfo: { flex: 1, gap: 1 },
   fileName: {
     fontSize: 12,
     fontWeight: '600',
+    flex: 1,
   },
   fileSize: {
     fontSize: 10,
+    flexShrink: 0,
   },
-  removeBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
+  action: {
+    flexShrink: 0,
   },
   pickBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 8,
+    gap: 5,
     paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 8,
-    borderWidth: 1,
+    borderWidth: 1.5,
     minHeight: 36,
-    alignSelf: 'flex-start',
   },
-  pickBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
+  pickText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  removeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

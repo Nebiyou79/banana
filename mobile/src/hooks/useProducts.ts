@@ -1,22 +1,31 @@
 /**
- * mobile/src/hooks/useProducts.ts
+ * mobile/src/hooks/useProducts.ts  (FIXED v3)
  *
- * New hooks:
- *  - useProductCategories       → full category hierarchy from server
- *  - useSaveProduct / useUnsaveProduct
- *  - useSavedProducts
+ * Critical fixes:
  *
- * Updated hooks:
- *  - useCompanyProducts         → accepts isOwner flag for status filtering
- *  - useUpdateProductStatus     → extended status enum
+ * 1. useCompanyProducts — enabled condition:
+ *    Old: enabled: !!resolvedId  (fires too early, resolvedId='' on first render)
+ *    New: enabled: isReady && !!resolvedId
+ *    This prevents the query from transitioning disabled→enabled mid-render.
  *
- * FIX (owner id resolution): mirrors frontend `user?.company ?? user?._id`.
- *   - user.company may be an object { _id, name }, a string id, or null
- *   - backend /products/company/:id accepts either Company._id or User._id
- *   - so user._id is a safe last-resort fallback (was `''` before → enabled:false
- *     → "No Products" empty state even though the company existed).
+ * 2. useCompanyProducts — data extraction:
+ *    The backend returns: { success, data: { products, pagination, company } }
+ *    But productService.getCompanyProducts must unwrap to { products, pagination }.
+ *    Added debugValidateResponseShape() to catch mismatches instantly.
+ *
+ * 3. resolveCurrentCompanyId — mirrors useCompanyId logic exactly so
+ *    mutation cache invalidation uses the same key the query used.
+ *
+ * 4. Full debug logging via productDebug utilities (DEV only).
  */
-import { useInfiniteQuery, useQuery, useMutation, useQueryClient, QueryClient } from '@tanstack/react-query';
+
+import {
+  useInfiniteQuery,
+  useQuery,
+  useMutation,
+  useQueryClient,
+  QueryClient,
+} from '@tanstack/react-query';
 import { Alert } from 'react-native';
 import {
   productService,
@@ -30,54 +39,43 @@ import {
 } from '../services/productService';
 import { useAuthStore } from '../store/authStore';
 import { useToast } from './useToast';
-import { useCompanyId } from './useCompanyId';
-// ── Helpers ────────────────────────────────────────────────────────────────────
+import { useCompanyId, resolveCompanyId } from './useCompanyId';
+import {
+  debugLog,
+  debugQueryState,
+  debugValidateResponseShape,
+} from '../utils/productDebug';
 
-/**
- * Resolve the id the backend's /products/company/:companyId endpoint expects.
- * Mirrors the frontend rule (user.company ?? user._id).
- */
-const resolveCurrentCompanyId = (
-  user: { _id?: string; company?: { _id?: string } | string | null } | null | undefined,
-): string => {
-  if (!user) return '';
-  if (typeof user.company === 'string' && user.company) return user.company;
-  if (user.company && typeof user.company === 'object' && user.company._id) return user.company._id;
-  return user._id ?? '';
-};
+// ── resolveCurrentCompanyId — for mutation callbacks (no hooks) ───────────────
 
-// ── Query keys ─────────────────────────────────────────────────────────────────
+const resolveCurrentCompanyId = (user: any): string => resolveCompanyId(user) ?? '';
+
+// ── Query keys ────────────────────────────────────────────────────────────────
 
 export const productKeys = {
-  all:        ['products']                                      as const,
-  list:       (f?: ProductFilters)     => [...productKeys.all, 'list', f]       as const,
-  featured:   ()                       => [...productKeys.all, 'featured']      as const,
-  categories: ()                       => [...productKeys.all, 'categories']    as const,
-  detail:     (id: string)             => [...productKeys.all, 'detail', id]    as const,
+  all:        ['products']                                        as const,
+  list:       (f?: ProductFilters)     => [...productKeys.all, 'list', f]        as const,
+  featured:   ()                       => [...productKeys.all, 'featured']       as const,
+  categories: ()                       => [...productKeys.all, 'categories']     as const,
+  detail:     (id: string)             => [...productKeys.all, 'detail', id]     as const,
   company:    (id: string, f?: object) => [...productKeys.all, 'company', id, f] as const,
-  related:    (id: string)             => [...productKeys.all, 'related', id]   as const,
-  saved:      ()                       => [...productKeys.all, 'saved']         as const,
+  related:    (id: string)             => [...productKeys.all, 'related', id]    as const,
+  saved:      ()                       => [...productKeys.all, 'saved']          as const,
 };
-// mobile/src/hooks/useProducts.ts
 
-// helper — flip isSaved + savedCount in any cache shape we know about
+// ── Optimistic save/unsave cache helper ───────────────────────────────────────
+
 const toggleProductInCaches = (qc: QueryClient, id: string, nextSaved: boolean) => {
   const updater = (p: Product): Product =>
     p._id === id
       ? { ...p, isSaved: nextSaved, savedCount: Math.max(0, (p.savedCount ?? 0) + (nextSaved ? 1 : -1)) }
       : p;
 
-  // Detail
   qc.setQueryData<Product | undefined>(productKeys.detail(id), (old) =>
     old && old._id === id ? updater(old) : old,
   );
 
-  // Lists / featured / company / saved — any infinite or array cache
-  const rootKeys = [
-    productKeys.all,
-    productKeys.featured(),
-    productKeys.saved(),
-  ];
+  const rootKeys = [productKeys.all, productKeys.featured(), productKeys.saved()];
   rootKeys.forEach((rk) => {
     qc.getQueriesData({ queryKey: rk }).forEach(([k, v]: [unknown, any]) => {
       if (!v) return;
@@ -96,8 +94,7 @@ const toggleProductInCaches = (qc: QueryClient, id: string, nextSaved: boolean) 
   });
 };
 
-
-// ── Public marketplace ─────────────────────────────────────────────────────────
+// ── Public marketplace ────────────────────────────────────────────────────────
 
 export const useProducts = (filters?: Omit<ProductFilters, 'page'>) =>
   useInfiniteQuery({
@@ -105,7 +102,7 @@ export const useProducts = (filters?: Omit<ProductFilters, 'page'>) =>
     queryFn: ({ pageParam = 1 }) =>
       productService.getProducts({ ...filters, page: pageParam as number, limit: 12 }),
     initialPageParam: 1,
-    getNextPageParam: last => {
+    getNextPageParam: (last) => {
       const { current, pages } = last.pagination;
       return current < pages ? current + 1 : undefined;
     },
@@ -115,84 +112,110 @@ export const useProducts = (filters?: Omit<ProductFilters, 'page'>) =>
 export const useProduct = (id: string) =>
   useQuery({
     queryKey: productKeys.detail(id),
-    queryFn:  () => productService.getProduct(id),
-    enabled:  !!id,
+    queryFn: () => productService.getProduct(id),
+    enabled: !!id,
     staleTime: 5 * 60 * 1000,
   });
 
 export const useFeaturedProducts = () =>
   useQuery({
     queryKey: productKeys.featured(),
-    queryFn:  productService.getFeaturedProducts,
+    queryFn: productService.getFeaturedProducts,
     staleTime: 10 * 60 * 1000,
   });
 
-/** Full category hierarchy with live counts */
 export const useProductCategories = () =>
   useQuery<CategoryItem[]>({
     queryKey: productKeys.categories(),
-    queryFn:  productService.getCategories,
+    queryFn: productService.getCategories,
     staleTime: 60 * 60 * 1000,
   });
 
 export const useRelatedProducts = (id: string) =>
   useQuery({
     queryKey: productKeys.related(id),
-    queryFn:  () => productService.getRelatedProducts(id),
-    enabled:  !!id,
+    queryFn: () => productService.getRelatedProducts(id),
+    enabled: !!id,
     staleTime: 5 * 60 * 1000,
   });
 
-// ── Company products (owner aware) ────────────────────────────────────────────
-
+// ── Company products (FULLY FIXED) ───────────────────────────────────────────
 
 export const useCompanyProducts = (
   companyId?: string,
   filters?: Omit<ProductFilters, 'page'> & { sort?: string; status?: string },
 ) => {
-  const fallbackId = useCompanyId();
-  const resolvedId = companyId ?? fallbackId ?? '';
+  const { companyId: fallbackId, isReady } = useCompanyId(true);
+  const resolvedId = (companyId?.trim() || fallbackId || '').trim();
+
+  // DEV: log the resolved id and whether the query will fire
+  if (__DEV__) {
+    debugLog('[QUERY]', 'useCompanyProducts config', {
+      passedCompanyId: companyId ?? 'none',
+      fallbackId,
+      resolvedId: resolvedId || 'EMPTY — query disabled',
+      isReady,
+      enabled: isReady && !!resolvedId,
+      filters,
+    });
+  }
 
   return useInfiniteQuery({
     queryKey: productKeys.company(resolvedId, filters),
-    queryFn: ({ pageParam = 1 }) =>
-      productService.getCompanyProducts(resolvedId, {
+    queryFn: async ({ pageParam = 1 }) => {
+      debugLog('[SERVICE]', `getCompanyProducts(${resolvedId}, page=${pageParam})`);
+
+      const result = await productService.getCompanyProducts(resolvedId, {
         ...filters,
         page: pageParam as number,
-      }),
+      });
+
+      // Validate and log the response shape in DEV
+      if (__DEV__) {
+        debugValidateResponseShape(`getCompanyProducts page=${pageParam}`, result);
+      }
+
+      return result;
+    },
     initialPageParam: 1,
     getNextPageParam: (last) => {
       const { current, pages } = last.pagination;
       return current < pages ? current + 1 : undefined;
     },
-    enabled: !!resolvedId,
+    // KEY FIX: only enable when auth has hydrated AND we have a real ID.
+    // Without isReady the query would briefly fire with resolvedId=''
+    // (disabled), then re-enable when auth hydrates — causing React Query
+    // to show isPending=true indefinitely in some timing windows.
+    enabled: isReady && !!resolvedId,
     staleTime: 5 * 60 * 1000,
+    retry: 2,
+    retryDelay: 1000,
   });
 };
 
-// ── Saved products ─────────────────────────────────────────────────────────────
+// ── Saved products ────────────────────────────────────────────────────────────
 
 export const useSavedProducts = (filters?: { page?: number; limit?: number }) =>
   useInfiniteQuery({
     queryKey: productKeys.saved(),
-    queryFn:  ({ pageParam = 1 }) =>
+    queryFn: ({ pageParam = 1 }) =>
       productService.getSavedProducts({ page: pageParam as number, limit: filters?.limit ?? 12 }),
     initialPageParam: 1,
-    getNextPageParam: last => {
+    getNextPageParam: (last) => {
       const { current, pages } = last.pagination;
       return current < pages ? current + 1 : undefined;
     },
     staleTime: 2 * 60 * 1000,
   });
 
-// ── Save / Unsave ──────────────────────────────────────────────────────────────
+// ── Save / Unsave ─────────────────────────────────────────────────────────────
 
 export const useSaveProduct = () => {
   const qc = useQueryClient();
   const { showError } = useToast();
   return useMutation({
     mutationFn: (id: string) => productService.saveProduct(id),
-    onMutate: async (id: string) => {
+    onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: productKeys.all });
       const prev = qc.getQueriesData({ queryKey: productKeys.all });
       toggleProductInCaches(qc, id, true);
@@ -202,9 +225,7 @@ export const useSaveProduct = () => {
       ctx?.prev?.forEach(([k, v]: any) => qc.setQueryData(k, v));
       showError(err?.message || 'Failed to save product');
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: productKeys.saved() });
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: productKeys.saved() }),
   });
 };
 
@@ -213,11 +234,10 @@ export const useUnsaveProduct = () => {
   const { showError } = useToast();
   return useMutation({
     mutationFn: (id: string) => productService.unsaveProduct(id),
-    onMutate: async (id: string) => {
+    onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: productKeys.all });
       const prev = qc.getQueriesData({ queryKey: productKeys.all });
       toggleProductInCaches(qc, id, false);
-      // Also drop it from the saved list immediately
       qc.setQueriesData({ queryKey: productKeys.saved() }, (old: any) => {
         if (!old?.pages) return old;
         return {
@@ -234,13 +254,11 @@ export const useUnsaveProduct = () => {
       ctx?.prev?.forEach(([k, v]: any) => qc.setQueryData(k, v));
       showError(err?.message || 'Failed to unsave product');
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: productKeys.saved() });
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: productKeys.saved() }),
   });
 };
 
-// ── Create / Update / Delete ───────────────────────────────────────────────────
+// ── Create / Update / Delete ──────────────────────────────────────────────────
 
 interface CreateVars { data: CreateProductData; imageAssets: ImageAsset[] }
 
@@ -276,7 +294,11 @@ export const useUpdateProduct = () => {
   const { showSuccess, showError } = useToast();
   return useMutation({
     mutationFn: ({ id, data, imageAssets, existingImages, imagesToDelete, primaryImageIndex }: UpdateVars) =>
-      productService.updateProduct(id, data, imageAssets, { existingImages, imagesToDelete, primaryImageIndex }),
+      productService.updateProduct(id, data, imageAssets, {
+        existingImages,
+        imagesToDelete,
+        primaryImageIndex,
+      }),
     onSuccess: (_, vars) => {
       const companyId = resolveCurrentCompanyId(user);
       qc.invalidateQueries({ queryKey: productKeys.detail(vars.id) });
@@ -318,8 +340,12 @@ export const useDeleteProduct = () => {
           'Are you sure you want to delete this product? This action cannot be undone.',
           [
             { text: 'Cancel', style: 'cancel', onPress: () => reject(new Error('cancelled')) },
-            { text: 'Delete', style: 'destructive', onPress: () => productService.deleteProduct(id).then(resolve).catch(reject) },
-          ]
+            {
+              text: 'Delete',
+              style: 'destructive',
+              onPress: () => productService.deleteProduct(id).then(resolve).catch(reject),
+            },
+          ],
         );
       }),
     onSuccess: () => {

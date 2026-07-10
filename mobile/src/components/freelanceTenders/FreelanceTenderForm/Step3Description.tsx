@@ -1,4 +1,5 @@
 // mobile/src/components/freelanceTenders/FreelanceTenderForm/Step3Description.tsx
+// UPDATED: useTheme() instead of useThemeStore(), all colors from theme
 
 import React, { memo, useCallback } from 'react';
 import {
@@ -9,7 +10,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useThemeStore } from '../../../store/themeStore';
+import { useTheme } from '../../../hooks/useTheme';
+import { MIN_TOUCH_TARGET } from '../../../theme/tokens';
 import type {
   FreelanceTenderFormData,
   ScreeningQuestion,
@@ -27,16 +29,20 @@ const MAX_DESCRIPTION = 50_000;
 
 const Step3Description: React.FC<Step3DescriptionProps> = memo(
   ({ data, description, onChange, onDescriptionChange, errors }) => {
-    const { theme } = useThemeStore();
-    const c = theme.colors;
+    const { colors: c, radius, spacing, type } = useTheme();
     const questions: ScreeningQuestion[] = data.details.screeningQuestions ?? [];
 
     const inputStyle = [
       styles.input,
-      { backgroundColor: c.surface ?? c.card, borderColor: c.border ?? c.textMuted + '44', color: c.text },
+      {
+        backgroundColor: c.inputBg,
+        borderColor: c.border,
+        color: c.text,
+        borderRadius: radius.md,
+      },
     ];
     const labelStyle = [styles.label, { color: c.text }];
-    const errorStyle = [styles.error, { color: c.error ?? '#EF4444' }];
+    const errorStyle = [styles.error, { color: c.danger }];
     const hintStyle = [styles.hint, { color: c.textMuted }];
 
     const patchQuestions = useCallback(
@@ -85,22 +91,12 @@ const Step3Description: React.FC<Step3DescriptionProps> = memo(
           {errors.description ? <Text style={errorStyle}>{errors.description}</Text> : null}
         </View>
 
-        {/* Skills Required */}
+        {/* Skills Required - placeholder */}
         <View style={styles.field}>
           <Text style={labelStyle}>Required Skills</Text>
-          <SkillsInput
-            skills={data.details.screeningQuestions ? [] : []}
-            inputStyle={inputStyle}
-            labelStyle={hintStyle}
-            primaryColor={c.primary}
-            textColor={c.text}
-            mutedColor={c.textMuted}
-            surfaceColor={c.surface ?? c.card}
-            borderColor={c.border ?? c.textMuted + '44'}
-            // Skills are managed at root level via `skillsRequired` field.
-            // This is a pass-through note — the parent form passes skillsRequired separately.
-          />
-          <Text style={hintStyle}>Skills are set in the parent form's skillsRequired field.</Text>
+          <Text style={[hintStyle, { fontStyle: 'italic' }]}>
+            Skills are set in the parent form's skillsRequired field.
+          </Text>
         </View>
 
         {/* Screening Questions */}
@@ -118,7 +114,11 @@ const Step3Description: React.FC<Step3DescriptionProps> = memo(
               key={i}
               style={[
                 styles.questionCard,
-                { backgroundColor: c.surface ?? c.card, borderColor: c.border ?? c.textMuted + '44' },
+                {
+                  backgroundColor: c.surface,
+                  borderColor: c.border,
+                  borderRadius: radius.md,
+                },
               ]}
             >
               <View style={styles.questionHeader}>
@@ -130,7 +130,7 @@ const Step3Description: React.FC<Step3DescriptionProps> = memo(
                   accessibilityLabel={`Remove question ${i + 1}`}
                   style={styles.removeBtn}
                 >
-                  <Text style={[styles.removeBtnText, { color: c.error ?? '#EF4444' }]}>✕</Text>
+                  <Text style={[styles.removeBtnText, { color: c.danger }]}>✕</Text>
                 </TouchableOpacity>
               </View>
 
@@ -149,8 +149,9 @@ const Step3Description: React.FC<Step3DescriptionProps> = memo(
                 style={[
                   styles.requiredToggle,
                   {
-                    backgroundColor: q.required ? c.primary + '18' : 'transparent',
-                    borderColor: q.required ? c.primary : c.border ?? c.textMuted + '44',
+                    backgroundColor: q.required ? c.primaryBg : 'transparent',
+                    borderColor: q.required ? c.primary : c.border,
+                    borderRadius: radius.full,
                   },
                 ]}
                 activeOpacity={0.75}
@@ -169,7 +170,11 @@ const Step3Description: React.FC<Step3DescriptionProps> = memo(
               onPress={addQuestion}
               style={[
                 styles.addQuestionBtn,
-                { borderColor: c.primary + '66', backgroundColor: c.primary + '0D' },
+                {
+                  borderColor: c.borderAccent,
+                  backgroundColor: c.primaryBg,
+                  borderRadius: radius.md,
+                },
               ]}
               activeOpacity={0.75}
               accessibilityRole="button"
@@ -185,28 +190,6 @@ const Step3Description: React.FC<Step3DescriptionProps> = memo(
   }
 );
 
-// ─── Tiny skills display (read-only placeholder) ──────────────────────────────
-// Full skill tag input is handled in Step4SkillsAttachments
-
-interface SkillsInputProps {
-  skills: string[];
-  inputStyle: object[];
-  labelStyle: object[];
-  primaryColor: string;
-  textColor: string;
-  mutedColor: string;
-  surfaceColor: string;
-  borderColor: string;
-}
-
-const SkillsInput: React.FC<SkillsInputProps> = ({ skills, mutedColor }) => (
-  <Text style={{ color: mutedColor, fontSize: 12, fontStyle: 'italic' }}>
-    {skills.length === 0
-      ? 'Skills are entered in the next step.'
-      : skills.join(', ')}
-  </Text>
-);
-
 Step3Description.displayName = 'Step3Description';
 
 const styles = StyleSheet.create({
@@ -215,38 +198,41 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: '600', marginBottom: 6 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   count: { fontSize: 12 },
-  input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, minHeight: 50 },
+  input: {
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    minHeight: MIN_TOUCH_TARGET + 6,
+  },
   descriptionInput: { minHeight: 200, paddingTop: 12 },
   error: { fontSize: 12, marginTop: 4 },
   hint: { fontSize: 11, marginTop: 4 },
   questionCard: {
     borderWidth: 1,
-    borderRadius: 12,
     padding: 14,
     marginTop: 12,
   },
   questionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   questionNum: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
-  removeBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  removeBtn: { minWidth: MIN_TOUCH_TARGET, minHeight: MIN_TOUCH_TARGET, alignItems: 'center', justifyContent: 'center' },
   removeBtnText: { fontSize: 16, fontWeight: '700' },
   requiredToggle: {
     paddingVertical: 8,
     paddingHorizontal: 14,
-    borderRadius: 16,
     borderWidth: 1,
     alignSelf: 'flex-start',
-    minHeight: 44,
+    minHeight: MIN_TOUCH_TARGET,
     justifyContent: 'center',
   },
   requiredText: { fontSize: 13, fontWeight: '600' },
   addQuestionBtn: {
     marginTop: 12,
     borderWidth: 1,
-    borderRadius: 10,
     borderStyle: 'dashed',
     paddingVertical: 14,
     alignItems: 'center',
-    minHeight: 50,
+    minHeight: MIN_TOUCH_TARGET + 6,
     justifyContent: 'center',
   },
   addQuestionText: { fontSize: 14, fontWeight: '600' },

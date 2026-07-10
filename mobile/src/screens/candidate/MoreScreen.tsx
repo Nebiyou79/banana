@@ -277,25 +277,58 @@ export const CandidateMoreScreen: React.FC = () => {
     },
   ];
 
-  const accountSection: MenuItem[] = [
-    {
-      icon: 'notifications-outline',
-      label: 'Notifications',
-      sublabel: 'Manage alerts and preferences',
-      color: colors.primary,
-    },
-    {
-      icon: 'lock-closed-outline',
-      label: 'Privacy and Security',
-      color: colors.primary,
-    },
-  ];
+// src/screens/candidate/MoreScreen.tsx (UPDATED)
+// Add the missing screen navigations for notifications and settings
 
-  const supportSection: MenuItem[] = [
-    { icon: 'help-circle-outline', label: 'Help and FAQ', color: colors.textMuted },
-    { icon: 'mail-outline', label: 'Contact Us', color: colors.textMuted },
-    { icon: 'document-text-outline', label: 'Terms and Privacy', color: colors.textMuted },
-  ];
+// Update the accountSection to include proper navigation:
+const accountSection: MenuItem[] = [
+  {
+    icon: 'notifications-outline',
+    label: 'Notifications',
+    sublabel: 'View all your notifications',
+    color: colors.primary,
+    screen: 'Notifications', // ✅ Added
+  },
+  {
+    icon: 'settings-outline',
+    label: 'Notification Preferences',
+    sublabel: 'Manage alerts and preferences',
+    color: colors.primary,
+    screen: 'NotificationPreferences', // ✅ Added
+  },
+  {
+    icon: 'lock-closed-outline',
+    label: 'Privacy and Security',
+    sublabel: 'Manage your privacy and security settings',
+    color: colors.primary,
+    screen: 'PrivacySecurity', // ✅ Added
+  },
+];
+
+// Update the supportSection to include proper navigation:
+const supportSection: MenuItem[] = [
+  { 
+    icon: 'help-circle-outline', 
+    label: 'Help and FAQ', 
+    sublabel: 'Get answers to common questions',
+    color: colors.textMuted,
+    screen: 'HelpFAQ', // ✅ Added
+  },
+  { 
+    icon: 'mail-outline', 
+    label: 'Contact Us', 
+    sublabel: 'Reach out to our support team',
+    color: colors.textMuted,
+    // No screen - will use Linking
+  },
+  { 
+    icon: 'document-text-outline', 
+    label: 'Terms and Privacy', 
+    sublabel: 'Read our terms and privacy policy',
+    color: colors.textMuted,
+    // No screen - will use WebView or Linking
+  },
+];
 
   return (
     <ScrollView

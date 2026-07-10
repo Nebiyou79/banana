@@ -3,8 +3,22 @@ import React from 'react';
 import { View, Pressable, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { EdgeInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../store/themeStore';
 import type { PillTabMeta } from './PillTabBar';
+
+// ─── Height helpers (mirrors PillTabBar pattern) ──────────────────────────────
+// paddingTop 6 + paddingVertical 6*2 + icon 28 + label 12 = 58
+export const SIMPLE_TAB_BAR_INNER_HEIGHT = 58;
+
+/**
+ * Total rendered height of SimpleRoleTabBar for a given device.
+ * Pass this to tabBarStyle.height in your navigator so React Navigation
+ * correctly offsets screen content below the bar.
+ */
+export function getSimpleTabBarHeight(insets: EdgeInsets): number {
+  return SIMPLE_TAB_BAR_INNER_HEIGHT + Math.max(insets.bottom, 6);
+}
 
 interface TabConfig {
   icon: string;
@@ -49,14 +63,22 @@ export const SimpleRoleTabBar: React.FC<SimpleRoleTabBarProps> = ({
 
   return (
     <View
-      style={[
-        styles.tabBar,
-        {
-          backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
-          borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-          paddingBottom: insets.bottom + 4,
-        },
-      ]}
+style={[
+    styles.tabBar,
+    {
+      backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
+      borderTopColor: isDark
+        ? 'rgba(255,255,255,0.08)'
+        : 'rgba(0,0,0,0.08)',
+
+      paddingBottom: Math.max(insets.bottom, 6),
+
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+    },
+  ]}
     >
       {routes.map((route: any, index: number) => {
         const focused = index === activeIndex;
@@ -65,7 +87,6 @@ export const SimpleRoleTabBar: React.FC<SimpleRoleTabBarProps> = ({
         
         const accent = isDark ? config.accentDark : config.accentLight;
         const badge = badges[route.name];
-
         return (
           <Pressable
             key={route.key}
@@ -111,24 +132,27 @@ export const SimpleRoleTabBar: React.FC<SimpleRoleTabBarProps> = ({
 };
 
 const styles = StyleSheet.create({
-  tabBar: {
-    flexDirection: 'row',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 4,
-    gap: 4,
-    minHeight: 48,
-  },
+tabBar: {
+  flexDirection: 'row',
+  borderTopWidth: StyleSheet.hairlineWidth,
+
+  paddingTop: 6,
+
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: -1 },
+  shadowOpacity: 0.05,
+  shadowRadius: 8,
+  elevation: 8,
+},
+tabItem: {
+  flex: 1,
+  height: '100%',
+
+  alignItems: 'center',
+  justifyContent: 'center',
+
+  paddingVertical: 6,
+},
   iconContainer: {
     position: 'relative',
     width: 28,

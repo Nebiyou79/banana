@@ -47,6 +47,7 @@ import NewChatScreen         from '../screens/NewChatScreen';
 import { useSocketBootstrap } from '../hooks/useSocket';
 
 import type { SocialStackParamList } from './types';
+import CreatePostScreen from '../screens/CreatePostScreen';
 
 const Stack = createNativeStackNavigator<SocialStackParamList>();
 
@@ -125,6 +126,15 @@ const SocialEntry: React.FC = () => {
           presentation: 'modal',
         }}
       />
+      {/* ── Post screens ── */}
+<Stack.Screen
+  name="CreatePost"
+  component={CreatePostScreen}
+  options={{
+    animation: 'slide_from_bottom',
+    presentation: 'modal',
+  }}
+/>
     </Stack.Navigator>
   );
 };

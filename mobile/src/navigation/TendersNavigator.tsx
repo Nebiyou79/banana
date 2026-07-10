@@ -2,6 +2,11 @@
 /**
  * src/navigation/TendersNavigator.tsx
  *
+ * FIXES:
+ * 1. Double tab bar — outer MainTendersTabBar is now hidden whenever the
+ *    ProfessionalTenders tab is active, so only the inner Pro tab bar shows.
+ * 2. MyInvitations tab added to both Company & Org Professional Tenders bottom tabs.
+ *
  * FIX: Professional Tenders now has its own fully isolated navigator stack.
  * When the "Pro" tab is pressed from the main Tenders bottom tabs, the app
  * pushes a NEW stack screen (CompanyProfTendersEntry / OrgProfTendersEntry)
@@ -63,13 +68,20 @@ import { TenderProposalsScreen } from '../screens/company/proposals/TenderPropos
 import { ProposalStatsScreen } from '../screens/company/proposals/ProposalStatsScreen';
 import { CompanyProposalDetailScreen } from '../screens/company/proposals/ProposalDetailScreen';
 
+// ── Invitations ───────────────────────────────────────────────────────────────
+import MyInvitationsScreen from '../screens/tenders/MyInvitationsScreen';
+
 // ── Splash + Home ─────────────────────────────────────────────────────────────
-import { TendersSplashScreen } from '../screens/tenders/TendersSplashScreen';
 import { TendersHomeScreen } from '../screens/tenders/TendersHomeScreen';
 import { CategoryPickerScreen } from '../screens/tenders/CategoryPickerScreen';
 import { CompanyInvitePickerScreen } from '../screens/tenders/CompanyInvitePickerScreen';
 
-import { TendersPlaceholder } from '../screens/tenders/placeholders/TendersPlaceholder';
+// import { TendersPlaceholder } from '../screens/tenders/placeholders/TendersPlaceholder';
+import TendersSplashScreen from '../screens/tenders/TendersSplashScreen';
+import ReceivedBidsTenderListScreen from '../screens/company/bids/ReceivedBidsTenderListScreen';
+import OrgBidsDashboardScreen from '../screens/organization/bids/OrgBidsDashboardScreen';
+import OrgIncomingBidsScreen from '../screens/organization/bids/OrgIncomingBidsScreen';
+import OrgBidDetailScreen from '../screens/organization/bids/OrgBidDetailScreen';
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  PARAM LISTS
@@ -103,8 +115,6 @@ export type FreelanceTendersStackParamList = {
 };
 
 // ── Professional Tenders entry stacks ────────────────────────────────────────
-// Each role has:  ProfSplash → ProfBottomTabs  (+ detail screens)
-
 export type CompanyProfTendersEntryStackParamList = {
   ProfSplash: undefined;
   ProfBottomTabs: undefined;
@@ -115,6 +125,7 @@ export type CompanyProfTendersEntryStackParamList = {
   OwnerBidDetail: { bidId: string; tenderId: string };
   BrowseProfessionalTenderDetail: { tenderId: string };
   SubmitBid: { tenderId: string };
+   MyBidDetail: { bidId: string; tenderId: string };
   ProposalStats: { tenderId: string; tenderTitle: string; role: 'company' | 'organization' };
   TenderProposals: { tenderId: string; tenderTitle: string; role: 'company' | 'organization' };
   ProposalDetail: { proposalId: string; tenderId: string; role: 'company' | 'organization' };
@@ -130,6 +141,9 @@ export type OrgProfTendersEntryStackParamList = {
   AddendumScreen: { tenderId: string };
   IncomingBids: { tenderId: string };
   OwnerBidDetail: { bidId: string; tenderId: string };
+  OrgBidsDashboard: undefined;
+  OrgIncomingBids: { tenderId: string };
+  OrgBidDetail: { bidId: string; tenderId: string };
   ProposalStats: { tenderId: string; tenderTitle: string; role: 'company' | 'organization' };
   TenderProposals: { tenderId: string; tenderTitle: string; role: 'company' | 'organization' };
   ProposalDetail: { proposalId: string; tenderId: string; role: 'company' | 'organization' };
@@ -138,11 +152,13 @@ export type OrgProfTendersEntryStackParamList = {
 };
 
 // ── Professional Tenders bottom tab param lists ───────────────────────────────
+// FIX: Added Invitations tab to both Company and Org
 export type CompanyProfTendersBottomTabParamList = {
   MyProfTenders: undefined;
   CreateProfTender: undefined;
   BrowseProfTenders: undefined;
   SavedProfTenders: undefined;
+  Invitations: undefined;
   ProfBack: undefined;
 };
 
@@ -150,6 +166,7 @@ export type OrgProfTendersBottomTabParamList = {
   MyProfTenders: undefined;
   CreateProfTender: undefined;
   SavedProfTenders: undefined;
+  Invitations: undefined;
   ProfBack: undefined;
 };
 
@@ -259,7 +276,6 @@ function ProfessionalTendersSplashScreen() {
 
     // Entrance sequence
     Animated.sequence([
-      // Logo pops in
       Animated.parallel([
         Animated.spring(logoScale, {
           toValue: 1,
@@ -273,14 +289,12 @@ function ProfessionalTendersSplashScreen() {
           useNativeDriver: true,
         }),
       ]),
-      // PRO badge bounces
       Animated.spring(badgeScale, {
         toValue: 1,
         friction: 5,
         tension: 100,
         useNativeDriver: true,
       }),
-      // Title slides up
       Animated.parallel([
         Animated.timing(titleOpacity, {
           toValue: 1,
@@ -294,13 +308,11 @@ function ProfessionalTendersSplashScreen() {
           useNativeDriver: true,
         }),
       ]),
-      // Subtitle fades
       Animated.timing(subtitleOpacity, {
         toValue: 1,
         duration: 300,
         useNativeDriver: true,
       }),
-      // Hold briefly then navigate
       Animated.delay(900),
     ]).start(() => {
       navigation.replace('ProfBottomTabs');
@@ -315,10 +327,8 @@ function ProfessionalTendersSplashScreen() {
 
   return (
     <View style={[splashStyles.container, { backgroundColor: bgColor }]}>
-      {/* Radial glow behind logo */}
       <View style={splashStyles.glowRing} />
 
-      {/* Logo */}
       <Animated.View
         style={[
           splashStyles.logoWrapper,
@@ -333,7 +343,6 @@ function ProfessionalTendersSplashScreen() {
           />
         </View>
 
-        {/* PRO badge */}
         <Animated.View
           style={[
             splashStyles.proBadge,
@@ -344,7 +353,6 @@ function ProfessionalTendersSplashScreen() {
         </Animated.View>
       </Animated.View>
 
-      {/* Title */}
       <Animated.Text
         style={[
           splashStyles.title,
@@ -358,7 +366,6 @@ function ProfessionalTendersSplashScreen() {
         Professional Tenders
       </Animated.Text>
 
-      {/* Subtitle */}
       <Animated.Text
         style={[
           splashStyles.subtitle,
@@ -371,7 +378,6 @@ function ProfessionalTendersSplashScreen() {
         Enterprise-grade procurement,{'\n'}bids & contracts
       </Animated.Text>
 
-      {/* Divider line with gold */}
       <Animated.View
         style={[
           splashStyles.divider,
@@ -379,9 +385,8 @@ function ProfessionalTendersSplashScreen() {
         ]}
       />
 
-      {/* Feature pills */}
       <Animated.View style={[splashStyles.pillRow, { opacity: subtitleOpacity }]}>
-        {['Tenders', 'Bids', 'Addenda', 'Stats'].map((label) => (
+        {['Tenders', 'Bids', 'Addenda', 'Invitations', 'Stats'].map((label) => (
           <View
             key={label}
             style={[
@@ -511,20 +516,22 @@ interface TabConfig {
 }
 
 const MAIN_TAB_CONFIG: Record<string, TabConfig> = {
-  Home: { icon: 'home-outline', iconActive: 'home', label: 'Home', accentDark: '#60A5FA', accentLight: '#2563EB' },
-  FreelanceTenders: { icon: 'people-outline', iconActive: 'people', label: 'Freelance', accentDark: '#34D399', accentLight: '#059669' },
-  ProfessionalTenders: { icon: 'briefcase-outline', iconActive: 'briefcase', label: 'Pro', accentDark: '#F1BB03', accentLight: '#B45309' },
-  Proposals: { icon: 'document-text-outline', iconActive: 'document-text', label: 'Proposals', accentDark: '#D8B4FE', accentLight: '#7C3AED' },
-  Bids: { icon: 'trending-up-outline', iconActive: 'trending-up', label: 'Bids', accentDark: '#FDBA74', accentLight: '#EA580C' },
-  Back: { icon: 'arrow-back-outline', iconActive: 'arrow-back', label: 'Back', accentDark: '#64748B', accentLight: '#475569' },
+  Home:                { icon: 'home-outline',         iconActive: 'home',          label: 'Home',      accentDark: '#60A5FA', accentLight: '#2563EB' },
+  FreelanceTenders:    { icon: 'people-outline',        iconActive: 'people',        label: 'Freelance', accentDark: '#34D399', accentLight: '#059669' },
+  ProfessionalTenders: { icon: 'briefcase-outline',     iconActive: 'briefcase',     label: 'Pro',       accentDark: '#F1BB03', accentLight: '#B45309' },
+  Proposals:           { icon: 'document-text-outline', iconActive: 'document-text', label: 'Proposals', accentDark: '#D8B4FE', accentLight: '#7C3AED' },
+  Bids:                { icon: 'trending-up-outline',   iconActive: 'trending-up',   label: 'Bids',      accentDark: '#FDBA74', accentLight: '#EA580C' },
+  Back:                { icon: 'arrow-back-outline',    iconActive: 'arrow-back',    label: 'Back',      accentDark: '#64748B', accentLight: '#475569' },
 };
 
+// FIX: Added Invitations tab config
 const PROF_TAB_CONFIG: Record<string, TabConfig> = {
-  MyProfTenders: { icon: 'briefcase-outline', iconActive: 'briefcase', label: 'My Tenders', accentDark: '#34D399', accentLight: '#059669' },
-  CreateProfTender: { icon: 'add-circle-outline', iconActive: 'add-circle', label: 'Create', accentDark: '#60A5FA', accentLight: '#2563EB' },
-  BrowseProfTenders: { icon: 'search-outline', iconActive: 'search', label: 'Browse', accentDark: '#F1BB03', accentLight: '#B45309' },
-  SavedProfTenders: { icon: 'bookmark-outline', iconActive: 'bookmark', label: 'Saved', accentDark: '#D8B4FE', accentLight: '#7C3AED' },
-  ProfBack: { icon: 'arrow-back-outline', iconActive: 'arrow-back', label: 'Back', accentDark: '#64748B', accentLight: '#475569' },
+  MyProfTenders:   { icon: 'briefcase-outline',     iconActive: 'briefcase',     label: 'My Tenders',   accentDark: '#34D399', accentLight: '#059669' },
+  CreateProfTender:{ icon: 'add-circle-outline',    iconActive: 'add-circle',    label: 'Create',       accentDark: '#60A5FA', accentLight: '#2563EB' },
+  BrowseProfTenders:{ icon: 'search-outline',       iconActive: 'search',        label: 'Browse',       accentDark: '#F1BB03', accentLight: '#B45309' },
+  SavedProfTenders:{ icon: 'bookmark-outline',      iconActive: 'bookmark',      label: 'Saved',        accentDark: '#D8B4FE', accentLight: '#7C3AED' },
+  Invitations:     { icon: 'mail-outline',          iconActive: 'mail',          label: 'Invitations',  accentDark: '#FB923C', accentLight: '#EA580C' },
+  ProfBack:        { icon: 'arrow-back-outline',    iconActive: 'arrow-back',    label: 'Back',         accentDark: '#64748B', accentLight: '#475569' },
 };
 
 /**
@@ -546,7 +553,7 @@ function makeTabBar(
           borderTopWidth: 0.5,
           borderTopColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
           paddingTop: 8,
-          paddingBottom: insets.bottom + 4,
+          paddingBottom: insets.bottom + 4
         }}
       >
         {state.routes.map((route: any, idx: number) => {
@@ -636,24 +643,12 @@ function TendersHomeOrg() { return <TendersHomeScreen userRole="organization" />
 
 function AllProposalsPlaceholder() {
   return (
-    <TendersPlaceholder
-      title="All Proposals"
-      description="View proposals across all your freelance tenders in one place."
-      icon="documents-outline"
-      module="Proposals Module"
-    />
+    <TenderProposalsScreen />
   );
 }
 
 function OrgReceivedBidsTab() {
-  return (
-    <TendersPlaceholder
-      title="Received Bids"
-      description="Bids submitted on your professional tenders appear here."
-      icon="trending-up-outline"
-      module="Bids Module"
-    />
-  );
+  return <OrgBidsDashboardScreen />;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -664,7 +659,7 @@ function FreelanceTendersTopTabs() {
   const isDark = useThemeStore((s) => s.theme.isDark);
   const surface = isDark ? '#1E293B' : '#FFFFFF';
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: surface }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: surface }} edges={['top']}>
       <FreelanceTopTab.Navigator screenOptions={topTabScreenOptions(isDark)}>
         <FreelanceTopTab.Screen name="MyFreelanceTenders" component={CompanyMyTendersScreen} options={{ title: 'My Tenders' }} />
         <FreelanceTopTab.Screen name="CreateFreelanceTender" component={FreelanceTenderCreateScreen} options={{ title: 'Create' }} />
@@ -691,6 +686,10 @@ function FreelanceTendersInner() {
 //    ProfSplash (auto-navigates) → ProfBottomTabs → detail screens
 //  The ProfBack tab calls navigation.goBack() on this stack, returning to
 //  the main Tenders bottom tabs — NOT to the outer role navigator.
+//
+//  FIX: The outer MainTendersTabBar is hidden when ProfessionalTenders tab is
+//  active (see CompanyBottomTabs / OrgBottomTabs below), so only the inner
+//  Pro tab bar is visible — preventing the double tab bar issue.
 // ═════════════════════════════════════════════════════════════════════════════
 
 // ── Company ───────────────────────────────────────────────────────────────────
@@ -698,17 +697,24 @@ function FreelanceTendersInner() {
 const CompanyProfTabBar = makeTabBar(PROF_TAB_CONFIG);
 
 function CompanyProfBottomTabs() {
+  const insets = useSafeAreaInsets();
+  const tabH = 60 + Math.max(insets.bottom, 4);
   return (
     <CompanyProfBottomTab.Navigator
       initialRouteName="MyProfTenders"
       tabBar={(props) => <CompanyProfTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: { height: tabH },
+      }}
     >
-      <CompanyProfBottomTab.Screen name="MyProfTenders" component={MyProfessionalTendersScreen} />
+      <CompanyProfBottomTab.Screen name="MyProfTenders"    component={MyProfessionalTendersScreen} />
       <CompanyProfBottomTab.Screen name="CreateProfTender" component={CreateProfessionalTenderScreen} />
       <CompanyProfBottomTab.Screen name="BrowseProfTenders" component={BrowseProfessionalTendersScreen} />
       <CompanyProfBottomTab.Screen name="SavedProfTenders" component={SavedTendersScreen} />
-      <CompanyProfBottomTab.Screen name="ProfBack" component={TendersBackPlaceholder} />
+      {/* FIX: Invitations tab added */}
+      <CompanyProfBottomTab.Screen name="Invitations"      component={MyInvitationsScreen} />
+      <CompanyProfBottomTab.Screen name="ProfBack"         component={TendersBackPlaceholder} />
     </CompanyProfBottomTab.Navigator>
   );
 }
@@ -726,14 +732,8 @@ function CompanyProfessionalTendersEntry() {
       initialRouteName="ProfSplash"
       screenOptions={{ headerShown: false }}
     >
-      <CompanyProfEntryStack.Screen
-        name="ProfSplash"
-        component={ProfessionalTendersSplashScreen}
-      />
-      <CompanyProfEntryStack.Screen
-        name="ProfBottomTabs"
-        component={CompanyProfBottomTabs}
-      />
+      <CompanyProfEntryStack.Screen name="ProfSplash"    component={ProfessionalTendersSplashScreen} />
+      <CompanyProfEntryStack.Screen name="ProfBottomTabs" component={CompanyProfBottomTabs} />
       <CompanyProfEntryStack.Screen
         name="ProfessionalTenderDetail"
         component={ProfessionalTenderDetailScreen}
@@ -769,6 +769,12 @@ function CompanyProfessionalTendersEntry() {
         component={SubmitBidScreen}
         options={{ ...stackScreenOptions(isDark), title: 'Submit Bid', headerShown: true }}
       />
+      {/* ADD THIS SCREEN REGISTRATION */}
+      <CompanyProfEntryStack.Screen
+        name="MyBidDetail"
+        component={MyBidDetailScreen}
+        options={{ ...stackScreenOptions(isDark), title: 'My Bid', headerShown: true }}
+      />
       <CompanyProfEntryStack.Screen
         name="ProposalStats"
         component={ProposalStatsScreen}
@@ -800,20 +806,26 @@ function CompanyProfessionalTendersEntry() {
 
 // ── Organization ──────────────────────────────────────────────────────────────
 
-// Org has no BrowseProfTenders — reuse same PROF_TAB_CONFIG but only register relevant screens
 const OrgProfTabBar = makeTabBar(PROF_TAB_CONFIG);
 
 function OrgProfBottomTabs() {
+  const insets = useSafeAreaInsets();
+  const tabH = 60 + Math.max(insets.bottom, 4);
   return (
     <OrgProfBottomTab.Navigator
       initialRouteName="MyProfTenders"
       tabBar={(props) => <OrgProfTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: { height: tabH },
+      }}
     >
-      <OrgProfBottomTab.Screen name="MyProfTenders" component={MyProfessionalTendersScreen} />
+      <OrgProfBottomTab.Screen name="MyProfTenders"    component={MyProfessionalTendersScreen} />
       <OrgProfBottomTab.Screen name="CreateProfTender" component={CreateProfessionalTenderScreen} />
       <OrgProfBottomTab.Screen name="SavedProfTenders" component={SavedTendersScreen} />
-      <OrgProfBottomTab.Screen name="ProfBack" component={TendersBackPlaceholder} />
+      {/* FIX: Invitations tab added */}
+      <OrgProfBottomTab.Screen name="Invitations"      component={MyInvitationsScreen} />
+      <OrgProfBottomTab.Screen name="ProfBack"         component={TendersBackPlaceholder} />
     </OrgProfBottomTab.Navigator>
   );
 }
@@ -828,14 +840,8 @@ function OrgProfessionalTendersEntry() {
       initialRouteName="ProfSplash"
       screenOptions={{ headerShown: false }}
     >
-      <OrgProfEntryStack.Screen
-        name="ProfSplash"
-        component={ProfessionalTendersSplashScreen}
-      />
-      <OrgProfEntryStack.Screen
-        name="ProfBottomTabs"
-        component={OrgProfBottomTabs}
-      />
+      <OrgProfEntryStack.Screen name="ProfSplash"     component={ProfessionalTendersSplashScreen} />
+      <OrgProfEntryStack.Screen name="ProfBottomTabs" component={OrgProfBottomTabs} />
       <OrgProfEntryStack.Screen
         name="ProfessionalTenderDetail"
         component={ProfessionalTenderDetailScreen}
@@ -859,6 +865,24 @@ function OrgProfessionalTendersEntry() {
       <OrgProfEntryStack.Screen
         name="OwnerBidDetail"
         component={OwnerBidDetailScreen}
+        options={{ ...stackScreenOptions(isDark), title: 'Bid Detail', headerShown: true }}
+      />
+      {/* NEW: Organization Bids Dashboard */}
+      <OrgProfEntryStack.Screen
+        name="OrgBidsDashboard"
+        component={OrgBidsDashboardScreen}
+        options={{ ...stackScreenOptions(isDark), title: 'Incoming Bids', headerShown: true }}
+      />
+      {/* NEW: Organization Incoming Bids for a specific tender */}
+      <OrgProfEntryStack.Screen
+        name="OrgIncomingBids"
+        component={OrgIncomingBidsScreen}
+        options={{ ...stackScreenOptions(isDark), title: 'Committee Bids Review', headerShown: true }}
+      />
+      {/* NEW: Organization Single Bid Detail */}
+      <OrgProfEntryStack.Screen
+        name="OrgBidDetail"
+        component={OrgBidDetailScreen}
         options={{ ...stackScreenOptions(isDark), title: 'Bid Detail', headerShown: true }}
       />
       <OrgProfEntryStack.Screen
@@ -911,14 +935,14 @@ function ProposalsInner() {
 // ═════════════════════════════════════════════════════════════════════════════
 
 function ReceivedBidsEntryScreen() {
-  return <MyProfessionalTendersScreen />;
+  return <ReceivedBidsTenderListScreen />;
 }
 
 function CompanyBidsTopTabs() {
   const isDark = useThemeStore((s) => s.theme.isDark);
   const surface = isDark ? '#1E293B' : '#FFFFFF';
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: surface }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: surface }} edges={['top']}>
       <CompanyBidsTopTab.Navigator screenOptions={topTabScreenOptions(isDark)}>
         <CompanyBidsTopTab.Screen name="ReceivedBids" component={ReceivedBidsEntryScreen} options={{ title: 'Received' }} />
         <CompanyBidsTopTab.Screen name="MyBids" component={MyBidsScreen} options={{ title: 'My Bids' }} />
@@ -941,43 +965,65 @@ function CompanyBidsInner() {
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  MAIN TENDERS BOTTOM TAB SETS
+//
+//  FIX: tabBar prop now returns null when ProfessionalTenders is the active
+//  tab. This prevents the outer tab bar from rendering on top of the inner
+//  Professional Tenders tab bar — eliminating the double-bar issue seen in
+//  the screenshot.
 // ═════════════════════════════════════════════════════════════════════════════
 
-const MainTendersTabBar = makeTabBar(MAIN_TAB_CONFIG);
+// Custom tab bar renderer that hides itself when Pro tab is active
+function makeMainTendersTabBar() {
+  const InnerTabBar = makeTabBar(MAIN_TAB_CONFIG);
+  return function MainTendersTabBarWithHide({ state, navigation }: any) {
+    // FIX: Hide outer tab bar when ProfessionalTenders tab is active
+    // so the inner Pro tab bar is the only one visible
+    const activeRoute = state.routes[state.index]?.name;
+    if (activeRoute === 'ProfessionalTenders') return null;
+    return <InnerTabBar state={state} navigation={navigation} />;
+  };
+}
+
+const MainTendersTabBar = makeMainTendersTabBar();
 
 function CompanyBottomTabs() {
+  const insets = useSafeAreaInsets();
+  const tabH = 60 + Math.max(insets.bottom, 4);
   return (
     <BottomTab.Navigator
       tabBar={(props) => <MainTendersTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: { height: tabH },
+      }}
     >
-      <BottomTab.Screen name="Home" component={TendersHomeCompany} />
-      <BottomTab.Screen name="FreelanceTenders" component={FreelanceTendersInner} />
-      {/*
-        ProfessionalTenders now renders CompanyProfessionalTendersEntry which is a
-        fully isolated stack. Navigating between tabs inside that stack does NOT
-        affect this BottomTab navigator at all.
-      */}
+      <BottomTab.Screen name="Home"                component={TendersHomeCompany} />
+      <BottomTab.Screen name="FreelanceTenders"    component={FreelanceTendersInner} />
       <BottomTab.Screen name="ProfessionalTenders" component={CompanyProfessionalTendersEntry} />
-      <BottomTab.Screen name="Proposals" component={ProposalsInner} />
-      <BottomTab.Screen name="Bids" component={CompanyBidsInner} />
-      <BottomTab.Screen name="Back" component={TendersBackPlaceholder} />
+      <BottomTab.Screen name="Proposals"           component={ProposalsInner} />
+      <BottomTab.Screen name="Bids"                component={CompanyBidsInner} />
+      <BottomTab.Screen name="Back"                component={TendersBackPlaceholder} />
     </BottomTab.Navigator>
   );
 }
 
 function OrgBottomTabs() {
+  const insets = useSafeAreaInsets();
+  const tabH = 60 + Math.max(insets.bottom, 4);
   return (
     <BottomTab.Navigator
       tabBar={(props) => <MainTendersTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: { height: tabH },
+      }}
     >
-      <BottomTab.Screen name="Home" component={TendersHomeOrg} />
-      <BottomTab.Screen name="FreelanceTenders" component={FreelanceTendersInner} />
+      <BottomTab.Screen name="Home"                component={TendersHomeOrg} />
+      <BottomTab.Screen name="FreelanceTenders"    component={FreelanceTendersInner} />
       <BottomTab.Screen name="ProfessionalTenders" component={OrgProfessionalTendersEntry} />
-      <BottomTab.Screen name="Proposals" component={ProposalsInner} />
-      <BottomTab.Screen name="Bids" component={OrgReceivedBidsTab} />
-      <BottomTab.Screen name="Back" component={TendersBackPlaceholder} />
+      <BottomTab.Screen name="Proposals"           component={ProposalsInner} />
+      <BottomTab.Screen name="Bids"                component={OrgReceivedBidsTab} />
+      <BottomTab.Screen name="Back"                component={TendersBackPlaceholder} />
     </BottomTab.Navigator>
   );
 }
@@ -994,7 +1040,7 @@ const TendersNavigator: React.FC<TendersNavigatorProps> = ({ userRole }) => {
   return (
     <Stack.Navigator initialRouteName="TendersSplash" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="TendersSplash" component={TendersSplashScreen} />
-      <Stack.Screen name="TendersHome" component={HomeComponent} />
+      <Stack.Screen name="TendersHome"   component={HomeComponent} />
     </Stack.Navigator>
   );
 };

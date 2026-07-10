@@ -1,4 +1,6 @@
 // mobile/src/components/freelanceTenders/FreelanceTenderForm/Step2Details.tsx
+// FIXES: F-03, G-04
+// UPDATED: useTheme() instead of useThemeStore(), all colors from theme
 
 import React, { memo } from 'react';
 import {
@@ -9,7 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useThemeStore } from '../../../store/themeStore';
+import { useTheme } from '../../../hooks/useTheme';
+import { MIN_TOUCH_TARGET } from '../../../theme/tokens';
 import type {
   Currency,
   EngagementType,
@@ -33,66 +36,66 @@ interface PillGroupProps<T extends string> {
   options: Array<{ label: string; value: T }>;
   selected: T | undefined;
   onSelect: (v: T) => void;
-  primaryColor: string;
-  textColor: string;
-  mutedColor: string;
-  surfaceColor: string;
-  borderColor: string;
+  scrollable?: boolean;
 }
 
 function PillGroup<T extends string>({
   options,
   selected,
   onSelect,
-  primaryColor,
-  textColor,
-  mutedColor,
-  surfaceColor,
-  borderColor,
+  scrollable = true,
 }: PillGroupProps<T>) {
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.pillRow}
-    >
-      {options.map((opt) => {
-        const active = selected === opt.value;
-        return (
-          <TouchableOpacity
-            key={opt.value}
-            onPress={() => onSelect(opt.value)}
-            style={[
-              styles.pill,
-              {
-                backgroundColor: active ? primaryColor : surfaceColor,
-                borderColor: active ? primaryColor : borderColor,
-              },
-            ]}
-            activeOpacity={0.75}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-          >
-            <Text
-              style={[
-                styles.pillText,
-                { color: active ? '#fff' : mutedColor },
-              ]}
-            >
-              {opt.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
-  );
+  const { colors: c, radius } = useTheme();
+
+  const pills = options.map((opt) => {
+    const active = selected === opt.value;
+    return (
+      <TouchableOpacity
+        key={opt.value}
+        onPress={() => onSelect(opt.value)}
+        style={[
+          styles.pill,
+          {
+            backgroundColor: active ? c.primary : c.surface,
+            borderColor: active ? c.primary : c.border,
+            borderRadius: radius.full,
+          },
+        ]}
+        activeOpacity={0.75}
+        accessibilityRole="button"
+        accessibilityState={{ selected: active }}
+      >
+        <Text
+          style={[
+            styles.pillText,
+            { color: active ? c.textInverse : c.textMuted },
+          ]}
+        >
+          {opt.label}
+        </Text>
+      </TouchableOpacity>
+    );
+  });
+
+  if (scrollable) {
+    return (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.pillRow}
+      >
+        {pills}
+      </ScrollView>
+    );
+  }
+
+  return <View style={styles.pillRowWrap}>{pills}</View>;
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
 const Step2Details: React.FC<Step2DetailsProps> = memo(({ data, onChange, errors }) => {
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+  const { colors: c, radius, spacing, type } = useTheme();
   const details = data.details;
 
   const patchDetails = (patch: Partial<TenderDetails>) => {
@@ -101,18 +104,16 @@ const Step2Details: React.FC<Step2DetailsProps> = memo(({ data, onChange, errors
 
   const inputStyle = [
     styles.input,
-    { backgroundColor: c.surface ?? c.card, borderColor: c.border ?? c.textMuted + '44', color: c.text },
+    {
+      backgroundColor: c.inputBg,
+      borderColor: c.border,
+      color: c.text,
+      borderRadius: radius.md,
+    },
   ];
   const labelStyle = [styles.label, { color: c.text }];
-  const errorStyle = [styles.error, { color: c.error ?? '#EF4444' }];
+  const errorStyle = [styles.error, { color: c.danger }];
   const hintStyle = [styles.hint, { color: c.textMuted }];
-  const pillProps = {
-    primaryColor: c.primary,
-    textColor: c.text,
-    mutedColor: c.textMuted,
-    surfaceColor: c.surface ?? c.card,
-    borderColor: c.border ?? c.textMuted + '44',
-  };
 
   const ENGAGEMENT_OPTIONS: Array<{ label: string; value: EngagementType }> = [
     { label: 'Fixed Price', value: 'fixed_price' },
@@ -167,7 +168,7 @@ const Step2Details: React.FC<Step2DetailsProps> = memo(({ data, onChange, errors
           options={ENGAGEMENT_OPTIONS}
           selected={et}
           onSelect={(v) => patchDetails({ engagementType: v })}
-          {...pillProps}
+          scrollable
         />
         {errors['details.engagementType'] ? (
           <Text style={errorStyle}>{errors['details.engagementType']}</Text>
@@ -204,8 +205,7 @@ const Step2Details: React.FC<Step2DetailsProps> = memo(({ data, onChange, errors
               keyboardType="numeric"
             />
           </View>
-          {/* Currency picker */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+          <View style={styles.currencyRow}>
             {CURRENCY_OPTIONS.map((cur) => (
               <TouchableOpacity
                 key={cur}
@@ -215,17 +215,18 @@ const Step2Details: React.FC<Step2DetailsProps> = memo(({ data, onChange, errors
                 style={[
                   styles.currencyChip,
                   {
-                    backgroundColor: details.budget?.currency === cur ? c.primary : c.surface ?? c.card,
-                    borderColor: details.budget?.currency === cur ? c.primary : c.border ?? c.textMuted + '44',
+                    backgroundColor: details.budget?.currency === cur ? c.primary : c.surface,
+                    borderColor: details.budget?.currency === cur ? c.primary : c.border,
+                    borderRadius: radius.full,
                   },
                 ]}
               >
-                <Text style={{ color: details.budget?.currency === cur ? '#fff' : c.textMuted, fontSize: 12, fontWeight: '600' }}>
+                <Text style={{ color: details.budget?.currency === cur ? c.textInverse : c.textMuted, fontSize: 12, fontWeight: '600' }}>
                   {cur}
                 </Text>
               </TouchableOpacity>
             ))}
-          </ScrollView>
+          </View>
           {errors['details.budget'] ? <Text style={errorStyle}>{errors['details.budget']}</Text> : null}
         </View>
       )}
@@ -264,7 +265,6 @@ const Step2Details: React.FC<Step2DetailsProps> = memo(({ data, onChange, errors
             />
           </View>
           <View style={styles.rowGap}>
-            {/* Period */}
             <PillGroup
               options={[
                 { label: 'Monthly', value: 'monthly' },
@@ -276,7 +276,7 @@ const Step2Details: React.FC<Step2DetailsProps> = memo(({ data, onChange, errors
                   salaryRange: { ...(details.salaryRange ?? { currency: 'ETB', min: 0, max: 0 }), period: v },
                 })
               }
-              {...pillProps}
+              scrollable={false}
             />
           </View>
           {errors['details.salaryRange'] ? (
@@ -287,7 +287,7 @@ const Step2Details: React.FC<Step2DetailsProps> = memo(({ data, onChange, errors
 
       {/* Negotiable note */}
       {et === 'negotiable' && (
-        <View style={[styles.infoBox, { backgroundColor: c.primary + '14', borderColor: c.primary + '44' }]}>
+        <View style={[styles.infoBox, { backgroundColor: c.primaryBg, borderColor: c.borderAccent }]}>
           <Text style={[styles.infoText, { color: c.primary }]}>
             Freelancers will propose their own rates. You negotiate final terms.
           </Text>
@@ -317,7 +317,7 @@ const Step2Details: React.FC<Step2DetailsProps> = memo(({ data, onChange, errors
           options={EXPERIENCE_OPTIONS}
           selected={details.experienceLevel}
           onSelect={(v) => patchDetails({ experienceLevel: v })}
-          {...pillProps}
+          scrollable={false}
         />
       </View>
 
@@ -328,7 +328,7 @@ const Step2Details: React.FC<Step2DetailsProps> = memo(({ data, onChange, errors
           options={PROJECT_OPTIONS}
           selected={details.projectType}
           onSelect={(v) => patchDetails({ projectType: v })}
-          {...pillProps}
+          scrollable={false}
         />
       </View>
 
@@ -339,7 +339,7 @@ const Step2Details: React.FC<Step2DetailsProps> = memo(({ data, onChange, errors
           options={LOCATION_OPTIONS}
           selected={details.locationType}
           onSelect={(v) => patchDetails({ locationType: v })}
-          {...pillProps}
+          scrollable
         />
       </View>
 
@@ -386,7 +386,7 @@ const Step2Details: React.FC<Step2DetailsProps> = memo(({ data, onChange, errors
                 },
               })
             }
-            {...pillProps}
+            scrollable={false}
           />
         </View>
       </View>
@@ -398,7 +398,7 @@ const Step2Details: React.FC<Step2DetailsProps> = memo(({ data, onChange, errors
           options={URGENCY_OPTIONS}
           selected={details.urgency}
           onSelect={(v) => patchDetails({ urgency: v })}
-          {...pillProps}
+          scrollable={false}
         />
       </View>
 
@@ -421,8 +421,9 @@ const Step2Details: React.FC<Step2DetailsProps> = memo(({ data, onChange, errors
           style={[
             styles.toggleChip,
             {
-              backgroundColor: details.ndaRequired ? c.primary + '18' : c.surface ?? c.card,
-              borderColor: details.ndaRequired ? c.primary : c.border ?? c.textMuted + '44',
+              backgroundColor: details.ndaRequired ? c.primaryBg : c.surface,
+              borderColor: details.ndaRequired ? c.primary : c.border,
+              borderRadius: radius.full,
             },
           ]}
           activeOpacity={0.75}
@@ -439,8 +440,9 @@ const Step2Details: React.FC<Step2DetailsProps> = memo(({ data, onChange, errors
           style={[
             styles.toggleChip,
             {
-              backgroundColor: details.portfolioRequired ? c.primary + '18' : c.surface ?? c.card,
-              borderColor: details.portfolioRequired ? c.primary : c.border ?? c.textMuted + '44',
+              backgroundColor: details.portfolioRequired ? c.primaryBg : c.surface,
+              borderColor: details.portfolioRequired ? c.primary : c.border,
+              borderRadius: radius.full,
             },
           ]}
           activeOpacity={0.75}
@@ -462,16 +464,22 @@ const styles = StyleSheet.create({
   container: { gap: 4 },
   field: { marginBottom: 20 },
   label: { fontSize: 14, fontWeight: '600', marginBottom: 6 },
-  input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, minHeight: 50 },
+  input: {
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    minHeight: MIN_TOUCH_TARGET + 6,
+  },
   error: { fontSize: 12, marginTop: 4 },
   hint: { fontSize: 11, marginTop: 4 },
-  pillRow: { gap: 8, paddingVertical: 2 },
+  pillRow: { gap: 8, paddingVertical: 4 },
+  pillRowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 2 },
   pill: {
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 20,
     borderWidth: 1,
-    minHeight: 44,
+    minHeight: MIN_TOUCH_TARGET,
     justifyContent: 'center',
   },
   pillText: { fontSize: 13, fontWeight: '600' },
@@ -479,14 +487,19 @@ const styles = StyleSheet.create({
   rangeInput: { flex: 1 },
   rangeSep: { fontSize: 20, fontWeight: '300' },
   rowGap: { marginTop: 8 },
+  currencyRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
   currencyChip: {
     paddingVertical: 8,
     paddingHorizontal: 14,
-    borderRadius: 16,
     borderWidth: 1,
-    marginRight: 8,
-    minHeight: 44,
+    minHeight: MIN_TOUCH_TARGET,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   infoBox: {
     borderWidth: 1,
@@ -499,9 +512,8 @@ const styles = StyleSheet.create({
   toggleChip: {
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 20,
     borderWidth: 1,
-    minHeight: 44,
+    minHeight: MIN_TOUCH_TARGET,
     justifyContent: 'center',
   },
   toggleText: { fontSize: 13, fontWeight: '600' },

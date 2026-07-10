@@ -37,6 +37,8 @@ const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const User = require('../models/User');
 const Follow = require('../models/Follow');
+// 🔔 NOTIFICATION
+const notificationService = require('../services/notificationService');
 
 const { isValidObjectId } = mongoose;
 
@@ -63,10 +65,6 @@ const ERROR_MESSAGES = {
 
 // ─── Helper: Check mutual follow ─────────────────────────────────────────────
 
-/**
- * Determines if two users mutually follow each other.
- * Uses Follow model with status='active' to confirm bidirectional following.
- */
 async function areMutuallyFollowing(userAId, userBId) {
   const [aToB, bToA] = await Promise.all([
     Follow.exists({ 
@@ -87,20 +85,14 @@ async function areMutuallyFollowing(userAId, userBId) {
 
 // ─── Helper: Enrich conversation for viewer ──────────────────────────────────
 
-/**
- * Transforms a conversation document into a viewer-specific shape.
- * Adds otherUser (the non-viewer participant) and unreadCount for the viewer.
- */
 function enrichForViewer(doc, viewerIdStr) {
   const obj = doc.toObject ? doc.toObject() : { ...doc };
   const viewerId = viewerIdStr.toString();
 
-  // Identify the other participant
   obj.otherUser = (obj.participants ?? []).find(
     (p) => (p._id ?? p).toString() !== viewerId
   ) ?? null;
 
-  // Calculate unread count for this viewer
   const counts = obj.unreadCounts;
   if (counts instanceof Map) {
     obj.unreadCount = counts.get(viewerId) ?? 0;
@@ -110,7 +102,6 @@ function enrichForViewer(doc, viewerIdStr) {
     obj.unreadCount = 0;
   }
 
-  // Determine viewer's role in this conversation
   obj.viewerRole = obj.requestedBy?.toString() === viewerId ? 'requester' : 'recipient';
 
   return obj;
@@ -130,22 +121,12 @@ function safeEmit(io, room, event, data) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /conversations/with/:userId
-// Creates or retrieves a direct message conversation between the authenticated
-// user and the target user.
-//
-// Business Rules:
-// - Cannot message yourself
-// - Target must exist and be active
-// - Mutual followers get 'active' status immediately
-// - Non-mutual followers get 'request' status (message request model)
-// - If conversation was soft-deleted by requester, restore it
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getOrCreateConversation = async (req, res) => {
   try {
     const myId = req.user.userId;
     const { userId: targetId } = req.params;
 
-    // Validation
     if (!isValidObjectId(targetId)) {
       return res.status(400).json({ 
         success: false, 
@@ -159,7 +140,6 @@ exports.getOrCreateConversation = async (req, res) => {
       });
     }
 
-    // Verify target exists and is active
     const targetUser = await User.findOne({ 
       _id: targetId, 
       isActive: true 
@@ -172,7 +152,6 @@ exports.getOrCreateConversation = async (req, res) => {
       });
     }
 
-    // Check for existing conversation (direct, 2 participants exactly)
     const existing = await Conversation.findOne({
       type: 'direct',
       participants: { $all: [myId, targetId], $size: 2 },
@@ -181,7 +160,6 @@ exports.getOrCreateConversation = async (req, res) => {
       .populate(LAST_MSG_POPULATE);
 
     if (existing) {
-      // Restore if previously soft-deleted by current user
       const wasDeleted = existing.deletedFor?.some(
         (u) => u.toString() === myId.toString()
       );
@@ -199,11 +177,9 @@ exports.getOrCreateConversation = async (req, res) => {
       });
     }
 
-    // Determine conversation status based on mutual follow
     const mutual = await areMutuallyFollowing(myId, targetId);
     const status = mutual ? 'active' : 'request';
 
-    // Create new conversation
     const conversation = await Conversation.create({
       participants: [myId, targetId],
       type: 'direct',
@@ -213,7 +189,6 @@ exports.getOrCreateConversation = async (req, res) => {
       unreadCounts: new Map(),
     });
 
-    // Populate for response
     const populated = await Conversation.findById(conversation._id)
       .populate('participants', PARTICIPANT_SELECT)
       .populate(LAST_MSG_POPULATE)
@@ -221,10 +196,35 @@ exports.getOrCreateConversation = async (req, res) => {
 
     const enriched = enrichForViewer(populated, myId);
 
-    // Notify the other user in real-time
     safeEmit(req.io, `user:${targetId}`, 'chat:conversation_created', {
       conversation: enrichForViewer(populated, targetId),
     });
+
+    // 🔔 NOTIFICATION: Message request notification
+    (async () => {
+      try {
+        if (status === 'request') {
+          await notificationService.create({
+            recipient: targetId,
+            actor: myId,
+            type: 'message_request',
+            title: 'New message request',
+            body: `{actorName} sent you a message request`,
+            data: {
+              entityType: 'Conversation',
+              entityId: conversation._id.toString(),
+              screen: 'MessageRequests',
+              params: { conversationId: conversation._id }
+            },
+            priority: 'high',
+            channels: { inApp: true, push: true, email: false }
+          });
+        }
+      } catch (notifErr) {
+        console.warn('[Notification] Non-critical error:', notifErr.message);
+      }
+    })();
+    // END NOTIFICATION
 
     return res.status(201).json({
       success: true,
@@ -242,8 +242,6 @@ exports.getOrCreateConversation = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /conversations
-// Returns all non-declined conversations for the authenticated user,
-// sorted by most recent activity. Includes requestsCount inline for badge.
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getMyConversations = async (req, res) => {
   try {
@@ -252,7 +250,6 @@ exports.getMyConversations = async (req, res) => {
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const skip = (page - 1) * limit;
 
-    // Base query: user is participant, not deleted by user, status is active or request
     const baseQuery = {
       participants: userId,
       deletedFor: { $ne: userId },
@@ -270,7 +267,6 @@ exports.getMyConversations = async (req, res) => {
 
       Conversation.countDocuments(baseQuery),
 
-      // Pending requests where the user is the RECIPIENT (not the requester)
       Conversation.countDocuments({
         participants: userId,
         status: 'request',
@@ -301,8 +297,6 @@ exports.getMyConversations = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /conversations/requests
-// Returns only conversations where the authenticated user is the RECIPIENT
-// of a message request (someone requested to message them).
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getMessageRequests = async (req, res) => {
   try {
@@ -311,7 +305,6 @@ exports.getMessageRequests = async (req, res) => {
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const skip = (page - 1) * limit;
 
-    // Critical filter: requestedBy !== userId ensures only RECIPIENT requests
     const query = {
       participants: userId,
       status: 'request',
@@ -351,14 +344,12 @@ exports.getMessageRequests = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /conversations/contacts/online
-// Returns online users from the current user's active conversations.
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getOnlineContacts = async (req, res) => {
   try {
     const userId = req.user.userId;
     const limit = Math.min(30, parseInt(req.query.limit, 10) || 20);
 
-    // Get all conversation participants except the current user
     const conversations = await Conversation.find({
       participants: userId,
       status: { $in: ['active', 'request'] },
@@ -367,20 +358,18 @@ exports.getOnlineContacts = async (req, res) => {
       .select('participants')
       .lean();
 
-    // Extract unique other user IDs
     const otherIds = [
       ...new Set(
         conversations.flatMap((c) =>
           c.participants.map(p => p.toString()).filter(id => id !== userId.toString())
         )
       ),
-    ].slice(0, 100); // Safety limit
+    ].slice(0, 100);
 
     if (otherIds.length === 0) {
       return res.json({ success: true, data: [] });
     }
 
-    // Find online users from the extracted IDs
     const onlineUsers = await User.find({
       _id: { $in: otherIds },
       isOnline: true,
@@ -402,7 +391,6 @@ exports.getOnlineContacts = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /conversations/:id
-// Returns a single conversation by ID if the user is a participant.
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getConversationById = async (req, res) => {
   try {
@@ -446,7 +434,6 @@ exports.getConversationById = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUT /conversations/:id/accept
-// Accepts a pending message request. Only the RECIPIENT can accept.
 // ─────────────────────────────────────────────────────────────────────────────
 exports.acceptMessageRequest = async (req, res) => {
   try {
@@ -472,7 +459,6 @@ exports.acceptMessageRequest = async (req, res) => {
       });
     }
 
-    // Guard: Only the RECIPIENT (non-requester) can accept
     if (conversation.requestedBy?.toString() === userId.toString()) {
       return res.status(400).json({ 
         success: false, 
@@ -490,7 +476,6 @@ exports.acceptMessageRequest = async (req, res) => {
     conversation.status = 'active';
     await conversation.save();
 
-    // Broadcast acceptance to both participants
     const convId = conversation._id.toString();
     safeEmit(req.io, `conv:${convId}`, 'chat:request_accepted', { conversationId: convId });
     
@@ -501,7 +486,32 @@ exports.acceptMessageRequest = async (req, res) => {
       });
     });
 
-    // Populate for response
+    // 🔔 NOTIFICATION: Notify requester that their request was accepted
+    (async () => {
+      try {
+        if (conversation.requestedBy) {
+          await notificationService.create({
+            recipient: conversation.requestedBy,
+            actor: userId,
+            type: 'message_request_accepted',
+            title: 'Message request accepted',
+            body: `{actorName} accepted your message request`,
+            data: {
+              entityType: 'Conversation',
+              entityId: id,
+              screen: 'ChatDetail',
+              params: { conversationId: id }
+            },
+            priority: 'high',
+            channels: { inApp: true, push: true, email: false }
+          });
+        }
+      } catch (notifErr) {
+        console.warn('[Notification] Non-critical error:', notifErr.message);
+      }
+    })();
+    // END NOTIFICATION
+
     const populated = await Conversation.findById(conversation._id)
       .populate('participants', PARTICIPANT_SELECT)
       .populate(LAST_MSG_POPULATE)
@@ -522,8 +532,6 @@ exports.acceptMessageRequest = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUT /conversations/:id/decline
-// Declines a message request. Only the RECIPIENT can decline.
-// Soft-deletes the conversation for the recipient.
 // ─────────────────────────────────────────────────────────────────────────────
 exports.declineMessageRequest = async (req, res) => {
   try {
@@ -549,7 +557,6 @@ exports.declineMessageRequest = async (req, res) => {
       });
     }
 
-    // Guard: Only the RECIPIENT (non-requester) can decline
     if (conversation.requestedBy?.toString() === userId.toString()) {
       return res.status(400).json({ 
         success: false, 
@@ -566,7 +573,6 @@ exports.declineMessageRequest = async (req, res) => {
 
     conversation.status = 'declined';
     
-    // Soft-delete for the recipient
     if (!conversation.deletedFor) conversation.deletedFor = [];
     if (!conversation.deletedFor.some((u) => u.toString() === userId.toString())) {
       conversation.deletedFor.push(userId);
@@ -574,7 +580,6 @@ exports.declineMessageRequest = async (req, res) => {
     
     await conversation.save();
 
-    // Notify the requester (optional, but professional)
     const convId = conversation._id.toString();
     safeEmit(req.io, `conv:${convId}`, 'chat:request_declined', { conversationId: convId });
 
@@ -590,8 +595,6 @@ exports.declineMessageRequest = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUT /conversations/:id/read
-// Marks a conversation as read for the current user.
-// Resets unread count to 0 AND marks all unread messages as read.
 // ─────────────────────────────────────────────────────────────────────────────
 exports.markConversationRead = async (req, res) => {
   try {
@@ -617,13 +620,11 @@ exports.markConversationRead = async (req, res) => {
       });
     }
 
-    // Reset unread count for this user
     if (!conversation.unreadCounts) conversation.unreadCounts = new Map();
     conversation.unreadCounts.set(userId.toString(), 0);
     conversation.markModified('unreadCounts');
     await conversation.save();
 
-    // Mark all unread messages as read
     const now = new Date();
     await Message.updateMany(
       {
@@ -637,7 +638,6 @@ exports.markConversationRead = async (req, res) => {
       }
     );
 
-    // Broadcast read receipt
     const convId = id.toString();
     safeEmit(req.io, `conv:${convId}`, 'chat:messages_read', {
       conversationId: convId,
@@ -657,8 +657,6 @@ exports.markConversationRead = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DELETE /conversations/:id
-// Soft-deletes a conversation for the current user only.
-// The other participant can still see and access the conversation.
 // ─────────────────────────────────────────────────────────────────────────────
 exports.deleteConversation = async (req, res) => {
   try {
@@ -684,7 +682,6 @@ exports.deleteConversation = async (req, res) => {
       });
     }
 
-    // Soft-delete: add user to deletedFor array
     if (!conversation.deletedFor) conversation.deletedFor = [];
     if (!conversation.deletedFor.some((u) => u.toString() === userId.toString())) {
       conversation.deletedFor.push(userId);

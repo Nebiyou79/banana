@@ -1,219 +1,182 @@
 /**
  * server/src/utils/resolveOwnerPreview.js
  * ─────────────────────────────────────────────────────────────────────────────
- * Single source of truth for resolving a company / organisation owner's
- * avatar URL and building the ownerPreview snapshot that is attached to
- * Job and Application responses.
- *
- * Architecture mirrors ProductController.buildOwnerSnapshot exactly:
- *   1. Load the Company / Organisation document.
- *   2. Look up the linked Profile document (via company.user / org.user).
- *   3. Return profile.avatar.secure_url as the canonical logoUrl.
- *
- * This file is intentionally framework-free (no Express imports) so it can
- * be required from any controller without side-effects.
+ * SINGLE SOURCE OF TRUTH for company/organization logo/avatar resolution.
+ * 
+ * FIXED: Falls back to direct Company/Organization lookup when `user` is
+ * not populated by Mongoose.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-const Company      = require('../models/Company');
-const Organization = require('../models/Organization');
-const Profile      = require('../models/Profile');
+const Profile = require('../models/Profile');
 
-// ── internal helpers ──────────────────────────────────────────────────────────
+// ─── Populate projections ────────────────────────────────────────────────────
 
-/**
- * Resolve the best avatar URL from any raw owner document object.
- *
- * Priority (highest → lowest):
- *   profile.avatar.secure_url          ← Cloudinary via ProfileController
- *   owner.avatarUrl                    ← flat string field on Company/Org doc
- *   owner.logoUrl                      ← legacy logo field
- *   owner.logo                         ← some older documents use this
- *   owner.profileImage                 ← alternative naming
- *   owner.avatar (string only)         ← plain URL stored directly
- *
- * Cloudinary object shapes (e.g. { public_id, secure_url }) are unwrapped
- * at the `profileAvatarSecureUrl` parameter; this helper only handles the
- * flat string fields that live directly on the Company/Org document.
- */
-const resolveRawLogoUrl = (ownerDoc, profileAvatarSecureUrl) => {
-  if (profileAvatarSecureUrl && typeof profileAvatarSecureUrl === 'string' && profileAvatarSecureUrl.startsWith('http')) {
-    return profileAvatarSecureUrl;
-  }
+const COMPANY_POPULATE_SELECT = [
+  '_id', 'name',
+  'logoUrl', 'logo',
+  'avatarUrl', 'avatar',
+  'profileImage',
+  'avatarPublicId',
+  'verified', 'industry', 'website',
+  'user',
+].join(' ');
+
+const ORGANIZATION_POPULATE_SELECT = [
+  '_id', 'name',
+  'logoUrl', 'logo',
+  'avatarUrl', 'avatar',
+  'profileImage',
+  'avatarPublicId',
+  'verified', 'industry', 'organizationType', 'website',
+  'user',
+].join(' ');
+
+// ─── Core resolver ────────────────────────────────────────────────────────────
+
+const resolveLogoUrl = (owner) => {
+  if (!owner) return null;
+  if (owner._profileAvatarUrl) return owner._profileAvatarUrl;
 
   const candidates = [
-    ownerDoc?.avatarUrl,
-    ownerDoc?.logoUrl,
-    ownerDoc?.logo,
-    ownerDoc?.profileImage,
-    // Guard against Cloudinary objects stored directly on the doc
-    (ownerDoc?.avatar && typeof ownerDoc.avatar === 'string') ? ownerDoc.avatar : null,
-    (ownerDoc?.avatar?.secure_url)                           ? ownerDoc.avatar.secure_url : null,
+    owner.avatarUrl,
+    owner.logoUrl,
+    owner.logo,
+    owner.profileImage,
+    typeof owner.avatar === 'string' ? owner.avatar : null,
+    (owner.avatar && typeof owner.avatar === 'object') ? owner.avatar.secure_url : null,
   ];
 
-  return candidates.find(v => typeof v === 'string' && v.startsWith('http')) || null;
-};
-
-/**
- * Fetch the Profile record for a given userId and extract
- * the Cloudinary avatar.secure_url.
- * Returns null if no profile or no avatar is found.
- */
-const fetchProfileAvatarUrl = async (userId) => {
-  if (!userId) return null;
-  try {
-    const profile = await Profile.findOne({ user: userId })
-      .select('avatar')
-      .lean();
-    return profile?.avatar?.secure_url || null;
-  } catch {
-    return null;
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === 'string' && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
   }
+  return null;
 };
 
-// ── public API ────────────────────────────────────────────────────────────────
+// ─── Owner preview builder ───────────────────────────────────────────────────
 
-/**
- * Build a compact ownerPreview from a raw Mongoose lean() company document.
- *
- * If the document already has a `user` ref, the Profile is looked up to
- * get the Cloudinary avatar (same as ProductController.buildOwnerSnapshot).
- *
- * @param {object|null} ownerDoc  - lean() Company or Organization document
- * @param {'company'|'organization'} type
- * @returns {Promise<object>}
- */
-const buildOwnerPreviewFromDoc = async (ownerDoc, type = 'company') => {
-  if (!ownerDoc) {
-    return { type, name: type === 'organization' ? 'Organization' : 'Company', logoUrl: null, verified: false };
-  }
-
-  // Identical flow to ProductController.buildOwnerSnapshot
-  const profileAvatarUrl = await fetchProfileAvatarUrl(ownerDoc.user);
-  const logoUrl = resolveRawLogoUrl(ownerDoc, profileAvatarUrl);
-
-  return {
-    _id:            ownerDoc._id?.toString() || null,
-    type,
-    name:           ownerDoc.name           || (type === 'organization' ? 'Organization' : 'Company'),
-    logoUrl,
-    avatarUrl:      logoUrl,                 // alias — frontend checks both
-    avatarPublicId: ownerDoc.avatarPublicId  || null,
-    verified:       ownerDoc.verified        || false,
-    industry:       ownerDoc.industry        || ownerDoc.organizationType || null,
-    website:        ownerDoc.website         || null,
-  };
-};
-
-/**
- * Build ownerPreview by loading the Company document from DB.
- * Call this when you only have a company ID (e.g. during job creation).
- *
- * @param {string|ObjectId} companyId
- * @returns {Promise<object>}
- */
-const buildCompanyOwnerPreview = async (companyId) => {
-  if (!companyId) return { type: 'company', name: 'Company', logoUrl: null, verified: false };
-  try {
-    const company = await Company.findById(companyId).lean();
-    return buildOwnerPreviewFromDoc(company, 'company');
-  } catch {
-    return { type: 'company', name: 'Company', logoUrl: null, verified: false };
-  }
-};
-
-/**
- * Build ownerPreview by loading the Organization document from DB.
- *
- * @param {string|ObjectId} orgId
- * @returns {Promise<object>}
- */
-const buildOrganizationOwnerPreview = async (orgId) => {
-  if (!orgId) return { type: 'organization', name: 'Organization', logoUrl: null, verified: false };
-  try {
-    const org = await Organization.findById(orgId).lean();
-    return buildOwnerPreviewFromDoc(org, 'organization');
-  } catch {
-    return { type: 'organization', name: 'Organization', logoUrl: null, verified: false };
-  }
-};
-
-/**
- * Build ownerPreview from a populated (or lean) job document.
- * Works on any job object regardless of whether it came from .lean() or
- * .populate(), because it accepts the already-hydrated company/org object.
- *
- * @param {object} job - populated job doc (company/organization already populated)
- * @returns {Promise<object>}
- */
 const buildOwnerPreviewFromJob = async (job) => {
   if (!job) return null;
-  const isOrg  = job.jobType === 'organization';
-  const owner  = isOrg ? job.organization : job.company;
-  const type   = isOrg ? 'organization' : 'company';
-  return buildOwnerPreviewFromDoc(owner, type);
-};
 
-/**
- * Enrich an array of lean job objects with ownerPreview in parallel.
- * Mutates each job object (adds job.ownerPreview).
- *
- * @param {object[]} jobs - array of lean job objects
- * @returns {Promise<object[]>} same array, mutated
- */
-const enrichJobsWithOwnerPreview = async (jobs) => {
-  if (!Array.isArray(jobs) || jobs.length === 0) return jobs;
-  await Promise.all(
-    jobs.map(async (job) => {
-      job.ownerPreview = await buildOwnerPreviewFromJob(job);
-    })
-  );
-  return jobs;
-};
+  const isOrg = job.jobType === 'organization';
+  const owner = isOrg ? job.organization : job.company;
 
-/**
- * Enrich an array of lean application objects with ownerPreview on job.
- * Mutates each application.job object.
- *
- * @param {object[]} applications
- * @returns {Promise<object[]>}
- */
-const enrichApplicationsWithOwnerPreview = async (applications) => {
-  if (!Array.isArray(applications) || applications.length === 0) return applications;
-  await Promise.all(
-    applications.map(async (app) => {
-      if (app.job) {
-        app.job.ownerPreview = await buildOwnerPreviewFromJob(app.job);
+  if (!owner) {
+    console.log('⚠️ [resolveOwnerPreview] No owner on job');
+    return null;
+  }
+
+  const type = isOrg ? 'organization' : 'company';
+  const ownerName = owner.name || (isOrg ? 'Organization' : 'Company');
+
+  console.log(`\n🔍 [resolveOwnerPreview] Building preview for: "${ownerName}" (${type})`);
+  console.log(`   owner._id: ${owner._id}`);
+  console.log(`   owner.user (from populate): ${owner.user} (type: ${typeof owner.user})`);
+
+  const preview = {
+    _id: owner._id?.toString(),
+    type,
+    name: ownerName,
+    logoUrl: null,
+    avatarUrl: null,
+    avatarPublicId: null,
+    verified: owner.verified || false,
+    industry: owner.industry || owner.organizationType || null,
+    website: owner.website || null,
+  };
+
+  // ── Get the user ID ────────────────────────────────────────────────────────
+  let ownerUserId = owner.user;
+
+  // CRITICAL FIX: If user is not populated, look it up directly
+  if (!ownerUserId && owner._id) {
+    try {
+      console.log(`   🔄 user not populated — doing direct ${isOrg ? 'Organization' : 'Company'} lookup...`);
+      const modelToUse = isOrg 
+        ? require('../models/Organization') 
+        : require('../models/Company');
+      const fullDoc = await modelToUse.findById(owner._id).select('user logoUrl logo avatarUrl avatar profileImage').lean();
+      
+      if (fullDoc) {
+        console.log(`   Direct lookup result - user: ${fullDoc.user}, logoUrl: "${fullDoc.logoUrl}", avatarUrl: "${fullDoc.avatarUrl}"`);
+        ownerUserId = fullDoc.user;
+        
+        // Also check for logo fields from the direct lookup
+        if (!preview.logoUrl) {
+          const directLogo = resolveLogoUrl(fullDoc);
+          if (directLogo) {
+            console.log(`   ✅ Found logo via direct lookup: ${directLogo.substring(0, 80)}`);
+            preview.logoUrl = directLogo;
+            preview.avatarUrl = directLogo;
+            return preview;
+          }
+        }
       }
-    })
-  );
-  return applications;
+    } catch (err) {
+      console.warn(`   ⚠️ Direct lookup error: ${err.message}`);
+    }
+  }
+
+  // ── Try Profile lookup ─────────────────────────────────────────────────────
+  if (ownerUserId) {
+    try {
+      const userId = typeof ownerUserId === 'object' ? ownerUserId._id || ownerUserId : ownerUserId;
+      console.log(`   Looking up Profile for user: ${userId}`);
+      
+      const profile = await Profile.findOne({ user: userId }).select('avatar').lean();
+      
+      if (profile?.avatar?.secure_url) {
+        console.log(`   ✅ Profile.avatar.secure_url: ${profile.avatar.secure_url.substring(0, 80)}`);
+        preview.logoUrl = profile.avatar.secure_url;
+        preview.avatarUrl = profile.avatar.secure_url;
+        preview.avatarPublicId = profile.avatar.public_id || null;
+        return preview;
+      } else {
+        console.log(`   ❌ No Profile avatar (secure_url empty or profile missing)`);
+      }
+    } catch (err) {
+      console.warn(`   ⚠️ Profile lookup error: ${err.message}`);
+    }
+  } else {
+    console.log(`   ⚠️ No user ref — cannot look up Profile`);
+  }
+
+  // ── Fallback to Company/Organization doc fields ────────────────────────────
+  if (!preview.logoUrl) {
+    const resolvedUrl = resolveLogoUrl(owner);
+    if (resolvedUrl) {
+      console.log(`   ✅ Using fallback from owner doc: ${resolvedUrl.substring(0, 80)}`);
+      preview.logoUrl = resolvedUrl;
+      preview.avatarUrl = resolvedUrl;
+    } else {
+      console.log(`   ❌ NO logo/avatar found — will show initials`);
+    }
+  }
+
+  return preview;
 };
 
-// ── The populate projection string every controller should use ─────────────────
-// Include the `user` ref so buildOwnerPreviewFromDoc can look up the Profile.
-const COMPANY_POPULATE_SELECT =
-  'name logoUrl logo avatar avatarUrl profileImage avatarPublicId verified industry website user';
+const enrichJobsWithOwnerPreview = async (jobs) => {
+  if (!jobs || !Array.isArray(jobs)) return;
+  await Promise.all(jobs.map(async (job) => {
+    if (job) job.ownerPreview = await buildOwnerPreviewFromJob(job);
+  }));
+};
 
-const ORGANIZATION_POPULATE_SELECT =
-  'name logoUrl logo avatar avatarUrl profileImage avatarPublicId verified industry organizationType website mission user';
+const enrichApplicationsWithOwnerPreview = async (applications) => {
+  if (!applications || !Array.isArray(applications)) return;
+  await Promise.all(applications.map(async (app) => {
+    if (app?.job) app.job.ownerPreview = await buildOwnerPreviewFromJob(app.job);
+  }));
+};
 
 module.exports = {
-  // Core builders
-  buildOwnerPreviewFromDoc,
-  buildOwnerPreviewFromJob,
-  buildCompanyOwnerPreview,
-  buildOrganizationOwnerPreview,
-
-  // Batch enrichment helpers
-  enrichJobsWithOwnerPreview,
-  enrichApplicationsWithOwnerPreview,
-
-  // Populate projection strings
   COMPANY_POPULATE_SELECT,
   ORGANIZATION_POPULATE_SELECT,
-
-  // Exposed for unit tests
-  resolveRawLogoUrl,
-  fetchProfileAvatarUrl,
+  resolveLogoUrl,
+  buildOwnerPreviewFromJob,
+  enrichJobsWithOwnerPreview,
+  enrichApplicationsWithOwnerPreview,
 };

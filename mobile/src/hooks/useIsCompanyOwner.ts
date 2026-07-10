@@ -1,44 +1,80 @@
 /**
- * mobile/src/hooks/useIsCompanyOwner.ts
+ * mobile/src/hooks/useIsCompanyOwner.ts  (FIXED v4)
  *
- * Single source of truth for "is the current user a company owner?".
- * Mirrors web: frontend/src/services/productService.ts → canManageProduct.
+ * KEY CHANGES FROM v3
+ * ───────────────────
+ * • Now returns { isOwner, isReady, isAuthenticated } via overload so callers
+ *   can distinguish "not ready yet" from "definitively not an owner".
+ * • Default export (no args / no product) returns boolean for backward compat.
  *
- * Usage:
- *   const isOwner = useIsCompanyOwner();
- *   const isOwnerOf = useIsCompanyOwner(product); // product-aware check
+ * ROOT CAUSE THIS FIXES
+ * ─────────────────────
+ * v3 returned false immediately when user===null, even before checking isReady.
+ * The screen was therefore showing "Company access only" wall when the real
+ * situation was "auth store hydrated but user is null → not logged in".
+ * With v4 the screen can branch correctly: not ready → spinner,
+ * not authenticated → login prompt, not owner → access wall.
  */
+
+import { useMemo } from 'react';
 import { useAuthStore } from '../store/authStore';
-import type { Product } from '../services/productService';
+import { useCompanyId } from './useCompanyId';
 
-const extractProductCompanyId = (product: Product | null | undefined): string | null => {
-  if (!product?.companyId) return null;
-  if (typeof product.companyId === 'string') return product.companyId;
-  return product.companyId._id ?? null;
-};
+interface MinimalProduct {
+  companyId?: string | { _id?: string } | null;
+}
 
-const extractUserCompanyId = (
-  user: { _id?: string; company?: { _id?: string } | string | null } | null | undefined,
-): string | null => {
-  if (!user) return null;
-  if (typeof user.company === 'string' && user.company) return user.company;
-  if (user.company && typeof user.company === 'object' && user.company._id) return user.company._id;
-  return user._id ?? null;
-};
+export interface IsCompanyOwnerResult {
+  isOwner: boolean;
+  isReady: boolean;
+  isAuthenticated: boolean;
+}
 
-export function useIsCompanyOwner(product?: Product | null): boolean {
+// ── Overloads ─────────────────────────────────────────────────────────────────
+
+/** Backward-compat: checks "is current user a company owner?" → boolean */
+export function useIsCompanyOwner(product?: null): boolean;
+/** With a product: "does this user own this product?" → boolean */
+export function useIsCompanyOwner(product: MinimalProduct): boolean;
+/** Full result with ready + auth flags (pass true to opt in) */
+export function useIsCompanyOwner(withResult: true): IsCompanyOwnerResult;
+
+export function useIsCompanyOwner(
+  arg?: MinimalProduct | null | true,
+): boolean | IsCompanyOwnerResult {
   const { user } = useAuthStore();
-  if (!user) return false;
+  const { companyId, isReady, isAuthenticated } = useCompanyId(true);
 
-  // Admin can manage anything
-  if (user.role === 'admin') return true;
-  if (user.role !== 'company') return false;
+  const withResult = arg === true;
+  const product = arg === true ? undefined : (arg as MinimalProduct | null | undefined);
 
-  // Generic "is the user a company-role at all" check (no product passed)
-  if (product === undefined) return true;
-  if (product === null) return false;
+  const isOwner = useMemo(() => {
+    if (!user) return false;
 
-  const userCid = extractUserCompanyId(user);
-  const prodCid = extractProductCompanyId(product);
-  return !!userCid && !!prodCid && userCid === prodCid;
+    // ── Mode 1: No product — is user a company owner? ──────────────────────
+    if (!product) {
+      if (user.role === 'company') return true;
+      if ((user as any).hasCompanyProfile === true) return true;
+      if (companyId !== null) return true;
+      return false;
+    }
+
+    // ── Mode 2: Does user own this specific product? ────────────────────────
+    if (!companyId) return false;
+
+    const ownerRaw = product.companyId;
+    const ownerId =
+      typeof ownerRaw === 'string'
+        ? ownerRaw
+        : ownerRaw && typeof ownerRaw === 'object' && '_id' in ownerRaw
+        ? (ownerRaw as { _id?: string })._id ?? ''
+        : '';
+
+    return !!ownerId && ownerId === companyId;
+  }, [user, product, companyId]);
+
+  if (withResult) {
+    return { isOwner, isReady, isAuthenticated };
+  }
+  return isOwner;
 }

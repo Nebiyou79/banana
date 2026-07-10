@@ -1,11 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// src/types/proposal.ts
+// mobile/src/types/proposal.ts
 // Banana Mobile App — Module 6B: Proposals
 // Single source of truth for all proposal-related TypeScript interfaces.
-// Derived from:
-//   • server/src/models/Proposal.js   (MilestoneSchema, AttachmentSchema, etc.)
-//   • frontend/src/services/proposalService.ts (type contracts)
-// ─────────────────────────────────────────────────────────────────────────────
+// FIXED: Added missing fields, aligned with web version
 
 // ─── Primitive enums ──────────────────────────────────────────────────────────
 
@@ -28,6 +24,12 @@ export type ProposalAvailability = 'full-time' | 'part-time' | 'flexible';
 export type ProposalDurationUnit = 'hours' | 'days' | 'weeks' | 'months';
 
 export type ProposalAttachmentType = 'cv' | 'portfolio' | 'sample' | 'other';
+
+export type ProposalSortBy =
+  | 'newest'
+  | 'highest_bid'
+  | 'lowest_bid'
+  | 'best_rating';
 
 // ─── Sub-document types ───────────────────────────────────────────────────────
 
@@ -83,6 +85,9 @@ export interface ProposalUser {
   avatar?: string;
   location?: string;
   skills?: string[];
+  firstName?: string;
+  lastName?: string;
+  headline?: string;
 }
 
 export interface ProposalFreelancerProfile {
@@ -136,8 +141,9 @@ export interface ProposalTender {
   skillsRequired?: string[];
   procurementCategory?: string;
   owner: string | ProposalUser;
-  ownerEntity?: string | { _id: string; name: string; logo?: string };
+  ownerEntity?: string | { _id: string; name: string; logo?: string; verified?: boolean };
   ownerEntityModel?: string;
+  ownerRole?: 'company' | 'organization';
   details?: {
     budget?: { min: number; max: number; currency: string };
     engagementType?: string;
@@ -145,6 +151,10 @@ export interface ProposalTender {
     experienceLevel?: string;
     projectType?: string;
   };
+  briefDescription?: string;
+  maxApplications?: number;
+  publishedAt?: string;
+  isDeleted?: boolean;
 }
 
 export interface TenderScreeningQuestion {
@@ -295,12 +305,6 @@ export interface ProposalFilters {
   limit?: number;
   isShortlisted?: boolean;
 }
-
-export type ProposalSortBy =
-  | 'newest'
-  | 'highest_bid'
-  | 'lowest_bid'
-  | 'best_rating';
 
 /**
  * Payload for PATCH /proposals/:id/status

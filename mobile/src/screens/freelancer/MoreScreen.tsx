@@ -152,16 +152,54 @@ export const FreelancerMoreScreen: React.FC = () => {
     { icon: 'storefront-outline', label: 'Product Marketplace', sublabel: 'Browse products & services', color: colors.primary, screen: 'ProductMarketplace' },
   ];
 
-  const accountSection: MenuItem[] = [
-    { icon: 'notifications-outline', label: 'Notifications', color: colors.primary },
-    { icon: 'lock-closed-outline', label: 'Privacy & Security', color: colors.primary },
-  ];
+// src/screens/freelancer/MoreScreen.tsx (UPDATED)
+// Update accountSection and supportSection with proper navigation
 
-  const supportSection: MenuItem[] = [
-    { icon: 'help-circle-outline', label: 'Help & FAQ', color: colors.textMuted },
-    { icon: 'mail-outline', label: 'Contact Us', color: colors.textMuted },
-    { icon: 'document-text-outline', label: 'Terms & Privacy', color: colors.textMuted },
-  ];
+const accountSection: MenuItem[] = [
+  { 
+    icon: 'notifications-outline', 
+    label: 'Notifications', 
+    sublabel: 'View all your notifications',
+    color: colors.primary,
+    screen: 'Notifications', // ✅ Added
+  },
+  { 
+    icon: 'settings-outline', 
+    label: 'Notification Preferences', 
+    sublabel: 'Manage alerts and preferences',
+    color: colors.primary,
+    screen: 'NotificationPreferences', // ✅ Added
+  },
+  { 
+    icon: 'lock-closed-outline', 
+    label: 'Privacy & Security', 
+    sublabel: 'Manage your privacy and security settings',
+    color: colors.primary,
+    screen: 'PrivacySecurity', // ✅ Added
+  },
+];
+
+const supportSection: MenuItem[] = [
+  { 
+    icon: 'help-circle-outline', 
+    label: 'Help & FAQ', 
+    sublabel: 'Get answers to common questions',
+    color: colors.textMuted,
+    screen: 'HelpFAQ', // ✅ Added
+  },
+  { 
+    icon: 'mail-outline', 
+    label: 'Contact Us', 
+    sublabel: 'Reach out to our support team',
+    color: colors.textMuted,
+  },
+  { 
+    icon: 'document-text-outline', 
+    label: 'Terms & Privacy', 
+    sublabel: 'Read our terms and privacy policy',
+    color: colors.textMuted,
+  },
+];
 
   return (
     <ScrollView

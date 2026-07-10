@@ -1,6 +1,12 @@
 /**
  * screens/organization/DashboardScreen.tsx
- * Updated with consistent header showing user name, avatar, and verification status
+ *
+ * Wired to real data from:
+ *   • organizationService.getDashboardStats() → totalJobs, activeJobs,
+ *                                                totalApplications, newApplications
+ *   • organizationService.getMyJobs()         → OrgJob[] with title, status,
+ *                                                applicantCount, deadline
+ *   • useProfile / useMyVerificationStatus    → avatar, name, verification badge
  */
 
 import React, { useCallback } from 'react';
@@ -17,7 +23,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { useProfile } from '../../hooks/useProfile';
-import { organizationService } from '../../services/organizationService';
+import { organizationService, type OrgStats, type OrgJob } from '../../services/organizationService';
 import { SkeletonCard } from '../../components/shared/ProfileAtoms';
 import type { OrganizationStackParamList } from '../../navigation/OrganizationNavigator';
 import { useMyVerificationStatus } from '../../hooks/useVerification';
@@ -26,16 +32,16 @@ import { initials as getInitials } from '../../theme/text';
 import StatCard from '../../components/shared/StatCard';
 
 type Nav = NativeStackNavigationProp<OrganizationStackParamList>;
-const ACC = '#8B5CF6';
+const ACC = '#8B5CF6'; // violet accent for organization role
 
-interface OrgJobRow {
-  _id: string; title: string; status: string; applicantCount?: number; deadline?: string;
-}
+// ─── Org job row ──────────────────────────────────────────────────────────────
 
-const OrgJobListItem: React.FC<{ item: OrgJobRow; onPress: () => void }> = React.memo(
+const OrgJobListItem: React.FC<{ item: OrgJob; onPress: () => void }> = React.memo(
   ({ item, onPress }) => {
     const { theme } = useThemeStore();
     const isActive = item.status === 'active';
+    // organizationService.getMyJobs() returns OrgJob which has `applicantCount`
+    const count = item.applicantCount ?? 0;
     return (
       <TouchableOpacity
         style={[dsh.jobRow, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
@@ -46,13 +52,13 @@ const OrgJobListItem: React.FC<{ item: OrgJobRow; onPress: () => void }> = React
           <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 13 }}>{item.title}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
             <View style={[dsh.pill, { backgroundColor: isActive ? '#10B98118' : theme.colors.border }]}>
-              <Text style={{ color: isActive ? '#10B981' : theme.colors.textMuted, fontSize: 10, fontWeight: '700' }}>{item.status}</Text>
-            </View>
-            {item.applicantCount !== undefined && (
-              <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
-                {item.applicantCount} applicant{item.applicantCount !== 1 ? 's' : ''}
+              <Text style={{ color: isActive ? '#10B981' : theme.colors.textMuted, fontSize: 10, fontWeight: '700' }}>
+                {item.status}
               </Text>
-            )}
+            </View>
+            <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
+              {count} applicant{count !== 1 ? 's' : ''}
+            </Text>
             {item.deadline && (
               <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
                 Due {new Date(item.deadline).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
@@ -65,6 +71,8 @@ const OrgJobListItem: React.FC<{ item: OrgJobRow; onPress: () => void }> = React
     );
   },
 );
+
+// ─── Quick action ─────────────────────────────────────────────────────────────
 
 const QuickAction: React.FC<{
   icon: string; label: string; sub?: string; color: string; onPress: () => void;
@@ -88,6 +96,8 @@ const QuickAction: React.FC<{
   );
 });
 
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
 export const OrganizationDashboardScreen: React.FC = () => {
   const { theme } = useThemeStore();
   const { colors, typography, spacing } = theme;
@@ -97,28 +107,38 @@ export const OrganizationDashboardScreen: React.FC = () => {
 
   const { data: profile } = useProfile();
   const { data: verificationData } = useMyVerificationStatus();
-  const { data: stats, isLoading: sLoad, refetch: rs } = useQuery({
+
+  // ── Real data queries ──────────────────────────────────────────────────────
+  const {
+    data: stats,
+    isLoading: sLoad,
+    refetch: rs,
+  } = useQuery<OrgStats>({
     queryKey: ['org', 'stats'],
     queryFn: organizationService.getDashboardStats,
     staleTime: 5 * 60 * 1000,
   });
-  const { data: jobs, isLoading: jLoad, refetch: rj } = useQuery({
+
+  const {
+    data: jobs,
+    isLoading: jLoad,
+    refetch: rj,
+  } = useQuery<OrgJob[]>({
     queryKey: ['org', 'jobs'],
     queryFn: organizationService.getMyJobs,
     staleTime: 5 * 60 * 1000,
   });
 
+  // ── Derived values ─────────────────────────────────────────────────────────
   const completion = profile?.profileCompletion?.percentage ?? 0;
   const recentJobs = (jobs ?? []).slice(0, 5);
   const isLoading = sLoad || jLoad;
-  
-  // Verification status
+
   const vStatus = verificationData?.verificationStatus ?? 'none';
   const isVerified = vStatus === 'full';
   const isPartial = vStatus === 'partial';
   const badgeConfig = verificationService.getBadgeConfig(vStatus);
-  
-  // Avatar and initials
+
   const avatarUrl = profile?.avatar?.secure_url ?? null;
   const userInitials = getInitials(user?.name ?? 'O');
 
@@ -127,10 +147,12 @@ export const OrganizationDashboardScreen: React.FC = () => {
     rs(); rj();
   }, [qc, rs, rj]);
 
-  const renderJob = useCallback(({ item }: { item: OrgJobRow }) => (
+  const renderJob = useCallback(({ item }: { item: OrgJob }) => (
     <OrgJobListItem
       item={item}
-      onPress={() => navigation.navigate('ApplicationList', { jobId: item._id, jobTitle: item.title })}
+      onPress={() =>
+        navigation.navigate('ApplicationList', { jobId: item._id, jobTitle: item.title })
+      }
     />
   ), [navigation]);
 
@@ -141,7 +163,7 @@ export const OrganizationDashboardScreen: React.FC = () => {
       showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={ACC} />}
     >
-      {/* Header with Avatar and Verification Badge */}
+      {/* ── Header ── */}
       <View style={[dsh.headerContainer, { paddingHorizontal: spacing[5] }]}>
         <View>
           <Text style={{ color: colors.textMuted, fontSize: typography.sm, fontWeight: '500' }}>Welcome back</Text>
@@ -149,11 +171,7 @@ export const OrganizationDashboardScreen: React.FC = () => {
             {user?.name?.split(' ')[0] ?? 'Organization'}
           </Text>
         </View>
-        
-        <TouchableOpacity
-          onPress={() => navigation.navigate('EditProfile')}
-          activeOpacity={0.85}
-        >
+        <TouchableOpacity onPress={() => navigation.navigate('EditProfile')} activeOpacity={0.85}>
           <View style={[dsh.avatarContainer, { backgroundColor: ACC + '18' }]}>
             {avatarUrl ? (
               <Image source={{ uri: avatarUrl }} style={dsh.avatar} />
@@ -169,12 +187,12 @@ export const OrganizationDashboardScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Verification Status Banner */}
+      {/* ── Verification banner ── */}
       {!isVerified && (
         <TouchableOpacity
           onPress={() => navigation.navigate('RoleVerification')}
-          style={[dsh.verifyBanner, { 
-            backgroundColor: badgeConfig.bgColor, 
+          style={[dsh.verifyBanner, {
+            backgroundColor: badgeConfig.bgColor,
             borderColor: badgeConfig.color,
             marginHorizontal: spacing[5],
             marginBottom: spacing[4],
@@ -182,11 +200,9 @@ export const OrganizationDashboardScreen: React.FC = () => {
         >
           <Ionicons name={badgeConfig.icon} size={20} color={badgeConfig.color} />
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={{ fontWeight: '700', color: badgeConfig.color }}>
-              {badgeConfig.label}
-            </Text>
+            <Text style={{ fontWeight: '700', color: badgeConfig.color }}>{badgeConfig.label}</Text>
             <Text style={{ fontSize: 12, color: colors.textMuted }}>
-              {isPartial 
+              {isPartial
                 ? 'Complete remaining steps to get fully verified'
                 : 'Get verified to build trust with applicants'}
             </Text>
@@ -195,7 +211,7 @@ export const OrganizationDashboardScreen: React.FC = () => {
         </TouchableOpacity>
       )}
 
-      {/* Strength */}
+      {/* ── Profile completeness ── */}
       <View style={[dsh.card, { backgroundColor: colors.surface, borderColor: colors.border, marginHorizontal: spacing[5] }]}>
         <View style={dsh.row}>
           <Text style={{ color: colors.text, fontWeight: '600', fontSize: typography.sm }}>Organization profile</Text>
@@ -209,43 +225,59 @@ export const OrganizationDashboardScreen: React.FC = () => {
         </Text>
       </View>
 
-      {/* Stats */}
+      {/* ── Stats ── */}
       <View style={[dsh.sectionRow, { paddingHorizontal: spacing[5] }]}>
         <Text style={{ color: colors.text, fontWeight: '700', fontSize: typography.base }}>Overview</Text>
       </View>
 
       {isLoading ? (
         <View style={[dsh.skeleRow, { paddingHorizontal: spacing[5] }]}>
-          {[0, 1, 2, 3].map((k) => <SkeletonCard key={k} height={88} style={{ flex: 1 }} />)}
+          {[0, 1, 2, 3].map(k => <SkeletonCard key={k} height={88} style={{ flex: 1 }} />)}
         </View>
       ) : (
         <View style={[dsh.grid, { paddingHorizontal: spacing[5] }]}>
-          <StatCard label="Jobs" value={stats?.totalJobs ?? 0} icon="briefcase-outline" color={ACC} />
+          {/* totalJobs — from organizationService.getDashboardStats() */}
+          <StatCard label="Postings" value={stats?.totalJobs ?? 0} icon="briefcase-outline" color={ACC} />
+          {/* activeJobs — jobs with status === 'active' */}
           <StatCard label="Active" value={stats?.activeJobs ?? 0} icon="radio-button-on" color="#10B981" />
+          {/* totalApplications — all applications received */}
           <StatCard label="Applications" value={stats?.totalApplications ?? 0} icon="document-text-outline" color="#F59E0B" />
-          <StatCard label="New Today" value={stats?.newApplications ?? 0} icon="notifications-outline" color="#EF4444" />
+          {/* newApplications — applications with status === 'pending' */}
+          <StatCard label="New" value={stats?.newApplications ?? 0} icon="notifications-outline" color="#EF4444" />
         </View>
       )}
 
-      {/* Quick actions */}
+      {/* ── Quick actions ── */}
       <View style={[dsh.sectionRow, { paddingHorizontal: spacing[5] }]}>
         <Text style={{ color: colors.text, fontWeight: '700', fontSize: typography.base }}>Quick Actions</Text>
       </View>
       <View style={{ paddingHorizontal: spacing[5], gap: 10, marginBottom: 20 }}>
-        <QuickAction icon="add-circle-outline" label="Post Opportunity" sub="Jobs, volunteering, internships" color={ACC} onPress={() => navigation.navigate('OrgJobCreate')} />
-        <QuickAction icon="people-outline" label="View Applicants" sub="Review and manage candidates" color="#6366F1" onPress={() => navigation.navigate('OrgJobList')} />
+        <QuickAction
+          icon="add-circle-outline"
+          label="Post Opportunity"
+          sub="Jobs, volunteering, internships"
+          color={ACC}
+          onPress={() => navigation.navigate('OrgJobCreate')}
+        />
+        <QuickAction
+          icon="people-outline"
+          label="View Applicants"
+          sub="Review and manage candidates"
+          color="#6366F1"
+          onPress={() => navigation.navigate('OrgJobList')}
+        />
         {!isVerified && (
-          <QuickAction 
-            icon="shield-checkmark-outline" 
-            label={isPartial ? "Complete Verification" : "Get Verified"} 
-            sub="Boost trust with applicants" 
-            color={isPartial ? "#F59E0B" : "#10B981"} 
-            onPress={() => navigation.navigate('RoleVerification')} 
+          <QuickAction
+            icon="shield-checkmark-outline"
+            label={isPartial ? 'Complete Verification' : 'Get Verified'}
+            sub="Boost trust with applicants"
+            color={isPartial ? '#F59E0B' : '#10B981'}
+            onPress={() => navigation.navigate('RoleVerification')}
           />
         )}
       </View>
 
-      {/* Recent postings */}
+      {/* ── Recent postings ── */}
       {recentJobs.length > 0 && (
         <>
           <View style={[dsh.sectionRow, { paddingHorizontal: spacing[5] }]}>
@@ -258,7 +290,7 @@ export const OrganizationDashboardScreen: React.FC = () => {
             <FlashList
               data={recentJobs}
               renderItem={renderJob}
-              keyExtractor={(item) => item._id}
+              keyExtractor={item => item._id}
               scrollEnabled={false}
             />
           </View>
@@ -277,8 +309,6 @@ const dsh = StyleSheet.create({
   avatarText: { fontSize: 20, fontWeight: '800' },
   verifiedBadge: { position: 'absolute', bottom: 0, right: 0, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
   verifyBanner: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, borderWidth: 1 },
-  greeting: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   card: { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 28 },
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   barBg: { height: 8, borderRadius: 99, overflow: 'hidden', marginBottom: 4 },

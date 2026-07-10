@@ -18,7 +18,8 @@
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Allow Banana to access your photos to upload profile pictures and portfolio images.",
         "NSCameraUsageDescription": "Allow Banana to use your camera to take profile pictures.",
-        "NSDocumentsFolderUsageDescription": "Allow Banana to access documents for CV uploads."
+        "NSDocumentsFolderUsageDescription": "Allow Banana to access documents for CV uploads.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -28,9 +29,12 @@
       },
       "package": "com.banana.app",
       "permissions": [
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "CAMERA"
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "ACCESS_FINE_LOCATION",
+"ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
@@ -38,6 +42,12 @@
       "bundler": "metro"
     },
     "plugins": [
+        [
+    "expo-location",
+    {
+      "locationAlwaysAndWhenInUsePermission": "Allow Banana to access your location."
+    }
+  ],
       [
         "expo-image-picker",
         {
@@ -52,8 +62,26 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "expo-video"
+      "expo-video",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.549140765646-o9moh3qhl9qcl4gbakadbd190dm4avc0"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#F1BB03"
+        }
+      ]
     ],
-    "scheme": "banana"
+    "scheme": "banana",
+    "extra": {
+      "eas": {
+        "projectId": "bda3c215-a20d-43a0-b2f7-4dc9a395afe8"
+      }
+    }
   }
 }

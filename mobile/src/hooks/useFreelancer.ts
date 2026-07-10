@@ -13,6 +13,7 @@ import type {
   ServiceFormData,
   CertificationFormData,
   FreelancerProfileUpdate,
+  FreelancerProfile,
 } from '../types/freelancer';
 
 // ─── Query Keys ───────────────────────────────────────────────────────────────
@@ -56,7 +57,21 @@ export const useFreelancerProfile = () =>
 export const useUpdateFreelancerProfile = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: FreelancerProfileUpdate) => freelancerService.updateProfile(data),
+    mutationFn: (data: FreelancerProfileUpdate) => {
+      // Ensure socialLinks is included in the update
+      const updateData = { ...data };
+      if (!updateData.socialLinks) {
+        updateData.socialLinks = {};
+      }
+      // Also ensure freelancerProfile.socialLinks is handled
+      if (!updateData.freelancerProfile) {
+        updateData.freelancerProfile = {};
+      }
+      if (!updateData.freelancerProfile.socialLinks) {
+        updateData.freelancerProfile.socialLinks = {};
+      }
+      return freelancerService.updateProfile(updateData);
+    },
     onSuccess: ({ profile }) => {
       qc.setQueryData(FREELANCER_KEYS.profile, profile);
       qc.invalidateQueries({ queryKey: FREELANCER_KEYS.dashboard });

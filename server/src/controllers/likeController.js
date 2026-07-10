@@ -1,6 +1,8 @@
 const Interaction = require('../models/Like');
 const Post = require('../models/Post');
 const Comment = require('../models/Comment');
+// 🔔 NOTIFICATION
+const notificationService = require('../services/notificationService');
 
 // Add reaction to a target
 const addReaction = async (req, res) => {
@@ -97,6 +99,51 @@ const addReaction = async (req, res) => {
 
     // Get updated interaction stats
     const interactionStats = await Interaction.getInteractionStats(targetType, id);
+
+    // 🔔 NOTIFICATION: Notify post/comment owner about reaction (not self-reactions)
+    (async () => {
+      try {
+        if (targetType === 'Post') {
+          const targetPost = await Post.findById(id).select('author').lean();
+          if (targetPost && targetPost.author.toString() !== req.user.userId.toString()) {
+            await notificationService.create({
+              recipient: targetPost.author,
+              actor: req.user.userId,
+              type: 'post_reacted',
+              title: 'New reaction',
+              body: `{actorName} reacted to your post`,
+              data: {
+                entityType: 'Post',
+                entityId: id,
+                screen: 'PostDetail',
+                params: { postId: id }
+              },
+              priority: 'low',
+              groupKey: `post_liked:${id}`,
+              channels: { inApp: true, push: false, email: false }
+            });
+          }
+        } else if (targetType === 'Comment') {
+          const parentComment = await Comment.findById(id).select('author').lean();
+          if (parentComment && parentComment.author.toString() !== req.user.userId.toString()) {
+            await notificationService.create({
+              recipient: parentComment.author,
+              actor: req.user.userId,
+              type: 'post_liked',
+              title: 'Comment liked',
+              body: `{actorName} liked your comment`,
+              data: { entityType: 'Comment', entityId: id, screen: 'PostDetail', params: { commentId: id } },
+              priority: 'low',
+              groupKey: `comment_liked:${id}`,
+              channels: { inApp: true, push: false, email: false }
+            });
+          }
+        }
+      } catch (notifErr) {
+        console.warn('[Notification] Non-critical error:', notifErr.message);
+      }
+    })();
+    // END NOTIFICATION
 
     res.status(201).json({
       success: true,

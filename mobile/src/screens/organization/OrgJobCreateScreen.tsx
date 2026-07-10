@@ -1,18 +1,21 @@
 /**
  * src/screens/organization/OrgJobCreateScreen.tsx
- * Wraps OrgJobForm for creating new organization opportunities.
+ * — Uses View (not SafeAreaView) — SafeArea handled by root navigator.
+ * — AppHeader for consistency with the company flow.
  */
 import React from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View } from 'react-native';
 import { useThemeStore } from '../../store/themeStore';
 import { useCreateOrganizationJob } from '../../hooks/useJobs';
 import { OrgJobForm } from '../../components/jobs/OrgJobForm';
 import { CreateJobData } from '../../services/jobService';
+import { AppHeader } from '../../components/shared';
 
 interface Props { navigation: any }
 
 export const OrgJobCreateScreen: React.FC<Props> = ({ navigation }) => {
   const { theme } = useThemeStore();
+  const c         = theme.colors;
   const createMut = useCreateOrganizationJob();
 
   const handleSubmit = async (data: CreateJobData, isDraft: boolean) => {
@@ -21,12 +24,12 @@ export const OrgJobCreateScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={['top']}>
+    <View style={{ flex: 1, backgroundColor: c.background }}>
       <OrgJobForm
         onSubmit={handleSubmit}
         onCancel={() => navigation.goBack()}
         isLoading={createMut.isPending}
       />
-    </SafeAreaView>
+    </View>
   );
 };

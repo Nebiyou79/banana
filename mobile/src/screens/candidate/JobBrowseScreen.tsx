@@ -1,13 +1,12 @@
 /**
  * mobile/src/screens/candidate/JobBrowseScreen.tsx
- * Refactored: useTheme(), correct color aliases, estimatedItemSize on FlashList.
+ * FIXED: Removed SafeAreaView (handled by root navigator)
  */
 
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
@@ -29,18 +28,19 @@ const SORT_OPTIONS = [
 export const JobBrowseScreen: React.FC<Props> = ({ navigation }) => {
   const { colors } = useTheme();
 
-  const [search, setSearch]   = useState('');
-  const [filters, setFilters] = useState<JobFilters>({} as JobFilters);
-  const [sortBy, setSortBy]   = useState('createdAt');
+  const [search, setSearch]       = useState('');
+  const [filters, setFilters]     = useState<JobFilters>({} as JobFilters);
+  const [sortBy, setSortBy]       = useState('createdAt');
   const [savedJobs, setSavedJobs] = useState<Set<string>>(new Set());
-  const searchTimeout = useRef<any>(null);
+
+  const appliedJobIds = useMemo(() => new Set<string>(), []);
 
   const queryFilters = useMemo<JobFilters>(() => ({
     ...filters,
-    search: search.length > 1 ? search : undefined,
+    search:    search.length > 1 ? search : undefined,
     sortBy,
     sortOrder: 'desc',
-    limit: 15,
+    limit:     15,
   }), [filters, search, sortBy]);
 
   const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage, refetch } =
@@ -79,18 +79,20 @@ export const JobBrowseScreen: React.FC<Props> = ({ navigation }) => {
     <CandidateJobCard
       job={item}
       onPress={() => navigation.navigate('JobDetail', { jobId: item._id })}
+      onApply={() => navigation.navigate('ApplyJob', { jobId: item._id, jobTitle: item.title })}
+      isApplied={appliedJobIds.has(item._id)}
       onSave={() => handleSave(item._id)}
       isSaved={savedJobs.has(item._id)}
     />
-  ), [navigation, handleSave, savedJobs]);
+  ), [navigation, handleSave, savedJobs, appliedJobIds]);
 
   return (
-    <SafeAreaView style={[s.root, { backgroundColor: colors.bg }]} edges={['top']}>
+    <View style={[s.root, { backgroundColor: colors.bg }]}>
       {/* Header */}
       <View style={s.header}>
         <Text style={[s.title, { color: colors.text }]}>Explore Jobs</Text>
         {totalResults > 0 && (
-          <Text style={[s.count, { color: colors.textMuted }]}>{totalResults.toLocaleString()} jobs</Text>
+          <Text style={[s.count, { color: colors.textMuted }]}>{`${totalResults.toLocaleString()} jobs`}</Text>
         )}
       </View>
 
@@ -160,20 +162,20 @@ export const JobBrowseScreen: React.FC<Props> = ({ navigation }) => {
           }
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 
 const s = StyleSheet.create({
-  root:      { flex: 1 },
-  header:    { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10 },
-  title:     { fontSize: 24, fontWeight: '800' },
-  count:     { fontSize: 13 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 10, marginBottom: 10 },
-  searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 11, gap: 8 },
+  root:       { flex: 1 },
+  header:     { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10 },
+  title:      { fontSize: 24, fontWeight: '800' },
+  count:      { fontSize: 13 },
+  searchRow:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 10, marginBottom: 10 },
+  searchBar:  { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 11, gap: 8 },
   searchInput:{ flex: 1, fontSize: 15 },
-  sortRow:   { flexDirection: 'row', paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth, marginBottom: 4 },
-  sortTab:   { paddingVertical: 10, marginRight: 20 },
-  sortText:  { fontSize: 14 },
-  list:      { padding: 16 },
+  sortRow:    { flexDirection: 'row', paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth, marginBottom: 4 },
+  sortTab:    { paddingVertical: 10, marginRight: 20 },
+  sortText:   { fontSize: 14 },
+  list:       { padding: 16 },
 });

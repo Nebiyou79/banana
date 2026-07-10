@@ -1279,3 +1279,148 @@ exports.sendBidsRevealedEmail = async (
         throw new Error('Failed to send bids revealed email');
     }
 };
+// =====================================================================
+// NOTIFICATION SYSTEM EMAIL FUNCTIONS
+// Append these to the BOTTOM of emailService.js
+// =====================================================================
+
+/**
+ * Send a notification email to a user.
+ */
+exports.sendNotificationEmail = async ({ to, recipientName, notification }) => {
+  try {
+    const { type, title, body, data } = notification;
+    const ctaUrl = buildCtaUrl(data);
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
+          .container { max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 8px; overflow: hidden; }
+          .header { background: linear-gradient(135deg, #0A2540 0%, #F1BB03 100%); padding: 24px 30px; text-align: center; color: white; }
+          .header h2 { margin: 0; color: #F1BB03; }
+          .body { padding: 28px 30px; }
+          .notif-card { background: #f8f9fb; border-left: 4px solid #F1BB03; padding: 16px 20px; border-radius: 0 8px 8px 0; margin: 20px 0; }
+          .cta { display: inline-block; background: #0A2540; color: white; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; margin-top: 20px; }
+          .footer { background: #f0f4f8; padding: 16px 30px; text-align: center; color: #888; font-size: 12px; }
+          .footer a { color: #0A2540; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>🍌 BananaLink</h2>
+          </div>
+          <div class="body">
+            <p>Hello ${recipientName},</p>
+            <div class="notif-card">
+              <strong>${title}</strong><br>
+              <span style="color:#555;">${body}</span>
+            </div>
+            ${ctaUrl ? `<a href="${ctaUrl}" class="cta">View Details</a>` : ''}
+            <p style="margin-top: 30px; font-size: 14px; color: #666;">
+              You're receiving this email because you have notifications enabled.<br>
+              <a href="${process.env.FRONTEND_URL}/settings/notifications">Manage notification settings</a>
+            </p>
+          </div>
+          <div class="footer">
+            <p>© ${new Date().getFullYear()} BananaLink</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    await transporter.sendMail({
+      from: `"BananaLink" <${process.env.EMAIL_USER}>`,
+      to,
+      subject: `[BananaLink] ${title}`,
+      html
+    });
+
+    console.log(`Notification email sent to ${to} (type: ${notification.type})`);
+  } catch (error) {
+    console.error('Error sending notification email:', error.message);
+  }
+};
+
+/**
+ * Send a daily digest email summarizing recent notifications.
+ */
+exports.sendDigestEmail = async ({ to, recipientName, notifications, period = 'yesterday' }) => {
+  try {
+    if (!notifications || notifications.length === 0) return;
+
+    const items = notifications.map(n => `
+      <div style="padding: 10px 0; border-bottom: 1px solid #eee;">
+        <strong>${n.title}</strong><br>
+        <span style="color:#555;">${n.body}</span>
+        ${n.data?.screen ? `<br><a href="${buildCtaUrl(n.data)}" style="color:#F1BB03;">View</a>` : ''}
+      </div>
+    `).join('');
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
+          .container { max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 8px; overflow: hidden; }
+          .header { background: linear-gradient(135deg, #0A2540 0%, #F1BB03 100%); padding: 20px 30px; text-align: center; color: white; }
+          .body { padding: 24px 30px; }
+          .footer { background: #f0f4f8; padding: 16px 30px; text-align: center; color: #888; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>🍌 Your ${period} digest</h2>
+            <p style="margin:0;opacity:0.9;">${notifications.length} new notification${notifications.length > 1 ? 's' : ''}</p>
+          </div>
+          <div class="body">${items}</div>
+          <div class="footer">
+            <a href="${process.env.FRONTEND_URL}/notifications">View all notifications</a> ·
+            <a href="${process.env.FRONTEND_URL}/settings/notifications">Manage settings</a>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    await transporter.sendMail({
+      from: `"BananaLink" <${process.env.EMAIL_USER}>`,
+      to,
+      subject: `Your BananaLink Digest — ${notifications.length} notification${notifications.length > 1 ? 's' : ''} from ${period}`,
+      html
+    });
+  } catch (error) {
+    console.error('Error sending digest email:', error.message);
+  }
+};
+
+// ── Helper: Build CTA URL from notification data ──────────────────
+function buildCtaUrl(data) {
+  if (!data?.screen || !process.env.FRONTEND_URL) return null;
+  const base = process.env.FRONTEND_URL;
+  const entityId = data.entityId;
+
+  const screenUrlMap = {
+    'JobDetail':          `${base}/jobs/${entityId}`,
+    'ApplicationDetail':  `${base}/applications/${entityId}`,
+    'PostDetail':         `${base}/posts/${entityId}`,
+    'TenderDetail':       `${base}/tenders/${entityId}`,
+    'ChatDetail':         `${base}/messages/${entityId}`,
+    'Profile':            `${base}/profile/${entityId}`,
+    'MyBids':             `${base}/dashboard/bids`,
+    'MyProposals':        `${base}/dashboard/proposals`,
+    'MyApplications':     `${base}/dashboard/applications`,
+    'VerificationStatus': `${base}/verification`,
+    'AppointmentDetail':  `${base}/appointments/${entityId}`,
+    'ReferralStats':      `${base}/referrals`,
+    'Home':               `${base}/`
+  };
+
+  return screenUrlMap[data.screen] || base;
+}

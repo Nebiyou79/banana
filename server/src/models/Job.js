@@ -311,7 +311,33 @@ const jobSchema = new mongoose.Schema({
     country: {
       type: String,
       default: 'Ethiopia'
+    },
+
+    // ── GeoJSON Point for proximity search ──────────────────────────────────
+    // Stored as [longitude, latitude] — MongoDB GeoJSON standard.
+    // Optional: jobs without coordinates still work everywhere except /near.
+    coordinates: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point'
+      },
+      coordinates: {
+        type: [Number],  // [lng, lat]
+        validate: {
+          validator: function (v) {
+            if (!v || v.length === 0) return true; // optional field
+            return (
+              v.length === 2 &&
+              v[0] >= -180 && v[0] <= 180 &&        // longitude
+              v[1] >= -90  && v[1] <= 90             // latitude
+            );
+          },
+          message: 'location.coordinates must be [longitude, latitude]'
+        }
+      }
     }
+    // ── End GeoJSON ──────────────────────────────────────────────────────────
   },
   
   // Keep existing demographic requirements
@@ -512,6 +538,11 @@ jobSchema.index({ candidatesNeeded: 1 });
 jobSchema.index({ jobType: 1, status: 1, category: 1 });
 jobSchema.index({ jobType: 1, status: 1, 'location.region': 1 });
 jobSchema.index({ jobType: 1, status: 1, opportunityType: 1 });
+
+// ── Geospatial index — REQUIRED for $geoNear / $nearSphere queries ────────────
+// sparse: true means jobs without coordinates are excluded from the index
+// (they still work for all non-geo queries).
+jobSchema.index({ 'location.coordinates': '2dsphere' }, { sparse: true });
 
 // VIRTUAL FIELDS
 

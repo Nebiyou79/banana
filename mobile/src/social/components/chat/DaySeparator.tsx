@@ -1,51 +1,40 @@
-// =============================================================================
-// FILE: mobile/src/social/components/chat/DaySeparator.tsx
-// =============================================================================
-
-/**
- * DaySeparator — date divider between message groups.
- * ─────────────────────────────────────────────────────────────────────────────
- * Shows "Today", "Yesterday", or a formatted date between message clusters.
- *
- * Professional polish:
- * - Theme tokens for styling
- * - Pill-shaped container
- * - Subtle border for definition
- * - Centered with line dividers (optional)
- */
-
+// src/social/components/chat/DaySeparator.tsx
 import React, { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useSocialTheme } from '../../theme/socialTheme';
 
-// ─── Props ───────────────────────────────────────────────────────────────────
-
 export interface DaySeparatorProps {
   label: string;
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
-
 const DaySeparator: React.FC<DaySeparatorProps> = memo(({ label }) => {
   const theme = useSocialTheme();
+  const { colors, spacing, radius, dark } = theme;
+
+  // Dark mode: darker background, subtle border
+  // Light mode: light background, clean border
+  const bgColor = dark ? colors.cardAlt : colors.cardAlt;
+  const borderColor = dark ? 'rgba(255,255,255,0.08)' : colors.border;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingVertical: spacing.md }]}>
       <View
         style={[
           styles.chip,
           {
-            backgroundColor: theme.cardAlt,
-            borderColor: theme.border,
-            borderRadius: theme.radius.pill,
+            backgroundColor: bgColor,
+            borderColor: borderColor,
+            borderRadius: radius.pill,
+            paddingHorizontal: spacing.md,
+            paddingVertical: spacing.xs + 2,
           },
         ]}
       >
         <Text
           style={[
             styles.text,
-            { color: theme.muted },
+            { color: colors.muted },
           ]}
         >
           {label}
@@ -57,17 +46,12 @@ const DaySeparator: React.FC<DaySeparatorProps> = memo(({ label }) => {
 
 DaySeparator.displayName = 'DaySeparator';
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    marginVertical: 16,
     paddingHorizontal: 16,
   },
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
     borderWidth: StyleSheet.hairlineWidth,
   },
   text: {
@@ -79,4 +63,3 @@ const styles = StyleSheet.create({
 });
 
 export default DaySeparator;
-// ✅ theme-migrated

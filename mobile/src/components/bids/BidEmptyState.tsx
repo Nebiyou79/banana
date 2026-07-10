@@ -1,60 +1,84 @@
 // src/components/bids/BidEmptyState.tsx
 // Empty state with icon + message + optional CTA.
+// UPDATED: Uses useTheme hook, improved styling, added subtitle support
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
   icon?: keyof typeof Ionicons.glyphMap;
   title?: string;
+  subtitle?: string;
   message: string;
   ctaLabel?: string;
+  ctaIcon?: keyof typeof Ionicons.glyphMap;
   onCta?: () => void;
 }
 
 export const BidEmptyState: React.FC<Props> = ({
   icon = 'document-text-outline',
   title = 'Nothing here yet',
+  subtitle,
   message,
   ctaLabel,
+  ctaIcon = 'add-circle-outline',
   onCta,
 }) => {
-  const isDark = useThemeStore((s) => s.theme.isDark);
-
-  const palette = {
-    iconWrap: isDark ? '#1E293B' : '#F1F5F9',
-    iconBorder: isDark ? '#334155' : '#E2E8F0',
-    icon:    isDark ? '#94A3B8' : '#64748B',
-    title:   isDark ? '#F1F5F9' : '#0F172A',
-    message: isDark ? '#94A3B8' : '#64748B',
-    ctaBg:   '#0A2540',
-    ctaText: '#FFFFFF',
-  };
+  const { colors, radius, spacing } = useTheme();
 
   return (
     <View style={styles.root}>
-      <View style={[styles.iconWrap, { backgroundColor: palette.iconWrap, borderColor: palette.iconBorder }]}>
-        <Ionicons name={icon} size={36} color={palette.icon} />
+      {/* Icon circle */}
+      <View
+        style={[
+          styles.iconWrap,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            borderRadius: radius.full,
+          },
+        ]}
+      >
+        <Ionicons name={icon} size={36} color={colors.textMuted} />
       </View>
 
-      <Text style={[styles.title, { color: palette.title }]}>{title}</Text>
-      <Text style={[styles.message, { color: palette.message }]}>{message}</Text>
+      {/* Title */}
+      <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
 
+      {/* Subtitle (optional) */}
+      {subtitle && (
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+          {subtitle}
+        </Text>
+      )}
+
+      {/* Message */}
+      <Text style={[styles.message, { color: colors.textMuted }]}>{message}</Text>
+
+      {/* CTA button */}
       {ctaLabel && onCta && (
         <Pressable
           onPress={onCta}
           style={({ pressed }) => [
             styles.cta,
-            { backgroundColor: palette.ctaBg, opacity: pressed ? 0.8 : 1 },
+            {
+              backgroundColor: colors.primary,
+              borderRadius: radius.md,
+              opacity: pressed ? 0.8 : 1,
+            },
           ]}
           accessibilityRole="button"
+          accessibilityLabel={ctaLabel}
         >
-          <Text style={[styles.ctaText, { color: palette.ctaText }]}>{ctaLabel}</Text>
+          <Ionicons name={ctaIcon} size={18} color={colors.textInverse} />
+          <Text style={[styles.ctaText, { color: colors.textInverse }]}>
+            {ctaLabel}
+          </Text>
         </Pressable>
       )}
     </View>
@@ -74,16 +98,22 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 80,
     height: 80,
-    borderRadius: 999,
+    borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: 1.5,
     marginBottom: 4,
   },
   title: {
     fontSize: 17,
     fontWeight: '800',
     textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: -6,
   },
   message: {
     fontSize: 13,
@@ -94,6 +124,7 @@ const styles = StyleSheet.create({
   cta: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
     paddingHorizontal: 22,
     paddingVertical: 12,
     borderRadius: 12,

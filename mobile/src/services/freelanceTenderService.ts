@@ -12,6 +12,7 @@ import type {
   TenderApplicationsResponse,
   SubmitApplicationData,
   TenderAttachment,
+  FreelanceTenderStats,
 } from '../types/freelanceTender';
 
 // ─── FormData builder ─────────────────────────────────────────────────────────
@@ -66,15 +67,22 @@ const freelanceTenderService = {
 
   // ── Browse (freelancer) ──────────────────────────────────────────────────────
 
-  getFreelanceTenders: async (
-    filters?: FreelanceTenderFilters
-  ): Promise<FreelanceTenderListResponse> => {
-    const res = await httpClient.get<{
-      success: boolean;
-      data: FreelanceTenderListResponse;
-    }>('/freelance-tenders', { params: filters });
-    return res.data.data;
-  },
+getFreelanceTenders: async (
+  filters?: FreelanceTenderFilters
+): Promise<FreelanceTenderListResponse> => {
+  const res = await httpClient.get<{
+    success: boolean;
+    data: FreelanceTenderListResponse;
+  }>('/freelance-tenders', { params: filters });
+  
+  // DEBUG: Log the first tender to see structure
+  if (res.data.data?.tenders?.length) {
+    console.log('🔍 [API DEBUG] First tender ownerEntity:', 
+      JSON.stringify(res.data.data.tenders[0].ownerEntity, null, 2));
+  }
+  
+  return res.data.data;
+},
 
   // ── Single tender ──────────────────────────────────────────────────────────
 
@@ -274,7 +282,8 @@ const freelanceTenderService = {
   uploadAttachments: async (
     tenderId: string,
     files: Array<{ uri: string; name: string; mimeType: string }>,
-    documentType?: string
+    documentType?: string,
+    description?: string
   ): Promise<TenderAttachment[]> => {
     const fd = new FormData();
     files.forEach((file) => {
@@ -285,6 +294,7 @@ const freelanceTenderService = {
       } as unknown as Blob);
     });
     if (documentType) fd.append('documentType', documentType);
+    if (description) fd.append('description', description);
     const res = await httpClient.post<{ success: boolean; data: TenderAttachment[] }>(
       `/freelance-tenders/${tenderId}/attachments/upload`,
       fd,
@@ -299,12 +309,26 @@ const freelanceTenderService = {
     );
   },
 
+  /**
+   * NEW: Download attachment with authenticated API route
+   * FIX: Uses authenticated API call, NOT direct URL
+   */
+  downloadAttachment: async (tenderId: string, attachmentId: string): Promise<void> => {
+    const response = await httpClient.get(
+      `/freelance-tenders/${tenderId}/attachments/${attachmentId}/download`,
+      { responseType: 'blob' }
+    );
+    // Handle blob download for React Native
+    // This requires react-native-fs or similar
+    return response.data;
+  },
+
   // ── Stats ─────────────────────────────────────────────────────────────────
 
   getFreelanceTenderStats: async (
     id: string
-  ): Promise<Record<string, unknown>> => {
-    const res = await httpClient.get<{ success: boolean; data: Record<string, unknown> }>(
+  ): Promise<FreelanceTenderStats> => {
+    const res = await httpClient.get<{ success: boolean; data: FreelanceTenderStats }>(
       `/freelance-tenders/${id}/stats`
     );
     return res.data.data;

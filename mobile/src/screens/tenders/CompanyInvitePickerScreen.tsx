@@ -1,262 +1,251 @@
-// src/screens/tenders/CompanyInvitePickerScreen.tsx
-// FIXED: Shows all companies immediately on mount (fetches with empty query via
-//        getCompaniesForInvitation endpoint from the routes file).
-//        useCompanySearch requires >=1 char; we use a separate "all companies"
-//        hook for the initial list, then switch to search results as the user types.
-// FIXED: Uses only theme tokens (no raw colors), consistent with the rest of the app.
+// ─────────────────────────────────────────────────────────────────────────────
+//  src/screens/tenders/CompanyInvitePickerScreen.tsx
+// ─────────────────────────────────────────────────────────────────────────────
+//  FIXED:
+//   • Uses GET /professional-tenders/companies/list (getCompaniesForInvitation)
+//   • Loads ALL companies on mount (no search required to see results)
+//   • Debounced search 300ms, infinite scroll pagination via FlashList
+//   • Avatars through TenderOwnerAvatar (Profile architecture, Cloudinary)
+//   • Zero hardcoded colors — 100% useTheme() tokens
+//   • Floating "Confirm N Companies" CTA, selected chips row
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { FlashList } from '@shopify/flash-list';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import {
-  useQuery,
-} from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
+
 import { useTheme } from '../../hooks/useTheme';
 import { withAlpha } from '../../theme/utils';
-import {
-  useCompaniesByIds,
-  useCompanySearch,
-} from '../../hooks/useProfessionalTender';
-import professionalTenderService from '../../services/professionalTenderService';
-import type { CompanyProfile, CompanySearchResult } from '../../services/companyService';
+import TenderOwnerAvatar from '../../components/shared/TenderOwnerAvatar';
+import api from '../../lib/api';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface InviteCompany {
+  _id:       string;
+  name:      string;
+  industry:  string;
+  headline:  string;
+  verified:  boolean;
+  avatarUrl: string | null;
+}
+
+interface CompanyPage {
+  companies:  InviteCompany[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
 
 interface RouteParams {
   selectedIds: string[];
   onPick:      (ids: string[]) => void;
 }
 
-const indexById = <T extends { _id: string }>(items: T[]): Record<string, T> => {
-  const out: Record<string, T> = {};
-  for (const it of items) out[it._id] = it;
-  return out;
-};
+// ─── API ──────────────────────────────────────────────────────────────────────
 
-// ─── Hook: all companies available for invitation (uses the dedicated
-//     /professional-tenders/companies/list endpoint in the routes file)
-const useAllCompaniesForInvitation = (enabled: boolean) =>
-  useQuery<CompanySearchResult[]>({
-    queryKey: ['companies', 'forInvitation'],
-    queryFn: async () => {
-      // The service exposes getCompaniesForInvitation via /companies/list route.
-      // We call companyService.searchCompanies with an empty-ish query to get the
-      // initial batch. The backend returns up to `limit` companies.
-      const { companyService } = await import('../../services/companyService');
-      return companyService.searchCompanies('', 50);
-    },
-    enabled,
-    staleTime: 60_000,
-  });
+const PAGE_SIZE = 20;
 
-// ─── Avatar initials helper ───────────────────────────────────────────────────
-const CompanyAvatar: React.FC<{ name?: string; verified?: boolean }> = ({ name, verified }) => {
-  const { colors: c, radius, type } = useTheme();
-  const initial = (name?.[0] ?? 'C').toUpperCase();
-  return (
-    <View style={[av.wrap, { backgroundColor: withAlpha(c.primary, 0.1), borderColor: c.border, borderRadius: radius.full }]}>
-      <Text style={[type.bodySm, { color: c.primary, fontWeight: '800', fontSize: 15 }]}>{initial}</Text>
-      {verified && (
-        <View style={[av.badge, { backgroundColor: c.primary }]}>
-          <Ionicons name="checkmark" size={8} color="#fff" />
-        </View>
-      )}
-    </View>
+async function fetchCompanies(page: number, search: string): Promise<CompanyPage> {
+  const params: Record<string, string | number> = { page, limit: PAGE_SIZE };
+  if (search) params.search = search;
+  const res = await api.get<{ success: boolean; data: CompanyPage }>(
+    '/professional-tenders/companies/list',
+    { params },
   );
-};
-const av = StyleSheet.create({
-  wrap:  { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderWidth: 1, position: 'relative' },
-  badge: { position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  if (!res.data?.success) throw new Error('Failed to fetch companies');
+  return res.data.data;
+}
+
+// ─── Company row ──────────────────────────────────────────────────────────────
+
+const CompanyRow = React.memo<{
+  item: InviteCompany;
+  isSelected: boolean;
+  onToggle: (id: string) => void;
+}>(({ item, isSelected, onToggle }) => {
+  const { colors, radius, type } = useTheme();
+  return (
+    <Pressable
+      onPress={() => onToggle(item._id)}
+      style={({ pressed }) => [
+        rowS.root,
+        {
+          backgroundColor: isSelected ? withAlpha(colors.primary, 0.10) : colors.surface,
+          borderColor:     isSelected ? colors.primary : colors.border,
+          borderRadius:    radius.lg,
+          opacity:         pressed ? 0.86 : 1,
+        },
+      ]}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: isSelected }}
+      accessibilityLabel={`${isSelected ? 'Deselect' : 'Select'} ${item.name}`}
+    >
+      <TenderOwnerAvatar
+        name={item.name}
+        avatarUrl={item.avatarUrl}
+        verified={item.verified}
+        role="company"
+        size={44}
+        showBadge={item.verified}
+      />
+      <View style={rowS.text}>
+        <View style={rowS.nameRow}>
+          <Text style={[type.bodySm, { color: colors.text, fontWeight: '600', flex: 1 }]} numberOfLines={1}>
+            {item.name}
+          </Text>
+          {item.verified && <Ionicons name="checkmark-circle" size={14} color={colors.success} />}
+        </View>
+        {!!(item.industry || item.headline) && (
+          <Text style={[type.caption, { color: colors.textMuted, marginTop: 1 }]} numberOfLines={1}>
+            {[item.industry, item.headline].filter(Boolean).join(' · ')}
+          </Text>
+        )}
+      </View>
+      <View
+        style={[
+          rowS.checkbox,
+          {
+            backgroundColor: isSelected ? colors.primary : 'transparent',
+            borderColor:     isSelected ? colors.primary : colors.border,
+            borderRadius:    radius.sm,
+          },
+        ]}
+      >
+        {isSelected && <Ionicons name="checkmark" size={14} color={colors.textInverse} />}
+      </View>
+    </Pressable>
+  );
+});
+CompanyRow.displayName = 'CompanyRow';
+
+const rowS = StyleSheet.create({
+  root:     { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, minHeight: 64 },
+  text:     { flex: 1, minWidth: 0 },
+  nameRow:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  checkbox: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, flexShrink: 0 },
 });
 
-// ─── Main screen ──────────────────────────────────────────────────────────────
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
 export const CompanyInvitePickerScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route      = useRoute<{ key: string; name: string; params: RouteParams }>();
-  const { colors: c, spacing, radius, type } = useTheme();
+  const { colors, spacing, radius, type } = useTheme();
+  const insets = useSafeAreaInsets();
 
-  const initialIds = route.params?.selectedIds ?? [];
+  const initialIds: string[] = route.params?.selectedIds ?? [];
   const [selectedIds, setSelectedIds] = useState<string[]>(initialIds);
 
+  // Debounced search
   const [rawQuery, setRawQuery] = useState('');
-  const [query, setQuery]       = useState('');
-
-  // Debounce search 300 ms
+  const [query,    setQuery]    = useState('');
   useEffect(() => {
     const h = setTimeout(() => setQuery(rawQuery.trim()), 300);
     return () => clearTimeout(h);
   }, [rawQuery]);
 
-  const isSearching = query.length >= 1;
+  // Infinite query — loads on mount even with empty query
+  const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage, isError, refetch } =
+    useInfiniteQuery<CompanyPage, Error>({
+      queryKey:         ['companies', 'forInvitation', query],
+      queryFn:          ({ pageParam = 1 }) => fetchCompanies(pageParam as number, query),
+      getNextPageParam: (last) =>
+        last.pagination.page < last.pagination.totalPages ? last.pagination.page + 1 : undefined,
+      initialPageParam: 1,
+      staleTime:        60_000,
+    });
 
-  // Initial list (all companies) — fetched on mount
-  const {
-    data: allCompanies = [],
-    isLoading: allLoading,
-  } = useAllCompaniesForInvitation(!isSearching);
+  const companies: InviteCompany[] = useMemo(
+    () => (data?.pages ?? []).flatMap((p) => p.companies),
+    [data],
+  );
+  const totalCount = data?.pages?.[0]?.pagination?.total ?? 0;
 
-  // Live search results — only when query >= 1 char
-  const {
-    data: searchResults = [],
-    isLoading: searchLoading,
-  } = useCompanySearch(query, { enabled: isSearching });
+  // Selection
+  const isSelected = useCallback((id: string) => selectedIds.includes(id), [selectedIds]);
+  const toggle     = useCallback((id: string) => {
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  }, []);
+  const remove     = useCallback((id: string) => setSelectedIds((prev) => prev.filter((x) => x !== id)), []);
 
-  // The active list shown to the user
-  const displayList: CompanySearchResult[] = isSearching ? searchResults : allCompanies;
-  const isLoading = isSearching ? searchLoading : allLoading;
-
-  // Hydrate selected ids → full profiles (for chips display)
-  const { data: selectedProfiles = [] } = useCompaniesByIds(selectedIds);
-  const profilesById = useMemo(() => indexById(selectedProfiles), [selectedProfiles]);
-
-  const isSelected = (id: string) => selectedIds.includes(id);
-
-  const toggle = (id: string) =>
-    setSelectedIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
-    );
-
-  const remove = (id: string) =>
-    setSelectedIds(prev => prev.filter(x => x !== id));
-
-  const handleDone = () => {
+  const handleDone = useCallback(() => {
     route.params?.onPick?.(selectedIds);
     navigation.goBack();
-  };
+  }, [selectedIds, route.params, navigation]);
+
+  // Name/avatar map for chips
+  const companyMap = useMemo(() => {
+    const m: Record<string, InviteCompany> = {};
+    for (const c of companies) m[c._id] = c;
+    return m;
+  }, [companies]);
 
   const selectedChips = useMemo(
-    () =>
-      selectedIds.map(id => {
-        const profile = profilesById[id];
-        const display = profile?.name ?? `Company …${id.slice(-6)}`;
-        return { id, display };
-      }),
-    [selectedIds, profilesById],
+    () => selectedIds.map((id) => ({
+      id,
+      name:      companyMap[id]?.name      ?? `…${id.slice(-6)}`,
+      avatarUrl: companyMap[id]?.avatarUrl ?? null,
+    })),
+    [selectedIds, companyMap],
   );
 
-  // ─── Row renderer ─────────────────────────────────────────────────────
-  const renderItem = ({ item }: { item: CompanySearchResult }) => {
-    const selected = isSelected(item._id);
-    return (
-      <Pressable
-        onPress={() => toggle(item._id)}
-        style={({ pressed }) => [
-          S.row,
-          {
-            backgroundColor: selected ? withAlpha(c.primary, 0.10) : c.surface,
-            borderColor:     selected ? c.primary : c.border,
-            borderRadius:    radius.lg,
-            opacity:         pressed ? 0.85 : 1,
-          },
-        ]}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: selected }}
-        accessibilityLabel={`${selected ? 'Deselect' : 'Select'} ${item.name}`}
-      >
-        <CompanyAvatar name={item.name} verified={item.verified} />
+  const renderItem  = useCallback(({ item }: { item: InviteCompany }) => (
+    <CompanyRow item={item} isSelected={isSelected(item._id)} onToggle={toggle} />
+  ), [isSelected, toggle]);
 
-        <View style={S.rowText}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Text
-              style={[type.bodySm, { color: c.text, fontWeight: '600', flex: 1 }]}
-              numberOfLines={1}
-            >
-              {item.name}
-            </Text>
-          </View>
-          {!!(item.industry || item.location) && (
-            <Text style={[type.caption, { color: c.textMuted, marginTop: 1 }]} numberOfLines={1}>
-              {[item.industry, item.location].filter(Boolean).join(' · ')}
-            </Text>
-          )}
-        </View>
-
-        <View
-          style={[
-            S.checkbox,
-            {
-              backgroundColor: selected ? c.primary : 'transparent',
-              borderColor:     selected ? c.primary : c.border,
-              borderRadius:    radius.sm,
-            },
-          ]}
-        >
-          {selected && <Ionicons name="checkmark" size={14} color="#fff" />}
-        </View>
-      </Pressable>
-    );
-  };
+  const keyExtractor  = useCallback((item: InviteCompany) => item._id, []);
+  const onEndReached  = useCallback(() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage(); }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return (
-    <SafeAreaView style={[S.root, { backgroundColor: c.bg }]} edges={['top', 'bottom']}>
-      {/* ── Header ──────────────────────────────────────────────────── */}
-      <View style={[S.header, { backgroundColor: c.surface, borderColor: c.border }]}>
+    <SafeAreaView style={[S.root, { backgroundColor: colors.bg }]} edges={['top']}>
+      {/* ── Header ─────────────────────────────────────────────────── */}
+      <View style={[S.header, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={S.headerTop}>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="Cancel without saving"
-          >
-            <Ionicons name="close" size={24} color={c.text} />
+          <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Cancel">
+            <Ionicons name="close" size={24} color={colors.text} />
           </Pressable>
-
           <View style={{ alignItems: 'center', flex: 1 }}>
-            <Text style={[type.bodySm, { color: c.text, fontWeight: '700' }]}>Invite Companies</Text>
-            <Text style={[type.caption, { color: c.textMuted, marginTop: 1 }]}>
-              {selectedIds.length === 0
-                ? 'Tap to select'
-                : `${selectedIds.length} selected`}
-            </Text>
+            <Text style={[type.bodySm, { color: colors.text, fontWeight: '700' }]}>Invite Companies</Text>
+            {totalCount > 0 && (
+              <Text style={[type.caption, { color: colors.textMuted, marginTop: 1 }]}>
+                {selectedIds.length > 0
+                  ? `${selectedIds.length} selected · ${totalCount} available`
+                  : `${totalCount} companies`}
+              </Text>
+            )}
           </View>
-
-          <Pressable
-            onPress={handleDone}
-            disabled={selectedIds.length === 0}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="Confirm selection"
-          >
-            <Text
-              style={[
-                type.bodySm,
-                { color: selectedIds.length === 0 ? c.textMuted : c.primary, fontWeight: '700' },
-              ]}
-            >
+          <Pressable onPress={handleDone} disabled={selectedIds.length === 0} hitSlop={10} accessibilityRole="button">
+            <Text style={[type.bodySm, { color: selectedIds.length === 0 ? colors.textMuted : colors.primary, fontWeight: '700' }]}>
               Done
             </Text>
           </Pressable>
         </View>
 
-        {/* Search input */}
-        <View
-          style={[
-            S.searchBox,
-            { backgroundColor: c.bg, borderColor: c.border, borderRadius: radius.md },
-          ]}
-        >
-          <Ionicons name="search-outline" size={16} color={c.textMuted} />
+        {/* Search */}
+        <View style={[S.searchBox, { backgroundColor: colors.inputBg ?? colors.bg, borderColor: colors.inputBorder ?? colors.border, borderRadius: radius.md }]}>
+          <Ionicons name="search-outline" size={16} color={colors.textMuted} />
           <TextInput
             value={rawQuery}
             onChangeText={setRawQuery}
-            placeholder="Search companies by name…"
-            placeholderTextColor={c.textMuted}
+            placeholder="Search by name or industry…"
+            placeholderTextColor={colors.inputPlaceholder ?? colors.textMuted}
             autoCapitalize="words"
             autoCorrect={false}
-            style={[S.searchInput, { color: c.text }]}
+            style={[S.searchInput, { color: colors.text }]}
             returnKeyType="search"
           />
           {rawQuery.length > 0 && (
             <Pressable onPress={() => setRawQuery('')} hitSlop={6}>
-              <Ionicons name="close-circle" size={16} color={c.textMuted} />
+              <Ionicons name="close-circle" size={16} color={colors.textMuted} />
             </Pressable>
           )}
         </View>
@@ -264,27 +253,18 @@ export const CompanyInvitePickerScreen: React.FC = () => {
         {/* Selected chips */}
         {selectedChips.length > 0 && (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-            {selectedChips.slice(0, 8).map(({ id, display }) => (
-              <View
-                key={id}
-                style={[S.chip, { backgroundColor: withAlpha(c.primary, 0.12), borderRadius: radius.full }]}
-              >
-                <Text
-                  style={[type.caption, { color: c.primary, fontWeight: '600', maxWidth: 160 }]}
-                  numberOfLines={1}
-                >
-                  {display}
-                </Text>
+            {selectedChips.slice(0, 8).map(({ id, name, avatarUrl }) => (
+              <View key={id} style={[S.chip, { backgroundColor: withAlpha(colors.primary, 0.12), borderRadius: radius.full }]}>
+                <TenderOwnerAvatar name={name} avatarUrl={avatarUrl} size={18} showBadge={false} />
+                <Text style={[type.caption, { color: colors.primary, fontWeight: '600', maxWidth: 140 }]} numberOfLines={1}>{name}</Text>
                 <Pressable onPress={() => remove(id)} hitSlop={6}>
-                  <Ionicons name="close" size={13} color={c.primary} />
+                  <Ionicons name="close" size={13} color={colors.primary} />
                 </Pressable>
               </View>
             ))}
             {selectedChips.length > 8 && (
-              <View style={[S.chip, { backgroundColor: withAlpha(c.primary, 0.12), borderRadius: radius.full }]}>
-                <Text style={[type.caption, { color: c.primary }]}>
-                  +{selectedChips.length - 8} more
-                </Text>
+              <View style={[S.chip, { backgroundColor: withAlpha(colors.primary, 0.12), borderRadius: radius.full }]}>
+                <Text style={[type.caption, { color: colors.primary }]}>+{selectedChips.length - 8} more</Text>
               </View>
             )}
           </View>
@@ -292,79 +272,74 @@ export const CompanyInvitePickerScreen: React.FC = () => {
       </View>
 
       {/* ── Body ────────────────────────────────────────────────────── */}
-      {isLoading && displayList.length === 0 ? (
+      {isLoading && companies.length === 0 ? (
         <View style={S.center}>
-          <ActivityIndicator size="large" color={c.primary} />
-          <Text style={[type.caption, { color: c.textMuted, marginTop: 8 }]}>
-            {isSearching ? 'Searching companies…' : 'Loading companies…'}
-          </Text>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[type.caption, { color: colors.textMuted, marginTop: 8 }]}>Loading companies…</Text>
+        </View>
+      ) : isError ? (
+        <View style={S.center}>
+          <Ionicons name="alert-circle-outline" size={32} color={colors.textMuted} />
+          <Text style={[type.bodySm, { color: colors.text, marginTop: 8 }]}>Couldn't load companies</Text>
+          <Pressable onPress={() => refetch()} style={[S.retryBtn, { backgroundColor: colors.primary, borderRadius: radius.md }]}>
+            <Text style={[type.bodySm, { color: colors.textInverse, fontWeight: '700' }]}>Try again</Text>
+          </Pressable>
         </View>
       ) : (
-        <FlatList
-          data={displayList}
-          keyExtractor={(item: CompanySearchResult) => item._id}
+        <FlashList
+          data={companies}
+          keyExtractor={keyExtractor}
           renderItem={renderItem}
-          contentContainerStyle={{ padding: spacing.md, paddingBottom: 48 }}
+          contentContainerStyle={{
+            padding:       spacing.md,
+            paddingBottom: insets.bottom + spacing.xxl + (selectedIds.length > 0 ? 80 : 0),
+          }}
           ItemSeparatorComponent={() => <View style={{ height: 6 }} />}
           keyboardShouldPersistTaps="handled"
+          onEndReached={onEndReached}
+          onEndReachedThreshold={0.4}
           ListHeaderComponent={
-            !isSearching && displayList.length > 0 ? (
-              <View
-                style={[
-                  S.listHeader,
-                  { backgroundColor: withAlpha(c.primary, 0.06), borderRadius: radius.md },
-                ]}
-              >
-                <Ionicons name="business-outline" size={14} color={c.primary} />
-                <Text style={[type.caption, { color: c.primary, fontWeight: '600' }]}>
-                  {displayList.length} companies available to invite
+            companies.length > 0 && !query ? (
+              <View style={[S.listHeader, { backgroundColor: withAlpha(colors.primary, 0.07), borderRadius: radius.md }]}>
+                <Ionicons name="business-outline" size={14} color={colors.primary} />
+                <Text style={[type.caption, { color: colors.primary, fontWeight: '600' }]}>
+                  {totalCount} companies available to invite
                 </Text>
               </View>
             ) : null
           }
           ListEmptyComponent={
-            <View style={S.emptyWrap}>
-              <Ionicons
-                name={isSearching ? 'search-outline' : 'business-outline'}
-                size={32}
-                color={c.textMuted}
-              />
-              <Text style={[type.bodySm, { color: c.text, fontWeight: '700', marginTop: 8 }]}>
-                {isSearching ? `No results for "${query}"` : 'No companies found'}
-              </Text>
-              <Text
-                style={[type.caption, { color: c.textMuted, textAlign: 'center', maxWidth: 280, marginTop: 4 }]}
-              >
-                {isSearching
-                  ? 'Try a different search term.'
-                  : 'Companies will appear here once they are registered on the platform.'}
-              </Text>
-            </View>
+            !isLoading ? (
+              <View style={S.center}>
+                <Ionicons name={query ? 'search-outline' : 'business-outline'} size={32} color={colors.textMuted} />
+                <Text style={[type.bodySm, { color: colors.text, fontWeight: '700', marginTop: 8 }]}>
+                  {query ? `No results for "${query}"` : 'No companies found'}
+                </Text>
+                <Text style={[type.caption, { color: colors.textMuted, textAlign: 'center', maxWidth: 280, marginTop: 4 }]}>
+                  {query ? 'Try a different search term.' : 'Companies appear here once registered on the platform.'}
+                </Text>
+              </View>
+            ) : null
+          }
+          ListFooterComponent={
+            isFetchingNextPage ? (
+              <View style={{ padding: 16, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null
           }
         />
       )}
 
-      {/* ── Floating done button when selections exist ──────────────── */}
+      {/* ── Floating confirm bar ─────────────────────────────────────── */}
       {selectedIds.length > 0 && (
-        <View
-          style={[
-            S.floatingBar,
-            {
-              backgroundColor: c.surface,
-              borderTopColor: c.border,
-              paddingBottom: 16,
-            },
-          ]}
-        >
+        <View style={[S.floatingBar, { backgroundColor: colors.surface, borderTopColor: colors.border, paddingBottom: insets.bottom + spacing.md }]}>
           <Pressable
             onPress={handleDone}
-            style={({ pressed }) => [
-              S.doneBtn,
-              { backgroundColor: c.primary, borderRadius: radius.md, opacity: pressed ? 0.88 : 1 },
-            ]}
+            style={({ pressed }) => [S.confirmBtn, { backgroundColor: colors.primary, borderRadius: radius.md, opacity: pressed ? 0.88 : 1 }]}
           >
-            <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
-            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>
+            <Ionicons name="checkmark-circle-outline" size={18} color={colors.textInverse} />
+            <Text style={{ color: colors.textInverse, fontWeight: '700', fontSize: 15 }}>
               Confirm {selectedIds.length} {selectedIds.length === 1 ? 'Company' : 'Companies'}
             </Text>
           </Pressable>
@@ -375,20 +350,17 @@ export const CompanyInvitePickerScreen: React.FC = () => {
 };
 
 const S = StyleSheet.create({
-  root:       { flex: 1 },
-  header:     { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, gap: 10, borderBottomWidth: 1 },
-  headerTop:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  searchBox:  { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, height: 42, borderWidth: 1 },
-  searchInput:{ flex: 1, fontSize: 14, padding: 0 },
-  chip:       { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 10, paddingRight: 8, paddingVertical: 4 },
-  center:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 24 },
-  listHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 10, marginBottom: 8 },
-  row:        { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, minHeight: 60 },
-  rowText:    { flex: 1, minWidth: 0 },
-  checkbox:   { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, flexShrink: 0 },
-  emptyWrap:  { alignItems: 'center', gap: 4, paddingVertical: 48, paddingHorizontal: 24 },
-  floatingBar:{ borderTopWidth: 1, paddingHorizontal: 16, paddingTop: 12 },
-  doneBtn:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, minHeight: 50 },
+  root:        { flex: 1 },
+  header:      { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, gap: 10, borderBottomWidth: 1 },
+  headerTop:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  searchBox:   { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, height: 42, borderWidth: 1 },
+  searchInput: { flex: 1, fontSize: 14, padding: 0 },
+  chip:        { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 8, paddingRight: 8, paddingVertical: 4 },
+  center:      { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 24 },
+  retryBtn:    { paddingHorizontal: 18, paddingVertical: 9, marginTop: 8 },
+  listHeader:  { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 10, marginBottom: 8 },
+  floatingBar: { borderTopWidth: 1, paddingHorizontal: 16, paddingTop: 12 },
+  confirmBtn:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, minHeight: 50 },
 });
 
 export default CompanyInvitePickerScreen;

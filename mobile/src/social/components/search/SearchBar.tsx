@@ -1,17 +1,6 @@
 // src/social/components/search/SearchBar.tsx
-/**
- * SearchBar — controlled search input with clear + cancel actions
- *
- * Theme migration:
- * - theme.inputBg → theme.colors.inputBg  (authoritative)
- * - theme.border  → theme.colors.border   (authoritative)
- * - theme.muted   → theme.colors.muted    (authoritative)
- * - theme.text    → theme.colors.text     (authoritative)
- * - theme.primary → theme.colors.primary  (authoritative)
- * Flat aliases remain valid but colours object used for consistency.
- */
 import { Ionicons } from '@expo/vector-icons';
-import React, { forwardRef, memo, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, memo, useImperativeHandle, useRef, useState } from 'react';
 import {
   Keyboard,
   StyleSheet,
@@ -35,7 +24,6 @@ interface Props {
   showCancel?: boolean;
   onCancel?: () => void;
   autoFocus?: boolean;
-  /** Called when the input gains focus (used to expand UI / show cancel). */
   onFocus?: () => void;
 }
 
@@ -54,8 +42,10 @@ const SearchBar = memo(
       },
       ref,
     ) => {
-      const theme    = useSocialTheme();
+      const theme = useSocialTheme();
+      const { colors, radius, dark } = theme;
       const inputRef = useRef<TextInput>(null);
+      const [focused, setFocused] = useState(false);
 
       useImperativeHandle(ref, () => ({
         focus: () => inputRef.current?.focus(),
@@ -74,31 +64,43 @@ const SearchBar = memo(
         inputRef.current?.focus();
       };
 
+      // Dark mode: dark input background, vibrant border on focus
+      // Light mode: light input background, subtle border on focus
+      const inputBg = dark ? colors.inputBg : colors.cardAlt;
+      const borderColor = focused ? colors.primary : colors.border;
+      const borderWidth = focused ? 1.5 : 1;
+
       return (
         <View style={styles.row}>
           <View
             style={[
               styles.field,
               {
-                backgroundColor: theme.colors.inputBg,
-                borderColor:     theme.colors.border,
+                backgroundColor: inputBg,
+                borderColor: borderColor,
+                borderWidth: borderWidth,
+                borderRadius: radius.pill,
               },
             ]}
           >
-            <Ionicons name="search-outline" size={18} color={theme.colors.muted} />
+            <Ionicons name="search-outline" size={18} color={colors.muted} />
             <TextInput
               ref={inputRef}
               value={value}
               onChangeText={onChangeText}
               onSubmitEditing={onSubmit}
-              onFocus={onFocus}
+              onFocus={() => {
+                setFocused(true);
+                onFocus?.();
+              }}
+              onBlur={() => setFocused(false)}
               placeholder={placeholder}
-              placeholderTextColor={theme.colors.muted}
+              placeholderTextColor={colors.muted}
               returnKeyType="search"
               autoCapitalize="none"
               autoCorrect={false}
               autoFocus={autoFocus}
-              style={[styles.input, { color: theme.colors.text }]}
+              style={[styles.input, { color: colors.text }]}
               accessibilityLabel="Search"
             />
             {value.length > 0 ? (
@@ -108,7 +110,7 @@ const SearchBar = memo(
                 accessibilityLabel="Clear search"
                 accessibilityRole="button"
               >
-                <Ionicons name="close-circle" size={18} color={theme.colors.muted} />
+                <Ionicons name="close-circle" size={18} color={colors.muted} />
               </TouchableOpacity>
             ) : null}
           </View>
@@ -121,7 +123,7 @@ const SearchBar = memo(
               accessibilityRole="button"
               accessibilityLabel="Cancel"
             >
-              <Text style={[styles.cancelText, { color: theme.colors.primary }]}>
+              <Text style={[styles.cancelText, { color: colors.primary }]}>
                 Cancel
               </Text>
             </TouchableOpacity>
@@ -135,21 +137,33 @@ const SearchBar = memo(
 SearchBar.displayName = 'SearchBar';
 
 const styles = StyleSheet.create({
-  row:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  field: {
-    flex:           1,
-    flexDirection:  'row',
-    alignItems:     'center',
-    gap:            8,
-    borderWidth:    1,
-    borderRadius:   22,
-    paddingHorizontal: 14,
-    height:         44,
+  row: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8 
   },
-  input:      { flex: 1, fontSize: 14, paddingVertical: 0 },
-  cancel:     { minHeight: 44, justifyContent: 'center', paddingHorizontal: 6 },
-  cancelText: { fontSize: 14, fontWeight: '600' },
+  field: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    height: 44,
+  },
+  input: { 
+    flex: 1, 
+    fontSize: 14, 
+    paddingVertical: 0 
+  },
+  cancel: { 
+    minHeight: 44, 
+    justifyContent: 'center', 
+    paddingHorizontal: 6 
+  },
+  cancelText: { 
+    fontSize: 14, 
+    fontWeight: '600' 
+  },
 });
 
 export default SearchBar;
-// ✅ theme-migrated

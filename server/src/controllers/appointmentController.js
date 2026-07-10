@@ -2,6 +2,8 @@
 const Appointment = require('../models/Appointment');
 const User = require('../models/User');
 const { sendEmail } = require('../services/emailService');
+// 🔔 NOTIFICATION
+const notificationService = require('../services/notificationService');
 
 exports.getAvailableSlots = async (req, res) => {
     try {
@@ -14,7 +16,6 @@ exports.getAvailableSlots = async (req, res) => {
             });
         }
 
-        // Validate date format (YYYY-MM-DD)
         const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
         if (!dateRegex.test(date)) {
             return res.status(400).json({
@@ -23,14 +24,12 @@ exports.getAvailableSlots = async (req, res) => {
             });
         }
 
-        // Generate working hours (9 AM to 4 PM, Monday to Friday)
         const slots = [];
         const startHour = 9;
         const endHour = 16;
-        const slotDuration = 45; // minutes
-        const slotsPerDay = 8; // 8 slots per day
+        const slotDuration = 45;
+        const slotsPerDay = 8;
 
-        // Check if date is a weekend
         const appointmentDate = new Date(date);
         const dayOfWeek = appointmentDate.getDay();
 
@@ -42,7 +41,6 @@ exports.getAvailableSlots = async (req, res) => {
             });
         }
 
-        // Generate slots for the day
         for (let i = 0; i < slotsPerDay; i++) {
             const slotHour = startHour + Math.floor((i * slotDuration) / 60);
             const slotMinute = (i * slotDuration) % 60;
@@ -52,7 +50,6 @@ exports.getAvailableSlots = async (req, res) => {
             const endMinute = (slotMinute + slotDuration) % 60;
             const endTime = `${endHourAdj.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
 
-            // Check if slot is already booked
             const existingAppointment = await Appointment.findOne({
                 appointmentDate: date,
                 appointmentTime: startTime,
@@ -103,7 +100,6 @@ exports.createAppointment = async (req, res) => {
             additionalNotes
         } = req.body;
 
-        // Validation
         if (!fullName || !email || !phone || !verificationType || !appointmentDate || !appointmentTime) {
             return res.status(400).json({
                 success: false,
@@ -111,7 +107,6 @@ exports.createAppointment = async (req, res) => {
             });
         }
 
-        // Validate email format
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             return res.status(400).json({
@@ -120,7 +115,6 @@ exports.createAppointment = async (req, res) => {
             });
         }
 
-        // Validate phone number (basic validation)
         if (phone.length < 10) {
             return res.status(400).json({
                 success: false,
@@ -128,7 +122,6 @@ exports.createAppointment = async (req, res) => {
             });
         }
 
-        // Check if slot is still available
         const existingAppointment = await Appointment.findOne({
             appointmentDate,
             appointmentTime,
@@ -142,7 +135,6 @@ exports.createAppointment = async (req, res) => {
             });
         }
 
-        // Check if user already has a pending appointment for this verification type
         const userPendingAppointment = await Appointment.findOne({
             userId,
             verificationType,
@@ -156,7 +148,6 @@ exports.createAppointment = async (req, res) => {
             });
         }
 
-        // Get user details if userId is provided
         let user = null;
         if (userId) {
             user = await User.findById(userId);
@@ -168,7 +159,6 @@ exports.createAppointment = async (req, res) => {
             }
         }
 
-        // Create appointment
         const appointment = new Appointment({
             userId: userId || null,
             fullName,
@@ -190,7 +180,6 @@ exports.createAppointment = async (req, res) => {
             await sendAppointmentConfirmationEmail(appointment, user);
         } catch (emailError) {
             console.error('Failed to send confirmation email:', emailError);
-            // Don't fail the appointment creation if email fails
         }
 
         // Notify admin about new appointment
@@ -199,6 +188,52 @@ exports.createAppointment = async (req, res) => {
         } catch (notificationError) {
             console.error('Failed to notify admin:', notificationError);
         }
+
+        // 🔔 NOTIFICATION: Confirm to user + notify admins
+        (async () => {
+            try {
+                if (userId) {
+                    await notificationService.create({
+                        recipient: userId,
+                        actor: null,
+                        type: 'appointment_confirmed',
+                        title: 'Appointment scheduled',
+                        body: `Your ${verificationType} appointment is set for ${appointmentDate} at ${appointmentTime}`,
+                        data: {
+                            entityType: 'Appointment',
+                            entityId: appointment._id.toString(),
+                            screen: 'AppointmentDetail',
+                            params: { appointmentId: appointment._id }
+                        },
+                        priority: 'high',
+                        channels: { inApp: true, push: true, email: true }
+                    });
+                }
+
+                const admins = await User.find({ role: 'admin', isActive: true }).select('_id').lean();
+                for (const admin of admins) {
+                    await notificationService.create({
+                        recipient: admin._id,
+                        actor: null,
+                        type: 'new_appointment_admin',
+                        title: 'New appointment booked',
+                        body: `${fullName} booked a ${verificationType} appointment`,
+                        data: {
+                            entityType: 'Appointment',
+                            entityId: appointment._id.toString(),
+                            screen: 'AdminAppointments',
+                            params: {}
+                        },
+                        priority: 'normal',
+                        groupKey: 'new_appointment_admin',
+                        channels: { inApp: true, push: false, email: true }
+                    });
+                }
+            } catch (notifErr) {
+                console.warn('[Notification] Non-critical error:', notifErr.message);
+            }
+        })();
+        // END NOTIFICATION
 
         res.status(201).json({
             success: true,
@@ -304,7 +339,6 @@ exports.cancelAppointment = async (req, res) => {
             });
         }
 
-        // Check if appointment can be cancelled (only pending appointments)
         if (appointment.status !== 'pending') {
             return res.status(400).json({
                 success: false,
@@ -312,7 +346,6 @@ exports.cancelAppointment = async (req, res) => {
             });
         }
 
-        // Check if appointment is in the past
         const appointmentDateTime = new Date(`${appointment.appointmentDate}T${appointment.appointmentTime}`);
         if (appointmentDateTime < new Date()) {
             return res.status(400).json({
@@ -321,26 +354,49 @@ exports.cancelAppointment = async (req, res) => {
             });
         }
 
-        // Update appointment status
         appointment.status = 'cancelled';
         appointment.cancellationReason = cancellationReason || 'User cancelled';
         appointment.cancelledAt = new Date();
 
         await appointment.save();
 
-        // Send cancellation email
         try {
             await sendAppointmentCancellationEmail(appointment);
         } catch (emailError) {
             console.error('Failed to send cancellation email:', emailError);
         }
 
-        // Notify admin about cancellation
         try {
             await notifyAdminAboutCancellation(appointment);
         } catch (notificationError) {
             console.error('Failed to notify admin:', notificationError);
         }
+
+        // 🔔 NOTIFICATION: Notify user about cancellation
+        (async () => {
+            try {
+                if (appointment.userId) {
+                    await notificationService.create({
+                        recipient: appointment.userId,
+                        actor: null,
+                        type: 'appointment_cancelled',
+                        title: 'Appointment cancelled',
+                        body: `Your ${appointment.verificationType} appointment on ${appointment.appointmentDate} has been cancelled`,
+                        data: {
+                            entityType: 'Appointment',
+                            entityId: id,
+                            screen: 'AppointmentDetail',
+                            params: { appointmentId: id }
+                        },
+                        priority: 'high',
+                        channels: { inApp: true, push: true, email: true }
+                    });
+                }
+            } catch (notifErr) {
+                console.warn('[Notification] Non-critical error:', notifErr.message);
+            }
+        })();
+        // END NOTIFICATION
 
         res.json({
             success: true,
@@ -383,7 +439,6 @@ exports.updateAppointmentStatus = async (req, res) => {
             });
         }
 
-        // Update status
         appointment.status = status;
 
         if (status === 'confirmed') {
@@ -397,12 +452,45 @@ exports.updateAppointmentStatus = async (req, res) => {
 
         await appointment.save();
 
-        // Send status update email
         try {
             await sendAppointmentStatusUpdateEmail(appointment, status);
         } catch (emailError) {
             console.error('Failed to send status update email:', emailError);
         }
+
+        // 🔔 NOTIFICATION: Notify user about status change
+        (async () => {
+            try {
+                if (appointment.userId) {
+                    const statusMsgMap = {
+                        confirmed:  { type: 'appointment_confirmed', title: 'Appointment confirmed ✅', priority: 'high' },
+                        cancelled:  { type: 'appointment_cancelled', title: 'Appointment cancelled', priority: 'high' },
+                        completed:  { type: 'appointment_confirmed', title: 'Appointment completed', priority: 'normal' }
+                    };
+                    const cfg = statusMsgMap[status];
+                    if (cfg) {
+                        await notificationService.create({
+                            recipient: appointment.userId,
+                            actor: adminId,
+                            type: cfg.type,
+                            title: cfg.title,
+                            body: `Your ${appointment.verificationType} appointment on ${appointment.appointmentDate} is now: ${status}`,
+                            data: {
+                                entityType: 'Appointment',
+                                entityId: id,
+                                screen: 'AppointmentDetail',
+                                params: { appointmentId: id }
+                            },
+                            priority: cfg.priority,
+                            channels: { inApp: true, push: true, email: true }
+                        });
+                    }
+                }
+            } catch (notifErr) {
+                console.warn('[Notification] Non-critical error:', notifErr.message);
+            }
+        })();
+        // END NOTIFICATION
 
         res.json({
             success: true,
@@ -475,7 +563,6 @@ exports.getAdminAppointments = async (req, res) => {
 
         const query = {};
 
-        // Apply filters
         if (status && status !== 'all') {
             query.status = status;
         }
@@ -484,14 +571,12 @@ exports.getAdminAppointments = async (req, res) => {
             query.verificationType = verificationType;
         }
 
-        // Date range filter
         if (dateFrom || dateTo) {
             query.appointmentDate = {};
             if (dateFrom) query.appointmentDate.$gte = dateFrom;
             if (dateTo) query.appointmentDate.$lte = dateTo;
         }
 
-        // Pagination
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
         const [appointments, total] = await Promise.all([
@@ -504,7 +589,6 @@ exports.getAdminAppointments = async (req, res) => {
             Appointment.countDocuments(query)
         ]);
 
-        // Get statistics
         const stats = await Appointment.aggregate([
             { $match: query },
             {
@@ -567,7 +651,6 @@ exports.bulkUpdateAppointments = async (req, res) => {
             });
         }
 
-        // Update multiple appointments
         const updateData = {
             status,
             updatedAt: new Date()
@@ -587,10 +670,8 @@ exports.bulkUpdateAppointments = async (req, res) => {
             { $set: updateData }
         );
 
-        // Send notifications for updated appointments
         const updatedAppointments = await Appointment.find({ _id: { $in: appointmentIds } });
 
-        // Send email notifications (in background)
         updatedAppointments.forEach(async (appointment) => {
             try {
                 await sendAppointmentStatusUpdateEmail(appointment, status);

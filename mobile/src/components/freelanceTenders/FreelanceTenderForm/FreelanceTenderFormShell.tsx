@@ -1,4 +1,6 @@
 // mobile/src/components/freelanceTenders/FreelanceTenderForm/FreelanceTenderFormShell.tsx
+// FIXES: G-01, G-02, G-03, F-01
+// UPDATED: useTheme() instead of useThemeStore(), all colors from theme
 
 import React, { useCallback, useState } from 'react';
 import {
@@ -12,8 +14,9 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useThemeStore } from '../../../store/themeStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../../hooks/useTheme';
+import { MIN_TOUCH_TARGET } from '../../../theme/tokens';
 import {
   useCreateFreelanceTender,
   useFreelanceTenderCategories,
@@ -38,7 +41,6 @@ import Step5Review from './Step5Review';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface FreelanceTenderFormShellProps {
-  /** If provided, form is in edit mode; pre-populates from API */
   tenderId?: string;
   onSuccess: (id: string) => void;
   onCancel: () => void;
@@ -49,8 +51,6 @@ type SubmitAction = 'draft' | 'publish';
 // ─── Default values ───────────────────────────────────────────────────────────
 
 function defaultDetails(): TenderDetails {
-  const deadline = new Date();
-  deadline.setDate(deadline.getDate() + 30);
   return {
     engagementType: 'fixed_price' as EngagementType,
     budget: { min: undefined, max: undefined, currency: 'ETB' },
@@ -85,7 +85,7 @@ function defaultFormData(): FreelanceTenderFormData {
 const STEPS = [
   { id: 1, label: 'Basics' },
   { id: 2, label: 'Details' },
-  { id: 3, label: 'Description' },
+  { id: 3, label: 'Descript…' },
   { id: 4, label: 'Skills' },
   { id: 5, label: 'Review' },
 ];
@@ -138,8 +138,8 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
   onCancel,
 }) => {
   const isEdit = !!tenderId;
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+  const { colors: c, radius, spacing, type, shadows } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<FreelanceTenderFormData>(defaultFormData());
@@ -150,7 +150,6 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
-  // BUG 1 FIX: import and use the real hook — no local stub below
   const { data: categoriesRaw = {} } = useFreelanceTenderCategories();
   const { data: editData } = useFreelanceTenderEditData(tenderId ?? '');
   const createMutation = useCreateFreelanceTender();
@@ -176,7 +175,7 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
       attachmentFiles: [],
     });
     setDescription((t.description as string) ?? '');
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editData]);
 
   const patchFormData = useCallback(
@@ -186,7 +185,6 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
     []
   );
 
-  // Stepper navigation
   const goNext = () => {
     const errs = validateStep(currentStep, formData, description);
     if (Object.keys(errs).length > 0) {
@@ -314,68 +312,79 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
   // ─── Stepper bar ──────────────────────────────────────────────────────────
 
   const StepperBar = () => (
-    <View style={[styles.stepperRow, { borderBottomColor: c.border ?? c.textMuted + '22' }]}>
-      {STEPS.map((step, idx) => {
-        const done = currentStep > step.id;
-        const active = currentStep === step.id;
-        return (
-          <React.Fragment key={step.id}>
-            <Pressable
-              onPress={() => done && goToStep(step.id)}
-              style={styles.stepItem}
-              accessibilityRole="button"
-              disabled={!done}
-            >
-              <View
-                style={[
-                  styles.stepCircle,
-                  {
-                    backgroundColor: done
-                      ? c.success
-                      : active
-                      ? c.primary
-                      : c.surface ?? c.card,
-                    borderColor: done
-                      ? c.success
-                      : active
-                      ? c.primary
-                      : c.border ?? c.textMuted + '44',
-                  },
-                ]}
+    <View
+      style={[
+        styles.stepperWrapper,
+        {
+          paddingTop: insets.top + 8,
+          borderBottomColor: c.border,
+          backgroundColor: c.bgCard,
+        },
+      ]}
+    >
+      <View style={styles.stepperRow}>
+        {STEPS.map((step, idx) => {
+          const done = currentStep > step.id;
+          const active = currentStep === step.id;
+          return (
+            <React.Fragment key={step.id}>
+              <Pressable
+                onPress={() => done && goToStep(step.id)}
+                style={styles.stepItem}
+                accessibilityRole="button"
+                disabled={!done}
               >
-                <Text
+                <View
                   style={[
-                    styles.stepCircleText,
-                    { color: done || active ? '#fff' : c.textMuted },
+                    styles.stepCircle,
+                    {
+                      backgroundColor: done
+                        ? c.success
+                        : active
+                        ? c.primary
+                        : c.surface,
+                      borderColor: done
+                        ? c.success
+                        : active
+                        ? c.primary
+                        : c.border,
+                    },
                   ]}
                 >
-                  {done ? '✓' : String(step.id)}
+                  <Text
+                    style={[
+                      styles.stepCircleText,
+                      { color: done || active ? c.textInverse : c.textMuted },
+                    ]}
+                  >
+                    {done ? '✓' : String(step.id)}
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.stepLabel,
+                    {
+                      color: active ? c.primary : done ? c.text : c.textMuted,
+                      fontWeight: active ? '700' : '400',
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {step.label}
                 </Text>
-              </View>
-              <Text
-                style={[
-                  styles.stepLabel,
-                  {
-                    color: active ? c.primary : done ? c.text : c.textMuted,
-                    fontWeight: active ? '700' : '400',
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                {step.label}
-              </Text>
-            </Pressable>
-            {idx < STEPS.length - 1 && (
-              <View
-                style={[
-                  styles.stepConnector,
-                  { backgroundColor: done ? c.success : c.border ?? c.textMuted + '33' },
-                ]}
-              />
-            )}
-          </React.Fragment>
-        );
-      })}
+              </Pressable>
+              {idx < STEPS.length - 1 && (
+                <View
+                  style={[
+                    styles.stepConnector,
+                    { backgroundColor: done ? c.success : c.border },
+                  ]}
+                />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </View>
     </View>
   );
 
@@ -386,8 +395,9 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
       style={[
         styles.footer,
         {
-          borderTopColor: c.border ?? c.textMuted + '22',
-          backgroundColor: c.background ?? c.card,
+          paddingBottom: 8,
+          borderTopColor: c.border,
+          backgroundColor: c.bgCard,
         },
       ]}
     >
@@ -397,7 +407,7 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
           style={[
             styles.footerBtn,
             styles.footerBtnSecondary,
-            { borderColor: c.textMuted + '55' },
+            { borderColor: c.border },
           ]}
           accessibilityRole="button"
           disabled={isMutating}
@@ -410,7 +420,7 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
           style={[
             styles.footerBtn,
             styles.footerBtnSecondary,
-            { borderColor: c.textMuted + '55' },
+            { borderColor: c.border },
           ]}
           accessibilityRole="button"
         >
@@ -424,7 +434,7 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
           style={[styles.footerBtn, styles.footerBtnPrimary, { backgroundColor: c.primary }]}
           accessibilityRole="button"
         >
-          <Text style={styles.footerBtnPrimaryText}>
+          <Text style={[styles.footerBtnPrimaryText, { color: c.textInverse }]}>
             {currentStep === STEPS.length - 1 ? 'Review →' : 'Continue →'}
           </Text>
         </Pressable>
@@ -436,7 +446,7 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
             style={[
               styles.footerBtn,
               styles.footerBtnSecondary,
-              { borderColor: c.primary + '66', flex: 1 },
+              { borderColor: c.primary, flex: 1 },
             ]}
             accessibilityRole="button"
           >
@@ -457,9 +467,9 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
             accessibilityRole="button"
           >
             {isMutating ? (
-              <ActivityIndicator color="#fff" size="small" />
+              <ActivityIndicator color={c.textInverse} size="small" />
             ) : (
-              <Text style={styles.footerBtnPrimaryText}>
+              <Text style={[styles.footerBtnPrimaryText, { color: c.textInverse }]}>
                 {isEdit ? 'Save & Publish' : 'Publish'}
               </Text>
             )}
@@ -472,10 +482,7 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
   // ─── Root render ──────────────────────────────────────────────────────────
 
   return (
-    <SafeAreaView
-      style={[styles.root, { backgroundColor: c.background ?? c.card }]}
-      edges={['top', 'bottom']}
-    >
+    <View style={[styles.root, { backgroundColor: c.bg }]}>
       <StepperBar />
       <KeyboardAvoidingView
         style={styles.flex}
@@ -484,15 +491,15 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
       >
         <ScrollView
           style={styles.flex}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { padding: spacing.lg }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.stepHeader}>
-            <Text style={[styles.stepHeadingSmall, { color: c.textMuted }]}>
+          <View style={[styles.stepHeader, { marginBottom: spacing.lg }]}>
+            <Text style={[type.caption, styles.stepHeadingSmall, { color: c.textMuted }]}>
               Step {currentStep} of {STEPS.length}
             </Text>
-            <Text style={[styles.stepHeading, { color: c.text }]}>
+            <Text style={[type.bodyMd, styles.stepHeading, { color: c.text, fontWeight: '700' }]}>
               {STEPS[currentStep - 1].label}
             </Text>
           </View>
@@ -501,20 +508,27 @@ const FreelanceTenderFormShell: React.FC<FreelanceTenderFormShellProps> = ({
         </ScrollView>
       </KeyboardAvoidingView>
       <Footer />
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
+
+  stepperWrapper: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+
   stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
+scrollContent: {
+  flexGrow: 1,
+},
   stepItem: { alignItems: 'center', gap: 4 },
   stepCircle: {
     width: 28,
@@ -530,9 +544,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.3,
     maxWidth: 52,
+    textAlign: 'center',
   },
-  stepConnector: { flex: 1, height: 1.5, marginHorizontal: 4, marginBottom: 14 },
-  scrollContent: { padding: 20, paddingBottom: 40 },
+  stepConnector: { flex: 1, height: 1.5, marginHorizontal: 4 },
+
   stepHeader: { marginBottom: 24 },
   stepHeadingSmall: {
     fontSize: 11,
@@ -542,23 +557,25 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   stepHeading: { fontSize: 22, fontWeight: '800' },
+
   footer: {
     flexDirection: 'row',
-    padding: 16,
+    paddingTop: 12,
+    paddingHorizontal: 16,
     gap: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   footerBtn: {
     flex: 1,
-    height: 52,
+    height: MIN_TOUCH_TARGET + 8,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  footerBtnSecondary: { borderWidth: 1 },
+  footerBtnSecondary: { borderWidth: 1.5 },
   footerBtnPrimary: {},
   footerBtnText: { fontSize: 15, fontWeight: '600' },
-  footerBtnPrimaryText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  footerBtnPrimaryText: { fontSize: 15, fontWeight: '700' },
   submitGroup: { flex: 1, flexDirection: 'row', gap: 10 },
 });
 

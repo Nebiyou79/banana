@@ -48,6 +48,12 @@ import { ProductMarketplaceScreen } from '../screens/products/ProductMarketplace
 import { ProductDetailsScreen } from '../screens/products/ProductDetailsScreen';
 import ProposalDetailScreen from '../screens/freelancer/proposals/ProposalDetailScreen';
 import RoleVerificationScreen from '../screens/shared/RoleVerificationScreen';
+import { NotificationsScreen } from '../screens/NotificationsScreen';
+import { NotificationPreferencesScreen } from '../screens/NotificationPreferencesScreen';
+import { HelpFAQScreen } from '../screens/settings/HelpFAQScreen';
+import { PrivacySecurityScreen } from '../screens/settings/PrivacySecurityScreen';
+import { ContactUsScreen } from '../screens/settings/ContactUsScreen';
+import { TermsPrivacyScreen } from '../screens/settings/TermsPrivacyScreen';
 
 // ─── Param lists ──────────────────────────────────────────────────────────────
 
@@ -65,7 +71,10 @@ export type FreelancerStackParamList = {
   FreelancerDetail: { freelancerId: string };
   FreelancerShortlist: undefined;
     RoleVerification: undefined;
-
+     NotificationPreferences: undefined;
+  Notifications: undefined;// ⚙️ SETTINGS ROUTES
+  PrivacySecurity: undefined;
+  HelpFAQ: undefined;
   // Tender detail screens pushed from the Tenders inner stack:
   FreelancerTenderDetail: { tenderId: string };
   SubmitProposal: { tenderId: string; tender: unknown };
@@ -76,6 +85,8 @@ export type FreelancerStackParamList = {
   Leaderboard: undefined;
   ProductMarketplace: undefined;
   ProductDetails: { productId: string };
+    ContactUs: undefined; // ✅ Added
+  TermsPrivacy: undefined; // ✅ Added
 };
 
 export type FreelancerTendersTabParamList = {
@@ -272,6 +283,45 @@ export default function FreelancerNavigator() {
       <Stack.Screen name="FreelancerMarketplace" component={FreelancerMarketplaceScreen} />
       <Stack.Screen name="FreelancerDetail" component={FreelancerDetailScreen} />
       <Stack.Screen name="FreelancerShortlist" component={FreelancerShortlistScreen} />
+ {/* 🔔 NOTIFICATION SCREENS */}
+      <Stack.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{
+          headerShown: true,
+          headerTitle: 'Notifications',
+        }}
+      />
+      <Stack.Screen
+        name="NotificationPreferences"
+        component={NotificationPreferencesScreen}
+        options={{
+          headerShown: true,
+          headerTitle: 'Notification Settings',
+        }}
+      />
+            {/* ⚙️ SETTINGS SCREENS */}
+{/* ⚙️ SETTINGS SCREENS */}
+<Stack.Screen
+  name="PrivacySecurity"
+  component={PrivacySecurityScreen}
+  options={{ headerShown: false }}
+/>
+<Stack.Screen
+  name="HelpFAQ"
+  component={HelpFAQScreen}
+  options={{ headerShown: false }}
+/>
+<Stack.Screen
+  name="ContactUs"
+  component={ContactUsScreen}
+  options={{ headerShown: false }}
+/>
+<Stack.Screen
+  name="TermsPrivacy"
+  component={TermsPrivacyScreen}
+  options={{ headerShown: false }}
+/>
       <Stack.Screen
         name="FreelancerTenderDetail"
         component={FreelancerTenderDetailScreen}

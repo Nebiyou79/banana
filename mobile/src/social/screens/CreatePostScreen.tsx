@@ -1,5 +1,5 @@
 // src/social/screens/CreatePostScreen.tsx
-// ✅ role-theme-migrated
+// ✅ role-theme-migrated — FIXED
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,9 +26,9 @@ import type { CreatePostData, PostVisibility } from '../types';
 type MediaFile = { uri: string; type: string; name: string };
 
 const VISIBILITIES: { key: PostVisibility; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: 'public', label: 'Public', icon: 'earth-outline' },
+  { key: 'public',      label: 'Public',      icon: 'earth-outline' },
   { key: 'connections', label: 'Connections', icon: 'people-outline' },
-  { key: 'private', label: 'Only me', icon: 'lock-closed-outline' },
+  { key: 'private',     label: 'Only me',     icon: 'lock-closed-outline' },
 ];
 
 const CreatePostScreen: React.FC = () => {
@@ -76,16 +76,29 @@ const CreatePostScreen: React.FC = () => {
     });
   }, [canSubmit, content, visibility, media, createM, navigation]);
 
+  // FIX: LinearGradient colors array must always have valid color strings
+  const gradientColors: [string, string] = canSubmit
+    ? [theme.colors.primary, theme.colors.primaryDark]
+    : [theme.colors.cardAlt, theme.colors.cardAlt];
+
   return (
-    <SafeAreaView style={[styles.container, theme.getPageBgStyle()]} edges={['top']}>
-      {/* Role-tinted accent strip at top for brand anchoring */}
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.bg }]}
+      edges={['top', 'bottom']}
+    >
+      {/* Role-tinted accent strip at top */}
       <View style={[styles.accentStrip, { backgroundColor: theme.colors.primary }]} />
 
       {/* Header */}
-      <View style={[styles.header, {
-        backgroundColor: theme.withAlpha(theme.colors.primary, 0.03),
-        borderBottomColor: theme.border,
-      }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor: theme.withAlpha(theme.colors.primary, 0.03),
+            borderBottomColor: theme.border,
+          },
+        ]}
+      >
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -95,9 +108,10 @@ const CreatePostScreen: React.FC = () => {
         >
           <Ionicons name="close" size={26} color={theme.text} />
         </TouchableOpacity>
+
         <Text style={[styles.headerTitle, { color: theme.text }]}>New post</Text>
 
-        {/* Gradient post button */}
+        {/* Gradient post button — opacity on wrapper, never on gradient itself */}
         <TouchableOpacity
           onPress={handleSubmit}
           disabled={!canSubmit}
@@ -107,11 +121,7 @@ const CreatePostScreen: React.FC = () => {
           style={{ opacity: canSubmit ? 1 : 0.4 }}
         >
           <LinearGradient
-            colors={
-              canSubmit
-                ? [theme.colors.primary, theme.colors.primaryDark]
-                : [theme.colors.cardAlt, theme.colors.cardAlt]
-            }
+            colors={gradientColors}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.postBtn}
@@ -126,12 +136,13 @@ const CreatePostScreen: React.FC = () => {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 40 }}
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
           {/* Text input */}
@@ -142,18 +153,18 @@ const CreatePostScreen: React.FC = () => {
             placeholderTextColor={theme.muted}
             multiline
             maxLength={5000}
-            style={[
-              styles.input,
-              { color: theme.text },
-            ]}
+            style={[styles.input, { color: theme.text }]}
             autoFocus
           />
 
           {/* Media preview row */}
-          {media.length > 0 ? (
-            <View style={[styles.mediaContainer, {
-              backgroundColor: theme.withAlpha(theme.colors.primary, 0.04),
-            }]}>
+          {media.length > 0 && (
+            <View
+              style={[
+                styles.mediaContainer,
+                { backgroundColor: theme.withAlpha(theme.colors.primary, 0.04) },
+              ]}
+            >
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -178,7 +189,7 @@ const CreatePostScreen: React.FC = () => {
                 ))}
               </ScrollView>
             </View>
-          ) : null}
+          )}
 
           {/* Visibility section */}
           <View style={[styles.section, { borderTopColor: theme.border }]}>
@@ -199,10 +210,15 @@ const CreatePostScreen: React.FC = () => {
         </ScrollView>
 
         {/* Toolbar */}
-        <View style={[styles.toolbar, {
-          backgroundColor: theme.withAlpha(theme.colors.primary, 0.03),
-          borderTopColor: theme.border,
-        }]}>
+        <View
+          style={[
+            styles.toolbar,
+            {
+              backgroundColor: theme.withAlpha(theme.colors.primary, 0.03),
+              borderTopColor: theme.border,
+            },
+          ]}
+        >
           <TouchableOpacity
             onPress={pickMedia}
             disabled={media.length >= 5}
@@ -226,6 +242,8 @@ const CreatePostScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  keyboardView: { flex: 1 },
+  scrollContent: { paddingBottom: 24 },
   accentStrip: {
     height: 2,
     opacity: 0.7,

@@ -11,6 +11,10 @@ import type { AddCommentData, Comment, Post } from '../types';
 
 /**
  * Paginated comments for a post.
+ *
+ * FIX: `select` always returns { comments, pages, pageParams } — but
+ * `data` itself is `undefined` until the first successful fetch. All
+ * consumers must guard: `commentsQ.data?.comments ?? []`
  */
 export const useComments = (postId: string) =>
   useInfiniteQuery({
@@ -21,7 +25,10 @@ export const useComments = (postId: string) =>
         limit: 15,
       });
       const raw = res.data;
-      return { data: (raw?.data ?? []) as Comment[], pagination: raw?.pagination };
+      return {
+        data: (raw?.data ?? []) as Comment[],
+        pagination: raw?.pagination ?? { page: 1, pages: 1, total: 0 },
+      };
     },
     initialPageParam: 1,
     getNextPageParam: (last) => {
@@ -32,6 +39,7 @@ export const useComments = (postId: string) =>
     staleTime: 1000 * 30,
     select: (data) => ({
       ...data,
+      // Always an array — never undefined
       comments: data.pages.flatMap((p) => p.data ?? []),
     }),
   });
@@ -48,7 +56,10 @@ export const useReplies = (commentId: string, enabled = true) =>
         limit: 10,
       });
       const raw = res.data;
-      return { data: (raw?.data ?? []) as Comment[], pagination: raw?.pagination };
+      return {
+        data: (raw?.data ?? []) as Comment[],
+        pagination: raw?.pagination ?? { page: 1, pages: 1, total: 0 },
+      };
     },
     initialPageParam: 1,
     getNextPageParam: (last) => {

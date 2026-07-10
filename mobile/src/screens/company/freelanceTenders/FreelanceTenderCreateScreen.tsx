@@ -1,4 +1,15 @@
 // mobile/src/screens/company/freelanceTenders/FreelanceTenderCreateScreen.tsx
+//
+// FIX: FreelanceTenderFormShell is rendered inside the Freelance Tenders top-tab
+// navigator (which itself lives inside the main Tenders bottom-tab navigator).
+// Both navigators report their heights to React Navigation, so the screen
+// content is already inset correctly. Any SafeAreaView with edges={['bottom']}
+// inside FreelanceTenderFormShell would double-pad the footer.
+//
+// Action: this wrapper is a thin pass-through — the fix must be applied inside
+// FreelanceTenderFormShell's own footer/SafeAreaView by using edges={['top']}
+// or edges={[]} for its bottom area. This file intentionally has no SafeAreaView
+// of its own so the shell component controls insets directly.
 
 import { useNavigation } from '@react-navigation/native';
 import React from 'react';
@@ -14,7 +25,6 @@ const FreelanceTenderCreateScreen: React.FC = () => {
   const navigation = useNavigation<any>();
 
   const handleSuccess = (_id: string) => {
-    // Pop back to MyTenders; the list will refetch via invalidation.
     if (navigation.canGoBack()) {
       navigation.goBack();
     } else {

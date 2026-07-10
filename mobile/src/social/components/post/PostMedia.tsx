@@ -1,15 +1,27 @@
 // src/social/components/post/PostMedia.tsx
 /**
- * PostMedia — image carousel + in-line video player
+ * PostMedia — fully fixed image carousel + inline video player
  *
- * Theme migration:
- * - theme.skeleton → theme.colors.skeleton (authoritative)
- * - theme.primary  → theme.colors.primary  (authoritative, for progress bar)
- * All other refs already use flat aliases that are backwards-compatible.
+ * Fixes applied:
+ * 1. Carousel uses ScrollView with pagingEnabled + correct itemWidth = card width
+ *    computed from screen minus margins — images no longer get cut off.
+ * 2. Smooth spring-based page transitions via Animated dot indicators.
+ * 3. Counter pill bounce animation on page change.
+ * 4. Video: thumbnail overlay, animated play button, progress bar.
+ * 5. ALL animations use only core react-native Animated (no reanimated).
+ *
+ * Design 2 (light): clean white/soft overlay controls
+ * Design 3 (dark):  glowing primary progress bar + gradient counter pill
  */
 import { Ionicons } from '@expo/vector-icons';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   Animated,
   Dimensions,
@@ -27,6 +39,10 @@ import { useSocialTheme } from '../../theme/socialTheme';
 import type { PostMedia as PostMediaT } from '../../types';
 
 const { width: SCREEN_W } = Dimensions.get('window');
+// Card margin: SPACING.md (12) * 2 sides = 24, plus card border = ~26
+// We use the full screen width since the card uses overflow:hidden
+const CARD_MARGIN = 12; // SPACING.md
+const MEDIA_W = SCREEN_W - CARD_MARGIN * 2; // card content width
 const MEDIA_H = 280;
 
 const getVideoThumbnail = (m: PostMediaT): string => {
@@ -40,197 +56,291 @@ const getVideoThumbnail = (m: PostMediaT): string => {
   return url;
 };
 
-// ── Video tile ────────────────────────────────────────────────
-const VideoTile: React.FC<{ item: PostMediaT; width: number }> = memo(
-  ({ item, width }) => {
-    const theme = useSocialTheme();
-    const src   = item.secure_url || item.url || '';
-    const thumb = getVideoThumbnail(item);
-    const player = useVideoPlayer(src, (p) => { p.loop = false; });
-    const [playing,  setPlaying]  = useState(false);
-    const [progress, setProgress] = useState(0);
+// ── Video Tile ─────────────────────────────────────────────────────────────
+const VideoTile: React.FC<{ item: PostMediaT; width: number }> = memo(({ item, width }) => {
+  const theme = useSocialTheme();
+  const src = item.secure_url || item.url || '';
+  const thumb = getVideoThumbnail(item);
+  const player = useVideoPlayer(src, (p) => { p.loop = false; });
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
 
-    const playScale = useRef(new Animated.Value(1)).current;
-    const triggerPlay = () => {
-      Animated.sequence([
-        Animated.spring(playScale, { toValue: 0.85, friction: 6, tension: 300, useNativeDriver: true }),
-        Animated.spring(playScale, { toValue: 1,    friction: 5, tension: 200, useNativeDriver: true }),
-      ]).start();
-    };
+  // Animated play button
+  const playScale = useRef(new Animated.Value(1)).current;
+  const playOpacity = useRef(new Animated.Value(1)).current;
 
-    const togglePlay = useCallback(() => {
-      triggerPlay();
-      if (player.playing) {
-        player.pause();
-        setPlaying(false);
-      } else {
-        player.play();
-        setPlaying(true);
+  const triggerPlay = useCallback(() => {
+    Animated.sequence([
+      Animated.parallel([
+        Animated.spring(playScale, { toValue: 0.80, friction: 5, tension: 320, useNativeDriver: true }),
+        Animated.timing(playOpacity, { toValue: 0.6, duration: 80, useNativeDriver: true }),
+      ]),
+      Animated.parallel([
+        Animated.spring(playScale, { toValue: 1, friction: 4, tension: 200, useNativeDriver: true }),
+        Animated.timing(playOpacity, { toValue: 1, duration: 120, useNativeDriver: true }),
+      ]),
+    ]).start();
+  }, [playScale, playOpacity]);
+
+  const togglePlay = useCallback(() => {
+    triggerPlay();
+    if (player.playing) {
+      player.pause();
+      setPlaying(false);
+    } else {
+      player.play();
+      setPlaying(true);
+    }
+  }, [player, triggerPlay]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (player.duration > 0) {
+        setProgress(player.currentTime / player.duration);
       }
-    }, [player]);
+    }, 250);
+    return () => clearInterval(interval);
+  }, [player]);
 
-    useEffect(() => {
-      const interval = setInterval(() => {
-        if (player.duration > 0) {
-          setProgress(player.currentTime / player.duration);
-        }
-      }, 300);
-      return () => clearInterval(interval);
-    }, [player]);
+  const progressColor = theme.dark
+    ? theme.colors.primary
+    : theme.colors.primary;
 
-    return (
-      <TouchableOpacity
-        activeOpacity={1}
-        onPress={togglePlay}
-        style={{ width, height: MEDIA_H, backgroundColor: '#000' }}
-      >
-        {!playing && (
-          <Image
-            source={{ uri: thumb }}
-            style={StyleSheet.absoluteFill}
-            resizeMode="cover"
-          />
-        )}
-        <VideoView
-          player={player}
+  return (
+    <TouchableOpacity
+      activeOpacity={1}
+      onPress={togglePlay}
+      style={{ width, height: MEDIA_H, backgroundColor: '#000', overflow: 'hidden' }}
+    >
+      {!playing && (
+        <Image
+          source={{ uri: thumb }}
           style={StyleSheet.absoluteFill}
-          contentFit="cover"
+          resizeMode="cover"
         />
+      )}
+      <VideoView
+        player={player}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+      />
 
-        {!playing && (
-          <Animated.View
-            pointerEvents="none"
-            style={[styles.playOverlay, { transform: [{ scale: playScale }] }]}
-          >
-            <View style={styles.playBtn}>
-              <Ionicons name="play" size={28} color="#fff" style={{ marginLeft: 3 }} />
-            </View>
-          </Animated.View>
-        )}
+      {/* Dark scrim for controls visibility */}
+      <View style={styles.videoScrim} pointerEvents="none" />
 
-        {playing && (
-          <View pointerEvents="none" style={styles.pauseHint}>
-            <Ionicons name="pause" size={14} color="#fff" />
-          </View>
-        )}
-
-        {/* Progress bar */}
-        <View style={styles.progressTrack}>
+      {/* Play button */}
+      {!playing && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.playOverlay,
+            { transform: [{ scale: playScale }], opacity: playOpacity },
+          ]}
+        >
           <View
             style={[
-              styles.progressFill,
+              styles.playBtn,
               {
-                width: `${Math.min(100, progress * 100)}%` as any,
-                backgroundColor: theme.colors.primary,
+                backgroundColor: theme.dark
+                  ? 'rgba(0,0,0,0.55)'
+                  : 'rgba(255,255,255,0.92)',
+                borderWidth: theme.dark ? 2 : 0,
+                borderColor: theme.dark ? theme.colors.primary : 'transparent',
               },
             ]}
-          />
-        </View>
-      </TouchableOpacity>
-    );
-  }
-);
+          >
+            <Ionicons
+              name="play"
+              size={26}
+              color={theme.dark ? theme.colors.primary : theme.colors.primary}
+              style={{ marginLeft: 3 }}
+            />
+          </View>
+        </Animated.View>
+      )}
 
-// ── PostMedia ─────────────────────────────────────────────────
+      {/* Pause indicator */}
+      {playing && (
+        <View pointerEvents="none" style={styles.pauseHint}>
+          <Ionicons name="pause" size={13} color="#fff" />
+        </View>
+      )}
+
+      {/* Duration badge */}
+      {!playing && (
+        <View style={styles.durationBadge}>
+          <Text style={styles.durationText}>
+            {Math.floor((item.duration ?? 0) / 60)}:
+            {String(Math.round((item.duration ?? 0) % 60)).padStart(2, '0')}
+          </Text>
+        </View>
+      )}
+
+      {/* Progress bar */}
+      <View style={styles.progressTrack}>
+        <Animated.View
+          style={[
+            styles.progressFill,
+            {
+              width: `${Math.min(100, progress * 100)}%` as any,
+              backgroundColor: progressColor,
+            },
+          ]}
+        />
+      </View>
+    </TouchableOpacity>
+  );
+});
+
+// ── PostMedia ──────────────────────────────────────────────────────────────
 const PostMedia: React.FC<{
   media: PostMediaT[];
   onMediaPress?: (index: number) => void;
 }> = memo(({ media, onMediaPress }) => {
-  const theme     = useSocialTheme();
-  const [index, setIndex] = useState(0);
-  const itemWidth = SCREEN_W;
+  const theme = useSocialTheme();
+  const [activeIndex, setActiveIndex] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
 
-  // Counter pill bounce on page change
+  // The item width = the scroll view width (full card width)
+  // We size it with onLayout so it's always exact
+  const [containerWidth, setContainerWidth] = useState(MEDIA_W);
+
+  // Counter pill bounce
   const counterScale = useRef(new Animated.Value(1)).current;
-  const bouncePill   = () => {
+  const bouncePill = useCallback(() => {
     Animated.sequence([
-      Animated.spring(counterScale, { toValue: 1.2, friction: 5, tension: 300, useNativeDriver: true }),
-      Animated.spring(counterScale, { toValue: 1,   friction: 6, tension: 200, useNativeDriver: true }),
+      Animated.spring(counterScale, { toValue: 1.25, friction: 5, tension: 350, useNativeDriver: true }),
+      Animated.spring(counterScale, { toValue: 1,    friction: 6, tension: 220, useNativeDriver: true }),
     ]).start();
-  };
+  }, [counterScale]);
 
-  // Dot width animations for active indicator
+  // Animated dot widths — expand active dot
   const dotWidths = useRef(
-    (media ?? []).map((_, i) => new Animated.Value(i === 0 ? 18 : 6))
+    (media ?? []).map((_, i) => new Animated.Value(i === 0 ? 20 : 6))
   ).current;
 
-  const onMomentumEnd = useCallback(
+  const dotOpacities = useRef(
+    (media ?? []).map((_, i) => new Animated.Value(i === 0 ? 1 : 0.45))
+  ).current;
+
+  const animateDots = useCallback((prev: number, next: number) => {
+    Animated.parallel([
+      // Shrink old dot
+      Animated.spring(dotWidths[prev], {
+        toValue: 6,
+        friction: 8,
+        tension: 200,
+        useNativeDriver: false,
+      }),
+      Animated.timing(dotOpacities[prev], {
+        toValue: 0.45,
+        duration: 200,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: false,
+      }),
+      // Expand new dot
+      Animated.spring(dotWidths[next], {
+        toValue: 20,
+        friction: 7,
+        tension: 250,
+        useNativeDriver: false,
+      }),
+      Animated.timing(dotOpacities[next], {
+        toValue: 1,
+        duration: 200,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: false,
+      }),
+    ]).start();
+  }, [dotWidths, dotOpacities]);
+
+  const onMomentumScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const x        = e.nativeEvent.contentOffset.x;
-      const newIndex = Math.round(x / itemWidth);
-      if (newIndex !== index) {
-        Animated.parallel([
-          Animated.timing(dotWidths[index], {
-            toValue: 6,
-            duration: 200,
-            easing: Easing.out(Easing.ease),
-            useNativeDriver: false,
-          }),
-          Animated.timing(dotWidths[newIndex], {
-            toValue: 18,
-            duration: 200,
-            easing: Easing.out(Easing.ease),
-            useNativeDriver: false,
-          }),
-        ]).start();
-        setIndex(newIndex);
+      const x = e.nativeEvent.contentOffset.x;
+      const newIndex = Math.max(0, Math.min(
+        media.length - 1,
+        Math.round(x / containerWidth)
+      ));
+      if (newIndex !== activeIndex) {
+        animateDots(activeIndex, newIndex);
+        setActiveIndex(newIndex);
         bouncePill();
       }
     },
-    [index, itemWidth, dotWidths]
+    [activeIndex, containerWidth, media.length, animateDots, bouncePill]
   );
 
   if (!media || media.length === 0) return null;
 
-  // Single item
+  // ── Single item ──
   if (media.length === 1) {
     const m = media[0];
     if (m.resource_type === 'video') {
       return (
-        <View style={styles.singleWrap}>
-          <VideoTile item={m} width={itemWidth} />
+        <View style={[styles.singleWrap, { height: MEDIA_H }]}>
+          <VideoTile item={m} width={containerWidth} />
         </View>
       );
     }
     return (
       <TouchableOpacity
-        activeOpacity={0.94}
+        activeOpacity={0.92}
         onPress={() => onMediaPress?.(0)}
         style={styles.singleWrap}
       >
         <Image
           source={{ uri: m.secure_url || m.url }}
-          style={[styles.singleImage, { width: itemWidth, backgroundColor: theme.colors.skeleton }]}
+          style={[
+            styles.singleImage,
+            { backgroundColor: theme.colors.skeleton },
+          ]}
           resizeMode="cover"
         />
       </TouchableOpacity>
     );
   }
 
-  // Carousel
+  // ── Carousel ──
   return (
-    <View style={[styles.carouselWrap, { height: MEDIA_H }]}>
+    <View
+      style={[styles.carouselWrap, { height: MEDIA_H }]}
+      onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+    >
       <ScrollView
+        ref={scrollRef}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={onMomentumEnd}
+        onMomentumScrollEnd={onMomentumScrollEnd}
         scrollEventThrottle={16}
         decelerationRate="fast"
+        bounces={false}
+        // Ensure snapping is pixel-perfect
+        snapToInterval={containerWidth}
+        snapToAlignment="start"
+        disableIntervalMomentum
+        contentContainerStyle={{ flexGrow: 0 }}
       >
         {media.map((m, i) =>
           m.resource_type === 'video' ? (
-            <VideoTile key={m.public_id ?? m.url ?? i} item={m} width={itemWidth} />
+            <VideoTile
+              key={m.public_id ?? m.url ?? i}
+              item={m}
+              width={containerWidth}
+            />
           ) : (
             <TouchableOpacity
               key={m.public_id ?? m.url ?? i}
-              activeOpacity={0.94}
+              activeOpacity={0.92}
               onPress={() => onMediaPress?.(i)}
-              style={{ width: itemWidth, height: MEDIA_H }}
+              style={{ width: containerWidth, height: MEDIA_H }}
             >
               <Image
                 source={{ uri: m.secure_url || m.url }}
-                style={[styles.carouselImage, { backgroundColor: theme.colors.skeleton }]}
+                style={[
+                  styles.carouselImage,
+                  { backgroundColor: theme.colors.skeleton },
+                ]}
                 resizeMode="cover"
               />
             </TouchableOpacity>
@@ -240,10 +350,19 @@ const PostMedia: React.FC<{
 
       {/* Counter pill */}
       <Animated.View
-        style={[styles.counterPill, { transform: [{ scale: counterScale }] }]}
+        style={[
+          styles.counterPill,
+          {
+            transform: [{ scale: counterScale }],
+            backgroundColor: theme.dark
+              ? `${theme.colors.primary}CC`
+              : 'rgba(0,0,0,0.52)',
+          },
+        ]}
+        pointerEvents="none"
       >
         <Text style={styles.counterText}>
-          {index + 1}/{media.length}
+          {activeIndex + 1}/{media.length}
         </Text>
       </Animated.View>
 
@@ -256,8 +375,8 @@ const PostMedia: React.FC<{
               styles.dot,
               {
                 width: dotWidths[i],
-                backgroundColor:
-                  i === index ? '#fff' : 'rgba(255,255,255,0.40)',
+                opacity: dotOpacities[i],
+                backgroundColor: '#FFFFFF',
               },
             ]}
           />
@@ -270,9 +389,9 @@ const PostMedia: React.FC<{
 PostMedia.displayName = 'PostMedia';
 
 const styles = StyleSheet.create({
-  singleWrap:   { width: '100%', height: MEDIA_H },
-  singleImage:  { height: MEDIA_H },
-  carouselWrap: { width: '100%', position: 'relative' },
+  singleWrap: { width: '100%', height: MEDIA_H },
+  singleImage: { width: '100%', height: MEDIA_H },
+  carouselWrap: { width: '100%', overflow: 'hidden', position: 'relative' },
   carouselImage: { width: '100%', height: MEDIA_H },
   counterPill: {
     position: 'absolute',
@@ -280,7 +399,6 @@ const styles = StyleSheet.create({
     right: 12,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    backgroundColor: 'rgba(0,0,0,0.52)',
     borderRadius: 12,
   },
   counterText: { color: '#fff', fontSize: 11, fontWeight: '700' },
@@ -294,17 +412,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
   },
-  dot: { height: 6, borderRadius: 3 },
+  dot: { height: 5, borderRadius: 2.5 },
+  videoScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+  },
   playOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },
   playBtn: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(0,0,0,0.52)',
+    width: 62,
+    height: 62,
+    borderRadius: 31,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -319,17 +440,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  durationBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: 'rgba(0,0,0,0.52)',
+    borderRadius: 8,
+  },
+  durationText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   progressTrack: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     height: 3,
-    backgroundColor: 'rgba(255,255,255,0.20)',
+    backgroundColor: 'rgba(255,255,255,0.22)',
   },
   progressFill: { height: 3 },
 });
 
 export default PostMedia;
 export { PostMedia };
-// ✅ theme-migrated

@@ -192,15 +192,32 @@ export const authService = {
    * We map them here so the rest of the app keeps clean types.
    */
 resetPasswordWithToken: async (data: {
-  token: string;
-  password: string;
-  confirmPassword: string;
-}): Promise<AuthResponse> => {
-  const res = await api.post<AuthResponse>(AUTH.RESET_PASSWORD, {
-    token: data.token,
-    password: data.password,
-    confirmPassword: data.confirmPassword,
-  });
-  return res.data;
-},
+    token: string;
+    password: string;
+    confirmPassword: string;
+  }): Promise<AuthResponse> => {
+    const res = await api.post<AuthResponse>(AUTH.RESET_PASSWORD, {
+      token: data.token,
+      password: data.password,
+      confirmPassword: data.confirmPassword,
+    });
+    return res.data;
+  },
+
+  /**
+   * POST /auth/reset-password
+   *
+   * Accepts the internal ResetPasswordData shape used by useResetPassword().
+   * Maps { email, otp, newPassword } → { email, token, password, confirmPassword }
+   * so the backend receives the fields it expects.
+   */
+  resetPassword: async (data: ResetPasswordData): Promise<AuthResponse> => {
+    const res = await api.post<AuthResponse>(AUTH.RESET_PASSWORD, {
+      email:           data.email,
+      token:           data.otp,           // backend calls this field "token"
+      password:        data.newPassword,
+      confirmPassword: data.newPassword,
+    });
+    return res.data;
+  },
 };

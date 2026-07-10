@@ -34,6 +34,7 @@ export type CandidateJobsTabParamList = {
   JobsList: undefined;
   SavedJobs: undefined;
   Applications: undefined;
+   NearMeJobs: undefined;
 };
 
 export type CandidateMoreStackParamList = {

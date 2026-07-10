@@ -3,6 +3,8 @@
 // FIXED: jobOwnerToEntity now uses resolveLogoUrl() which checks every field
 // name the backend might use (avatarUrl, logoUrl, logo, profileImage, avatar,
 // avatar.secure_url) — same priority chain as ProductController.buildOwnerSnapshot.
+// 
+// DEBUG MODE ADDED — logs image loading state
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useState, memo, useEffect, useRef } from 'react';
 import {
@@ -12,6 +14,17 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { resolveLogoUrl } from '../../models/companyPreview';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DEBUG CONFIGURATION
+// ═══════════════════════════════════════════════════════════════════════════════
+const DEBUG_AVATAR = __DEV__ && true; // ← SET TO false TO DISABLE
+
+const debugLog = (message: string, data?: any) => {
+  if (!DEBUG_AVATAR) return;
+  console.log(`🖼️ [Avatar] ${message}`);
+  if (data) console.log(JSON.stringify(data, null, 2));
+};
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -25,17 +38,36 @@ export type AvatarEntity =
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 export function getEntityAvatarUrl(entity: AvatarEntity): string | null {
-  if (!entity) return null;
+  if (!entity) {
+    debugLog('getEntityAvatarUrl: entity is null/undefined');
+    return null;
+  }
+  
   switch (entity.type) {
     case 'company':
-    case 'organization':
-      // FIXED: use resolveLogoUrl so all field names are checked
-      return resolveLogoUrl(entity as Record<string, any>) ?? null;
+    case 'organization': {
+      const url = resolveLogoUrl(entity as Record<string, any>);
+      debugLog(`getEntityAvatarUrl [${entity.type}]:`, {
+        hasLogoUrl: !!entity.logoUrl,
+        hasLogo: !!entity.logo,
+        resolvedUrl: url ? `${url.substring(0, 60)}...` : 'NULL',
+      });
+      return url ?? null;
+    }
     case 'candidate':
-    case 'freelancer':
-      return entity.avatar || entity.profileImage || null;
-    case 'generic':
+    case 'freelancer': {
+      const url = entity.avatar || entity.profileImage || null;
+      debugLog(`getEntityAvatarUrl [${entity.type}]:`, {
+        hasAvatar: !!entity.avatar,
+        hasProfileImage: !!entity.profileImage,
+        resolvedUrl: url ? `${url.substring(0, 60)}...` : 'NULL',
+      });
+      return url;
+    }
+    case 'generic': {
+      debugLog('getEntityAvatarUrl [generic]:', { imageUrl: entity.imageUrl });
       return entity.imageUrl || null;
+    }
     default:
       return null;
   }
@@ -104,10 +136,23 @@ export const Avatar = memo<AvatarProps>(({
   const initials      = getInitials(resolvedName);
   const fontSize      = size <= 32 ? 11 : size <= 48 ? 14 : size <= 64 ? 18 : 22;
 
+  // Debug log
+  useEffect(() => {
+    debugLog(`Rendering [${entity?.type ?? 'unknown'}]:`, {
+      size,
+      resolvedUri: resolvedUri ? `${resolvedUri.substring(0, 80)}...` : 'NONE',
+      showImage,
+      imgError,
+      loading,
+      resolvedName,
+      initials,
+    });
+  }, [resolvedUri, showImage, imgError, loading, resolvedName, initials, entity?.type, size]);
+
   return (
     <Animated.View style={[{ width: size, height: size, opacity: fadeAnim }, style]}>
       {showImage ? (
-        <>
+        <React.Fragment>
           <Image
             source={{ uri: resolvedUri! }}
             style={[
@@ -115,16 +160,26 @@ export const Avatar = memo<AvatarProps>(({
               { width: size, height: size, borderRadius: radius, borderColor: c.borderPrimary },
             ]}
             resizeMode="cover"
-            onError={() => { setImgError(true); setLoading(false); }}
-            onLoadStart={() => setLoading(true)}
-            onLoadEnd={() => setLoading(false)}
+            onError={() => { 
+              debugLog('❌ Image load ERROR', { uri: resolvedUri?.substring(0, 80) });
+              setImgError(true); 
+              setLoading(false); 
+            }}
+            onLoadStart={() => {
+              debugLog('⏳ Image load STARTED');
+              setLoading(true);
+            }}
+            onLoadEnd={() => {
+              debugLog('✅ Image load ENDED');
+              setLoading(false);
+            }}
           />
           {showLoader && loading && (
             <View style={[styles.loaderOverlay, { borderRadius: radius, backgroundColor: 'rgba(0,0,0,0.25)' }]}>
               <ActivityIndicator size="small" color={c.accent} />
             </View>
           )}
-        </>
+        </React.Fragment>
       ) : (
         <View style={[
           styles.fallback,
@@ -181,22 +236,35 @@ export function jobOwnerToEntity(job: {
 
   // Prefer the backend-synthesised ownerPreview (Profile-backed, always correct)
   if (job.ownerPreview) {
+    debugLog('jobOwnerToEntity: Using ownerPreview', {
+      type,
+      name: job.ownerPreview.name,
+      logoUrl: resolveLogoUrl(job.ownerPreview as Record<string, any>),
+      verified: job.ownerPreview.verified,
+    });
     return {
       type:     type as 'company' | 'organization',
       name:     job.ownerPreview.name,
-      // resolveLogoUrl covers both logoUrl and avatarUrl on ownerPreview
       logoUrl:  resolveLogoUrl(job.ownerPreview as Record<string, any>),
       verified: job.ownerPreview.verified,
     };
   }
 
   const owner = isOrg ? job.organization : job.company;
+  const resolvedUrl = resolveLogoUrl(owner as Record<string, any>);
+  
+  debugLog('jobOwnerToEntity: Using populated doc', {
+    type,
+    name: owner?.name,
+    ownerFields: owner ? Object.keys(owner) : [],
+    resolvedUrl: resolvedUrl ? `${resolvedUrl.substring(0, 60)}...` : 'NONE',
+    verified: owner?.verified,
+  });
+  
   return {
     type:     type as 'company' | 'organization',
     name:     owner?.name,
-    // FIXED: was `owner?.logoUrl || owner?.logo || owner?.avatar`
-    // now uses the shared resolver that checks all field names
-    logoUrl:  resolveLogoUrl(owner as Record<string, any>),
+    logoUrl:  resolvedUrl,
     verified: owner?.verified,
   };
 }

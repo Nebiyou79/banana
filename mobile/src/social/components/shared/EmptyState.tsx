@@ -1,14 +1,4 @@
 // src/social/components/shared/EmptyState.tsx
-/**
- * EmptyState — centred icon + title + subtitle + optional CTA
- *
- * Theme migration:
- * - `type.titleSm`      → `type.title`
- * - `type.btn`          → `type.bodyMd`
- * - `colors.onPrimary`  → `colors.white`
- * - `colors.textSecondary` → `colors.textMuted`
- * All other tokens ✅
- */
 import { Ionicons } from '@expo/vector-icons';
 import React, { memo } from 'react';
 import {
@@ -32,9 +22,16 @@ interface Props {
 const EmptyState: React.FC<Props> = memo(({
   icon = 'sparkles-outline', title, subtitle, actionLabel, onAction,
 }) => {
-  const { colors, spacing, radius, type, withAlpha } = useSocialTheme();
-  const opacity              = useFadeIn(50, 400);
-  const { translateY }       = useSlideUp(20, 100);
+  const theme = useSocialTheme();
+  const { colors, spacing, radius, type, withAlpha, dark } = theme;
+  
+  const opacity = useFadeIn(50, 400);
+  const { translateY } = useSlideUp(20, 100);
+
+  // Dark mode: deeper icon background
+  // Light mode: softer icon background
+  const iconBg = withAlpha(colors.primary, dark ? 0.15 : 0.10);
+  const iconColor = colors.primary;
 
   return (
     <Animated.View
@@ -52,7 +49,7 @@ const EmptyState: React.FC<Props> = memo(({
         style={[
           styles.iconCircle,
           {
-            backgroundColor: withAlpha(colors.primary, 0.10),
+            backgroundColor: iconBg,
             borderRadius: radius.pill,
             width: 72,
             height: 72,
@@ -60,14 +57,17 @@ const EmptyState: React.FC<Props> = memo(({
           },
         ]}
       >
-        <Ionicons name={icon} size={32} color={colors.primary} />
+        <Ionicons name={icon} size={32} color={iconColor} />
       </View>
 
-      {/* type.titleSm → type.title */}
       <Text
         style={[
           type.title,
-          { color: colors.text, textAlign: 'center', marginBottom: spacing.xs },
+          { 
+            color: colors.text, 
+            textAlign: 'center', 
+            marginBottom: spacing.xs 
+          },
         ]}
       >
         {title}
@@ -78,7 +78,6 @@ const EmptyState: React.FC<Props> = memo(({
           style={[
             type.bodySm,
             {
-              // colors.textSecondary → colors.textMuted
               color: colors.textMuted,
               textAlign: 'center',
               maxWidth: 280,
@@ -105,7 +104,6 @@ const EmptyState: React.FC<Props> = memo(({
             },
           ]}
         >
-          {/* type.btn → type.bodyMd; colors.onPrimary → colors.white */}
           <Text style={[type.bodyMd, { color: colors.white }]}>
             {actionLabel}
           </Text>
@@ -115,13 +113,10 @@ const EmptyState: React.FC<Props> = memo(({
   );
 });
 
-EmptyState.displayName = 'EmptyState';
-
 const styles = StyleSheet.create({
-  wrap:       { alignItems: 'center', justifyContent: 'center' },
+  wrap: { alignItems: 'center', justifyContent: 'center' },
   iconCircle: { alignItems: 'center', justifyContent: 'center' },
-  action:     { justifyContent: 'center' },
+  action: { justifyContent: 'center' },
 });
 
 export default EmptyState;
-// ✅ theme-migrated

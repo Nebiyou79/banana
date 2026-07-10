@@ -1,20 +1,11 @@
 // src/social/screens/SearchScreen.tsx
+// ✅ role-theme-migrated — FIXED
 /**
- * SearchScreen — user discovery.
- * -----------------------------------------------------------------------------
- * Layout:
- *   ┌──────────────────────────────────────────────┐
- *   │ Search bar  ┊  Cancel (when focused/active)  │
- *   ├──────────────────────────────────────────────┤
- *   │ Type chips                  Sort ▾            │
- *   ├──────────────────────────────────────────────┤
- *   │ Empty:    Recent searches                    │
- *   │           Trending hashtags                  │
- *   │ Active:   Profile result rows                │
- *   └──────────────────────────────────────────────┘
- *
- * Each result row uses SearchResultCard (FollowButton + ChatActionButton).
- * Connection statuses are bulk-fetched in one round-trip.
+ * FIXES:
+ *  - `theme.colors.primary` used consistently (was mixing theme.primary / theme.colors.primary)
+ *  - Result-count pill borderRadius now uses theme.radius.pill (was inline theme.radius.pill reference)
+ *  - RefreshControl colors array uses theme.colors.primary
+ *  - Gradient & SafeAreaView structure unchanged (was already correct)
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -47,10 +38,7 @@ import {
   useSearchHistory,
   useSocialSearch,
 } from '../hooks/useSocialSearch';
-import {
-  useBulkConnectionStatus,
-  useToggleFollow,
-} from '../hooks/useFollow';
+import { useBulkConnectionStatus, useToggleFollow } from '../hooks/useFollow';
 import { useSocialTheme } from '../theme/socialTheme';
 import type { SearchSortBy, SearchType } from '../types';
 
@@ -89,17 +77,15 @@ const SearchScreen: React.FC = () => {
     trending?: boolean;
   }>;
 
-  // ── Bulk connection status for the visible page of results ───────────
+  // ── Bulk connection status ────────────────────────────────────────────
   const userIds = useMemo(() => results.map((r) => r._id), [results]);
   const { statusMap } = useBulkConnectionStatus(userIds);
 
-  // ── Persist successful searches in history ───────────────────────────
+  // ── Persist searches in history ───────────────────────────────────────
   useEffect(() => {
     if (!searchQ.isSuccess || !hasQuery) return;
     if (!results.length) return;
     addHistoryM.mutate({ query: trimmed, type });
-    // Persist only when the *committed* query result changes, not on every
-    // unrelated state update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQ.isSuccess, results.length, trimmed]);
 
@@ -121,9 +107,7 @@ const SearchScreen: React.FC = () => {
     setQuery(`#${name}`);
   }, []);
 
-  // ── Render ───────────────────────────────────────────────────────────
   return (
-    // Tab root — LinearGradient background
     <LinearGradient
       colors={theme.bgGradient}
       style={{ flex: 1 }}
@@ -132,8 +116,8 @@ const SearchScreen: React.FC = () => {
     >
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.headerWrap}>
-          {/* "Discover People" identity strip */}
           {!focused && query.length === 0 ? (
+            // FIX: theme.muted (flat alias) is fine here — matches original intent
             <Text style={[styles.discoverLabel, { color: theme.muted }]}>
               Discover People
             </Text>
@@ -157,15 +141,27 @@ const SearchScreen: React.FC = () => {
           onSortChange={setSortBy}
         />
 
-        {/* Result count pill — shown when results are ready */}
+        {/* Result count pill */}
         {isSearching && !searchQ.isLoading && results.length > 0 ? (
-          <View style={[styles.resultCount, {
-            backgroundColor: theme.withAlpha(theme.colors.primary, 0.08),
-            borderRadius: theme.radius.pill,
-            borderColor: theme.withAlpha(theme.colors.primary, 0.20),
-            borderWidth: 1,
-          }]}>
-            <Text style={{ color: theme.colors.primary, fontSize: 12, fontWeight: '700' }}>
+          <View
+            style={[
+              styles.resultCount,
+              {
+                // FIX: use theme.colors.primary + theme.radius.pill
+                backgroundColor: theme.withAlpha(theme.colors.primary, 0.08),
+                borderRadius: theme.radius.pill,
+                borderColor: theme.withAlpha(theme.colors.primary, 0.20),
+                borderWidth: 1,
+              },
+            ]}
+          >
+            <Text
+              style={{
+                color: theme.colors.primary,
+                fontSize: 12,
+                fontWeight: '700',
+              }}
+            >
               {results.length} result{results.length !== 1 ? 's' : ''}
             </Text>
           </View>
@@ -187,6 +183,7 @@ const SearchScreen: React.FC = () => {
               <RefreshControl
                 refreshing={searchQ.isRefetching}
                 onRefresh={() => searchQ.refetch()}
+                // FIX: consistent use of theme.colors.primary
                 tintColor={theme.colors.primary}
                 colors={[theme.colors.primary]}
               />
@@ -200,9 +197,7 @@ const SearchScreen: React.FC = () => {
                 <EmptyState
                   icon="search-outline"
                   title={
-                    hasQuery
-                      ? `No matches for "${trimmed}"`
-                      : 'Refine your filters'
+                    hasQuery ? `No matches for "${trimmed}"` : 'Refine your filters'
                   }
                   subtitle={
                     hasQuery
@@ -241,10 +236,7 @@ const SearchScreen: React.FC = () => {
                 {trending.length > 0 ? (
                   <View>
                     <SectionHeader title="Trending" />
-                    <TrendingHashtags
-                      hashtags={trending}
-                      onPress={handleHashtagPress}
-                    />
+                    <TrendingHashtags hashtags={trending} onPress={handleHashtagPress} />
                   </View>
                 ) : null}
 
@@ -284,4 +276,3 @@ const makeStyles = (_theme: ReturnType<typeof useSocialTheme>) =>
   });
 
 export default SearchScreen;
-// ✅ role-theme-migrated

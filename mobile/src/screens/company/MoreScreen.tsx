@@ -268,6 +268,63 @@ export const CompanyMoreScreen: React.FC = () => {
       screen: 'Leaderboard',
     },
   ];
+// src/screens/company/MoreScreen.tsx (UPDATED)
+// Add the missing account and support sections with navigation
+
+// Add this after rewardsItems:
+const accountItems: MenuItem[] = [
+  {
+    icon: 'notifications-outline',
+    label: 'Notifications',
+    sublabel: 'View all your notifications',
+    iconColor: colors.primary,
+    iconBg: `${colors.primary}18`,
+    screen: 'Notifications', // ✅ Added
+  },
+  {
+    icon: 'settings-outline',
+    label: 'Notification Preferences',
+    sublabel: 'Manage alerts and preferences',
+    iconColor: colors.primary,
+    iconBg: `${colors.primary}18`,
+    screen: 'NotificationPreferences', // ✅ Added
+  },
+  {
+    icon: 'lock-closed-outline',
+    label: 'Privacy and Security',
+    sublabel: 'Manage your privacy and security settings',
+    iconColor: colors.primary,
+    iconBg: `${colors.primary}18`,
+    screen: 'PrivacySecurity', // ✅ Added
+  },
+];
+
+const supportItems: MenuItem[] = [
+  {
+    icon: 'help-circle-outline',
+    label: 'Help and FAQ',
+    sublabel: 'Get answers to common questions',
+    iconColor: colors.textMuted,
+    iconBg: `${colors.textMuted}18`,
+    screen: 'HelpFAQ', // ✅ Added
+  },
+  {
+    icon: 'mail-outline',
+    label: 'Contact Us',
+    sublabel: 'Reach out to our support team',
+    iconColor: colors.textMuted,
+    iconBg: `${colors.textMuted}18`,
+    // No screen - use Linking
+  },
+  {
+    icon: 'document-text-outline',
+    label: 'Terms and Privacy',
+    sublabel: 'Read our terms and privacy policy',
+    iconColor: colors.textMuted,
+    iconBg: `${colors.textMuted}18`,
+    // No screen - use WebView
+  },
+];
 
   const avatarUri = profile?.avatar?.secure_url;
 
@@ -340,7 +397,11 @@ export const CompanyMoreScreen: React.FC = () => {
         <MenuSection title="Products" items={productItems} navigation={navigation} colors={colors} />
         <MenuSection title="Verification" items={verificationItems} navigation={navigation} colors={colors} />
         <MenuSection title="Rewards" items={rewardsItems} navigation={navigation} colors={colors} />
+{/* ── Account Section ── */}
+<MenuSection title="Account" items={accountItems} navigation={navigation} colors={colors} />
 
+{/* ── Support Section ── */}
+<MenuSection title="Support" items={supportItems} navigation={navigation} colors={colors} />
         {/* ── Sign out ──────────────────────────────────────────────────── */}
         <TouchableOpacity
           onPress={handleLogout}

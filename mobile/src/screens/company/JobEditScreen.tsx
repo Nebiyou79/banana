@@ -1,13 +1,13 @@
 /**
  * src/screens/company/JobEditScreen.tsx
+ * FIXED: Removed SafeAreaView (handled by root navigator)
  */
+
 import React from 'react';
 import { View, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../hooks/useTheme';
 import { useJob, useUpdateJob } from '../../hooks/useJobs';
 import { JobForm } from '../../components/jobs/JobForm';
-import { ScreenHeader } from '../../components/shared/ScreenHeader';
 import { CreateJobData } from '../../services/jobService';
 import { AppHeader } from '../../components/shared';
 
@@ -31,17 +31,17 @@ export const JobEditScreen: React.FC<Props> = ({ navigation, route }) => {
 
   if (jobQ.isLoading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
         <AppHeader title="Edit Job" onBack={() => navigation.goBack()} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <AppHeader title="Edit Job" subtitle={jobQ.data?.title} onBack={() => navigation.goBack()} />
       <JobForm
         initialData={jobQ.data}
@@ -49,6 +49,6 @@ export const JobEditScreen: React.FC<Props> = ({ navigation, route }) => {
         onCancel={() => navigation.goBack()}
         isLoading={updateMut.isPending}
       />
-    </SafeAreaView>
+    </View>
   );
 };

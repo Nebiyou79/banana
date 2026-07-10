@@ -1,15 +1,28 @@
 /**
  * src/navigation/PillTabBar.tsx
  *
+ * FIX — Button overlap / over-padding issue:
+ *   The previous version did not export its height, so React Navigation
+ *   could not tell screens how much bottom offset to apply. Screens that
+ *   used SafeAreaView edges={['bottom']} were double-padded (safe-area inset
+ *   PLUS the tab bar height), shoving Cancel/Next buttons way up.
+ *
+ *   Solution:
+ *     1. Export TAB_BAR_HEIGHT constant (inner content height, no insets).
+ *     2. Export getTabBarHeight(insets) helper for full height calculation.
+ *     3. All bottom-tab navigators that use PillTabBar must declare
+ *        tabBarStyle: { height: getTabBarHeight(insets) } in screenOptions
+ *        so React Navigation correctly insets child screens.
+ *     4. Form screens (Create/Edit tender) drop edges={['bottom']} from
+ *        SafeAreaView and instead use useBottomTabBarHeight() when they
+ *        need explicit bottom padding, or simply omit bottom-edge insets
+ *        because the navigator already provides the correct offset.
+ *
  * PILL RENDERING FIX (Android):
  *   Android paints children in JSX declaration order regardless of zIndex
  *   when mixing position:absolute and normal-flow siblings inside a flex
- *   container. First declared = bottom of paint stack. Last = top.
- *
- *   Solution: declare Pill FIRST, Icon second, Label last.
- *   Pill is position:absolute so it does not affect flex layout.
- *   Icon and Label render in normal flow ON TOP of the pill visually.
- *   No zIndex, no overflow:hidden, no gap required.
+ *   container. Pill is declared FIRST so it sits below Icon and Label in
+ *   the paint stack. No zIndex, no overflow:hidden needed.
  *
  * Animation split:
  *   pillAnim  (width/opacity) → useNativeDriver: false
@@ -27,6 +40,26 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { EdgeInsets } from 'react-native-safe-area-context';
+
+// ─── Height constants ─────────────────────────────────────────────────────────
+
+/**
+ * The fixed inner height of the tab bar (content only, no bottom safe-area
+ * inset). Keep in sync with styles.bar paddingTop + styles.btn paddingVertical
+ * + icon size + label line height.
+ *   paddingTop 6 + paddingVertical 8*2 + icon 22 + marginTop 2 + label 11 = 57
+ */
+export const TAB_BAR_INNER_HEIGHT = 57;
+
+/**
+ * Returns the total rendered height of PillTabBar for a given device.
+ * Pass this to tabBarStyle.height in your navigator so React Navigation
+ * correctly offsets screen content below the bar.
+ */
+export function getTabBarHeight(insets: EdgeInsets): number {
+  return TAB_BAR_INNER_HEIGHT + Math.max(insets.bottom, 0) + 4;
+}
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -89,14 +122,14 @@ export const PillTabButton: React.FC<PillTabButtonProps> = ({
       toValue: focused ? 1 : 0,
       duration: 200,
       easing: Easing.out(Easing.quad),
-      useNativeDriver: false,
+      useNativeDriver: false, // width animation — cannot use native driver
     }).start();
 
     Animated.spring(scaleAnim, {
       toValue: focused ? 1.12 : 1,
       friction: 6,
       tension: 280,
-      useNativeDriver: true,
+      useNativeDriver: true, // transform — native driver fine
     }).start();
   }, [focused, pillAnim, scaleAnim]);
 
@@ -123,7 +156,7 @@ export const PillTabButton: React.FC<PillTabButtonProps> = ({
       accessibilityLabel={tabMeta.label}
       accessibilityState={{ selected: focused }}
     >
-      {/* PILL — declared FIRST: painted at bottom of Android layer stack */}
+      {/* PILL — declared FIRST: bottom of Android paint stack */}
       <Animated.View
         style={[
           styles.pill,
@@ -135,10 +168,8 @@ export const PillTabButton: React.FC<PillTabButtonProps> = ({
         ]}
       />
 
-      {/* ICON — declared second: painted on top of pill */}
-      <Animated.View
-        style={[styles.iconWrap, { transform: [{ scale: scaleAnim }] }]}
-      >
+      {/* ICON — on top of pill */}
+      <Animated.View style={[styles.iconWrap, { transform: [{ scale: scaleAnim }] }]}>
         <Ionicons
           name={(focused ? tabMeta.iconActive : tabMeta.icon) as any}
           size={22}
@@ -153,7 +184,7 @@ export const PillTabButton: React.FC<PillTabButtonProps> = ({
         )}
       </Animated.View>
 
-      {/* LABEL — declared last: painted on top of everything */}
+      {/* LABEL — topmost in paint stack */}
       <Text style={[styles.label, { color: labelColor }]} numberOfLines={1}>
         {tabMeta.label}
       </Text>
@@ -175,9 +206,7 @@ export const PillTabBar: React.FC<PillTabBarProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const bgColor = isDark ? '#0F172A' : '#FFFFFF';
-  const borderColor = isDark
-    ? 'rgba(255,255,255,0.07)'
-    : 'rgba(0,0,0,0.07)';
+  const borderColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
 
   return (
     <View
@@ -186,7 +215,10 @@ export const PillTabBar: React.FC<PillTabBarProps> = ({
         {
           backgroundColor: bgColor,
           borderTopColor: borderColor,
-          paddingBottom: insets.bottom + 4,
+          // Only the device's bottom inset — NOT extra padding.
+          // React Navigation already tells screens the full bar height via
+          // tabBarStyle.height, so screens don't add their own bottom padding.
+          paddingBottom: Math.max(insets.bottom, 0) + 4,
         },
       ]}
     >
@@ -227,15 +259,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 8,
-    // No gap — use marginTop on label instead (gap + absolute = Android bug)
-    // No overflow:hidden — clips pill on Android
+    minHeight: 44, // accessibility minimum
   },
   pill: {
     position: 'absolute',
     top: 6,
     height: 36,
     borderRadius: 18,
-    // No zIndex — declaration order handles layering
   },
   iconWrap: {
     position: 'relative',

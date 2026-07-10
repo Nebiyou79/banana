@@ -1,12 +1,13 @@
 // src/components/bids/BidFinancialBreakdownDisplay.tsx
 // Read-only table: description / qty / unit / unitPrice / total
 // Footer row: grand total.
+// UPDATED: Migrated to useTheme hook
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 import { BidFinancialLineItem, BidCurrency } from '../../types/bid';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -18,16 +19,6 @@ function fmtCurrency(value: number, currency?: BidCurrency): string {
   })}`;
 }
 
-// ── Column config ─────────────────────────────────────────────────────────────
-
-const COLS = [
-  { key: 'description', label: 'Description', flex: 3, align: 'left'  as const },
-  { key: 'quantity',    label: 'Qty',          flex: 1, align: 'right' as const },
-  { key: 'unit',        label: 'Unit',         flex: 1, align: 'right' as const },
-  { key: 'unitPrice',   label: 'Unit Price',   flex: 2, align: 'right' as const },
-  { key: 'totalPrice',  label: 'Total',        flex: 2, align: 'right' as const },
-];
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -36,56 +27,38 @@ interface Props {
 }
 
 export const BidFinancialBreakdownDisplay: React.FC<Props> = ({ items, currency }) => {
-  const isDark = useThemeStore((s) => s.theme.isDark);
-
-  const palette = {
-    card:        isDark ? '#1E293B' : '#FFFFFF',
-    headerBg:    isDark ? '#1A2540' : '#F1F5F9',
-    footerBg:    isDark ? '#0F172A' : '#F8FAFC',
-    border:      isDark ? '#334155' : '#E2E8F0',
-    text:        isDark ? '#F1F5F9' : '#0F172A',
-    muted:       isDark ? '#94A3B8' : '#64748B',
-    accent:      '#F1BB03',
-    totalText:   isDark ? '#F1BB03' : '#0A2540',
-    stripBg:     isDark ? '#162032' : '#F8FAFC',
-  };
+  const { colors, radius } = useTheme();
 
   const grandTotal = items.reduce((sum, row) => sum + (row.totalPrice ?? 0), 0);
 
   if (items.length === 0) {
     return (
-      <View style={[styles.empty, { borderColor: palette.border, backgroundColor: palette.card }]}>
-        <Ionicons name="document-text-outline" size={32} color={palette.muted} />
-        <Text style={[styles.emptyText, { color: palette.muted }]}>No line items</Text>
+      <View style={[styles.empty, { borderColor: colors.border, backgroundColor: colors.bgCard, borderRadius: radius.lg }]}>
+        <Ionicons name="document-text-outline" size={32} color={colors.textMuted} />
+        <Text style={[styles.emptyText, { color: colors.textMuted }]}>No line items</Text>
       </View>
     );
   }
 
   return (
-    <View style={[styles.card, { borderColor: palette.border, backgroundColor: palette.card }]}>
+    <View style={[styles.card, { borderColor: colors.border, backgroundColor: colors.bgCard, borderRadius: radius.lg }]}>
       {/* Section header */}
-      <View style={[styles.sectionHeader, { borderBottomColor: palette.border, backgroundColor: palette.headerBg }]}>
-        <Ionicons name="receipt-outline" size={15} color={palette.muted} />
-        <Text style={[styles.sectionTitle, { color: palette.text }]}>Financial Breakdown</Text>
-        <Text style={[styles.itemCount, { color: palette.muted }]}>{items.length} item{items.length !== 1 ? 's' : ''}</Text>
+      <View style={[styles.sectionHeader, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
+        <Ionicons name="receipt-outline" size={15} color={colors.textMuted} />
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Financial Breakdown</Text>
+        <Text style={[styles.itemCount, { color: colors.textMuted }]}>{items.length} item{items.length !== 1 ? 's' : ''}</Text>
       </View>
 
       {/* Scrollable table */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={{ minWidth: 560 }}>
           {/* Table header */}
-          <View style={[styles.tableHeader, { backgroundColor: palette.headerBg, borderBottomColor: palette.border }]}>
-            {COLS.map((col) => (
-              <Text
-                key={col.key}
-                style={[
-                  styles.th,
-                  { flex: col.flex, color: palette.muted, textAlign: col.align },
-                ]}
-              >
-                {col.label}
-              </Text>
-            ))}
+          <View style={[styles.tableHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+            <Text style={[styles.th, { flex: 3, color: colors.textMuted }]}>Description</Text>
+            <Text style={[styles.th, { flex: 1, color: colors.textMuted }]}>Qty</Text>
+            <Text style={[styles.th, { flex: 1, color: colors.textMuted }]}>Unit</Text>
+            <Text style={[styles.th, { flex: 2, color: colors.textMuted }]}>Unit Price</Text>
+            <Text style={[styles.th, { flex: 2, color: colors.textMuted }]}>Total</Text>
           </View>
 
           {/* Table rows */}
@@ -94,38 +67,38 @@ export const BidFinancialBreakdownDisplay: React.FC<Props> = ({ items, currency 
               key={idx}
               style={[
                 styles.tableRow,
-                { borderBottomColor: palette.border },
-                idx % 2 !== 0 && { backgroundColor: palette.stripBg },
+                { borderBottomColor: colors.border },
+                idx % 2 !== 0 && { backgroundColor: colors.surface },
               ]}
             >
-              <Text style={[styles.td, { flex: 3, color: palette.text, textAlign: 'left' }]} numberOfLines={2}>
+              <Text style={[styles.td, { flex: 3, color: colors.text }]} numberOfLines={2}>
                 {row.description || '—'}
               </Text>
-              <Text style={[styles.td, { flex: 1, color: palette.text, textAlign: 'right' }]}>
+              <Text style={[styles.td, { flex: 1, color: colors.text }]}>
                 {row.quantity ?? '—'}
               </Text>
-              <Text style={[styles.td, { flex: 1, color: palette.muted, textAlign: 'right' }]} numberOfLines={1}>
+              <Text style={[styles.td, { flex: 1, color: colors.textMuted }]} numberOfLines={1}>
                 {row.unit || '—'}
               </Text>
-              <Text style={[styles.td, { flex: 2, color: palette.text, textAlign: 'right' }]}>
+              <Text style={[styles.td, { flex: 2, color: colors.text }]}>
                 {row.unitPrice != null
-                  ? row.unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  ? row.unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })
                   : '—'}
               </Text>
-              <Text style={[styles.td, { flex: 2, color: palette.text, textAlign: 'right', fontWeight: '600' }]}>
+              <Text style={[styles.td, { flex: 2, color: colors.text, fontWeight: '600' }]}>
                 {row.totalPrice != null
-                  ? row.totalPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  ? row.totalPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })
                   : '—'}
               </Text>
             </View>
           ))}
 
           {/* Grand total footer */}
-          <View style={[styles.footer, { backgroundColor: palette.footerBg, borderTopColor: palette.accent }]}>
-            <Text style={[styles.footerLabel, { flex: 3 + 1 + 1 + 2, color: palette.muted }]}>
+          <View style={[styles.footer, { backgroundColor: colors.inputBg, borderTopColor: colors.primary }]}>
+            <Text style={[styles.footerLabel, { flex: 8, color: colors.textMuted }]}>
               Grand Total
             </Text>
-            <Text style={[styles.footerTotal, { flex: 2, color: palette.totalText }]}>
+            <Text style={[styles.footerTotal, { flex: 2, color: colors.primary }]}>
               {fmtCurrency(grandTotal, currency)}
             </Text>
           </View>
@@ -139,11 +112,9 @@ export const BidFinancialBreakdownDisplay: React.FC<Props> = ({ items, currency 
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 14,
     borderWidth: 1,
     overflow: 'hidden',
   },
-
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -163,7 +134,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
-
   tableHeader: {
     flexDirection: 'row',
     paddingHorizontal: 12,
@@ -176,8 +146,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     textTransform: 'uppercase',
     paddingHorizontal: 4,
+    textAlign: 'left',
   },
-
   tableRow: {
     flexDirection: 'row',
     paddingHorizontal: 12,
@@ -189,7 +159,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     paddingHorizontal: 4,
   },
-
   footer: {
     flexDirection: 'row',
     paddingHorizontal: 12,
@@ -202,6 +171,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     textTransform: 'uppercase',
     paddingHorizontal: 4,
+    textAlign: 'right',
   },
   footerTotal: {
     fontSize: 14,
@@ -209,12 +179,10 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     paddingHorizontal: 4,
   },
-
   empty: {
     alignItems: 'center',
     gap: 8,
     padding: 32,
-    borderRadius: 14,
     borderWidth: 1,
   },
   emptyText: { fontSize: 13 },

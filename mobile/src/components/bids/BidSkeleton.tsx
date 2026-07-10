@@ -1,10 +1,11 @@
 // src/components/bids/BidSkeleton.tsx
 // Animated skeleton loading state matching BidCard layout.
+// UPDATED: Migrated to useTheme hook
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet } from 'react-native';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 
 // ── Shimmer block ─────────────────────────────────────────────────────────────
 
@@ -12,19 +13,21 @@ interface ShimmerProps {
   width: number | `${number}%`;
   height: number;
   borderRadius?: number;
-  shimmerBg: string;
 }
 
-const Shimmer: React.FC<ShimmerProps> = ({ width, height, borderRadius = 6, shimmerBg }) => (
-  <View
-    style={{
-      width,
-      height,
-      borderRadius,
-      backgroundColor: shimmerBg,
-    }}
-  />
-);
+const Shimmer: React.FC<ShimmerProps> = ({ width, height, borderRadius = 6 }) => {
+  const { colors } = useTheme();
+  return (
+    <View
+      style={{
+        width,
+        height,
+        borderRadius,
+        backgroundColor: colors.skeleton,
+      }}
+    />
+  );
+};
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -33,14 +36,8 @@ interface Props {
 }
 
 export const BidSkeleton: React.FC<Props> = ({ count = 3 }) => {
-  const isDark = useThemeStore((s) => s.theme.isDark);
+  const { colors, radius } = useTheme();
   const opacity = useRef(new Animated.Value(0.4)).current;
-
-  const palette = {
-    card:    isDark ? '#1E293B' : '#FFFFFF',
-    border:  isDark ? '#334155' : '#E2E8F0',
-    shimmer: isDark ? '#334155' : '#E2E8F0',
-  };
 
   useEffect(() => {
     const anim = Animated.loop(
@@ -60,26 +57,31 @@ export const BidSkeleton: React.FC<Props> = ({ count = 3 }) => {
           key={idx}
           style={[
             styles.card,
-            { borderColor: palette.border, backgroundColor: palette.card, opacity },
+            {
+              borderColor: colors.border,
+              backgroundColor: colors.bgCard,
+              borderRadius: radius.lg,
+              opacity,
+            },
           ]}
         >
           {/* Top row: status pill + sealed indicator */}
           <View style={styles.topRow}>
-            <Shimmer width={80} height={22} borderRadius={999} shimmerBg={palette.shimmer} />
-            <Shimmer width={60} height={18} borderRadius={999} shimmerBg={palette.shimmer} />
+            <Shimmer width={80} height={22} borderRadius={999} />
+            <Shimmer width={60} height={18} borderRadius={999} />
           </View>
 
           {/* Tender title */}
-          <Shimmer width="85%" height={16} shimmerBg={palette.shimmer} />
-          <Shimmer width="60%" height={13} shimmerBg={palette.shimmer} />
+          <Shimmer width="85%" height={16} />
+          <Shimmer width="60%" height={13} />
 
           {/* Bid number */}
-          <Shimmer width={120} height={12} shimmerBg={palette.shimmer} />
+          <Shimmer width={120} height={12} />
 
           {/* Bottom row: amount + date */}
           <View style={styles.bottomRow}>
-            <Shimmer width={110} height={20} borderRadius={8} shimmerBg={palette.shimmer} />
-            <Shimmer width={80} height={12} shimmerBg={palette.shimmer} />
+            <Shimmer width={110} height={20} borderRadius={8} />
+            <Shimmer width={80} height={12} />
           </View>
         </Animated.View>
       ))}
@@ -91,20 +93,16 @@ export const BidSkeleton: React.FC<Props> = ({ count = 3 }) => {
 
 const styles = StyleSheet.create({
   root: { gap: 10 },
-
   card: {
-    borderRadius: 14,
     borderWidth: 1,
     padding: 14,
     gap: 10,
   },
-
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-
   bottomRow: {
     flexDirection: 'row',
     alignItems: 'center',

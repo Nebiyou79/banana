@@ -3,6 +3,8 @@ const Follow = require('../models/Follow');
 const Like = require('../models/Like');
 const Comment = require('../models/Comment');
 const Save = require('../models/Save');
+// 🔔 NOTIFICATION
+const notificationService = require('../services/notificationService');
 
 // =====================
 // HELPER FUNCTIONS
@@ -39,27 +41,22 @@ const mergeEngagementData = (posts, userLikes, userSaves, userId) => {
   return posts.map(post => {
     const postObj = post.toObject ? post.toObject() : post;
 
-    // Find user's interaction
     const userLike = userLikes.find(like => {
       if (!like.targetId || !post._id) return false;
-
       if (like.targetId.equals && post._id.equals) {
         return like.targetId.equals(post._id);
       }
       return like.targetId.toString() === post._id.toString();
     });
 
-    // Find if post is saved
     const isSaved = userSaves.some(save => {
       if (!save.targetId || !post._id) return false;
-
       if (save.targetId.equals && post._id.equals) {
         return save.targetId.equals(post._id);
       }
       return save.targetId.toString() === post._id.toString();
     });
 
-    // Determine engagement state based on interaction type
     let userReaction = null;
     let userDisliked = false;
 
@@ -73,7 +70,6 @@ const mergeEngagementData = (posts, userLikes, userSaves, userId) => {
       }
     }
 
-    // Ensure stats exist
     const stats = postObj.stats || {
       likes: 0,
       dislikes: 0,
@@ -114,7 +110,7 @@ const mergeEngagementData = (posts, userLikes, userSaves, userId) => {
 // CONTROLLER FUNCTIONS
 // =====================
 
-// Create new post with Cloudinary media handling - UPDATED
+// Create new post with Cloudinary media handling
 exports.createPost = async (req, res) => {
   try {
     const {
@@ -128,7 +124,6 @@ exports.createPost = async (req, res) => {
       pinned = false
     } = req.body;
 
-    // Validate content or media requirement
     if (!content && !req.cloudinaryMedia && !req.cloudinaryMedia?.media) {
       return res.status(400).json({
         success: false,
@@ -140,25 +135,17 @@ exports.createPost = async (req, res) => {
     let processedMedia = [];
     let postType = type;
 
-    // Helper function to generate proper thumbnail URL
     const generateProperThumbnailUrl = (mediaItem) => {
-      // If thumbnailUrl is provided and valid, use it
       if (mediaItem.thumbnailUrl && !mediaItem.thumbnailUrl.includes('.mp4.jpg')) {
         return mediaItem.thumbnailUrl;
       }
-
-      // For videos, generate proper Cloudinary video thumbnail
       if (mediaItem.type === 'video' && mediaItem.cloudinary?.secure_url) {
         const videoUrl = mediaItem.cloudinary.secure_url;
-        // Cloudinary video thumbnail transformation - no .jpg extension
         if (videoUrl.includes('/upload/')) {
-          // Use proper video thumbnail transformation
           return videoUrl.replace('/upload/', '/upload/w_600,h_400,c_fill/');
         }
         return videoUrl;
       }
-
-      // For images, use the secure_url with transformation
       if (mediaItem.type === 'image' && mediaItem.cloudinary?.secure_url) {
         const imageUrl = mediaItem.cloudinary.secure_url;
         if (imageUrl.includes('/upload/')) {
@@ -166,17 +153,12 @@ exports.createPost = async (req, res) => {
         }
         return imageUrl;
       }
-
-      // Fallback
       return mediaItem.thumbnailUrl || mediaItem.cloudinary?.secure_url || '';
     };
 
-    // Process Cloudinary media if available
     if (req.cloudinaryMedia?.media) {
-      // Handle single media upload
       if (!Array.isArray(req.cloudinaryMedia.media)) {
         const mediaItem = req.cloudinaryMedia.media;
-
         const formattedMedia = {
           type: mediaItem.type,
           public_id: mediaItem.cloudinary.public_id,
@@ -189,34 +171,21 @@ exports.createPost = async (req, res) => {
           duration: mediaItem.cloudinary.duration,
           created_at: mediaItem.cloudinary.created_at,
           tags: mediaItem.cloudinary.tags || [],
-          // Backward compatibility fields
           url: mediaItem.cloudinary.secure_url,
-          thumbnail: generateProperThumbnailUrl(mediaItem), // FIXED: Use helper function
+          thumbnail: generateProperThumbnailUrl(mediaItem),
           originalName: mediaItem.originalName,
           size: mediaItem.size,
           mimeType: mediaItem.mimetype,
           description: req.body.mediaDescription || '',
           order: 0
         };
-
         processedMedia.push(formattedMedia);
-
-        // Determine post type based on media
-        if (mediaItem.type === 'video') {
-          postType = 'video';
-        } else if (mediaItem.type === 'image') {
-          postType = 'image';
-        }
-      }
-      // Handle multiple media upload
-      else if (Array.isArray(req.cloudinaryMedia.media)) {
-        processedMedia = req.cloudinaryMedia.media.map((mediaItem, index) => {
-          // Skip failed uploads
-          if (mediaItem.success === false) {
-            return null;
-          }
-
-          return {
+        if (mediaItem.type === 'video') postType = 'video';
+        else if (mediaItem.type === 'image') postType = 'image';
+      } else if (Array.isArray(req.cloudinaryMedia.media)) {
+        processedMedia = req.cloudinaryMedia.media
+          .filter(mediaItem => mediaItem.success !== false)
+          .map((mediaItem, index) => ({
             type: mediaItem.type,
             public_id: mediaItem.cloudinary.public_id,
             secure_url: mediaItem.cloudinary.secure_url,
@@ -228,27 +197,21 @@ exports.createPost = async (req, res) => {
             duration: mediaItem.cloudinary.duration,
             created_at: mediaItem.cloudinary.created_at,
             tags: mediaItem.cloudinary.tags || [],
-            // Backward compatibility fields
             url: mediaItem.cloudinary.secure_url,
-            thumbnail: generateProperThumbnailUrl(mediaItem), // FIXED: Use helper function
+            thumbnail: generateProperThumbnailUrl(mediaItem),
             originalName: mediaItem.originalName,
             size: mediaItem.size,
             mimeType: mediaItem.mimetype,
             description: req.body.mediaDescription || '',
             order: index
-          };
-        }).filter(item => item !== null);
-
-        // Determine post type based on media
+          }));
         const hasVideo = processedMedia.some(m => m.type === 'video');
         const hasImage = processedMedia.some(m => m.type === 'image');
-
         if (hasVideo) postType = 'video';
         else if (hasImage) postType = 'image';
       }
     }
 
-    // Validate that we have at least content or media
     if (!content && processedMedia.length === 0) {
       return res.status(400).json({
         success: false,
@@ -274,12 +237,45 @@ exports.createPost = async (req, res) => {
     await post.save();
     await post.populate('author', 'name avatar headline role verificationStatus company');
 
-    // Update user's post count
     const Profile = require('../models/Profile');
     await Profile.updateOne(
       { user: req.user.userId },
       { $inc: { 'socialStats.postCount': 1 } }
     );
+
+    // 🔔 NOTIFICATION: Notify mentioned users in post
+    (async () => {
+      try {
+        const mentionRegex = /@([a-zA-Z0-9_]+)/g;
+        const mentionedUsernames = [...new Set([...(content?.matchAll(mentionRegex) || [])].map(m => m[1]))];
+        if (mentionedUsernames.length > 0) {
+          const User = require('../models/User');
+          const mentionedUsers = await User.find({ username: { $in: mentionedUsernames } }).select('_id');
+          for (const mentionedUser of mentionedUsers) {
+            if (mentionedUser._id.toString() !== req.user.userId.toString()) {
+              await notificationService.create({
+                recipient: mentionedUser._id,
+                actor: req.user.userId,
+                type: 'post_mentioned',
+                title: 'You were mentioned',
+                body: `{actorName} mentioned you in a post`,
+                data: {
+                  entityType: 'Post',
+                  entityId: post._id.toString(),
+                  screen: 'PostDetail',
+                  params: { postId: post._id }
+                },
+                priority: 'high',
+                channels: { inApp: true, push: true, email: false }
+              });
+            }
+          }
+        }
+      } catch (notifErr) {
+        console.warn('[Notification] Non-critical error:', notifErr.message);
+      }
+    })();
+    // END NOTIFICATION
 
     res.status(201).json({
       success: true,
@@ -289,7 +285,6 @@ exports.createPost = async (req, res) => {
     });
   } catch (error) {
     console.error('Create post error:', error);
-
     res.status(500).json({
       success: false,
       message: 'Error creating post',
@@ -299,22 +294,17 @@ exports.createPost = async (req, res) => {
   }
 };
 
-// Get personalized feed with professional filtering - FIXED VERSION
+// Get personalized feed with professional filtering
 exports.getFeedPosts = async (req, res) => {
   try {
     const { page = 1, limit = 20, type, author, hashtag, sortBy } = req.query;
     const skip = (page - 1) * limit;
 
-    // Build query based on filters
-    let query = {
-      status: 'active'
-    };
+    let query = { status: 'active' };
 
     console.log('🔍 Feed request from user:', req.user.userId);
 
-    // Professional feed: More inclusive approach
     if (!author && !hashtag) {
-      // Get followed users
       const follows = await Follow.find({
         follower: req.user.userId,
         status: 'accepted'
@@ -322,45 +312,29 @@ exports.getFeedPosts = async (req, res) => {
 
       const followedIds = follows.map(f => f.targetId);
 
-      console.log('📊 User network stats:', {
-        userId: req.user.userId,
-        followedCount: followedIds.length,
-        followedIds: followedIds
-      });
-
-      // Build inclusive query for feed
       query.$or = [
-        { author: req.user.userId },                           // User's own posts
-        { author: { $in: followedIds } },                      // Posts from followed users
+        { author: req.user.userId },
+        { author: { $in: followedIds } },
         {
           visibility: 'public',
-          author: { $ne: req.user.userId }                     // All public posts except user's own
+          author: { $ne: req.user.userId }
         }
       ];
-
-      console.log('🔍 Feed query:', JSON.stringify(query, null, 2));
     }
 
-    // Filter by author if specified
     if (author) {
       query.author = author;
-      // Remove the complex $or when filtering by specific author
       delete query.$or;
     }
 
-    // Filter by hashtag if specified
     if (hashtag) {
       query.hashtags = { $in: [hashtag.toLowerCase()] };
     }
 
-    // Filter by post type if specified
     if (type) {
       query.type = type;
     }
 
-    console.log('🎯 Final query:', JSON.stringify(query, null, 2));
-
-    // Determine sort order
     let sortOptions = { pinned: -1, createdAt: -1 };
     if (sortBy === 'trending') {
       sortOptions = {
@@ -379,25 +353,11 @@ exports.getFeedPosts = async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit));
 
-    console.log('📨 Found posts:', posts.length);
-
-    // Get post IDs for batch fetching
     const postIds = posts.map(post => post._id);
-
-    // Batch fetch user interactions and saves
     const { userLikes, userSaves } = await fetchUserEngagementForPosts(req.user.userId, postIds);
-
-    // Merge engagement data
     const postsWithEngagement = mergeEngagementData(posts, userLikes, userSaves, req.user.userId);
 
     const total = await Post.countDocuments(query);
-
-    console.log('✅ Feed response:', {
-      success: true,
-      postCount: postsWithEngagement.length,
-      totalPosts: total,
-      userId: req.user.userId
-    });
 
     res.json({
       success: true,
@@ -440,7 +400,6 @@ exports.getPost = async (req, res) => {
       });
     }
 
-    // Professional access control
     if (post.status !== 'active' && !(req.user && (post.author._id.equals(req.user.userId) || req.user.role === 'admin'))) {
       return res.status(404).json({
         success: false,
@@ -449,7 +408,6 @@ exports.getPost = async (req, res) => {
       });
     }
 
-    // Check visibility for non-public posts
     if (post.visibility !== 'public' && req.user) {
       if (!post.author._id.equals(req.user.userId)) {
         if (post.visibility === 'private') {
@@ -475,31 +433,16 @@ exports.getPost = async (req, res) => {
       }
     }
 
-    // Increment view count for authenticated users (atomic update)
     if (req.user) {
-      await Post.findByIdAndUpdate(
-        id,
-        { $inc: { 'stats.views': 1 } }
-      );
-      // Update the post object with incremented view count
+      await Post.findByIdAndUpdate(id, { $inc: { 'stats.views': 1 } });
       post.stats.views = (post.stats.views || 0) + 1;
     }
 
-    // Get user's interaction and save status
     const [userLike, userSave] = await Promise.all([
-      Like.findOne({
-        user: req.user.userId,
-        targetType: 'Post',
-        targetId: post._id
-      }),
-      Save.findOne({
-        user: req.user.userId,
-        targetType: 'Post',
-        targetId: post._id
-      })
+      Like.findOne({ user: req.user.userId, targetType: 'Post', targetId: post._id }),
+      Save.findOne({ user: req.user.userId, targetType: 'Post', targetId: post._id })
     ]);
 
-    // Determine engagement state
     let userReaction = null;
     let userDisliked = false;
 
@@ -513,15 +456,7 @@ exports.getPost = async (req, res) => {
       }
     }
 
-    // Ensure stats exist
-    const stats = post.stats || {
-      likes: 0,
-      dislikes: 0,
-      comments: 0,
-      shares: 0,
-      views: 0,
-      saves: 0
-    };
+    const stats = post.stats || { likes: 0, dislikes: 0, comments: 0, shares: 0, views: 0, saves: 0 };
 
     const postWithEngagement = {
       ...post.toObject(),
@@ -555,19 +490,10 @@ exports.getPost = async (req, res) => {
   }
 };
 
-// Professional post update with Cloudinary media handling - UPDATED VERSION
+// Professional post update
 exports.updatePost = async (req, res) => {
   try {
     const { id } = req.params;
-
-    console.log('📨 Received update request:', {
-      id,
-      bodyKeys: Object.keys(req.body),
-      cloudinaryMedia: !!req.cloudinaryMedia,
-      cloudinaryMediaCount: Array.isArray(req.cloudinaryMedia?.media) ? req.cloudinaryMedia.media.length :
-        req.cloudinaryMedia?.media ? 1 : 0,
-      timestamp: new Date().toISOString()
-    });
 
     const post = await Post.findById(id);
 
@@ -579,7 +505,6 @@ exports.updatePost = async (req, res) => {
       });
     }
 
-    // Professional ownership check
     if (!post.author.equals(req.user.userId) && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -588,37 +513,21 @@ exports.updatePost = async (req, res) => {
       });
     }
 
-    // Helper function to generate proper thumbnail URL
     const generateProperThumbnailUrl = (mediaItem) => {
-      // If thumbnailUrl is provided and valid, use it
-      if (mediaItem.thumbnailUrl && !mediaItem.thumbnailUrl.includes('.mp4.jpg')) {
-        return mediaItem.thumbnailUrl;
-      }
-
-      // For videos, generate proper Cloudinary video thumbnail
+      if (mediaItem.thumbnailUrl && !mediaItem.thumbnailUrl.includes('.mp4.jpg')) return mediaItem.thumbnailUrl;
       if (mediaItem.type === 'video' && mediaItem.cloudinary?.secure_url) {
         const videoUrl = mediaItem.cloudinary.secure_url;
-        // Cloudinary video thumbnail transformation - no .jpg extension
-        if (videoUrl.includes('/upload/')) {
-          return videoUrl.replace('/upload/', '/upload/w_600,h_400,c_fill/');
-        }
+        if (videoUrl.includes('/upload/')) return videoUrl.replace('/upload/', '/upload/w_600,h_400,c_fill/');
         return videoUrl;
       }
-
-      // For images, use the secure_url with transformation
       if (mediaItem.type === 'image' && mediaItem.cloudinary?.secure_url) {
         const imageUrl = mediaItem.cloudinary.secure_url;
-        if (imageUrl.includes('/upload/')) {
-          return imageUrl.replace('/upload/', '/upload/w_600,h_400,c_fill/');
-        }
+        if (imageUrl.includes('/upload/')) return imageUrl.replace('/upload/', '/upload/w_600,h_400,c_fill/');
         return imageUrl;
       }
-
-      // Fallback
       return mediaItem.thumbnailUrl || mediaItem.cloudinary?.secure_url || '';
     };
 
-    // Start with existing post data
     let updateData = {
       content: req.body.content !== undefined ? req.body.content : post.content,
       visibility: req.body.visibility !== undefined ? req.body.visibility : post.visibility,
@@ -631,12 +540,6 @@ exports.updatePost = async (req, res) => {
     let finalMedia = [...post.media];
     let mediaToDelete = [];
 
-    console.log('📊 Initial media state:', {
-      existingCount: post.media.length,
-      finalMediaCount: finalMedia.length
-    });
-
-    // FIX 1: Handle media removal - Fixed array mutation issues
     if (req.body.mediaToRemove && finalMedia.length > 0) {
       try {
         let mediaToRemove = [];
@@ -646,13 +549,6 @@ exports.updatePost = async (req, res) => {
           mediaToRemove = req.body.mediaToRemove;
         }
 
-        console.log('🗑️ Processing media removal:', {
-          requestCount: mediaToRemove.length,
-          currentMediaCount: finalMedia.length,
-          mediaIds: mediaToRemove
-        });
-
-        // Create a new array instead of modifying in-place to avoid index issues
         const remainingMedia = [];
         const toDelete = [];
 
@@ -664,10 +560,7 @@ exports.updatePost = async (req, res) => {
             mediaToRemove.includes(mediaItem.secure_url);
 
           if (shouldRemove) {
-            if (mediaItem.public_id) {
-              toDelete.push(mediaItem.public_id);
-            }
-            console.log(`🗑️ Marked for removal: ${mediaItem.public_id || mediaItem._id}`);
+            if (mediaItem.public_id) toDelete.push(mediaItem.public_id);
           } else {
             remainingMedia.push(mediaItem);
           }
@@ -675,19 +568,11 @@ exports.updatePost = async (req, res) => {
 
         finalMedia = remainingMedia;
         mediaToDelete = [...mediaToDelete, ...toDelete];
-
-        console.log('✅ Media removal complete:', {
-          removedCount: toDelete.length,
-          remainingCount: finalMedia.length
-        });
-
       } catch (error) {
         console.error('❌ Failed to parse mediaToRemove:', error);
-        // Don't fail the entire update if media removal parsing fails
       }
     }
 
-    // FIX 2: Handle existing media updates (reordering, descriptions)
     if (req.body.media && finalMedia.length > 0) {
       try {
         let updatedMedia = [];
@@ -697,67 +582,33 @@ exports.updatePost = async (req, res) => {
           updatedMedia = req.body.media;
         }
 
-        console.log('🔄 Processing media updates:', {
-          updateCount: updatedMedia.length,
-          currentMediaCount: finalMedia.length
-        });
-
-        // Create a map for quick lookup
         const mediaMap = new Map();
         finalMedia.forEach((item, index) => {
           const key = item._id?.toString() || item.public_id;
-          if (key) {
-            mediaMap.set(key, { item, index });
-          }
+          if (key) mediaMap.set(key, { item, index });
         });
 
-        // Update existing media items (descriptions, order)
         updatedMedia.forEach(updatedItem => {
           const key = updatedItem._id || updatedItem.public_id;
           if (key && mediaMap.has(key)) {
             const { index } = mediaMap.get(key);
-
-            // Update existing item
-            if (updatedItem.description !== undefined) {
-              finalMedia[index].description = updatedItem.description;
-            }
-            if (updatedItem.order !== undefined) {
-              finalMedia[index].order = updatedItem.order;
-            }
-
-            console.log(`🔄 Updated media: ${key}`, {
-              description: updatedItem.description !== undefined,
-              order: updatedItem.order !== undefined
-            });
-          } else {
-            console.log(`⚠️ Media not found for update: ${key}`);
+            if (updatedItem.description !== undefined) finalMedia[index].description = updatedItem.description;
+            if (updatedItem.order !== undefined) finalMedia[index].order = updatedItem.order;
           }
         });
 
-        // Sort by order if specified
         const hasOrderUpdates = updatedMedia.some(item => item.order !== undefined);
-        if (hasOrderUpdates) {
-          finalMedia.sort((a, b) => (a.order || 0) - (b.order || 0));
-          console.log('🔄 Sorted media by order');
-        }
-
+        if (hasOrderUpdates) finalMedia.sort((a, b) => (a.order || 0) - (b.order || 0));
       } catch (error) {
         console.error('❌ Failed to process media updates:', error);
-        // Don't fail the entire update if media update parsing fails
       }
     }
 
-    // FIX 3: Handle new Cloudinary media uploads
     if (req.cloudinaryMedia?.media) {
-      console.log('📤 Processing new Cloudinary media uploads');
-
       let newMediaItems = [];
-
-      // Handle single upload
       if (!Array.isArray(req.cloudinaryMedia.media)) {
         const mediaItem = req.cloudinaryMedia.media;
-
-        const formattedMedia = {
+        newMediaItems.push({
           type: mediaItem.type,
           public_id: mediaItem.cloudinary.public_id,
           secure_url: mediaItem.cloudinary.secure_url,
@@ -769,22 +620,17 @@ exports.updatePost = async (req, res) => {
           duration: mediaItem.cloudinary.duration,
           created_at: mediaItem.cloudinary.created_at,
           tags: mediaItem.cloudinary.tags || [],
-          // Backward compatibility fields
           url: mediaItem.cloudinary.secure_url,
-          thumbnail: generateProperThumbnailUrl(mediaItem), // FIXED: Use helper function
+          thumbnail: generateProperThumbnailUrl(mediaItem),
           originalName: mediaItem.originalName,
           size: mediaItem.size,
           mimeType: mediaItem.mimetype,
           description: req.body.mediaDescription || '',
           order: finalMedia.length
-        };
-
-        newMediaItems.push(formattedMedia);
-      }
-      // Handle multiple uploads
-      else if (Array.isArray(req.cloudinaryMedia.media)) {
+        });
+      } else if (Array.isArray(req.cloudinaryMedia.media)) {
         newMediaItems = req.cloudinaryMedia.media
-          .filter(mediaItem => mediaItem.success !== false) // Skip failed uploads
+          .filter(mediaItem => mediaItem.success !== false)
           .map((mediaItem, index) => ({
             type: mediaItem.type,
             public_id: mediaItem.cloudinary.public_id,
@@ -797,9 +643,8 @@ exports.updatePost = async (req, res) => {
             duration: mediaItem.cloudinary.duration,
             created_at: mediaItem.cloudinary.created_at,
             tags: mediaItem.cloudinary.tags || [],
-            // Backward compatibility fields
             url: mediaItem.cloudinary.secure_url,
-            thumbnail: generateProperThumbnailUrl(mediaItem), // FIXED: Use helper function
+            thumbnail: generateProperThumbnailUrl(mediaItem),
             originalName: mediaItem.originalName,
             size: mediaItem.size,
             mimeType: mediaItem.mimetype,
@@ -807,44 +652,26 @@ exports.updatePost = async (req, res) => {
             order: finalMedia.length + index
           }));
       }
-
-      // Add new media to final array
       finalMedia = [...finalMedia, ...newMediaItems];
-      console.log(`✅ Added ${newMediaItems.length} new media items`);
     }
 
-    // Update media array and determine post type
     updateData.media = finalMedia;
 
     if (finalMedia.length > 0) {
       const hasVideo = finalMedia.some(m => m.type === 'video');
       const hasImage = finalMedia.some(m => m.type === 'image');
-
       if (hasVideo) updateData.type = 'video';
       else if (hasImage) updateData.type = 'image';
     } else if (!updateData.content || updateData.content.trim() === '') {
       updateData.type = 'text';
     } else {
-      updateData.type = post.type; // Keep existing type
+      updateData.type = post.type;
     }
 
-    console.log('🔄 Final update data:', {
-      contentLength: updateData.content?.length,
-      mediaCount: updateData.media.length,
-      type: updateData.type,
-      mediaToDeleteCount: mediaToDelete.length,
-      finalMediaIds: finalMedia.map(m => m.public_id || m._id).slice(0, 5) // Log first 5
-    });
-
-    // Atomic update operation
     const updatedPost = await Post.findByIdAndUpdate(
       id,
       { $set: updateData },
-      {
-        new: true,
-        runValidators: true,
-        context: 'query'
-      }
+      { new: true, runValidators: true, context: 'query' }
     )
       .populate('author', 'name avatar headline role verificationStatus company')
       .populate('originalAuthor', 'name avatar headline')
@@ -858,33 +685,18 @@ exports.updatePost = async (req, res) => {
       });
     }
 
-    // FIX 4: Staggered Cloudinary deletions after successful update
     if (mediaToDelete.length > 0) {
-      console.log('🗑️ Scheduling Cloudinary deletions:', {
-        count: mediaToDelete.length,
-        ids: mediaToDelete.slice(0, 3) // Log first 3
-      });
-
       const cloudinaryStorageService = require('../services/cloudinaryStorageService');
-
-      // Stagger deletions to avoid rate limits
       mediaToDelete.forEach((publicId, index) => {
         setTimeout(async () => {
           try {
-            const result = await cloudinaryStorageService.deleteFile(publicId);
-            if (result.success) {
-              console.log(`✅ Deleted media from Cloudinary: ${publicId}`);
-            } else {
-              console.error(`❌ Failed to delete media from Cloudinary: ${publicId}`, result.error);
-            }
+            await cloudinaryStorageService.deleteFile(publicId);
           } catch (error) {
             console.error(`❌ Error deleting media from Cloudinary: ${publicId}`, error);
           }
-        }, index * 200); // 200ms delay between deletions
+        }, index * 200);
       });
     }
-
-    console.log('✅ Post updated successfully:', updatedPost._id);
 
     res.json({
       success: true,
@@ -894,7 +706,6 @@ exports.updatePost = async (req, res) => {
     });
   } catch (error) {
     console.error('Update post error:', error);
-
     res.status(500).json({
       success: false,
       message: 'Error updating post: ' + error.message,
@@ -919,7 +730,6 @@ exports.deletePost = async (req, res) => {
       });
     }
 
-    // Professional ownership check
     if (!post.author.equals(req.user.userId) && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -928,39 +738,27 @@ exports.deletePost = async (req, res) => {
       });
     }
 
-    // Delete all media files from Cloudinary
     if (post.media && Array.isArray(post.media)) {
       const cloudinaryStorageService = require('../services/cloudinaryStorageService');
-
-      // Delete each media item asynchronously
       post.media.forEach(mediaItem => {
         if (mediaItem.public_id) {
           cloudinaryStorageService.deleteFile(mediaItem.public_id)
             .then(result => {
-              if (result.success) {
-                console.log(`✅ Deleted media from Cloudinary: ${mediaItem.public_id}`);
-              } else {
-                console.error(`❌ Failed to delete media from Cloudinary: ${mediaItem.public_id}`, result.error);
-              }
+              if (result.success) console.log(`✅ Deleted media from Cloudinary: ${mediaItem.public_id}`);
             })
-            .catch(error => {
-              console.error(`❌ Error deleting media from Cloudinary: ${mediaItem.public_id}`, error);
-            });
+            .catch(error => console.error(`❌ Error deleting media from Cloudinary: ${mediaItem.public_id}`, error));
         }
       });
     }
 
     if (permanent && req.user.role === 'admin') {
-      // Permanent deletion (admin only)
       await Post.findByIdAndDelete(id);
     } else {
-      // Soft delete
       post.status = 'deleted';
       post.deletedAt = new Date();
       await post.save();
     }
 
-    // Update user's post count
     const Profile = require('../models/Profile');
     await Profile.updateOne(
       { user: post.author },
@@ -989,34 +787,21 @@ exports.getProfilePosts = async (req, res) => {
     const { page = 1, limit = 20, type, includeShared = true } = req.query;
     const skip = (page - 1) * limit;
 
-    console.log('🔍 Profile posts request:', {
-      requestedProfile: profileId,
-      requestingUser: req.user.userId
-    });
-
     let query = {
-      $or: [
-        { author: profileId }
-      ],
+      $or: [{ author: profileId }],
       status: 'active'
     };
 
-    // Include shared posts if requested
     if (includeShared === 'true') {
       query.$or.push({ originalAuthor: profileId });
     }
 
-    // Filter by post type if specified
-    if (type) {
-      query.type = type;
-    }
+    if (type) query.type = type;
 
-    // Professional privacy check
     const isOwnProfile = profileId === req.user.userId;
     const isAdmin = req.user.role === 'admin';
 
     if (!isOwnProfile && !isAdmin) {
-      // Check if profile is private
       const Profile = require('../models/Profile');
       const profile = await Profile.findOne({ user: profileId });
 
@@ -1034,16 +819,11 @@ exports.getProfilePosts = async (req, res) => {
             code: 'PROFILE_PRIVATE'
           });
         }
-
-        // For private profiles, only show posts visible to connections
         query.visibility = { $in: ['connections', 'public'] };
       } else {
-        // For public profiles, show public and connections posts
         query.visibility = { $in: ['public', 'connections'] };
       }
     }
-
-    console.log('🎯 Profile Posts query:', JSON.stringify(query, null, 2));
 
     const posts = await Post.find(query)
       .populate('author', 'name avatar headline role verificationStatus company')
@@ -1053,25 +833,11 @@ exports.getProfilePosts = async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit));
 
-    console.log('📨 Found profile posts:', posts.length);
-
-    // Get post IDs for batch fetching
     const postIds = posts.map(post => post._id);
-
-    // Batch fetch user interactions and saves
     const { userLikes, userSaves } = await fetchUserEngagementForPosts(req.user.userId, postIds);
-
-    // Merge engagement data
     const postsWithEngagement = mergeEngagementData(posts, userLikes, userSaves, req.user.userId);
 
     const total = await Post.countDocuments(query);
-
-    console.log('✅ Profile Posts response:', {
-      success: true,
-      postCount: postsWithEngagement.length,
-      totalPosts: total,
-      profileId: profileId
-    });
 
     res.json({
       success: true,
@@ -1133,15 +899,40 @@ exports.sharePost = async (req, res) => {
     await sharedPost.populate('sharedPost');
     await sharedPost.populate('originalAuthor', 'name avatar headline');
 
-    // Increment share count on original post
     await originalPost.incrementStats('shares');
 
-    // Update user's post count
     const Profile = require('../models/Profile');
     await Profile.updateOne(
       { user: req.user.userId },
       { $inc: { 'socialStats.postCount': 1 } }
     );
+
+    // 🔔 NOTIFICATION: Notify original post author about share
+    (async () => {
+      try {
+        if (!originalPost.author._id.equals(req.user.userId)) {
+          await notificationService.create({
+            recipient: originalPost.author._id || originalPost.author,
+            actor: req.user.userId,
+            type: 'post_shared',
+            title: 'Post shared',
+            body: `{actorName} shared your post`,
+            data: {
+              entityType: 'Post',
+              entityId: sharedPost._id.toString(),
+              screen: 'PostDetail',
+              params: { postId: sharedPost._id }
+            },
+            priority: 'normal',
+            groupKey: `post_shared:${id}`,
+            channels: { inApp: true, push: false, email: false }
+          });
+        }
+      } catch (notifErr) {
+        console.warn('[Notification] Non-critical error:', notifErr.message);
+      }
+    })();
+    // END NOTIFICATION
 
     res.status(201).json({
       success: true,
@@ -1194,19 +985,15 @@ exports.savePost = async (req, res) => {
       targetType: 'Post'
     });
 
-    await Post.findByIdAndUpdate(postId, {
-      $inc: { 'stats.saves': 1 }
-    });
+    await Post.findByIdAndUpdate(postId, { $inc: { 'stats.saves': 1 } });
 
     return res.status(200).json({
       success: true,
       message: 'Post saved successfully',
       code: 'POST_SAVED'
     });
-
   } catch (error) {
     console.error('Save post error:', error);
-
     if (error.code === 11000) {
       return res.status(200).json({
         success: true,
@@ -1214,7 +1001,6 @@ exports.savePost = async (req, res) => {
         code: 'POST_ALREADY_SAVED'
       });
     }
-
     return res.status(500).json({
       success: false,
       message: 'Error saving post',
@@ -1242,9 +1028,7 @@ exports.unsavePost = async (req, res) => {
       });
     }
 
-    await Post.findByIdAndUpdate(postId, {
-      $inc: { 'stats.saves': -1 }
-    });
+    await Post.findByIdAndUpdate(postId, { $inc: { 'stats.saves': -1 } });
 
     return res.status(200).json({
       success: true,
@@ -1267,7 +1051,6 @@ exports.getSavedPosts = async (req, res) => {
     const { page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
 
-    // Get saved post IDs
     const saves = await Save.find({
       user: req.user.userId,
       targetType: 'Post'
@@ -1279,7 +1062,6 @@ exports.getSavedPosts = async (req, res) => {
 
     const postIds = saves.map(save => save.targetId);
 
-    // Get posts with their save status
     const posts = await Post.find({
       _id: { $in: postIds },
       status: 'active'
@@ -1289,68 +1071,20 @@ exports.getSavedPosts = async (req, res) => {
       .populate('sharedPost')
       .sort({ createdAt: -1 });
 
-    // Get like status for current user
     const userLikes = await Like.find({
       user: req.user.userId,
       targetType: 'Post',
       targetId: { $in: postIds }
     });
 
-    // Get save status for current user (all should be saved)
     const userSaves = await Save.find({
       user: req.user.userId,
       targetType: 'Post',
       targetId: { $in: postIds }
     });
 
-    const postsWithEngagement = posts.map(post => {
-      const postObj = post.toObject();
-      const userLike = userLikes.find(like => like.targetId.equals(post._id));
-      const isSaved = userSaves.some(save => save.targetId.equals(post._id));
+    const postsWithEngagement = mergeEngagementData(posts, userLikes, userSaves, req.user.userId);
 
-      // Determine engagement state
-      let userReaction = null;
-      let userDisliked = false;
-
-      if (userLike) {
-        if (userLike.interactionType === 'reaction') {
-          userReaction = userLike.reaction;
-          userDisliked = false;
-        } else if (userLike.interactionType === 'dislike') {
-          userReaction = null;
-          userDisliked = true;
-        }
-      }
-
-      // Ensure stats exist
-      const stats = postObj.stats || {
-        likes: 0,
-        dislikes: 0,
-        comments: 0,
-        shares: 0,
-        views: 0,
-        saves: 0
-      };
-
-      return {
-        ...postObj,
-        stats: {
-          likes: stats.likes || 0,
-          dislikes: stats.dislikes || 0,
-          comments: stats.comments || 0,
-          shares: stats.shares || 0,
-          views: stats.views || 0,
-          saves: stats.saves || 0
-        },
-        userReaction,
-        userDisliked,
-        isSaved,
-        canEdit: post.author._id.equals(req.user.userId) || req.user.role === 'admin',
-        canDelete: post.author._id.equals(req.user.userId) || req.user.role === 'admin'
-      };
-    });
-
-    // Maintain original save order
     const orderedPosts = saves.map(save =>
       postsWithEngagement.find(post => post._id.equals(save.targetId))
     ).filter(Boolean);
@@ -1389,26 +1123,18 @@ exports.getMyPosts = async (req, res) => {
 
     let query = {
       $or: [
-        { author: req.user.userId },                    // User's own posts
-        { originalAuthor: req.user.userId }            // Posts shared by user
+        { author: req.user.userId },
+        { originalAuthor: req.user.userId }
       ]
     };
 
-    console.log('🔍 My Posts request from user:', req.user.userId);
-
-    // Filter by status (allow seeing deleted posts for owner)
     if (status) {
       query.status = status;
     } else {
       query.status = { $ne: 'deleted' };
     }
 
-    // Filter by post type if specified
-    if (type) {
-      query.type = type;
-    }
-
-    console.log('🎯 My Posts query:', JSON.stringify(query, null, 2));
+    if (type) query.type = type;
 
     const posts = await Post.find(query)
       .populate('author', 'name avatar headline role verificationStatus company')
@@ -1418,24 +1144,11 @@ exports.getMyPosts = async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit));
 
-    console.log('📨 Found my posts:', posts.length);
-
     const total = await Post.countDocuments(query);
 
-    // Get post IDs for batch fetching
     const postIds = posts.map(post => post._id);
-
-    // Batch fetch user interactions and saves
     const { userLikes, userSaves } = await fetchUserEngagementForPosts(req.user.userId, postIds);
-
-    // Merge engagement data
     const postsWithEngagement = mergeEngagementData(posts, userLikes, userSaves, req.user.userId);
-
-    console.log('✅ My Posts response:', {
-      success: true,
-      postCount: postsWithEngagement.length,
-      totalPosts: total
-    });
 
     res.json({
       success: true,

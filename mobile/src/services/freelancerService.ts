@@ -112,7 +112,37 @@ export const freelancerService = {
   updateProfile: async (
     data: FreelancerProfileUpdate,
   ): Promise<{ profile: FreelancerProfile; profileCompletion: number }> => {
-    const res = await api.put<ApiResp<FreelancerProfile>>(FREELANCER.PROFILE, data);
+    // Make sure socialLinks is properly structured
+    const payload = { ...data };
+    
+    // Ensure socialLinks is sent as an object and clean empty values
+    if (data.socialLinks) {
+      const cleanedLinks: Record<string, string> = {};
+      Object.keys(data.socialLinks).forEach(key => {
+        const value = data.socialLinks?.[key];
+        if (value && value.trim() !== '') {
+          cleanedLinks[key] = value.trim();
+        }
+      });
+      payload.socialLinks = cleanedLinks;
+    }
+
+    // Handle freelancerProfile.socialLinks as well
+    if (data.freelancerProfile?.socialLinks) {
+      const cleanedLinks: Record<string, string> = {};
+      Object.keys(data.freelancerProfile.socialLinks).forEach(key => {
+        const value = data.freelancerProfile?.socialLinks?.[key];
+        if (value && value.trim() !== '') {
+          cleanedLinks[key] = value.trim();
+        }
+      });
+      payload.freelancerProfile = {
+        ...data.freelancerProfile,
+        socialLinks: cleanedLinks
+      };
+    }
+
+    const res = await api.put<ApiResp<FreelancerProfile>>(FREELANCER.PROFILE, payload);
     if (!res.data.success) throw new Error(res.data.message ?? 'Failed to update profile');
     const profile = res.data.data;
     if (profile.portfolio) {
@@ -226,15 +256,12 @@ export const freelancerService = {
     return res.data.data;
   },
 
-
-  // FIX: Was completely missing — caused every edit to 404
   updateService: async (id: string, data: Partial<Omit<FreelancerServiceItem, '_id'>>): Promise<FreelancerServiceItem> => {
     const res = await api.put<ApiResp<FreelancerServiceItem>>(FREELANCER.SERVICE(id), data);
     if (!res.data.success) throw new Error(res.data.message ?? 'Failed to update service');
     return res.data.data;
   },
- 
-  // FIX: Was missing
+
   deleteService: async (id: string): Promise<void> => {
     const res = await api.delete<ApiResp<any>>(FREELANCER.SERVICE(id));
     if (!res.data.success) throw new Error('Failed to delete service');

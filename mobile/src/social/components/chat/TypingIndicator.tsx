@@ -1,31 +1,12 @@
-// =============================================================================
-// FILE: mobile/src/social/components/chat/TypingIndicator.tsx
-// =============================================================================
-
-/**
- * TypingIndicator — animated three-dot indicator.
- * ─────────────────────────────────────────────────────────────────────────────
- * Uses react-native Animated (no reanimated) per hard rules.
- *
- * Professional polish:
- * - Theme token for colors
- * - Left-aligned bubble matching incoming message style
- * - Smooth pulsing animation with 3 staggered dots
- * - Proper tail on bubble bottom-left
- */
-
+// src/social/components/chat/TypingIndicator.tsx
 import React, { useEffect, useRef, memo } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 
 import { useSocialTheme } from '../../theme/socialTheme';
 
-// ─── Props ───────────────────────────────────────────────────────────────────
-
 export interface TypingIndicatorProps {
   visible: boolean;
 }
-
-// ─── Animated Dot ────────────────────────────────────────────────────────────
 
 interface DotProps {
   delay: number;
@@ -67,38 +48,45 @@ const Dot: React.FC<DotProps> = memo(({ delay, color }) => {
 
 Dot.displayName = 'Dot';
 
-// ─── Main Component ─────────────────────────────────────────────────────────
-
 const TypingIndicator: React.FC<TypingIndicatorProps> = memo(({ visible }) => {
   const theme = useSocialTheme();
+  const { colors, spacing, radius, dark } = theme;
 
   if (!visible) return null;
 
+  // Dark mode: darker bubble, subtle border
+  // Light mode: light bubble, clean border
+  const bgColor = colors.card;
+  const borderColor = dark ? 'rgba(255,255,255,0.08)' : colors.border;
+  const dotColor = dark ? colors.textMuted : colors.muted;
+
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, { paddingHorizontal: spacing.md }]}>
       <View
         style={[
           styles.bubble,
           {
-            backgroundColor: theme.card,
-            borderColor: theme.border,
-            marginHorizontal: theme.spacing.md,
+            backgroundColor: bgColor,
+            borderColor: borderColor,
+            borderRadius: radius.lg,
+            borderBottomLeftRadius: radius.sm,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            borderWidth: StyleSheet.hairlineWidth,
           },
         ]}
         accessibilityRole="text"
         accessibilityLabel="Someone is typing"
       >
-        <Dot delay={0} color={theme.muted} />
-        <Dot delay={150} color={theme.muted} />
-        <Dot delay={300} color={theme.muted} />
+        <Dot delay={0} color={dotColor} />
+        <Dot delay={150} color={dotColor} />
+        <Dot delay={300} color={dotColor} />
       </View>
     </View>
   );
 });
 
 TypingIndicator.displayName = 'TypingIndicator';
-
-// ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   row: {
@@ -109,11 +97,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 18,
-    borderBottomLeftRadius: 4,
-    borderWidth: StyleSheet.hairlineWidth,
     gap: 5,
   },
   dot: {
@@ -124,4 +107,3 @@ const styles = StyleSheet.create({
 });
 
 export default TypingIndicator;
-// ✅ theme-migrated

@@ -1,11 +1,15 @@
 // src/hooks/useBid.ts
 // Module 7B — Bids
+//
 // All React Query hooks for the bid system.
 //
 // Key contracts:
-//   useGetMyBid   → handles 404 gracefully (null, hasBid: false)
-//   useUpdateBidStatus → optimistically updates cache before server confirms
-//   All mutations → toast on success/error via Alert (mobile pattern)
+//   useGetMyBid          → handles 404 gracefully (null, hasBid: false)
+//   useUpdateBidStatus   → OPTIMISTIC UPDATE — patches cache before server confirms, rolls back on error
+//   useSubmitEvaluationScore → 3-step Ethiopian procurement evaluation
+//   useVerifyCPOReturn   → CPO return recording (required by law for losing bidders)
+//   useUpdateComplianceChecklist → compliance doc verification by owner
+//   All mutations        → Alert.alert on success/error (mobile pattern)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Alert } from 'react-native';
@@ -19,14 +23,15 @@ import {
 import bidService, { BidFileEntry } from '../services/bidService';
 import {
   Bid,
-  BidListItem,
   BidListParams,
-  BidPagination,
   BidStatus,
+  ComplianceItem,
   GetBidsResponse,
   MyAllBidsResponse,
   SubmitBidData,
   UpdateBidStatusData,
+  BidEvaluation,
+  BidCPO,
 } from '../types/bid';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -35,20 +40,20 @@ import {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const bidKeys = {
-  all:          ['bids'] as const,
-  tender:       (tenderId: string)           => ['bids', tenderId] as const,
-  allBids:      (tenderId: string)           => ['bids', tenderId, 'all'] as const,
-  myBid:        (tenderId: string)           => ['bids', tenderId, 'my-bid'] as const,
-  detail:       (tenderId: string, bidId: string) => ['bids', tenderId, bidId] as const,
-  myAllBids:    (params?: object)            => ['bids', 'my-all-bids', params] as const,
+  all:       ['bids'] as const,
+  tender:    (tenderId: string)                    => ['bids', tenderId] as const,
+  allBids:   (tenderId: string)                    => ['bids', tenderId, 'all'] as const,
+  myBid:     (tenderId: string)                    => ['bids', tenderId, 'my-bid'] as const,
+  detail:    (tenderId: string, bidId: string)     => ['bids', tenderId, bidId] as const,
+  myAllBids: (params?: object)                     => ['bids', 'my-all-bids', params] as const,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TOAST HELPERS (React Native — Alert)
+// ALERT HELPERS (React Native — Alert replaces web toast)
 // ═══════════════════════════════════════════════════════════════════════════
 
 function toastSuccess(message: string): void {
-  Alert.alert('✓', message);
+  Alert.alert('✓ Success', message);
 }
 
 function toastError(error: unknown, fallback = 'Something went wrong'): void {
@@ -64,6 +69,7 @@ function toastError(error: unknown, fallback = 'Something went wrong'): void {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STATUS MESSAGE MAP
+// Matches web useBid.ts statusMessages record exactly.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const STATUS_MESSAGES: Record<BidStatus, string> = {
@@ -83,7 +89,7 @@ const STATUS_MESSAGES: Record<BidStatus, string> = {
 /**
  * Fetch current user's bid for a specific tender.
  * Returns { data: Bid | null, hasBid: boolean, isLoading, error }.
- * 404 → treated as "no bid" — never throws.
+ * 404 → treated as "no bid" — never throws to the consumer.
  */
 export const useGetMyBid = (
   tenderId: string,
@@ -96,7 +102,7 @@ export const useGetMyBid = (
         return await bidService.getMyBid(tenderId);
       } catch (err: unknown) {
         const status = (err as { response?: { status?: number } })?.response?.status;
-        if (status === 404) return null; // graceful — no bid exists yet
+        if (status === 404) return null; // no bid yet — not an error
         throw err;
       }
     },
@@ -134,10 +140,7 @@ export const useGetBids = (
  */
 export const useGetMyAllBids = (
   params?: BidListParams,
-  options?: Omit<
-    UseQueryOptions<MyAllBidsResponse>,
-    'queryKey' | 'queryFn'
-  >,
+  options?: Omit<UseQueryOptions<MyAllBidsResponse>, 'queryKey' | 'queryFn'>,
 ) => {
   return useQuery<MyAllBidsResponse>({
     queryKey: bidKeys.myAllBids(params),
@@ -153,7 +156,7 @@ export const useGetMyAllBids = (
 
 /**
  * Submit a new bid.
- * On success: invalidates my-bid + my-all-bids.
+ * On success: invalidates my-bid + allBids + my-all-bids.
  */
 export const useSubmitBid = () => {
   const queryClient = useQueryClient();
@@ -182,7 +185,7 @@ export const useSubmitBid = () => {
 
 /**
  * Update an existing submitted bid.
- * On success: invalidates my-bid + my-all-bids.
+ * On success: invalidates my-bid + detail + my-all-bids.
  */
 export const useUpdateBid = () => {
   const queryClient = useQueryClient();
@@ -213,7 +216,7 @@ export const useUpdateBid = () => {
 
 /**
  * Withdraw a submitted bid.
- * On success: invalidates bid detail, my-bid, and my-all-bids.
+ * On success: invalidates bid detail, my-bid, allBids, and my-all-bids.
  */
 export const useWithdrawBid = () => {
   const queryClient = useQueryClient();
@@ -237,9 +240,9 @@ export const useWithdrawBid = () => {
 /**
  * Owner: update bid status.
  *
- * OPTIMISTIC UPDATE — sets new status in cache immediately.
- * Rolls back on error.
- * On success: invalidates allBids + detail caches.
+ * OPTIMISTIC UPDATE — sets new status in cache immediately before server confirms.
+ * Rolls back on error to maintain data integrity.
+ * On success: invalidates allBids + detail + my-all-bids.
  */
 export const useUpdateBidStatus = () => {
   const queryClient = useQueryClient();
@@ -259,15 +262,15 @@ export const useUpdateBidStatus = () => {
 
     // ── Optimistic update ──────────────────────────────────────────────────
     onMutate: async ({ tenderId, bidId, status, ownerNotes }) => {
-      // Cancel any in-flight refetches
+      // Cancel in-flight refetches to avoid overwriting our optimistic patch
       await queryClient.cancelQueries({ queryKey: bidKeys.allBids(tenderId) });
       await queryClient.cancelQueries({ queryKey: bidKeys.detail(tenderId, bidId) });
 
-      // Snapshot previous values for rollback
+      // Snapshot for rollback
       const prevAll    = queryClient.getQueryData<GetBidsResponse>(bidKeys.allBids(tenderId));
       const prevDetail = queryClient.getQueryData<Bid>(bidKeys.detail(tenderId, bidId));
 
-      // Optimistically patch allBids list
+      // Patch allBids list
       if (prevAll) {
         queryClient.setQueryData<GetBidsResponse>(bidKeys.allBids(tenderId), {
           ...prevAll,
@@ -279,7 +282,7 @@ export const useUpdateBidStatus = () => {
         });
       }
 
-      // Optimistically patch detail
+      // Patch detail
       if (prevDetail) {
         queryClient.setQueryData<Bid>(bidKeys.detail(tenderId, bidId), {
           ...prevDetail,
@@ -292,7 +295,7 @@ export const useUpdateBidStatus = () => {
     },
 
     onError: (error, { tenderId, bidId }, context) => {
-      // Roll back optimistic update
+      // Roll back optimistic patches
       if (context?.prevAll) {
         queryClient.setQueryData(bidKeys.allBids(tenderId), context.prevAll);
       }
@@ -308,17 +311,108 @@ export const useUpdateBidStatus = () => {
       queryClient.invalidateQueries({ queryKey: bidKeys.detail(tenderId, bidId) });
       queryClient.invalidateQueries({ queryKey: bidKeys.myAllBids() });
 
-      // If awarded, also refresh professional tender caches
+      // If awarded, refresh professional tender caches too
       if (status === BidStatus.Awarded) {
         queryClient.invalidateQueries({ queryKey: ['professionalTenders'] });
+        queryClient.invalidateQueries({ queryKey: ['tenders'] });
       }
     },
   });
 };
 
 /**
+ * Owner: submit evaluation score — 3-step Ethiopian procurement process.
+ * step: 'preliminary' | 'technical' | 'financial'
+ */
+export const useSubmitEvaluationScore = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      tenderId,
+      bidId,
+      ...data
+    }: {
+      tenderId: string;
+      bidId: string;
+      step: 'preliminary' | 'technical' | 'financial';
+      technicalScore?: number;
+      financialScore?: number;
+      preliminaryPassed?: boolean;
+      technicalNotes?: string;
+      financialNotes?: string;
+      preliminaryNotes?: string;
+    }) => bidService.submitEvaluationScore(tenderId, bidId, data),
+
+    onSuccess: (_result, { tenderId, bidId }) => {
+      toastSuccess('Evaluation saved');
+      queryClient.invalidateQueries({ queryKey: bidKeys.allBids(tenderId) });
+      queryClient.invalidateQueries({ queryKey: bidKeys.detail(tenderId, bidId) });
+    },
+
+    onError: (error) => toastError(error, 'Failed to save evaluation'),
+  });
+};
+
+/**
+ * Owner: record CPO return to a losing bidder.
+ * Required by Ethiopian procurement law after contract award.
+ */
+export const useVerifyCPOReturn = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      tenderId,
+      bidId,
+      ...data
+    }: {
+      tenderId: string;
+      bidId: string;
+      returnStatus: 'returned' | 'forfeited';
+      returnNotes?: string;
+    }) => bidService.verifyCPOReturn(tenderId, bidId, data),
+
+    onSuccess: (_result, { tenderId, bidId }) => {
+      toastSuccess('CPO return recorded');
+      queryClient.invalidateQueries({ queryKey: bidKeys.allBids(tenderId) });
+      queryClient.invalidateQueries({ queryKey: bidKeys.detail(tenderId, bidId) });
+    },
+
+    onError: (error) => toastError(error, 'Failed to record CPO return'),
+  });
+};
+
+/**
+ * Owner: update compliance document checklist for a bid.
+ */
+export const useUpdateComplianceChecklist = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      tenderId,
+      bidId,
+      complianceItems,
+    }: {
+      tenderId: string;
+      bidId: string;
+      complianceItems: ComplianceItem[];
+    }) => bidService.updateComplianceChecklist(tenderId, bidId, complianceItems),
+
+    onSuccess: (_result, { tenderId, bidId }) => {
+      toastSuccess('Compliance checklist updated');
+      queryClient.invalidateQueries({ queryKey: bidKeys.allBids(tenderId) });
+      queryClient.invalidateQueries({ queryKey: bidKeys.detail(tenderId, bidId) });
+    },
+
+    onError: (error) => toastError(error, 'Failed to update compliance checklist'),
+  });
+};
+
+/**
  * Download a bid document — returns a Blob for mobile file handling.
- * Consumer is responsible for writing / sharing the blob.
+ * Consumer is responsible for writing/sharing via expo-file-system + expo-sharing.
  */
 export const useDownloadBidDocument = () => {
   return useMutation({
@@ -335,3 +429,5 @@ export const useDownloadBidDocument = () => {
     onError: (error) => toastError(error, 'Failed to download document'),
   });
 };
+
+export { BidFileEntry };

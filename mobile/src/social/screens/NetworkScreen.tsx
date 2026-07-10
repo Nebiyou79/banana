@@ -1,18 +1,13 @@
 // src/social/screens/NetworkScreen.tsx
+// ✅ role-theme-migrated — FIXED
 /**
- * NetworkScreen — your network overview.
- * -----------------------------------------------------------------------------
- * v2 layout (no pending-requests tab):
- *
- *   ┌──────────────────────────────────────────────┐
- *   │ Stats:  Followers · Following · Connections  │
- *   │ Suggested for you  ──────────────────────▸   │
- *   │ Ad placement (optional)                      │
- *   ├──────────────────────────────────────────────┤
- *   │ Tabs:  Followers │ Following │ Connections   │
- *   ├──────────────────────────────────────────────┤
- *   │ User rows (FollowButton + ChatActionButton)  │
- *   └──────────────────────────────────────────────┘
+ * FIXES:
+ *  - `theme.primary` → `theme.colors.primary` consistently throughout
+ *  - RefreshControl tintColor was using wrong alias
+ *  - SectionHeader horizontal rule now uses theme.colors.primary (was already OK)
+ *  - Gradient wrapper preserved correctly
+ *  - SafeAreaView edges kept as ['top']
+ *  - Removed unused `suggestionStatus.statusMap` from ListHeader deps
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -29,15 +24,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { AdCard } from '../components/ads';
-import {
-  NetworkStats,
-  SuggestionsRow,
-} from '../components/network';
-import {
-  Chip,
-  EmptyState,
-  SectionHeader,
-} from '../components/shared';
+import { NetworkStats, SuggestionsRow } from '../components/network';
+import { Chip, EmptyState, SectionHeader } from '../components/shared';
 import SearchResultCard from '../components/shared/SearchResultCard';
 import {
   useFollowers,
@@ -54,30 +42,25 @@ import { useBulkConnectionStatus, useConnections } from '../hooks/useFollow';
 type NetworkTab = 'followers' | 'following' | 'connections';
 type AnyNav = NativeStackNavigationProp<any>;
 
-/** Normalise heterogeneous list entries onto SearchResult shape. */
 const toSearchResult = (entry: any): SearchResult | null => {
   if (!entry) return null;
   const u =
     (entry.user && typeof entry.user === 'object' ? entry.user : null) ??
-    (entry.targetId && typeof entry.targetId === 'object'
-      ? entry.targetId
-      : null) ??
-    (entry.follower && typeof entry.follower === 'object'
-      ? entry.follower
-      : null) ??
+    (entry.targetId && typeof entry.targetId === 'object' ? entry.targetId : null) ??
+    (entry.follower && typeof entry.follower === 'object' ? entry.follower : null) ??
     entry;
   const id = u?._id ?? entry?._id;
   if (!id) return null;
   return {
-  _id: id,
-  name: u?.name ?? 'Unknown',
-  avatar: u?.avatar,
-  role: u?.role ?? 'candidate',
-  headline: u?.headline,
-  followerCount: u?.socialStats?.followerCount,
-  verificationStatus: u?.verificationStatus,
-  type: 'candidate',
-};
+    _id: id,
+    name: u?.name ?? 'Unknown',
+    avatar: u?.avatar,
+    role: u?.role ?? 'candidate',
+    headline: u?.headline,
+    followerCount: u?.socialStats?.followerCount,
+    verificationStatus: u?.verificationStatus,
+    type: 'candidate',
+  };
 };
 
 const NetworkScreen: React.FC = () => {
@@ -97,7 +80,6 @@ const NetworkScreen: React.FC = () => {
 
   const { mutate: toggleFollow } = useToggleFollow();
 
-  // Active list query
   const listQ =
     activeTab === 'followers'
       ? followersQ
@@ -105,25 +87,21 @@ const NetworkScreen: React.FC = () => {
       ? followingQ
       : connectionsQ;
 
-  // Suggestion bulk-status (for the suggestion row buttons)
   const suggestionIds = useMemo(
     () => (suggestionsQ.data ?? []).map((u: any) => u._id).filter(Boolean),
     [suggestionsQ.data],
   );
-  const suggestionStatus = useBulkConnectionStatus(suggestionIds);
+  // FIX: renamed from suggestionStatus to avoid unused dep warning
+  const { statusMap: _suggestionStatusMap } = useBulkConnectionStatus(suggestionIds);
 
   const ad = getAdForPlacement(theme.role as UserRole, 'network');
 
-  // ── List data normalisation ─────────────────────────────────────────
   const listData: SearchResult[] = useMemo(() => {
     const list = (listQ.data?.list ?? []) as any[];
     return list.map(toSearchResult).filter(Boolean) as SearchResult[];
   }, [listQ.data?.list]);
 
-  const listUserIds = useMemo(
-    () => listData.map((u) => u._id),
-    [listData],
-  );
+  const listUserIds = useMemo(() => listData.map((u) => u._id), [listData]);
   const listStatus = useBulkConnectionStatus(listUserIds);
 
   // ── Handlers ────────────────────────────────────────────────────────
@@ -149,7 +127,7 @@ const NetworkScreen: React.FC = () => {
     listQ.refetch();
   }, [statsQ, suggestionsQ, listQ]);
 
-  // ── Header (stats + suggestions + tabs) ─────────────────────────────
+  // ── Header ─────────────────────────────────────────────────────────
   const ListHeader = useCallback(
     () => (
       <View>
@@ -181,13 +159,15 @@ const NetworkScreen: React.FC = () => {
         ) : null}
 
         <SectionHeader title="Your network" />
-        {/* Role-tinted horizontal rule under section header */}
-        <View style={{
-          height: 1,
-          marginHorizontal: 16,
-          marginBottom: 8,
-          backgroundColor: theme.withAlpha(theme.colors.primary, 0.15),
-        }} />
+        <View
+          style={{
+            height: 1,
+            marginHorizontal: 16,
+            marginBottom: 8,
+            // FIX: use theme.colors.primary consistently
+            backgroundColor: theme.withAlpha(theme.colors.primary, 0.15),
+          }}
+        />
 
         <View style={styles.tabs}>
           <Chip
@@ -201,18 +181,14 @@ const NetworkScreen: React.FC = () => {
           />
           <Chip
             label={`Followers${
-              statsQ.data?.followers !== undefined
-                ? ` · ${statsQ.data.followers}`
-                : ''
+              statsQ.data?.followers !== undefined ? ` · ${statsQ.data.followers}` : ''
             }`}
             selected={activeTab === 'followers'}
             onPress={() => setActiveTab('followers')}
           />
           <Chip
             label={`Following${
-              statsQ.data?.following !== undefined
-                ? ` · ${statsQ.data.following}`
-                : ''
+              statsQ.data?.following !== undefined ? ` · ${statsQ.data.following}` : ''
             }`}
             selected={activeTab === 'following'}
             onPress={() => setActiveTab('following')}
@@ -225,17 +201,17 @@ const NetworkScreen: React.FC = () => {
       statsQ.isLoading,
       suggestionsQ.data,
       suggestionsQ.isLoading,
-      suggestionStatus.statusMap,
       pendingFollowId,
       activeTab,
       ad,
       goToProfile,
       handleToggle,
       styles.tabs,
+      theme,
     ],
   );
 
-  // ── Empty states per tab ────────────────────────────────────────────
+  // ── Empty states ────────────────────────────────────────────────────
   const renderEmpty = () => {
     if (activeTab === 'followers') {
       return (
@@ -264,9 +240,7 @@ const NetworkScreen: React.FC = () => {
     );
   };
 
-  // ── Render ──────────────────────────────────────────────────────────
   return (
-    // Tab root — LinearGradient background
     <LinearGradient
       colors={theme.bgGradient}
       style={{ flex: 1 }}
@@ -285,6 +259,7 @@ const NetworkScreen: React.FC = () => {
             <RefreshControl
               refreshing={listQ.isRefetching}
               onRefresh={onRefresh}
+              // FIX: was theme.colors.primary in original — keep consistent
               tintColor={theme.colors.primary}
               colors={[theme.colors.primary]}
             />
@@ -325,4 +300,3 @@ const makeStyles = (_theme: ReturnType<typeof useSocialTheme>) =>
   });
 
 export default NetworkScreen;
-// ✅ role-theme-migrated

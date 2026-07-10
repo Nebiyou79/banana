@@ -1,26 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// src/services/proposalService.ts
+// mobile/src/services/proposalService.ts
 // Banana Mobile App — Module 6B: Proposals
-//
 // API client for all proposal-related endpoints.
 // Mirrors frontend/src/services/proposalService.ts pattern exactly.
-// All paths are relative to the axios baseURL (/api/v1 is already in httpClient).
-//
-// Routes:
-//   POST   /proposals/create
-//   GET    /proposals/my-proposals
-//   GET    /proposals/:id
-//   PUT    /proposals/:id
-//   POST   /proposals/:id/submit
-//   POST   /proposals/:id/withdraw
-//   GET    /proposals/tenders/:tenderId/proposals
-//   GET    /proposals/tenders/:tenderId/stats
-//   GET    /proposals/tenders/:tenderId/my-proposal
-//   PATCH  /proposals/:id/status
-//   PATCH  /proposals/:id/shortlist
-//   POST   /proposals/:id/attachments
-//   DELETE /proposals/:id/attachments/:attachId
-// ─────────────────────────────────────────────────────────────────────────────
 
 import { AxiosError } from 'axios';
 import httpClient from '../lib/httpClient';
@@ -98,6 +79,7 @@ const createDraft = async (data: CreateProposalData): Promise<Proposal> => {
  * PUT /proposals/:id
  *
  * Called automatically on every step navigation to auto-save progress.
+ * FIX: Returns the updated Proposal object like the web version.
  */
 const updateDraft = async (
   proposalId: string,
@@ -306,6 +288,15 @@ const removeAttachment = async (
   );
 };
 
+/**
+ * C3. Get authenticated download URL for an attachment.
+ * Used client-side to trigger download with token.
+ */
+const getDownloadUrl = (proposalId: string, attachmentId: string): string => {
+  const base = process.env.NEXT_PUBLIC_API_URL ?? '';
+  return `${base}/api/v1/proposals/${proposalId}/attachments/${attachmentId}/download`;
+};
+
 // ─── Named export object (mirrors proposalService pattern from web) ───────────
 
 const proposalService = {
@@ -325,6 +316,7 @@ const proposalService = {
   // Attachments
   uploadAttachment,
   removeAttachment,
+  getDownloadUrl,
 };
 
 export default proposalService;

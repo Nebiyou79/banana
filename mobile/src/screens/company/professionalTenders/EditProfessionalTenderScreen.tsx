@@ -1,4 +1,7 @@
 // src/screens/company/professionalTenders/EditProfessionalTenderScreen.tsx
+//
+// FIX: Same bottom-edge double-padding fix as CreateProfessionalTenderScreen.
+// See that file for the full explanation.
 
 import React, { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -39,9 +42,10 @@ export const EditProfessionalTenderScreen: React.FC = () => {
 
   if (!tenderId) {
     return (
+      // Error state — no tabs here, safe to include bottom edge
       <SafeAreaView
         style={[styles.root, { backgroundColor: colors.bg }]}
-        edges={['bottom']}
+        edges={['top', 'bottom']}
       >
         <View style={styles.errorWrap}>
           <Text style={[styles.errorText, { color: colors.text }]}>
@@ -53,9 +57,10 @@ export const EditProfessionalTenderScreen: React.FC = () => {
   }
 
   return (
+    // FIX: edges={['top']} only — navigator owns the bottom offset.
     <SafeAreaView
       style={[styles.root, { backgroundColor: colors.bg }]}
-      edges={['bottom']}
+      edges={['top']}
     >
       <View style={styles.formWrap}>
         <ProfessionalTenderForm

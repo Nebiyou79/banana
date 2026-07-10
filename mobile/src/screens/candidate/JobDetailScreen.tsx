@@ -14,6 +14,7 @@ import { useJob, useSaveJob, useUnsaveJob, useSavedJobs } from '../../hooks/useJ
 import { ListSkeleton } from '../../components/skeletons';
 import { JobHeader } from '../../components/jobs/JobHeader';
 import { Job } from '../../services/jobService';
+import CompanyAvatar from '../../components/shared/CompanyAvatar';
 
 interface Props {
   navigation: any;
@@ -354,12 +355,14 @@ const CompanyTab = ({ job, c }: { job: Job; c: any }) => {
     <View>
       <Card c={c} title={isOrg ? 'Organization Info' : 'Company Info'} icon="business-outline">
         <View style={[ts.companyHeader, { borderBottomColor: c.border }]}>
-          <View style={[ts.companyLogoBox, { backgroundColor: isOrg ? c.organization : c.company }]}>
-            <Text style={ts.companyLogoText}>
-              {(owner.name ?? '?').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
-            </Text>
-          </View>
-          <View style={{ flex: 1 }}>
+          {/* FIXED: Use CompanyAvatar instead of manual initials box */}
+          <CompanyAvatar 
+            job={job} 
+            size={52} 
+            borderRadius={14}
+            showDebug={true}
+          />
+          <View style={{ flex: 1, marginLeft: 12 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Text style={[ts.companyName, { color: c.text }]}>{owner.name}</Text>
               {owner.verified && <Ionicons name="checkmark-circle" size={16} color={c.success} />}
@@ -381,7 +384,7 @@ const CompanyTab = ({ job, c }: { job: Job; c: any }) => {
         <View style={[ts.detailRow, { borderBottomColor: c.border }]}>
           <Ionicons name="calendar-outline" size={16} color={c.textMuted} />
           <Text style={[ts.detailValue, { color: c.text }]}>
-            Posted {job.createdAt ? new Date(job.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}
+            {`Posted ${job.createdAt ? new Date(job.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}`}
           </Text>
         </View>
       </Card>

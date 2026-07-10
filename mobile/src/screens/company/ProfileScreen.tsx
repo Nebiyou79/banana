@@ -1,50 +1,210 @@
 /**
- * src/screens/company/ProfileScreen.tsx
+ * src/screens/company/ProfileScreen.tsx  — REDESIGNED
  *
- * Displays all Company model fields + Profile avatar/cover
- * Data sources:
- *   - useCompanyProfile() → companyService.getMyCompany() → Company model
- *   - useProfile() → profileService.getProfile() → Profile model (avatar, cover)
+ * A professional, modern company profile screen.
+ * Design direction: Refined enterprise dashboard — clean cards,
+ * strong typographic hierarchy, purposeful use of accent colour,
+ * and generous but controlled white space.
  */
 import React, { useCallback, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity,
-  RefreshControl, Linking, Image, StyleSheet, StatusBar,
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+  Linking,
+  Image,
+  StyleSheet,
+  StatusBar,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { useProfile, useCompanyProfile } from '../../hooks/useProfile';
 import { ProfileImageUploader } from '../../components/shared/ProfileImageUploader';
-import { SkeletonCard, CompletionBar, BadgePill } from '../../components/shared/ProfileAtoms';
+import { SkeletonCard } from '../../components/shared/ProfileAtoms';
 import { useTheme } from '../../hooks/useTheme';
 import { FONT_SIZE } from '../../theme/tokens';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-const formatSize = (s?: string) => ({ '1-10': '1–10', '11-50': '11–50', '51-200': '51–200', '201-500': '201–500', '501-1000': '501–1000', '1000+': '1000+' } as any)[s ?? ''] ?? s ?? '';
-const formatType = (t?: string) => ({ startup: 'Startup', sme: 'SME', enterprise: 'Enterprise', agency: 'Agency', other: 'Other' } as any)[t ?? ''] ?? t ?? '';
+const { width: SCREEN_W } = Dimensions.get('window');
+const COVER_H = 200;
+const AVATAR_SIZE = 80;
+const AVATAR_OFFSET = AVATAR_SIZE / 2 + 8;
 
-// ── Section Card ──────────────────────────────────────────────────────────────
-const SectionCard: React.FC<{ title: string; icon?: keyof typeof Ionicons.glyphMap; children: React.ReactNode; colors: any; accent: string }> = ({ title, icon, children, colors, accent }) => (
-  <View style={[sc.card, { backgroundColor: colors.bgCard }]}>
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-      {icon && <View style={[sc.iconWrap, { backgroundColor: `${accent}12` }]}><Ionicons name={icon} size={14} color={accent} /></View>}
-      <Text style={[sc.title, { color: colors.textMuted }]}>{title.toUpperCase()}</Text>
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const formatSize = (s?: string) =>
+  ({ '1-10': '1–10', '11-50': '11–50', '51-200': '51–200', '201-500': '201–500', '501-1000': '501–1000', '1000+': '1000+' } as any)[s ?? ''] ?? s ?? '';
+const formatType = (t?: string) =>
+  ({ startup: 'Startup', sme: 'SME', enterprise: 'Enterprise', agency: 'Agency', other: 'Other' } as any)[t ?? ''] ?? t ?? '';
+
+// ── Divider ───────────────────────────────────────────────────────────────────
+const Divider: React.FC<{ color: string }> = ({ color }) => (
+  <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: color, marginVertical: 12 }} />
+);
+
+// ── InfoRow ───────────────────────────────────────────────────────────────────
+const InfoRow: React.FC<{
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  onPress?: () => void;
+  accent: string;
+  colors: any;
+  isLink?: boolean;
+}> = ({ icon, label, value, onPress, accent, colors, isLink }) => (
+  <TouchableOpacity
+    onPress={onPress}
+    disabled={!onPress}
+    activeOpacity={onPress ? 0.65 : 1}
+    style={ir.row}
+  >
+    <View style={[ir.iconBox, { backgroundColor: `${accent}14` }]}>
+      <Ionicons name={icon} size={16} color={accent} />
+    </View>
+    <View style={ir.content}>
+      <Text style={[ir.label, { color: colors.textMuted }]}>{label}</Text>
+      <Text
+        style={[ir.value, { color: isLink ? accent : colors.text }]}
+        numberOfLines={2}
+      >
+        {value}
+      </Text>
+    </View>
+    {onPress && <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />}
+  </TouchableOpacity>
+);
+
+const ir = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  iconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  content: { flex: 1 },
+  label: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1 },
+  value: { fontSize: 14, fontWeight: '500', lineHeight: 19 },
+});
+
+// ── Section ───────────────────────────────────────────────────────────────────
+const Section: React.FC<{
+  title: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  accent: string;
+  colors: any;
+  children: React.ReactNode;
+  action?: { label: string; onPress: () => void };
+}> = ({ title, icon, accent, colors, children, action }) => (
+  <View style={[sec.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+    <View style={sec.header}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        {icon && (
+          <View style={[sec.iconWrap, { backgroundColor: `${accent}14` }]}>
+            <Ionicons name={icon} size={13} color={accent} />
+          </View>
+        )}
+        <Text style={[sec.title, { color: colors.textMuted }]}>{title.toUpperCase()}</Text>
+      </View>
+      {action && (
+        <TouchableOpacity onPress={action.onPress} hitSlop={8}>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: accent }}>{action.label}</Text>
+        </TouchableOpacity>
+      )}
     </View>
     {children}
   </View>
 );
-const sc = StyleSheet.create({
-  card: { borderRadius: 16, padding: 16, marginBottom: 12 },
-  iconWrap: { width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 10, fontWeight: '700', letterSpacing: 0.9 },
+
+const sec = StyleSheet.create({
+  card: { borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: StyleSheet.hairlineWidth },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  iconWrap: { width: 24, height: 24, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 10, fontWeight: '800', letterSpacing: 0.9 },
 });
 
-// ── Empty State ───────────────────────────────────────────────────────────────
-const Empty: React.FC<{ msg: string; colors: any }> = ({ msg, colors }) => (
-  <Text style={{ fontSize: 13, fontStyle: 'italic', textAlign: 'center', paddingVertical: 4, color: colors.textMuted }}>{msg}</Text>
+// ── Stat pill ─────────────────────────────────────────────────────────────────
+const StatPill: React.FC<{
+  icon: keyof typeof Ionicons.glyphMap;
+  value: number;
+  label: string;
+  accent: string;
+  colors: any;
+  onPress?: () => void;
+}> = ({ icon, value, label, accent, colors, onPress }) => (
+  <TouchableOpacity
+    onPress={onPress}
+    disabled={!onPress}
+    style={[sp.pill, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+    activeOpacity={0.7}
+  >
+    <View style={[sp.iconRing, { backgroundColor: `${accent}12` }]}>
+      <Ionicons name={icon} size={18} color={accent} />
+    </View>
+    <Text style={[sp.val, { color: colors.text }]}>{value}</Text>
+    <Text style={[sp.label, { color: colors.textMuted }]}>{label}</Text>
+  </TouchableOpacity>
 );
+
+const sp = StyleSheet.create({
+  pill: { flex: 1, alignItems: 'center', gap: 5, paddingVertical: 14, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth },
+  iconRing: { width: 36, height: 36, borderRadius: 99, alignItems: 'center', justifyContent: 'center' },
+  val: { fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
+  label: { fontSize: 11, fontWeight: '600' },
+});
+
+// ── Tag chip ──────────────────────────────────────────────────────────────────
+const TagChip: React.FC<{ label: string; bg: string; fg: string }> = ({ label, bg, fg }) => (
+  <View style={[tag.chip, { backgroundColor: bg }]}>
+    <Text style={[tag.text, { color: fg }]}>{label}</Text>
+  </View>
+);
+
+const tag = StyleSheet.create({
+  chip: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 99 },
+  text: { fontSize: 12, fontWeight: '600' },
+});
+
+// ── Completion bar ────────────────────────────────────────────────────────────
+const CompletionSection: React.FC<{
+  pct: number; accent: string; colors: any; onPress: () => void;
+}> = ({ pct, accent, colors, onPress }) => {
+  const remaining = 100 - pct;
+  const barColor = pct < 40 ? colors.danger : pct < 75 ? colors.warning : colors.success;
+  return (
+    <View style={[comp.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+      <View style={comp.top}>
+        <View>
+          <Text style={[comp.title, { color: colors.text }]}>Profile Completion</Text>
+          <Text style={[comp.sub, { color: colors.textMuted }]}>
+            {remaining > 0 ? `${remaining}% remaining` : 'All done!'}
+          </Text>
+        </View>
+        <Text style={[comp.pct, { color: barColor }]}>{pct}%</Text>
+      </View>
+      <View style={[comp.track, { backgroundColor: `${barColor}20` }]}>
+        <View style={[comp.fill, { width: `${pct}%`, backgroundColor: barColor }]} />
+      </View>
+      {pct < 100 && (
+        <TouchableOpacity onPress={onPress} style={[comp.btn, { borderColor: accent }]}>
+          <Ionicons name="pencil-outline" size={14} color={accent} />
+          <Text style={[comp.btnText, { color: accent }]}>Complete your profile</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+};
+
+const comp = StyleSheet.create({
+  card: { borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: StyleSheet.hairlineWidth, gap: 12 },
+  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  title: { fontSize: 14, fontWeight: '700' },
+  sub: { fontSize: 12, marginTop: 2 },
+  pct: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  track: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  fill: { height: '100%', borderRadius: 3 },
+  btn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, alignSelf: 'flex-start' },
+  btnText: { fontSize: 13, fontWeight: '700' },
+});
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 export const CompanyProfileScreen: React.FC = () => {
@@ -57,14 +217,22 @@ export const CompanyProfileScreen: React.FC = () => {
   const { data: company, isLoading: cLoading, refetch: rC } = useCompanyProfile();
   const isLoading = pLoading || cLoading;
 
-  const onRefresh = useCallback(async () => { setRefreshing(true); await Promise.all([rP(), rC()]); setRefreshing(false); }, [rP, rC]);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([rP(), rC()]);
+    setRefreshing(false);
+  }, [rP, rC]);
 
   if (isLoading) {
     return (
-      <SafeAreaView style={[st.safe, { backgroundColor: colors.bg }]} edges={['top']}>
+      <View style={[S.root, { backgroundColor: colors.bg }]}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}><SkeletonCard /><SkeletonCard /><SkeletonCard /></ScrollView>
-      </SafeAreaView>
+        <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </ScrollView>
+      </View>
     );
   }
 
@@ -74,163 +242,464 @@ export const CompanyProfileScreen: React.FC = () => {
   const completion = profile?.profileCompletion?.percentage ?? 0;
   const isVerified = profile?.verificationStatus === 'verified' || company?.verified;
   const sl = (company as any)?.socialLinks ?? {};
-  const settings = (company as any)?.settings ?? {};
   const stats = (company as any)?.socialStats ?? {};
 
+  // Derived social links array
+  const socialLinks = [
+    sl.linkedin && { key: 'linkedin', label: 'LinkedIn', icon: 'logo-linkedin' as const, url: sl.linkedin, color: '#0A66C2' },
+    sl.twitter && { key: 'twitter', label: 'X / Twitter', icon: 'logo-twitter' as const, url: sl.twitter, color: '#000000' },
+    sl.facebook && { key: 'facebook', label: 'Facebook', icon: 'logo-facebook' as const, url: sl.facebook, color: '#1877F2' },
+    sl.instagram && { key: 'instagram', label: 'Instagram', icon: 'logo-instagram' as const, url: sl.instagram, color: '#E4405F' },
+  ].filter(Boolean) as Array<{ key: string; label: string; icon: keyof typeof Ionicons.glyphMap; url: string; color: string }>;
+
+  const hasContact = !!(company?.email || company?.phone || company?.website || company?.address);
+
   return (
-    <SafeAreaView style={[st.safe, { backgroundColor: colors.bg }]} edges={['top']}>
+    <View style={[S.root, { backgroundColor: colors.bg }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-      {/* Header */}
-      <View style={[st.header, { backgroundColor: colors.bgCard, borderBottomColor: colors.border }]}>
-        <View style={{ width: 40 }} />
-        <Text style={[st.headerTitle, { color: colors.text }]} numberOfLines={1}>Profile</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('EditProfile')} style={[st.editChip, { backgroundColor: `${accent}18`, borderColor: `${accent}35` }]} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="pencil-outline" size={13} color={accent} />
-          <Text style={[st.editChipText, { color: accent }]}>Edit</Text>
-        </TouchableOpacity>
-      </View>
 
-      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={accent} />} contentContainerStyle={{ paddingBottom: insets.bottom + 32 }} showsVerticalScrollIndicator={false}>
-        {/* Cover */}
-        <View style={[st.coverWrap, { backgroundColor: colors.bgCard }]}>
-          {coverUrl ? <Image source={{ uri: coverUrl }} style={st.coverImg} resizeMode="cover" /> : <View style={[st.coverPlaceholder, { backgroundColor: `${accent}10` }]}><Ionicons name="business-outline" size={40} color={`${accent}30`} /></View>}
-        </View>
-
-        {/* Identity Card */}
-        <View style={[st.identity, { backgroundColor: colors.bgCard }]}>
-          <View style={{ alignItems: 'center', marginTop: -50, paddingBottom: 8 }}>
-            <ProfileImageUploader currentAvatarUrl={avatarUrl} currentCoverUrl={coverUrl} accentColor={accent} type="avatar" avatarShape="square" verifiedFull={isVerified} />
-          </View>
-          <View style={{ paddingHorizontal: 16, gap: 6 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <Text style={[st.name, { color: colors.text }]} numberOfLines={2}>{company?.name ?? 'Your Company'}</Text>
-              {isVerified && <View style={[st.verifiedBadge, { backgroundColor: colors.success }]}><Ionicons name="checkmark-circle" size={14} color="#fff" /><Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>Verified</Text></View>}
-            </View>
-            {company?.headline ? <Text style={[st.headline, { color: accent }]}>{company.headline}</Text> : null}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 4 }}>
-              {company?.industry && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Ionicons name="briefcase-outline" size={12} color={colors.textMuted} /><Text style={{ fontSize: 12, color: colors.textMuted }}>{company.industry}</Text></View>}
-              {company?.address && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Ionicons name="location-outline" size={12} color={colors.textMuted} /><Text style={{ fontSize: 12, color: colors.textMuted }} numberOfLines={1}>{company.address}</Text></View>}
-            </View>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-              {company?.companySize && <BadgePill label={`${formatSize(company.companySize)} employees`} color={`${accent}15`} textColor={accent} />}
-              {company?.companyType && <BadgePill label={formatType(company.companyType)} color={`${accent}15`} textColor={accent} />}
-              {company?.foundedYear && <BadgePill label={`Est. ${company.foundedYear}`} color={`${colors.warning}15`} textColor={colors.warning} />}
-              {company?.tin && <BadgePill label={`TIN: ${company.tin}`} color={colors.bgCard} textColor={colors.textMuted} />}
-            </View>
-          </View>
-          {/* Stats */}
-          <View style={[st.statsRow, { borderTopColor: colors.border }]}>
-            {[['Jobs', stats?.postCount ?? 0, 'briefcase-outline'], ['Products', stats?.followerCount ?? 0, 'cube-outline'], ['Followers', stats?.followerCount ?? 0, 'people-outline']].map(([label, val, icon], i, arr) => (
-              <React.Fragment key={label as string}>
-                <View style={{ flex: 1, alignItems: 'center', gap: 4 }}>
-                  <Ionicons name={icon as any} size={16} color={accent} />
-                  <Text style={[st.statVal, { color: colors.text }]}>{val as number}</Text>
-                  <Text style={[st.statLabel, { color: colors.textMuted }]}>{label as string}</Text>
+      <ScrollView
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={accent} />}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 48 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Hero: Cover + Avatar ────────────────────────────────────── */}
+        <View style={S.heroWrap}>
+          {/* Cover */}
+          <View style={[S.cover, { backgroundColor: `${accent}18` }]}>
+            {coverUrl ? (
+              <Image source={{ uri: coverUrl }} style={S.coverImg} resizeMode="cover" />
+            ) : (
+              <View style={S.coverGradientWrap}>
+                <LinearGradient
+                  colors={isDark
+                    ? [`${accent}30`, `${accent}08`]
+                    : [`${accent}20`, `${accent}05`]}
+                  style={StyleSheet.absoluteFill}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                />
+                <View style={S.coverDecor}>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Ionicons key={i} name="ellipse" size={4} color={`${accent}30`} />
+                  ))}
                 </View>
-                {i < arr.length - 1 && <View style={{ width: 1, height: 36, backgroundColor: colors.border, alignSelf: 'center' }} />}
-              </React.Fragment>
-            ))}
+                <Ionicons name="business-outline" size={48} color={`${accent}25`} />
+              </View>
+            )}
+
+            {/* Edit button — top-right overlay on cover */}
+            <TouchableOpacity
+              onPress={() => navigation.navigate('EditProfile')}
+              style={[S.editOverlay, { backgroundColor: accent }]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.82}
+            >
+              <Ionicons name="pencil" size={13} color="#fff" />
+              <Text style={S.editBtnText}>Edit</Text>
+            </TouchableOpacity>
+
+            {/* Gradient overlay at bottom */}
+            <LinearGradient
+              colors={['transparent', colors.bgCard + 'FF']}
+              style={S.coverFade}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              pointerEvents="none"
+            />
+          </View>
+
+          {/* Identity card — white card beneath cover */}
+          <View style={[S.identityCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            {/* Avatar sits at top edge of card, overlapping cover */}
+            <View style={S.avatarRow}>
+              <View style={[S.avatarRing, { borderColor: colors.bgCard, backgroundColor: colors.bgCard }]}>
+                <ProfileImageUploader
+                  currentAvatarUrl={avatarUrl}
+                  currentCoverUrl={coverUrl}
+                  accentColor={accent}
+                  type="avatar"
+                  avatarShape="square"
+                  verifiedFull={isVerified}
+                />
+              </View>
+
+              {isVerified && (
+                <View style={[S.verifiedBadge, { backgroundColor: `${colors.success}18`, borderColor: `${colors.success}40` }]}>
+                  <Ionicons name="shield-checkmark" size={12} color={colors.success} />
+                  <Text style={[S.verifiedText, { color: colors.success }]}>Verified</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Name + headline */}
+            <Text style={[S.companyName, { color: colors.text }]} numberOfLines={2}>
+              {company?.name ?? 'Your Company'}
+            </Text>
+            {company?.headline ? (
+              <Text style={[S.headline, { color: accent }]} numberOfLines={2}>
+                {company.headline}
+              </Text>
+            ) : null}
+
+            {/* Industry + location row */}
+            {(company?.industry || company?.address) ? (
+              <View style={S.metaRow}>
+                {company?.industry && (
+                  <View style={S.metaItem}>
+                    <Ionicons name="briefcase-outline" size={12} color={colors.textMuted} />
+                    <Text style={[S.metaText, { color: colors.textMuted }]}>{company.industry}</Text>
+                  </View>
+                )}
+                {company?.address && (
+                  <View style={S.metaItem}>
+                    <Ionicons name="location-outline" size={12} color={colors.textMuted} />
+                    <Text style={[S.metaText, { color: colors.textMuted }]} numberOfLines={1}>{company.address}</Text>
+                  </View>
+                )}
+              </View>
+            ) : null}
+
+            {/* Badges row */}
+            {(company?.companySize || company?.companyType || company?.foundedYear || company?.tin) ? (
+              <View style={S.badgeRow}>
+                {company?.companySize && (
+                  <TagChip
+                    label={`${formatSize(company.companySize)} employees`}
+                    bg={`${accent}12`}
+                    fg={accent}
+                  />
+                )}
+                {company?.companyType && (
+                  <TagChip
+                    label={formatType(company.companyType)}
+                    bg={`${accent}12`}
+                    fg={accent}
+                  />
+                )}
+                {company?.foundedYear && (
+                  <TagChip
+                    label={`Est. ${company.foundedYear}`}
+                    bg={`${colors.warning}14`}
+                    fg={colors.warning}
+                  />
+                )}
+                {company?.tin && (
+                  <TagChip
+                    label={`TIN: ${company.tin}`}
+                    bg={`${colors.textMuted}12`}
+                    fg={colors.textMuted}
+                  />
+                )}
+              </View>
+            ) : null}
           </View>
         </View>
 
-        {/* Completion */}
-        {completion < 100 && (
-          <View style={[st.completionCard, { backgroundColor: colors.bgCard, marginHorizontal: 16, marginTop: 12 }]}>
-            <CompletionBar percentage={completion} label="Profile Completion" accentColor={accent} />
-            <TouchableOpacity onPress={() => navigation.navigate('EditProfile')} style={[st.completeBtn, { backgroundColor: accent }]}>
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Complete profile</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* ── Stats row ───────────────────────────────────────────────── */}
+        <View style={S.statsRow}>
+          <StatPill
+            icon="briefcase-outline"
+            value={stats?.postCount ?? 0}
+            label="Jobs"
+            accent={accent}
+            colors={colors}
+          />
+          <StatPill
+            icon="cube-outline"
+            value={stats?.productCount ?? 0}
+            label="Products"
+            accent={accent}
+            colors={colors}
+          />
+          <StatPill
+            icon="people-outline"
+            value={stats?.followerCount ?? 0}
+            label="Followers"
+            accent={accent}
+            colors={colors}
+          />
+        </View>
 
-        <View style={{ padding: 16, paddingTop: 12 }}>
+        {/* ── Body sections ────────────────────────────────────────────── */}
+        <View style={S.body}>
+          {/* Completion */}
+          {completion < 100 && (
+            <CompletionSection
+              pct={completion}
+              accent={accent}
+              colors={colors}
+              onPress={() => navigation.navigate('EditProfile')}
+            />
+          )}
+
           {/* About */}
-          {company?.description ? <SectionCard title="About" icon="information-circle-outline" colors={colors} accent={accent}><Text style={[st.body, { color: colors.textMuted }]}>{company.description}</Text></SectionCard> : null}
-          {/* Mission */}
-          {company?.mission ? <SectionCard title="Mission" icon="flag-outline" colors={colors} accent={accent}><Text style={[st.quote, { color: colors.textMuted }]}>"{company.mission}"</Text></SectionCard> : null}
-          {/* Culture */}
-          {company?.culture ? <SectionCard title="Culture" icon="heart-outline" colors={colors} accent={accent}><Text style={[st.body, { color: colors.textMuted }]}>{company.culture}</Text></SectionCard> : null}
-
-          {/* Contact */}
-          <SectionCard title="Contact" icon="call-outline" colors={colors} accent={accent}>
-            {company?.email ? <TouchableOpacity onPress={() => Linking.openURL(`mailto:${company.email}`)} style={st.contactRow}><View style={[st.contactIcon, { backgroundColor: `${accent}15` }]}><Ionicons name="mail-outline" size={16} color={accent} /></View><Text style={[st.contactText, { color: accent }]} numberOfLines={1}>{company.email}</Text><Ionicons name="open-outline" size={14} color={colors.textMuted} /></TouchableOpacity> : null}
-            {company?.phone ? <TouchableOpacity onPress={() => Linking.openURL(`tel:${company.phone}`)} style={st.contactRow}><View style={[st.contactIcon, { backgroundColor: `${colors.success}15` }]}><Ionicons name="call-outline" size={16} color={colors.success} /></View><Text style={[st.contactText, { color: colors.text }]}>{company.phone}</Text></TouchableOpacity> : null}
-            {company?.website ? <TouchableOpacity onPress={() => Linking.openURL(company.website!)} style={st.contactRow}><View style={[st.contactIcon, { backgroundColor: `${colors.warning}15` }]}><Ionicons name="globe-outline" size={16} color={colors.warning} /></View><Text style={[st.contactText, { color: accent }]} numberOfLines={1}>{company.website}</Text><Ionicons name="open-outline" size={14} color={colors.textMuted} /></TouchableOpacity> : null}
-            {company?.address ? <View style={st.contactRow}><View style={[st.contactIcon, { backgroundColor: `${colors.danger}15` }]}><Ionicons name="location-outline" size={16} color={colors.danger} /></View><Text style={[st.contactText, { color: colors.text }]} numberOfLines={2}>{company.address}</Text></View> : null}
-            {!company?.email && !company?.phone && !company?.website && !company?.address && <Empty msg="No contact info yet — tap Edit to add some." colors={colors} />}
-          </SectionCard>
-
-          {/* Social Links */}
-          {(sl.linkedin || sl.twitter || sl.facebook || sl.instagram) ? (
-            <SectionCard title="Social Links" icon="share-social-outline" colors={colors} accent={accent}>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
-                {sl.linkedin && <TouchableOpacity onPress={() => Linking.openURL(sl.linkedin)} style={{ alignItems: 'center', gap: 6 }}><View style={[st.socialIcon, { backgroundColor: '#0077B5' }]}><Ionicons name="logo-linkedin" size={18} color="#fff" /></View><Text style={{ fontSize: 11, fontWeight: '500', color: colors.textMuted }}>LinkedIn</Text></TouchableOpacity>}
-                {sl.twitter && <TouchableOpacity onPress={() => Linking.openURL(sl.twitter)} style={{ alignItems: 'center', gap: 6 }}><View style={[st.socialIcon, { backgroundColor: '#000' }]}><Ionicons name="logo-twitter" size={18} color="#fff" /></View><Text style={{ fontSize: 11, fontWeight: '500', color: colors.textMuted }}>Twitter</Text></TouchableOpacity>}
-                {sl.facebook && <TouchableOpacity onPress={() => Linking.openURL(sl.facebook)} style={{ alignItems: 'center', gap: 6 }}><View style={[st.socialIcon, { backgroundColor: '#1877F2' }]}><Ionicons name="logo-facebook" size={18} color="#fff" /></View><Text style={{ fontSize: 11, fontWeight: '500', color: colors.textMuted }}>Facebook</Text></TouchableOpacity>}
-                {sl.instagram && <TouchableOpacity onPress={() => Linking.openURL(sl.instagram)} style={{ alignItems: 'center', gap: 6 }}><View style={[st.socialIcon, { backgroundColor: '#E4405F' }]}><Ionicons name="logo-instagram" size={18} color="#fff" /></View><Text style={{ fontSize: 11, fontWeight: '500', color: colors.textMuted }}>Instagram</Text></TouchableOpacity>}
-              </View>
-            </SectionCard>
+          {company?.description ? (
+            <Section title="About" icon="information-circle-outline" accent={accent} colors={colors}>
+              <Text style={[S.bodyText, { color: colors.textMuted }]} numberOfLines={8}>
+                {company.description}
+              </Text>
+            </Section>
           ) : null}
 
-          {/* Values */}
-          {(company as any)?.values?.length > 0 && (
-            <SectionCard title="Values" icon="star-outline" colors={colors} accent={accent}>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {(company as any).values.map((v: string, i: number) => <View key={i} style={[st.tag, { backgroundColor: `${colors.success}15`, borderColor: `${colors.success}30` }]}><Text style={[st.tagText, { color: colors.success }]}>{v}</Text></View>)}
+          {/* Mission */}
+          {company?.mission ? (
+            <Section title="Mission" icon="flag-outline" accent={accent} colors={colors}>
+              <View style={[S.quoteWrap, { borderLeftColor: accent }]}>
+                <Text style={[S.quoteText, { color: colors.textMuted }]}>{company.mission}</Text>
               </View>
-            </SectionCard>
+            </Section>
+          ) : null}
+
+          {/* Contact */}
+          <Section title="Contact" icon="call-outline" accent={accent} colors={colors}>
+            {hasContact ? (
+              <>
+                {company?.email && (
+                  <InfoRow
+                    icon="mail-outline"
+                    label="Email"
+                    value={company.email}
+                    onPress={() => Linking.openURL(`mailto:${company.email}`)}
+                    accent={accent}
+                    colors={colors}
+                    isLink
+                  />
+                )}
+                {company?.phone && (
+                  <>
+                    {company?.email && <Divider color={colors.border} />}
+                    <InfoRow
+                      icon="call-outline"
+                      label="Phone"
+                      value={company.phone}
+                      onPress={() => Linking.openURL(`tel:${company.phone}`)}
+                      accent={colors.success}
+                      colors={colors}
+                    />
+                  </>
+                )}
+                {company?.website && (
+                  <>
+                    {(company?.email || company?.phone) && <Divider color={colors.border} />}
+                    <InfoRow
+                      icon="globe-outline"
+                      label="Website"
+                      value={company.website}
+                      onPress={() => Linking.openURL(company.website!)}
+                      accent={colors.warning}
+                      colors={colors}
+                      isLink
+                    />
+                  </>
+                )}
+                {company?.address && (
+                  <>
+                    {(company?.email || company?.phone || company?.website) && <Divider color={colors.border} />}
+                    <InfoRow
+                      icon="location-outline"
+                      label="Address"
+                      value={company.address}
+                      accent={colors.danger}
+                      colors={colors}
+                    />
+                  </>
+                )}
+              </>
+            ) : (
+              <TouchableOpacity
+                onPress={() => navigation.navigate('EditProfile')}
+                style={[S.emptyContact, { borderColor: `${accent}30`, backgroundColor: `${accent}06` }]}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="add-circle-outline" size={20} color={accent} />
+                <Text style={[S.emptyContactText, { color: accent }]}>Add contact information</Text>
+              </TouchableOpacity>
+            )}
+          </Section>
+
+          {/* Social Links */}
+          {socialLinks.length > 0 && (
+            <Section title="Social" icon="share-social-outline" accent={accent} colors={colors}>
+              <View style={S.socialRow}>
+                {socialLinks.map(link => (
+                  <TouchableOpacity
+                    key={link.key}
+                    onPress={() => Linking.openURL(link.url)}
+                    style={[S.socialBtn, { backgroundColor: `${link.color}14`, borderColor: `${link.color}30` }]}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[S.socialIconBox, { backgroundColor: link.color }]}>
+                      <Ionicons name={link.icon} size={16} color="#fff" />
+                    </View>
+                    <Text style={[S.socialLabel, { color: colors.text }]}>{link.label}</Text>
+                    <Ionicons name="open-outline" size={12} color={colors.textMuted} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </Section>
           )}
 
           {/* Specialties */}
           {(company as any)?.specialties?.length > 0 && (
-            <SectionCard title="Specialties" icon="ribbon-outline" colors={colors} accent={accent}>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {(company as any).specialties.map((sp: string, i: number) => <View key={i} style={[st.tag, { backgroundColor: `${accent}15`, borderColor: `${accent}30` }]}><Text style={[st.tagText, { color: accent }]}>{sp}</Text></View>)}
+            <Section title="Specialties" icon="ribbon-outline" accent={accent} colors={colors}>
+              <View style={S.tagWrap}>
+                {(company as any).specialties.map((sp: string, i: number) => (
+                  <TagChip key={i} label={sp} bg={`${accent}12`} fg={accent} />
+                ))}
               </View>
-            </SectionCard>
+            </Section>
+          )}
+
+          {/* Values */}
+          {(company as any)?.values?.length > 0 && (
+            <Section title="Values" icon="star-outline" accent={accent} colors={colors}>
+              <View style={S.tagWrap}>
+                {(company as any).values.map((v: string, i: number) => (
+                  <TagChip key={i} label={v} bg={`${colors.success}12`} fg={colors.success} />
+                ))}
+              </View>
+            </Section>
           )}
 
           {/* Tags */}
           {(company as any)?.tags?.length > 0 && (
-            <SectionCard title="Tags" icon="pricetag-outline" colors={colors} accent={accent}>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {(company as any).tags.map((t: string, i: number) => <View key={i} style={[st.tag, { backgroundColor: `${colors.warning}15`, borderColor: `${colors.warning}30` }]}><Text style={[st.tagText, { color: colors.warning }]}>{t}</Text></View>)}
+            <Section title="Tags" icon="pricetag-outline" accent={accent} colors={colors}>
+              <View style={S.tagWrap}>
+                {(company as any).tags.map((t: string, i: number) => (
+                  <TagChip key={i} label={t} bg={`${colors.warning}12`} fg={colors.warning} />
+                ))}
               </View>
-            </SectionCard>
+            </Section>
           )}
 
-          <View style={{ height: 40 }} />
+          {/* Culture */}
+          {company?.culture ? (
+            <Section title="Culture" icon="heart-outline" accent={accent} colors={colors}>
+              <Text style={[S.bodyText, { color: colors.textMuted }]}>{company.culture}</Text>
+            </Section>
+          ) : null}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-const st = StyleSheet.create({
-  safe: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: StyleSheet.hairlineWidth, minHeight: 56 },
-  headerTitle: { fontSize: FONT_SIZE.md ?? 16, fontWeight: '700', letterSpacing: -0.2 },
-  editChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1 },
-  editChipText: { fontSize: 13, fontWeight: '700' },
-  coverWrap: { marginHorizontal: 16, marginTop: 16, borderTopLeftRadius: 16, borderTopRightRadius: 16, overflow: 'hidden', height: 160 },
+// ── Master Styles ─────────────────────────────────────────────────────────────
+const S = StyleSheet.create({
+  root: { flex: 1 },
+
+  // Edit overlay on cover (top-right)
+  editOverlay: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    zIndex: 10,
+  },
+  editBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+
+  // Hero
+  heroWrap: { marginHorizontal: 0 },
+  cover: { height: COVER_H, overflow: 'hidden' },
   coverImg: { width: '100%', height: '100%' },
-  coverPlaceholder: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
-  identity: { marginHorizontal: 16, borderBottomLeftRadius: 16, borderBottomRightRadius: 16, overflow: 'hidden', paddingBottom: 0 },
-  name: { fontSize: FONT_SIZE.xl ?? 20, fontWeight: '800', letterSpacing: -0.4, flex: 1, lineHeight: 26 },
-  verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
-  headline: { fontSize: FONT_SIZE.base ?? 14, fontWeight: '600', marginTop: 2 },
-  statsRow: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 14, paddingHorizontal: 16, marginTop: 12 },
-  statVal: { fontSize: FONT_SIZE.md ?? 16, fontWeight: '800', letterSpacing: -0.3, marginTop: 2 },
-  statLabel: { fontSize: 11, fontWeight: '500', textAlign: 'center' },
-  completionCard: { borderRadius: 14, padding: 16, gap: 12 },
-  completeBtn: { alignItems: 'center', paddingVertical: 10, borderRadius: 10 },
-  body: { fontSize: 14, lineHeight: 22 },
-  quote: { fontSize: 14, lineHeight: 22, fontStyle: 'italic' },
-  contactRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7 },
-  contactIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  contactText: { flex: 1, fontSize: 14, fontWeight: '500' },
-  socialIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  tag: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, borderWidth: 1 },
-  tagText: { fontSize: 13, fontWeight: '600' },
+  coverGradientWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  coverDecor: { position: 'absolute', top: 20, right: 20, flexDirection: 'row', gap: 6 },
+  coverFade: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 60 },
+
+  // Identity card
+  identityCard: {
+    marginHorizontal: 16,
+    marginTop: -24,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 16,
+    paddingTop: AVATAR_OFFSET + 4,
+    marginBottom: 12,
+    // Shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  avatarRow: {
+    position: 'absolute',
+    top: -AVATAR_OFFSET,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+  },
+  avatarRing: {
+    borderRadius: 18,
+    borderWidth: 3,
+    overflow: 'hidden',
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 99,
+    borderWidth: 1,
+    marginBottom: 4,
+  },
+  verifiedText: { fontSize: 11, fontWeight: '700' },
+
+  companyName: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5, lineHeight: 28, marginBottom: 2 },
+  headline: { fontSize: 14, fontWeight: '600', marginBottom: 8, lineHeight: 19 },
+
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 10 },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText: { fontSize: 12, fontWeight: '500' },
+
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+
+  // Stats
+  statsRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 12 },
+
+  // Body
+  body: { paddingHorizontal: 16 },
+  bodyText: { fontSize: 14, lineHeight: 22 },
+
+  quoteWrap: { borderLeftWidth: 3, paddingLeft: 12, paddingVertical: 4 },
+  quoteText: { fontSize: 14, lineHeight: 22, fontStyle: 'italic' },
+
+  // Contact empty
+  emptyContact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+  },
+  emptyContactText: { fontSize: 13, fontWeight: '600' },
+
+  // Social
+  socialRow: { gap: 8 },
+  socialBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  socialIconBox: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  socialLabel: { flex: 1, fontSize: 13, fontWeight: '600' },
+
+  // Tags
+  tagWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
 });

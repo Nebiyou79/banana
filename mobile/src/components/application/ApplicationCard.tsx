@@ -1,10 +1,15 @@
 /**
  * src/components/application/ApplicationCard.tsx
  * ─────────────────────────────────────────────────────────────────────────────
- * Candidate-facing application card with company/organization avatar.
+ * Candidate-facing application card.
  *
- * FIXED: Company/org logo now renders using the shared Avatar component
- * with proper entity resolution that matches what the backend returns.
+ * AVATAR FIX — removed inline resolveOwnerEntity() function and replaced
+ * Avatar + manual entity building with CompanyAvatar which automatically
+ * prefers application.job.ownerPreview (Profile-backed Cloudinary URL).
+ *
+ * DEBUG TOOLS — Added showAvatarDebug prop to trace resolution issues.
+ * All other logic and styling preserved exactly.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
@@ -19,7 +24,11 @@ import {
   STATUS_LABELS,
   STATUS_COLORS,
 } from '../../services/applicationService';
-import { Avatar } from '../shared/Avatar';
+// AVATAR FIX: use CompanyAvatar instead of Avatar + inline resolveOwnerEntity
+import CompanyAvatar from '../shared/CompanyAvatar';
+
+// ─── Debug flag ──────────────────────────────────────────────────────────────
+const DEBUG_AVATAR = __DEV__ && false; // Set to true to debug avatar resolution
 
 // ─── Pipeline stages ──────────────────────────────────────────────────────────
 
@@ -37,44 +46,8 @@ interface ApplicationCardProps {
   application: Application;
   onPress: () => void;
   onWithdraw?: () => void;
+  showAvatarDebug?: boolean; // DEBUG: overlays check/cross on avatar
 }
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/**
- * Resolve the owner entity for the Avatar component.
- * Tries all possible field names the backend might use.
- */
-const resolveOwnerEntity = (application: Application) => {
-  const isOrg = application.job?.jobType === 'organization';
-  const owner = isOrg
-    ? (application.job?.organization as any)
-    : (application.job?.company as any);
-
-  if (!owner) {
-    return {
-      type: (isOrg ? 'organization' : 'company') as 'organization' | 'company',
-      name: isOrg ? 'Organization' : 'Company',
-    };
-  }
-
-  // Try all possible logo/image URL fields
-  const logoUrl = 
-    owner.logoUrl || 
-    owner.logo || 
-    owner.avatarUrl || 
-    owner.avatar || 
-    owner.imageUrl || 
-    owner.profileImage;
-
-  return {
-    type: (isOrg ? 'organization' : 'company') as 'organization' | 'company',
-    name: owner.name || (isOrg ? 'Organization' : 'Company'),
-    logoUrl: typeof logoUrl === 'string' && logoUrl.startsWith('http') ? logoUrl : undefined,
-    logo: typeof logoUrl === 'string' && logoUrl.startsWith('http') ? logoUrl : undefined,
-    verified: owner.verified || false,
-  };
-};
 
 // ─── Pipe dot — extracted stable sub-component ────────────────────────────────
 
@@ -104,35 +77,30 @@ const PipeDot = React.memo<PipeDotProps>(
 PipeDot.displayName = 'ApplicationCard.PipeDot';
 
 const pd = StyleSheet.create({
-  dot: {
-    width:          18,
-    height:         18,
-    borderRadius:   9,
-    borderWidth:    2,
-    alignItems:     'center',
-    justifyContent: 'center',
-  },
+  dot:   { width: 18, height: 18, borderRadius: 9, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   inner: { width: 6, height: 6, borderRadius: 3 },
 });
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const ApplicationCard = memo<ApplicationCardProps>(
-  ({ application, onPress, onWithdraw }) => {
+  ({ application, onPress, onWithdraw, showAvatarDebug = DEBUG_AVATAR }) => {
     const { colors: c, isDark, shadows } = useTheme();
 
     const appStatus   = application.status as ApplicationStatus;
     const sc          = STATUS_COLORS[appStatus] ?? STATUS_COLORS['applied'];
     const statusLabel = STATUS_LABELS[appStatus] ?? application.status;
 
-    // ✅ FIXED: Build owner entity properly for Avatar component
-    const ownerEntity = useMemo(() => resolveOwnerEntity(application), [application]);
-    
+    // Owner name: prefer ownerPreview then fall through to populated doc
     const isOrg = application.job?.jobType === 'organization';
     const owner = isOrg
       ? (application.job?.organization as any)
       : (application.job?.company as any);
-    const ownerName = owner?.name || (isOrg ? 'Organization' : 'Company');
+    const ownerName = application.job?.ownerPreview?.name
+      ?? owner?.name
+      ?? (isOrg ? 'Organization' : 'Company');
+
+    const ownerVerified = application.job?.ownerPreview?.verified ?? owner?.verified ?? false;
 
     const pipelineIdx = STATUS_PIPELINE.indexOf(appStatus);
     const dateLabel   = formatShortDate(application.createdAt);
@@ -154,37 +122,17 @@ export const ApplicationCard = memo<ApplicationCardProps>(
           stripe:  { width: 4, backgroundColor: sc.dot },
           content: { flex: 1, padding: 13 },
 
-          topRow: {
-            flexDirection: 'row',
-            alignItems:    'flex-start',
-            gap:           10,
-            marginBottom:  10,
-          },
+          topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
           headerInfo: { flex: 1 },
-          jobTitle: {
-            fontSize:     14,
-            fontWeight:   '700',
-            lineHeight:   19,
-            marginBottom: 3,
-            color:        c.text,
-          },
-          ownerRow: { flexDirection: 'row', alignItems: 'center' },
-          ownerName: {
-            fontSize:   12,
-            fontWeight: '600',
-            color:      c.primary,
-          },
+          jobTitle: { fontSize: 14, fontWeight: '700', lineHeight: 19, marginBottom: 3, color: c.text },
+          ownerRow:  { flexDirection: 'row', alignItems: 'center' },
+          ownerName: { fontSize: 12, fontWeight: '600', color: c.primary },
 
           statusPill: {
-            flexDirection:     'row',
-            alignItems:        'center',
-            gap:               4,
-            paddingHorizontal: 7,
-            paddingVertical:   3,
-            borderRadius:      RADIUS.full,
-            borderWidth:       1,
-            backgroundColor:   sc.bg,
-            borderColor:       sc.border,
+            flexDirection: 'row', alignItems: 'center', gap: 4,
+            paddingHorizontal: 7, paddingVertical: 3,
+            borderRadius: RADIUS.full, borderWidth: 1,
+            backgroundColor: sc.bg, borderColor: sc.border,
           },
           statusDot:  { width: 6, height: 6, borderRadius: 3, backgroundColor: sc.dot },
           statusText: { fontSize: 10, fontWeight: '700', color: sc.text },
@@ -194,43 +142,26 @@ export const ApplicationCard = memo<ApplicationCardProps>(
           pipeLineDone:   { backgroundColor: c.success },
           pipeLineUndone: { backgroundColor: withAlpha(c.text, isDark ? 0.08 : 0.07) },
 
-          skillRow: {
-            flexDirection: 'row',
-            flexWrap:      'wrap',
-            gap:           5,
-            marginBottom:  9,
-          },
-          skillChip: {
-            paddingHorizontal: SPACING.sm,
-            paddingVertical:   3,
-            borderRadius:      RADIUS.full,
-            borderWidth:       1,
-            backgroundColor:   withAlpha(c.primary, 0.12),
-            borderColor:       withAlpha(c.primary, 0.28),
+          skillRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginBottom: 9 },
+          skillChip:  {
+            paddingHorizontal: SPACING.sm, paddingVertical: 3,
+            borderRadius: RADIUS.full, borderWidth: 1,
+            backgroundColor: withAlpha(c.primary, 0.12),
+            borderColor:     withAlpha(c.primary, 0.28),
           },
           skillText:  { fontSize: 10, fontWeight: '600', color: c.primary },
           moreSkills: { fontSize: 10, alignSelf: 'center', color: c.textMuted },
 
-          footer: {
-            flexDirection:  'row',
-            alignItems:     'center',
-            justifyContent: 'space-between',
-          },
+          footer:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
           dateRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
           date:    { fontSize: 11, color: c.textMuted },
 
           withdrawBtn: {
-            paddingHorizontal: 10,
-            paddingVertical:   4,
-            borderRadius:      RADIUS.sm,
-            borderWidth:       1,
-            borderColor:       withAlpha(c.danger, 0.30),
+            paddingHorizontal: 10, paddingVertical: 4,
+            borderRadius: RADIUS.sm, borderWidth: 1,
+            borderColor: withAlpha(c.danger, 0.30),
           },
-          withdrawText: {
-            color:      c.danger,
-            fontSize:   11,
-            fontWeight: '600',
-          },
+          withdrawText: { color: c.danger, fontSize: 11, fontWeight: '600' },
         }),
       [c, isDark, sc, shadows],
     );
@@ -248,12 +179,13 @@ export const ApplicationCard = memo<ApplicationCardProps>(
         <View style={s.content}>
           {/* Top row */}
           <View style={s.topRow}>
-            {/* ✅ FIXED: Use shared Avatar component with proper entity */}
-            <Avatar 
-              entity={ownerEntity} 
-              size={48} 
-              borderRadius={RADIUS.md} 
-              verified={owner?.verified}
+            {/* AVATAR FIX: CompanyAvatar resolves from application.job.ownerPreview */}
+            <CompanyAvatar
+              application={application}
+              size={48}
+              borderRadius={RADIUS.md}
+              verified={ownerVerified}
+              showDebug={showAvatarDebug}
             />
 
             <View style={s.headerInfo}>
@@ -261,25 +193,16 @@ export const ApplicationCard = memo<ApplicationCardProps>(
                 {application.job?.title ?? 'Position'}
               </Text>
               <View style={s.ownerRow}>
-                <Text style={s.ownerName} numberOfLines={1}>
-                  {ownerName}
-                </Text>
-                {owner?.verified && (
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={13}
-                    color={c.primary}
-                    style={{ marginLeft: 3 }}
-                  />
+                <Text style={s.ownerName} numberOfLines={1}>{ownerName}</Text>
+                {ownerVerified && (
+                  <Ionicons name="checkmark-circle" size={13} color={c.primary} style={{ marginLeft: 3 }} />
                 )}
               </View>
             </View>
 
             <View style={s.statusPill}>
               <View style={s.statusDot} />
-              <Text style={s.statusText} numberOfLines={1}>
-                {statusLabel}
-              </Text>
+              <Text style={s.statusText} numberOfLines={1}>{statusLabel}</Text>
             </View>
           </View>
 
@@ -299,12 +222,7 @@ export const ApplicationCard = memo<ApplicationCardProps>(
                       inactiveBorder={withAlpha(c.text, isDark ? 0.12 : 0.10)}
                     />
                     {i < STATUS_PIPELINE.length - 1 && (
-                      <View
-                        style={[
-                          s.pipeLine,
-                          done ? s.pipeLineDone : s.pipeLineUndone,
-                        ]}
-                      />
+                      <View style={[s.pipeLine, done ? s.pipeLineDone : s.pipeLineUndone]} />
                     )}
                   </React.Fragment>
                 );
@@ -321,9 +239,7 @@ export const ApplicationCard = memo<ApplicationCardProps>(
                 </View>
               ))}
               {application.skills.length > 3 && (
-                <Text style={s.moreSkills}>
-                  +{application.skills.length - 3}
-                </Text>
+                <Text style={s.moreSkills}>+{application.skills.length - 3}</Text>
               )}
             </View>
           )}

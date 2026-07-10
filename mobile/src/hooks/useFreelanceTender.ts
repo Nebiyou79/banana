@@ -1,5 +1,5 @@
 // mobile/src/hooks/useFreelanceTender.ts
-// Mirrors frontend/src/hooks/useFreelanceTender.ts structure.
+// Mirrors frontend/src/hooks/useFreelanceTender.ts structure with all missing hooks added.
 
 import {
   useInfiniteQuery,
@@ -16,6 +16,8 @@ import type {
   FreelanceTenderListItem,
   ApplicationStatus,
   SubmitApplicationData,
+  FreelanceTenderStats,
+  TenderAttachment,
 } from '../types/freelanceTender';
 
 // ─── Query key factory ────────────────────────────────────────────────────────
@@ -36,14 +38,12 @@ export const freelanceTenderKeys = {
     [...freelanceTenderKeys.all, 'saved', params ?? {}] as const,
   applications: (tenderId: string) =>
     [...freelanceTenderKeys.all, 'applications', tenderId] as const,
+  stats: (id: string) => [...freelanceTenderKeys.detail(id), 'stats'] as const,
 };
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
 /**
- * BUG 1 FIX — was only defined as a local stub inside FreelanceTenderFormShell.
- * Now properly exported from the hook file.
- *
  * Fetch procurement categories (used by the create/edit form step 1).
  * staleTime: 1 hour — categories rarely change.
  * placeholderData: {} so Step1Basics never receives undefined.
@@ -139,6 +139,17 @@ export const useFreelanceTenderApplications = (
       freelanceTenderService.getFreelanceTenderApplications(tenderId, params),
     enabled: !!tenderId,
     staleTime: 2 * 60 * 1000,
+  });
+
+/**
+ * Tender statistics for analytics.
+ */
+export const useFreelanceTenderStats = (id: string) =>
+  useQuery({
+    queryKey: freelanceTenderKeys.stats(id),
+    queryFn: () => freelanceTenderService.getFreelanceTenderStats(id),
+    enabled: !!id,
+    staleTime: 5 * 60 * 1000,
   });
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
@@ -264,6 +275,7 @@ export const useCloseFreelanceTender = () => {
 
 /**
  * Single toggle hook — optimistically flips isSaved on detail + invalidates saved list.
+ * FIX: Now invalidates lists and saved lists like the web version.
  */
 export const useSaveUnsaveTender = () => {
   const qc = useQueryClient();
@@ -272,6 +284,9 @@ export const useSaveUnsaveTender = () => {
       freelanceTenderService.toggleSaveFreelanceTender(id),
     onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: freelanceTenderKeys.detail(id) });
+      await qc.cancelQueries({ queryKey: freelanceTenderKeys.lists() });
+      await qc.cancelQueries({ queryKey: freelanceTenderKeys.saved() });
+
       const prev = qc.getQueryData<FreelanceTender>(
         freelanceTenderKeys.detail(id)
       );
@@ -281,6 +296,24 @@ export const useSaveUnsaveTender = () => {
           isSaved: !prev.isSaved,
         });
       }
+
+      // Update list cache optimistically
+      qc.setQueriesData(
+        { queryKey: freelanceTenderKeys.lists() },
+        (old: any) => {
+          if (!old?.pages) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page: any) => ({
+              ...page,
+              tenders: page.tenders.map((tender: any) =>
+                tender._id === id ? { ...tender, isSaved: !tender.isSaved } : tender
+              ),
+            })),
+          };
+        }
+      );
+
       return { prev };
     },
     onError: (_err, id, ctx) => {
@@ -291,6 +324,7 @@ export const useSaveUnsaveTender = () => {
     },
     onSettled: (_data, _err, id) => {
       qc.invalidateQueries({ queryKey: freelanceTenderKeys.saved() });
+      qc.invalidateQueries({ queryKey: freelanceTenderKeys.lists() });
       qc.invalidateQueries({ queryKey: freelanceTenderKeys.detail(id) });
     },
   });
@@ -349,6 +383,67 @@ export const useSubmitApplication = () => {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data
           ?.message ?? 'Failed to submit application';
+      Toast.show({ type: 'error', text1: msg });
+    },
+  });
+};
+
+/**
+ * NEW: Download attachment with authenticated API route
+ */
+export const useDownloadFreelanceAttachment = () => {
+  return useMutation({
+    mutationFn: ({ tenderId, attachmentId }: { tenderId: string; attachmentId: string }) =>
+      freelanceTenderService.downloadAttachment(tenderId, attachmentId),
+    onError: (error: unknown) => {
+      const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to download file';
+      Toast.show({ type: 'error', text1: msg });
+    },
+  });
+};
+
+/**
+ * NEW: Delete attachment from tender
+ */
+export const useDeleteFreelanceAttachment = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, attachmentId }: { id: string; attachmentId: string }) =>
+      freelanceTenderService.deleteAttachment(id, attachmentId),
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: freelanceTenderKeys.detail(id) });
+      Toast.show({ type: 'success', text1: 'Attachment deleted' });
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to delete attachment';
+      Toast.show({ type: 'error', text1: msg });
+    },
+  });
+};
+
+/**
+ * NEW: Upload attachments to tender
+ */
+export const useUploadFreelanceAttachments = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ 
+      id, 
+      files, 
+      documentType, 
+      description 
+    }: { 
+      id: string; 
+      files: Array<{ uri: string; name: string; mimeType: string }>; 
+      documentType?: string; 
+      description?: string; 
+    }) => freelanceTenderService.uploadAttachments(id, files, documentType, description),
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: freelanceTenderKeys.detail(id) });
+      Toast.show({ type: 'success', text1: 'Attachments uploaded' });
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to upload attachments';
       Toast.show({ type: 'error', text1: msg });
     },
   });

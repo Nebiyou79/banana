@@ -1,15 +1,4 @@
 // src/social/components/shared/FollowButton.tsx
-/**
- * FollowButton — 5-state follow / unfollow / follow-back button
- *
- * Theme migration:
- * - `colors.bgAlt`      → `colors.cardAlt`
- * - `colors.primaryDeep` → `colors.primaryDark`
- * - `type.btnSm`        → `type.bodySm`
- * - `type.btn`          → `type.bodyMd`
- * - `'#FFFFFF'`         → `colors.white`  (on primary / follow-back fill)
- * All other tokens (colors.border, colors.text, colors.primary, etc.) ✅
- */
 import React, { useRef } from 'react';
 import {
   ActivityIndicator,
@@ -58,7 +47,8 @@ const usePressScale = (to = 0.94) => {
 const FollowButton: React.FC<FollowButtonProps> = ({
   status, onPress, loading, size = 'md', showConnectedDot,
 }) => {
-  const { colors, spacing, radius, type } = useSocialTheme();
+  const theme = useSocialTheme();
+  const { colors, spacing, radius, type, dark } = theme;
   const { scale, onPressIn, onPressOut } = usePressScale();
   const sm = size === 'sm';
 
@@ -68,19 +58,28 @@ const FollowButton: React.FC<FollowButtonProps> = ({
   const isFollowBack = status === 'follow_back';
   const isBlocked    = status === 'blocked';
 
+  // Color logic based on dark/light mode and status
   let bg: string, border: string, fg: string;
 
   if (isBlocked) {
-    // colors.bgAlt → colors.cardAlt
-    bg = colors.cardAlt; border = colors.border; fg = colors.textMuted;
+    bg = colors.cardAlt;
+    border = colors.border;
+    fg = colors.textMuted;
   } else if (isFollowBack) {
-    // colors.primaryDeep → colors.primaryDark; '#FFFFFF' → colors.white
-    bg = colors.primaryDark; border = colors.primaryDark; fg = colors.white;
+    // Follow Back: primary dark (vibrant)
+    bg = colors.primaryDark || colors.primary;
+    border = colors.primary;
+    fg = colors.white;
   } else if (isFollowing) {
-    bg = 'transparent'; border = colors.border; fg = colors.text;
+    // Following: transparent with border (subtle)
+    bg = 'transparent';
+    border = colors.border;
+    fg = colors.text;
   } else {
-    // '#FFFFFF' → colors.white
-    bg = colors.primary; border = colors.primary; fg = colors.white;
+    // Follow: solid primary
+    bg = colors.primary;
+    border = colors.primary;
+    fg = colors.white;
   }
 
   return (
@@ -93,7 +92,10 @@ const FollowButton: React.FC<FollowButtonProps> = ({
         activeOpacity={0.85}
         accessibilityRole="button"
         accessibilityLabel={LABELS[status]}
-        accessibilityState={{ disabled: loading || isBlocked, selected: isFollowing }}
+        accessibilityState={{ 
+          disabled: loading || isBlocked, 
+          selected: isFollowing 
+        }}
         style={[
           styles.btn,
           {
@@ -127,8 +129,10 @@ const FollowButton: React.FC<FollowButtonProps> = ({
                 style={{ marginRight: 4 }}
               />
             )}
-            {/* type.btnSm → type.bodySm; type.btn → type.bodyMd */}
-            <Text style={[sm ? type.bodySm : type.bodyMd, { color: fg }]}>
+            <Text style={[
+              sm ? type.bodySm : type.bodyMd, 
+              { color: fg }
+            ]}>
               {LABELS[status]}
             </Text>
           </View>
@@ -144,4 +148,3 @@ const styles = StyleSheet.create({
 });
 
 export default FollowButton;
-// ✅ theme-migrated

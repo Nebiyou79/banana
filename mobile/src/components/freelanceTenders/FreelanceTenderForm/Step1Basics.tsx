@@ -1,7 +1,10 @@
 // mobile/src/components/freelanceTenders/FreelanceTenderForm/Step1Basics.tsx
+// FIXES: F-02, F-06
+// UPDATED: useTheme() instead of useThemeStore(), all colors from theme
 
-import React, { memo } from 'react';
+import React, { useState } from 'react';
 import {
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,7 +12,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useThemeStore } from '../../../store/themeStore';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Calendar } from 'lucide-react-native';
+import { useTheme } from '../../../hooks/useTheme';
+import { MIN_TOUCH_TARGET } from '../../../theme/tokens';
 import type { FreelanceTenderFormData } from '../../../types/freelanceTender';
 
 export interface Step1BasicsProps {
@@ -19,7 +25,8 @@ export interface Step1BasicsProps {
   categories: Record<string, string[]>;
 }
 
-// Flat list of all subcategories prefixed by their parent for display
+// ─── Category options ─────────────────────────────────────────────────────────
+
 function buildCategoryOptions(cats: Record<string, string[]>): Array<{ label: string; value: string }> {
   const opts: Array<{ label: string; value: string }> = [];
   Object.entries(cats).forEach(([parent, subs]) => {
@@ -30,28 +37,132 @@ function buildCategoryOptions(cats: Record<string, string[]>): Array<{ label: st
   return opts;
 }
 
-// Minimum deadline: 1 day from now
-function minDeadlineISO(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 16);
+// ─── Inline DatePickerField ───────────────────────────────────────────────────
+
+interface DatePickerFieldProps {
+  value?: string;
+  onChange: (iso: string) => void;
+  placeholder?: string;
+  mode?: 'date' | 'datetime';
+  minimumDate?: Date;
+  error?: boolean;
 }
 
-const Step1Basics: React.FC<Step1BasicsProps> = memo(({ data, onChange, errors, categories }) => {
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+const DatePickerField: React.FC<DatePickerFieldProps> = ({
+  value,
+  onChange,
+  placeholder,
+  mode = 'datetime',
+  minimumDate,
+  error,
+}) => {
+  const { colors: c } = useTheme();
+  const [open, setOpen] = useState(false);
+  const [pickerMode, setPickerMode] = useState<'date' | 'time'>('date');
+  const [tempDate, setTempDate] = useState<Date | null>(null);
+
+  const display = value
+    ? (() => {
+        const d = new Date(value);
+        if (isNaN(d.getTime())) return value;
+        return d.toLocaleString(undefined, {
+          year: 'numeric', month: 'short', day: '2-digit',
+          hour: '2-digit', minute: '2-digit',
+        });
+      })()
+    : '';
+
+  const openPicker = () => {
+    setPickerMode('date');
+    setTempDate(value ? new Date(value) : new Date());
+    setOpen(true);
+  };
+
+  const handleChange = (_: any, selected?: Date) => {
+    if (Platform.OS === 'android') {
+      setOpen(false);
+      if (!selected) return;
+      if (mode === 'datetime' && pickerMode === 'date') {
+        setTempDate(selected);
+        setPickerMode('time');
+        setTimeout(() => setOpen(true), 100);
+        return;
+      }
+      const final =
+        mode === 'datetime' && tempDate
+          ? new Date(
+              tempDate.getFullYear(),
+              tempDate.getMonth(),
+              tempDate.getDate(),
+              selected.getHours(),
+              selected.getMinutes(),
+            )
+          : selected;
+      onChange(final.toISOString());
+    } else {
+      if (selected) {
+        setTempDate(selected);
+        onChange(selected.toISOString());
+      }
+    }
+  };
+
+  return (
+    <View>
+      <TouchableOpacity
+        onPress={openPicker}
+        style={[
+          styles.dateField,
+          {
+            backgroundColor: c.inputBg,
+            borderColor: error ? c.danger : c.border,
+          },
+        ]}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={`Pick ${mode === 'datetime' ? 'date and time' : 'date'}`}
+      >
+        <Calendar size={16} color={c.textMuted} strokeWidth={2.2} />
+        <Text
+          style={{
+            flex: 1,
+            color: display ? c.text : c.textMuted,
+            fontSize: 15,
+          }}
+        >
+          {display || placeholder || 'Select date…'}
+        </Text>
+      </TouchableOpacity>
+      {open && (
+        <DateTimePicker
+          value={tempDate ?? new Date()}
+          mode={Platform.OS === 'ios' ? (mode === 'datetime' ? 'datetime' : 'date') : pickerMode}
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={handleChange}
+          minimumDate={minimumDate}
+        />
+      )}
+    </View>
+  );
+};
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
+const Step1Basics: React.FC<Step1BasicsProps> = ({ data, onChange, errors, categories }) => {
+  const { colors: c, radius, spacing, type } = useTheme();
 
   const inputStyle = [
     styles.input,
     {
-      backgroundColor: c.surface ?? c.card,
-      borderColor: c.border ?? c.textMuted + '44',
+      backgroundColor: c.inputBg,
+      borderColor: c.border,
       color: c.text,
+      borderRadius: radius.md,
     },
   ];
 
   const labelStyle = [styles.label, { color: c.text }];
-  const errorStyle = [styles.error, { color: c.error ?? '#EF4444' }];
+  const errorStyle = [styles.error, { color: c.danger }];
   const hintStyle = [styles.hint, { color: c.textMuted }];
 
   const categoryOptions = buildCategoryOptions(categories);
@@ -116,7 +227,7 @@ const Step1Basics: React.FC<Step1BasicsProps> = memo(({ data, onChange, errors, 
                 data.procurementCategory
               : 'Select category…'}
           </Text>
-          <Text style={{ color: c.textMuted }}>▾</Text>
+          <Text style={{ color: c.textMuted, fontSize: 12 }}>▾</Text>
         </TouchableOpacity>
         {errors.procurementCategory ? (
           <Text style={errorStyle}>{errors.procurementCategory}</Text>
@@ -126,7 +237,12 @@ const Step1Basics: React.FC<Step1BasicsProps> = memo(({ data, onChange, errors, 
           <ScrollView
             style={[
               styles.categoryList,
-              { backgroundColor: c.surface ?? c.card, borderColor: c.border ?? c.textMuted + '44' },
+              {
+                backgroundColor: c.surface,
+                borderColor: c.border,
+                height: Platform.OS === 'ios' ? 240 : undefined,
+                maxHeight: 240,
+              },
             ]}
             nestedScrollEnabled
           >
@@ -136,7 +252,7 @@ const Step1Basics: React.FC<Step1BasicsProps> = memo(({ data, onChange, errors, 
                 style={[
                   styles.categoryItem,
                   data.procurementCategory === opt.value && {
-                    backgroundColor: c.primary + '18',
+                    backgroundColor: c.primaryBg,
                   },
                 ]}
                 onPress={() => {
@@ -148,10 +264,8 @@ const Step1Basics: React.FC<Step1BasicsProps> = memo(({ data, onChange, errors, 
                   style={[
                     styles.categoryItemText,
                     {
-                      color:
-                        data.procurementCategory === opt.value ? c.primary : c.text,
-                      fontWeight:
-                        data.procurementCategory === opt.value ? '700' : '400',
+                      color: data.procurementCategory === opt.value ? c.primary : c.text,
+                      fontWeight: data.procurementCategory === opt.value ? '700' : '400',
                     },
                   ]}
                 >
@@ -168,19 +282,14 @@ const Step1Basics: React.FC<Step1BasicsProps> = memo(({ data, onChange, errors, 
         <Text style={labelStyle}>
           Application Deadline <Text style={errorStyle}>*</Text>
         </Text>
-        {/* React Native doesn't have a native datetime-local input.
-            We use a plain TextInput expecting ISO format; in production
-            integrate with @react-native-community/datetimepicker. */}
-        <TextInput
-          style={inputStyle}
-          value={data.deadline ? data.deadline.slice(0, 16) : ''}
-          onChangeText={(v) => onChange({ deadline: v })}
-          placeholder="YYYY-MM-DDTHH:MM"
-          placeholderTextColor={c.textMuted}
-          autoCapitalize="none"
-          returnKeyType="next"
+        <DatePickerField
+          value={data.deadline}
+          onChange={(iso) => onChange({ deadline: iso })}
+          placeholder="Select application deadline"
+          mode="datetime"
+          minimumDate={new Date(Date.now() + 86_400_000)}
+          error={!!errors.deadline}
         />
-        <Text style={hintStyle}>Format: YYYY-MM-DDTHH:MM (at least 1 day from now)</Text>
         {errors.deadline ? <Text style={errorStyle}>{errors.deadline}</Text> : null}
       </View>
 
@@ -201,9 +310,7 @@ const Step1Basics: React.FC<Step1BasicsProps> = memo(({ data, onChange, errors, 
       </View>
     </View>
   );
-});
-
-Step1Basics.displayName = 'Step1Basics';
+};
 
 const styles = StyleSheet.create({
   container: { gap: 4 },
@@ -211,11 +318,10 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: '600', marginBottom: 6 },
   input: {
     borderWidth: 1,
-    borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    minHeight: 50,
+    minHeight: MIN_TOUCH_TARGET + 6,
   },
   multiline: {
     minHeight: 90,
@@ -225,11 +331,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 50,
+    minHeight: MIN_TOUCH_TARGET + 6,
   },
   selectorText: { flex: 1, fontSize: 15 },
   categoryList: {
-    maxHeight: 240,
     borderWidth: 1,
     borderRadius: 10,
     marginTop: 4,
@@ -241,6 +346,16 @@ const styles = StyleSheet.create({
   categoryItemText: { fontSize: 14 },
   error: { fontSize: 12, marginTop: 4 },
   hint: { fontSize: 11, marginTop: 4 },
+  dateField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: MIN_TOUCH_TARGET + 6,
+    borderWidth: 1,
+    borderRadius: 10,
+  },
 });
 
 export default Step1Basics;

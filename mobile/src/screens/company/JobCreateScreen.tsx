@@ -1,12 +1,13 @@
 /**
  * src/screens/company/JobCreateScreen.tsx
+ * — Uses View (not SafeAreaView) — SafeArea handled by root navigator.
+ * — AppHeader for consistent back-button + title.
  */
 import React from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
 import { useCreateJob } from '../../hooks/useJobs';
 import { JobForm } from '../../components/jobs/JobForm';
-import { ScreenHeader } from '../../components/shared/ScreenHeader';
 import { CreateJobData } from '../../services/jobService';
 import { AppHeader } from '../../components/shared';
 
@@ -14,7 +15,7 @@ interface Props { navigation: any }
 
 export const JobCreateScreen: React.FC<Props> = ({ navigation }) => {
   const { colors } = useTheme();
-  const createMut = useCreateJob();
+  const createMut  = useCreateJob();
 
   const handleSubmit = async (data: CreateJobData, isDraft: boolean) => {
     const payload = { ...data, status: isDraft ? 'draft' as const : 'active' as const };
@@ -23,13 +24,12 @@ export const JobCreateScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
-      <AppHeader title="Post a Job" onBack={() => navigation.goBack()} />
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <JobForm
         onSubmit={handleSubmit}
         onCancel={() => navigation.goBack()}
         isLoading={createMut.isPending}
       />
-    </SafeAreaView>
+    </View>
   );
 };

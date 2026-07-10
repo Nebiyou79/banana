@@ -1,23 +1,5 @@
-// ─────────────────────────────────────────────────────────────────────────────
-//  src/components/professionalTenders/ProfessionalTenderForm/index.tsx
-// ─────────────────────────────────────────────────────────────────────────────
-//  The 5-step ProfessionalTenderForm shell (post-refactor).
-//
-//  Step map:
-//    1. Step1_BasicInfo           — identity + category picker + ref-num generator + invitees
-//    2. Step2_Procurement         — procurement.* + CPO subsection
-//    3. Step3_EligibilityEvaluation — eligibility + scope + evaluation
-//    4. Step4_DatesDocuments      — dates + preBidMeeting (P-14 root) + files
-//    5. Step5_Review              — summary
-//
-//  Owns:
-//   • RHF + zod resolver + FormProvider
-//   • Step state + per-step trigger() validation
-//   • Edit-mode pre-fill via useProfessionalTenderEditData + reset()
-//   • Edit-lock redirect when status !== 'draft'
-//   • Staged files (kept outside RHF) — passed into Step 4 (picker) and Step 5 (review)
-//   • Dual-action submit: Save Draft / Publish
-// ─────────────────────────────────────────────────────────────────────────────
+// src/components/professionalTenders/ProfessionalTenderForm/index.tsx
+// FULLY REFACTORED: Premium Mint-themed shell with useTheme(), proper insets, reusable components
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -32,8 +14,9 @@ import {
 import { FormProvider, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Check, ChevronLeft, ChevronRight, Save, Send } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useThemeStore } from '../../../store/themeStore';
+import { useTheme } from '../../../hooks/useTheme';
 import {
   useCreateProfessionalTender,
   useProfessionalTenderEditData,
@@ -49,14 +32,14 @@ import {
   type StepIndex,
 } from './formSchema';
 
-import Step1_BasicInfo            from './Step1_BasicInfo';
-import Step2_Procurement          from './Step2_Procurement';
+import Step1_BasicInfo from './Step1_BasicInfo';
+import Step2_Procurement from './Step2_Procurement';
 import Step3_EligibilityEvaluation from './Step3_EligibilityEvaluation';
 import Step4_DatesDocuments, { type StagedFile } from './Step4_DatesDocuments';
-import Step5_Review               from './Step5_Review';
+import Step5_Review from './Step5_Review';
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  PROPS
+// PROPS
 // ═════════════════════════════════════════════════════════════════════════════
 
 export interface ProfessionalTenderFormProps {
@@ -67,37 +50,36 @@ export interface ProfessionalTenderFormProps {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  STEPPER
+// PREMIUM STEP INDICATOR
 // ═════════════════════════════════════════════════════════════════════════════
 
-const Stepper: React.FC<{
+const StepIndicator: React.FC<{
   current: StepIndex;
   onJump: (idx: StepIndex) => void;
   highestVisited: StepIndex;
 }> = ({ current, onJump, highestVisited }) => {
-  const isDark = useThemeStore((s) => s.theme.isDark);
-  const palette = isDark
-    ? { active: '#60A5FA', done: '#34D399', idle: '#475569', bgActive: '#1E3A5F', bgDone: '#022C22', bgIdle: '#0F172A', text: '#F1F5F9', textMute: '#94A3B8' }
-    : { active: '#2563EB', done: '#16A34A', idle: '#94A3B8', bgActive: '#DBEAFE', bgDone: '#D1FAE5', bgIdle: '#F1F5F9', text: '#0F172A', textMute: '#64748B' };
+  const { colors, spacing, radius } = useTheme();
 
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      contentContainerStyle={stepperStyles.row}
+      contentContainerStyle={[
+        stepperStyles.row,
+        { paddingHorizontal: spacing.md },
+      ]}
     >
       {STEP_DEFINITIONS.map((def, i) => {
         const isActive = def.index === current;
         const isDone = def.index < current;
         const visitable = def.index <= highestVisited;
-        const dotBg = isDone ? palette.bgDone : isActive ? palette.bgActive : palette.bgIdle;
-        const dotFg = isDone ? palette.done   : isActive ? palette.active   : palette.idle;
+
         return (
           <React.Fragment key={def.index}>
             <Pressable
               onPress={() => visitable && onJump(def.index)}
               disabled={!visitable}
-              style={({ pressed }: { pressed: boolean }) => [
+              style={({ pressed }) => [
                 stepperStyles.itemBlock,
                 { opacity: pressed ? 0.85 : 1 },
               ]}
@@ -105,17 +87,55 @@ const Stepper: React.FC<{
               accessibilityState={{ selected: isActive, disabled: !visitable }}
               accessibilityLabel={`Step ${def.index}: ${def.title}`}
             >
-              <View style={[stepperStyles.dot, { backgroundColor: dotBg, borderColor: dotFg }]}>
+              <View
+                style={[
+                  stepperStyles.dot,
+                  {
+                    width: 32,
+                    height: 32,
+                    borderRadius: 16,
+                    backgroundColor: isDone
+                      ? colors.success
+                      : isActive
+                      ? `${colors.primary}18`
+                      : 'transparent',
+                    borderColor: isDone
+                      ? colors.success
+                      : isActive
+                      ? colors.primary
+                      : colors.border,
+                    borderWidth: 2,
+                  },
+                  isActive && stepperStyles.activeDot,
+                ]}
+              >
                 {isDone ? (
-                  <Check size={14} color={dotFg} strokeWidth={3} />
+                  <Check size={14} color="#FFFFFF" strokeWidth={3} />
                 ) : (
-                  <Text style={[stepperStyles.dotNum, { color: dotFg }]}>{def.index}</Text>
+                  <Text
+                    style={[
+                      stepperStyles.dotNum,
+                      {
+                        color: isActive ? colors.primary : colors.textMuted,
+                        fontWeight: isActive ? '700' : '600',
+                      },
+                    ]}
+                  >
+                    {def.index}
+                  </Text>
                 )}
               </View>
               <Text
                 style={[
                   stepperStyles.itemLabel,
-                  { color: isActive ? dotFg : palette.textMute },
+                  {
+                    color: isActive
+                      ? colors.primary
+                      : isDone
+                      ? colors.textSecondary
+                      : colors.textMuted,
+                    fontWeight: isActive ? '700' : '500',
+                  },
                 ]}
                 numberOfLines={1}
               >
@@ -123,7 +143,16 @@ const Stepper: React.FC<{
               </Text>
             </Pressable>
             {i < STEP_DEFINITIONS.length - 1 && (
-              <View style={[stepperStyles.connector, { backgroundColor: isDone ? palette.done : palette.idle }]} />
+              <View
+                style={[
+                  stepperStyles.connector,
+                  {
+                    backgroundColor: isDone ? colors.success : colors.border,
+                    height: 2,
+                    flex: 1,
+                  },
+                ]}
+              />
             )}
           </React.Fragment>
         );
@@ -133,7 +162,7 @@ const Stepper: React.FC<{
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  MAIN
+// MAIN COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
 
 const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
@@ -143,14 +172,8 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
   onRedirectToAddendum,
 }) => {
   const isEdit = !!tenderId;
-  const isDark = useThemeStore((s) => s.theme.isDark);
-
-  const palette = useMemo(
-    () => isDark
-      ? { background: '#0F172A', surface: '#1E293B', border: '#334155', text: '#F1F5F9', textMuted: '#94A3B8', primary: '#60A5FA', primaryFg: '#0F172A', secondary: '#334155', secondaryFg: '#F1F5F9', success: '#22C55E', successFg: '#FFFFFF' }
-      : { background: '#F8FAFC', surface: '#FFFFFF', border: '#E2E8F0', text: '#0F172A', textMuted: '#64748B', primary: '#2563EB', primaryFg: '#FFFFFF', secondary: '#E2E8F0', secondaryFg: '#0F172A', success: '#16A34A', successFg: '#FFFFFF' },
-    [isDark],
-  );
+  const { colors, spacing, radius, shadows } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const methods = useForm<ProfessionalTenderFormValues>({
     resolver: zodResolver(professionalTenderFormSchema) as any,
@@ -162,11 +185,9 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
   const [highestVisited, setHighestVisited] = useState<StepIndex>(1);
   const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
 
-  // ─── Edit-mode data fetch ───────────────────────────────────────────────
   const { data: editData, isLoading: editLoading, error: editError } =
     useProfessionalTenderEditData(tenderId, { enabled: isEdit });
 
-  // ─── Edit-lock redirect ─────────────────────────────────────────────────
   useEffect(() => {
     if (!isEdit || !editData) return;
     if (editData.status !== 'draft') {
@@ -183,13 +204,10 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
     }
   }, [isEdit, editData, onRedirectToAddendum, onCancel]);
 
-  // ─── Pre-fill on edit-data arrival ──────────────────────────────────────
   useEffect(() => {
     if (!isEdit || !editData) return;
     if (editData.status !== 'draft') return;
 
-    // Hydrate invitedCompanies from any of: invitedCompanies[], invitations[].companyId, etc.
-    // We accept either a string array or an array of objects with ._id / .companyId / .company.
     const hydrateInvited = (raw: any): string[] => {
       if (!Array.isArray(raw)) return [];
       return raw
@@ -206,73 +224,67 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
     );
 
     methods.reset({
-      title:               editData.title ?? '',
-      briefDescription:    editData.briefDescription ?? '',
-      description:         editData.description ?? '',
+      title: editData.title ?? '',
+      briefDescription: editData.briefDescription ?? '',
+      description: editData.description ?? '',
       procurementCategory: editData.procurementCategory ?? '',
-      tenderType:          editData.tenderType ?? 'services',
-      // P-01: workflowType only — ignore any legacy biddingType
-      workflowType:        editData.workflowType ?? 'open',
-      visibilityType:      editData.visibilityType ?? 'public',
-      referenceNumber:     editData.referenceNumber ?? '',
-      invitedCompanies:    invited,
-
+      tenderType: editData.tenderType ?? 'services',
+      workflowType: editData.workflowType ?? 'open',
+      visibilityType: editData.visibilityType ?? 'public',
+      referenceNumber: editData.referenceNumber ?? '',
+      invitedCompanies: invited,
       procurement: {
-        procuringEntity:     editData.procurement?.procuringEntity ?? '',
-        procurementMethod:   editData.procurement?.procurementMethod ?? 'open_tender',
-        fundingSource:       editData.procurement?.fundingSource ?? '',
-        bidSecurityAmount:   editData.procurement?.bidSecurityAmount,
+        procuringEntity: editData.procurement?.procuringEntity ?? '',
+        procurementMethod: editData.procurement?.procurementMethod ?? 'open_tender',
+        fundingSource: editData.procurement?.fundingSource ?? '',
+        bidSecurityAmount: editData.procurement?.bidSecurityAmount,
         bidSecurityCurrency: editData.procurement?.bidSecurityCurrency ?? 'ETB',
         contactPerson: {
-          name:     editData.procurement?.contactPerson?.name ?? '',
-          email:    editData.procurement?.contactPerson?.email ?? '',
-          phone:    editData.procurement?.contactPerson?.phone ?? '',
+          name: editData.procurement?.contactPerson?.name ?? '',
+          email: editData.procurement?.contactPerson?.email ?? '',
+          phone: editData.procurement?.contactPerson?.phone ?? '',
           position: editData.procurement?.contactPerson?.position ?? '',
         },
       },
-      cpoRequired:    !!editData.cpoRequired,
+      cpoRequired: !!editData.cpoRequired,
       cpoDescription: editData.cpoDescription ?? '',
-      cpoAmount:      (editData as any).cpoAmount,
-      cpoCurrency:    (editData as any).cpoCurrency ?? 'ETB',
-
+      cpoAmount: (editData as any).cpoAmount,
+      cpoCurrency: (editData as any).cpoCurrency ?? 'ETB',
       eligibility: {
-        minimumExperience:         editData.eligibility?.minimumExperience,
-        requiredCertifications:    editData.eligibility?.requiredCertifications ?? [],
+        minimumExperience: editData.eligibility?.minimumExperience,
+        requiredCertifications: editData.eligibility?.requiredCertifications ?? [],
         legalRegistrationRequired: !!editData.eligibility?.legalRegistrationRequired,
       },
       scope: { description: editData.scope?.description ?? '' },
       evaluation: {
         evaluationMethod: editData.evaluation?.evaluationMethod ?? 'combined',
-        technicalWeight:  editData.evaluation?.technicalWeight ?? 70,
-        financialWeight:  editData.evaluation?.financialWeight ?? 30,
-        criteria:         editData.evaluation?.criteria ?? '',
+        technicalWeight: editData.evaluation?.technicalWeight ?? 70,
+        financialWeight: editData.evaluation?.financialWeight ?? 30,
+        criteria: editData.evaluation?.criteria ?? '',
       },
-
-      deadline:              editData.deadline ?? '',
-      bidOpeningDate:        editData.bidOpeningDate ?? '',
+      deadline: editData.deadline ?? '',
+      bidOpeningDate: editData.bidOpeningDate ?? '',
       clarificationDeadline: editData.clarificationDeadline ?? '',
-      // P-14: preBidMeeting is at ROOT of the response
       preBidMeeting: {
-        enabled:    !!editData.preBidMeeting,
-        date:       editData.preBidMeeting?.date ?? '',
-        location:   editData.preBidMeeting?.location ?? '',
+        enabled: !!editData.preBidMeeting,
+        date: editData.preBidMeeting?.date ?? '',
+        location: editData.preBidMeeting?.location ?? '',
         onlineLink: editData.preBidMeeting?.onlineLink ?? '',
-        mandatory:  !!editData.preBidMeeting?.mandatory,
+        mandatory: !!editData.preBidMeeting?.mandatory,
       },
     });
   }, [isEdit, editData, methods]);
 
-  // ─── Mutations ──────────────────────────────────────────────────────────
   const createMut = useCreateProfessionalTender();
   const updateMut = useUpdateProfessionalTender();
   const isSubmitting = createMut.isPending || updateMut.isPending;
 
-  // ─── Step navigation ────────────────────────────────────────────────────
   const goNext = useCallback(async () => {
     const fieldsToValidate = STEP_FIELDS[step];
-    const ok = fieldsToValidate.length === 0
-      ? true
-      : await methods.trigger(fieldsToValidate as any, { shouldFocus: true });
+    const ok =
+      fieldsToValidate.length === 0
+        ? true
+        : await methods.trigger(fieldsToValidate as any, { shouldFocus: true });
     if (!ok) return;
     const next = Math.min(step + 1, STEP_DEFINITIONS.length) as StepIndex;
     setStep(next);
@@ -284,12 +296,14 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
     setStep(prev);
   }, [step]);
 
-  const goToStep = useCallback((target: StepIndex) => {
-    if (target > highestVisited) return;
-    setStep(target);
-  }, [highestVisited]);
+  const goToStep = useCallback(
+    (target: StepIndex) => {
+      if (target > highestVisited) return;
+      setStep(target);
+    },
+    [highestVisited],
+  );
 
-  // ─── Submit ─────────────────────────────────────────────────────────────
   const handleSubmit = useCallback(
     async (status: 'draft' | 'published') => {
       if (status === 'published') {
@@ -310,8 +324,9 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
       }
 
       const values = methods.getValues();
-      const payload = { ...toCreatePayload(values), status } as
-        Parameters<typeof createMut.mutateAsync>[0]['data'];
+      const payload = { ...toCreatePayload(values), status } as Parameters<
+        typeof createMut.mutateAsync
+      >[0]['data'];
 
       try {
         if (isEdit && tenderId) {
@@ -338,53 +353,78 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
     [methods, isEdit, tenderId, stagedFiles, createMut, updateMut, onSuccess, highestVisited],
   );
 
-  // ─── Loading / error states ─────────────────────────────────────────────
   if (isEdit && editLoading) {
     return (
-      <View style={[styles.fullCenter, { backgroundColor: palette.background }]}>
-        <ActivityIndicator size="large" color={palette.primary} />
-        <Text style={[styles.loadingText, { color: palette.textMuted }]}>Loading tender…</Text>
+      <View style={[styles.fullCenter, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { color: colors.textMuted }]}>
+          Loading tender…
+        </Text>
       </View>
     );
   }
 
   if (isEdit && editError) {
     return (
-      <View style={[styles.fullCenter, { backgroundColor: palette.background }]}>
-        <Text style={[styles.errorText, { color: palette.text }]}>
+      <View style={[styles.fullCenter, { backgroundColor: colors.bg }]}>
+        <Text style={[styles.errorText, { color: colors.text }]}>
           {(editError as any)?.message ?? 'Failed to load tender data.'}
         </Text>
         <Pressable
           onPress={onCancel}
-          style={[styles.btn, styles.btnSecondary, { backgroundColor: palette.secondary }]}
+          style={[
+            styles.btn,
+            styles.btnSecondary,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
         >
-          <Text style={[styles.btnLabel, { color: palette.secondaryFg }]}>Go back</Text>
+          <Text style={[styles.btnLabel, { color: colors.text }]}>Go back</Text>
         </Pressable>
       </View>
     );
   }
 
-  // ─── Render ─────────────────────────────────────────────────────────────
   return (
     <FormProvider {...methods}>
-      <View style={[styles.root, { backgroundColor: palette.background }]}>
+      <View style={[styles.root, { backgroundColor: colors.bg }]}>
         {/* Header */}
-        <View style={[styles.header, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-          <Text style={[styles.title, { color: palette.text }]}>
+        <View
+          style={[
+            styles.header,
+            {
+              backgroundColor: colors.surface,
+              borderBottomColor: colors.border,
+              paddingTop: insets.top + spacing.md,
+              paddingBottom: spacing.md,
+              paddingHorizontal: spacing.lg,
+            },
+          ]}
+        >
+          <Text style={[styles.title, { color: colors.text }]}>
             {isEdit ? 'Edit Draft Tender' : 'New Professional Tender'}
           </Text>
-          <Text style={[styles.subtitle, { color: palette.textMuted }]} numberOfLines={1}>
+          <Text
+            style={[styles.subtitle, { color: colors.textMuted }]}
+            numberOfLines={1}
+          >
             Step {step} of {STEP_DEFINITIONS.length} · {STEP_DEFINITIONS[step - 1].title}
           </Text>
-          <View style={styles.stepperWrap}>
-            <Stepper current={step} onJump={goToStep} highestVisited={highestVisited} />
+          <View style={{ marginTop: spacing.md }}>
+            <StepIndicator
+              current={step}
+              onJump={goToStep}
+              highestVisited={highestVisited}
+            />
           </View>
         </View>
 
         {/* Body */}
         <ScrollView
           style={styles.bodyScroll}
-          contentContainerStyle={styles.body}
+          contentContainerStyle={[
+            styles.body,
+            { padding: spacing.lg, paddingBottom: spacing.xxl },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -401,25 +441,55 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
         </ScrollView>
 
         {/* Footer */}
-        <View style={[styles.footer, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+        <View
+          style={[
+            styles.footer,
+            {
+              backgroundColor: colors.bgCard,
+              borderTopColor: colors.border,
+              paddingHorizontal: spacing.lg,
+              paddingTop: spacing.md,
+              paddingBottom: spacing.lg,
+              ...shadows.md,
+            },
+          ]}
+        >
           {step === 1 ? (
             <Pressable
               onPress={onCancel}
-              style={[styles.btn, styles.btnSecondary, { backgroundColor: palette.secondary }]}
+              style={[
+                styles.btn,
+                styles.btnSecondary,
+                {
+                  borderColor: colors.border,
+                  borderRadius: radius.lg,
+                  height: 52,
+                  flex: 1,
+                },
+              ]}
               accessibilityRole="button"
               accessibilityLabel="Cancel and go back"
             >
-              <Text style={[styles.btnLabel, { color: palette.secondaryFg }]}>Cancel</Text>
+              <Text style={[styles.btnLabel, { color: colors.text }]}>Cancel</Text>
             </Pressable>
           ) : (
             <Pressable
               onPress={goBack}
-              style={[styles.btn, styles.btnSecondary, { backgroundColor: palette.secondary }]}
+              style={[
+                styles.btn,
+                styles.btnSecondary,
+                {
+                  borderColor: colors.border,
+                  borderRadius: radius.lg,
+                  height: 52,
+                  flex: 1,
+                },
+              ]}
               accessibilityRole="button"
               accessibilityLabel="Go to previous step"
             >
-              <ChevronLeft size={16} color={palette.secondaryFg} strokeWidth={2.5} />
-              <Text style={[styles.btnLabel, { color: palette.secondaryFg }]}>Back</Text>
+              <ChevronLeft size={16} color={colors.text} strokeWidth={2.5} />
+              <Text style={[styles.btnLabel, { color: colors.text }]}>Back</Text>
             </Pressable>
           )}
 
@@ -430,13 +500,19 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
               style={[
                 styles.btn,
                 styles.btnPrimary,
-                { backgroundColor: palette.primary, opacity: isSubmitting ? 0.6 : 1 },
+                {
+                  backgroundColor: isSubmitting ? colors.textDisabled : colors.primary,
+                  borderRadius: radius.lg,
+                  height: 52,
+                  flex: 1,
+                  ...shadows.md,
+                },
               ]}
               accessibilityRole="button"
               accessibilityLabel="Go to next step"
             >
-              <Text style={[styles.btnLabel, { color: palette.primaryFg }]}>Next</Text>
-              <ChevronRight size={16} color={palette.primaryFg} strokeWidth={2.5} />
+              <Text style={[styles.btnLabel, { color: '#FFFFFF' }]}>Next</Text>
+              <ChevronRight size={16} color="#FFFFFF" strokeWidth={2.5} />
             </Pressable>
           ) : (
             <View style={styles.submitGroup}>
@@ -446,17 +522,25 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                 style={[
                   styles.btn,
                   styles.btnSecondary,
-                  { backgroundColor: palette.secondary, opacity: isSubmitting ? 0.6 : 1 },
+                  {
+                    borderColor: colors.primary,
+                    borderWidth: 1.5,
+                    borderRadius: radius.lg,
+                    height: 52,
+                    flex: 0.5,
+                  },
                 ]}
                 accessibilityRole="button"
                 accessibilityLabel="Save as draft"
               >
                 {isSubmitting ? (
-                  <ActivityIndicator size="small" color={palette.secondaryFg} />
+                  <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
-                  <Save size={16} color={palette.secondaryFg} strokeWidth={2.5} />
+                  <Save size={16} color={colors.primary} strokeWidth={2.5} />
                 )}
-                <Text style={[styles.btnLabel, { color: palette.secondaryFg }]}>Save Draft</Text>
+                <Text style={[styles.btnLabel, { color: colors.primary }]}>
+                  Save Draft
+                </Text>
               </Pressable>
               <Pressable
                 onPress={() => handleSubmit('published')}
@@ -464,17 +548,23 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
                 style={[
                   styles.btn,
                   styles.btnPublish,
-                  { backgroundColor: palette.success, opacity: isSubmitting ? 0.6 : 1 },
+                  {
+                    backgroundColor: isSubmitting ? colors.textDisabled : colors.success,
+                    borderRadius: radius.lg,
+                    height: 52,
+                    flex: 0.5,
+                    ...shadows.md,
+                  },
                 ]}
                 accessibilityRole="button"
                 accessibilityLabel="Publish tender now"
               >
                 {isSubmitting ? (
-                  <ActivityIndicator size="small" color={palette.successFg} />
+                  <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Send size={16} color={palette.successFg} strokeWidth={2.5} />
+                  <Send size={16} color="#FFFFFF" strokeWidth={2.5} />
                 )}
-                <Text style={[styles.btnLabel, { color: palette.successFg }]}>Publish</Text>
+                <Text style={[styles.btnLabel, { color: '#FFFFFF' }]}>Publish</Text>
               </Pressable>
             </View>
           )}
@@ -485,7 +575,7 @@ const ProfessionalTenderForm: React.FC<ProfessionalTenderFormProps> = ({
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  STYLES
+// STYLES
 // ═════════════════════════════════════════════════════════════════════════════
 
 const styles = StyleSheet.create({
@@ -494,45 +584,44 @@ const styles = StyleSheet.create({
   loadingText: { fontSize: 13 },
   errorText: { fontSize: 14, textAlign: 'center', marginBottom: 6 },
 
-  header: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, borderBottomWidth: 1, gap: 4 },
+  header: { borderBottomWidth: StyleSheet.hairlineWidth, gap: 4 },
   title: { fontSize: 18, fontWeight: '800' },
   subtitle: { fontSize: 12 },
-  stepperWrap: { marginTop: 12 },
-
   bodyScroll: { flex: 1 },
-  body: { padding: 16, paddingBottom: 32 },
+  body: {},
 
-  footer: { flexDirection: 'row', gap: 8, padding: 12, borderTopWidth: 1 },
+  footer: { flexDirection: 'row', gap: 10, borderTopWidth: StyleSheet.hairlineWidth },
   btn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    minHeight: 44,
-    flex: 1,
   },
   btnPrimary: {},
-  btnSecondary: {},
+  btnSecondary: { borderWidth: 1.5 },
   btnPublish: {},
   btnLabel: { fontSize: 14, fontWeight: '700' },
-  submitGroup: { flex: 2, flexDirection: 'row', gap: 8 },
+  submitGroup: { flex: 1, flexDirection: 'row', gap: 8 },
 });
 
 const stepperStyles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 2 },
-  itemBlock: { alignItems: 'center', gap: 4, paddingHorizontal: 4, minWidth: 64 },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  itemBlock: { alignItems: 'center', gap: 4, paddingHorizontal: 4, minWidth: 60 },
   dot: {
-    width: 28, height: 28,
-    borderRadius: 999,
-    borderWidth: 1.5,
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  dotNum: { fontSize: 12, fontWeight: '800' },
-  itemLabel: { fontSize: 10, fontWeight: '600' },
-  connector: { width: 16, height: 2, opacity: 0.4 },
+  activeDot: {
+    shadowColor: '#2DD4A0',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
+  },
+  dotNum: { fontSize: 13 },
+  itemLabel: { fontSize: 10 },
+  connector: { marginHorizontal: 4, marginBottom: 16 },
 });
 
 export default ProfessionalTenderForm;

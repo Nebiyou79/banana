@@ -31,6 +31,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import OTPVerification from '@/components/auth/OTPVerification';
+import GoogleSignIn from '@/components/auth/GoogleSignIn';
 import { SleekButton } from '@/components/ui/SleekButton';
 import { colors, lightTheme, darkTheme, colorClasses } from '@/utils/color';
 import { promoCodeService } from '@/services/promoCodeService';
@@ -81,7 +82,7 @@ export default function RegisterPage() {
   const [verificationEmail, setVerificationEmail] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
-  // NEW: Promo code states
+  // Promo code states
   const [promoCode, setPromoCode] = useState('');
   const [validatingPromo, setValidatingPromo] = useState(false);
   const [validatedPromo, setValidatedPromo] = useState<ValidatedPromo | null>(null);
@@ -132,7 +133,7 @@ export default function RegisterPage() {
     return strength;
   };
 
-  // NEW: Validate promo code
+  // Validate promo code
   const validatePromoCode = async (code: string) => {
     if (!code || code.length < 3) {
       setPromoError(null);
@@ -156,7 +157,6 @@ export default function RegisterPage() {
         });
         setPromoError(null);
 
-        // Show success toast
         toast({
           title: 'Valid Promo Code! 🎉',
           description: `You'll get ${result.data.benefits.discountPercentage}% off and ${result.data.benefits.rewardPoints} bonus points!`,
@@ -288,20 +288,20 @@ export default function RegisterPage() {
     },
   });
 
-if (requiresVerification) {
-  return (
-    <div
-      className={`min-h-screen flex items-center justify-center px-4 sm:px-6 ${colorClasses.bg.secondary}`}
-    >
-      <div className="w-full">
-        <OTPVerification
-          email={verificationEmail}
-          onBack={() => setRequiresVerification(false)}
-        />
+  if (requiresVerification) {
+    return (
+      <div
+        className={`min-h-screen flex items-center justify-center px-4 sm:px-6 ${colorClasses.bg.secondary}`}
+      >
+        <div className="w-full">
+          <OTPVerification
+            email={verificationEmail}
+            onBack={() => setRequiresVerification(false)}
+          />
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
   return (
     <div
@@ -316,7 +316,8 @@ if (requiresVerification) {
         <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:60px_60px]"></div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
 
-        <div className="relative z-10 flex flex-col justify-between items-center px-16 py-18 w-full">          {/* Logo */}
+        <div className="relative z-10 flex flex-col justify-between items-center px-16 py-18 w-full">
+          {/* Logo */}
           <div className="w-full flex justify-center">
             <div
               className="rounded-xl flex items-center justify-center shadow-lg"
@@ -435,7 +436,6 @@ if (requiresVerification) {
                 borderColor: theme.border.default
               }}
             >
-              {/* Logo Container */}
               <div
                 className="w-16 h-16 rounded-xl flex items-center justify-center shadow-md"
                 style={{ backgroundColor: theme.bg.primary }}
@@ -449,7 +449,6 @@ if (requiresVerification) {
                 />
               </div>
 
-              {/* Brand Text */}
               <div className="flex flex-col">
                 <span
                   className="text-2xl font-bold"
@@ -1226,6 +1225,18 @@ if (requiresVerification) {
                 )}
               </form>
             </Form>
+
+            {/* Google Sign-In */}
+            <GoogleSignIn
+              type="register"
+              onError={(error) => {
+                toast({
+                  title: 'Google Sign-Up Failed',
+                  description: error.message || 'Could not sign up with Google',
+                  variant: 'destructive',
+                });
+              }}
+            />
           </div>
 
           {/* Login Link */}

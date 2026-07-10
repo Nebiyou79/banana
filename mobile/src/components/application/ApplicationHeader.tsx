@@ -3,17 +3,17 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Gradient header for application detail screens.
  *
- * FIXED: Now uses the shared Avatar component for both candidate and company
- * avatars, ensuring consistent rendering and proper fallback behavior.
+ * AVATAR FIX — removed inline buildAvatarEntity() and replaced Avatar with
+ * CompanyAvatar (for candidate role showing company/org) and Avatar (for
+ * employer role showing candidate). CompanyAvatar automatically prefers
+ * job.ownerPreview (Profile-backed) over the raw sub-doc.
+ *
+ * DEBUG TOOLS — Added showAvatarDebug prop to trace resolution issues.
+ * All other logic and styling preserved exactly.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
-import React, { useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-} from 'react-native';
+import React, { useMemo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -27,63 +27,13 @@ import {
   STATUS_COLORS,
   STATUS_COLORS_DARK,
 } from '../../services/applicationService';
+// AVATAR FIX: Avatar for candidate (already works), CompanyAvatar for company/org
 import { Avatar } from '../shared/Avatar';
+import CompanyAvatar from '../shared/CompanyAvatar';
+import { candidateToEntity } from '../shared/Avatar';
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const getInitials = (name?: string): string =>
-  (name ?? '?')
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-
-/**
- * Build the appropriate Avatar entity based on role.
- * For candidate: shows candidate's avatar
- * For employer: shows company/organization logo
- */
-const buildAvatarEntity = (application: Application, role: 'candidate' | 'employer') => {
-  if (role === 'employer') {
-    // Show candidate avatar
-    return {
-      type: 'candidate' as const,
-      name: application.userInfo?.name ?? application.candidate?.name ?? 'Candidate',
-      avatar: application.candidate?.avatar ?? (application.userInfo as any)?.avatar,
-      profileImage: application.candidate?.avatar ?? (application.userInfo as any)?.profileImage,
-    };
-  }
-  
-  // Show company/organization logo
-  const isOrg = application.job?.jobType === 'organization';
-  const owner = isOrg
-    ? (application.job?.organization as any)
-    : (application.job?.company as any);
-
-  if (!owner) {
-    return {
-      type: (isOrg ? 'organization' : 'company') as 'organization' | 'company',
-      name: isOrg ? 'Organization' : 'Company',
-    };
-  }
-
-  const logoUrl = 
-    owner.logoUrl || 
-    owner.logo || 
-    owner.avatarUrl || 
-    owner.avatar || 
-    owner.imageUrl || 
-    owner.profileImage;
-
-  return {
-    type: (isOrg ? 'organization' : 'company') as 'organization' | 'company',
-    name: owner.name || (isOrg ? 'Organization' : 'Company'),
-    logoUrl: typeof logoUrl === 'string' && logoUrl.startsWith('http') ? logoUrl : undefined,
-    logo: typeof logoUrl === 'string' && logoUrl.startsWith('http') ? logoUrl : undefined,
-    verified: owner.verified || false,
-  };
-};
+// ─── Debug flag ──────────────────────────────────────────────────────────────
+const DEBUG_AVATAR = __DEV__ && false; // Set to true to debug avatar resolution
 
 // ─── Gradient palettes ────────────────────────────────────────────────────────
 
@@ -97,6 +47,7 @@ interface ApplicationHeaderProps {
   role: 'candidate' | 'employer';
   onBack: () => void;
   onShare?: () => void;
+  showAvatarDebug?: boolean; // DEBUG: overlays check/cross on avatar
 }
 
 // ─── StatItem ─────────────────────────────────────────────────────────────────
@@ -129,6 +80,7 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
   role,
   onBack,
   onShare,
+  showAvatarDebug = DEBUG_AVATAR,
 }) => {
   const { colors: c, isDark } = useTheme();
   const isEmployer  = role === 'employer';
@@ -137,34 +89,29 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
   // ── Status colours ─────────────────────────────────────────────────────────
   const SC          = isDark ? STATUS_COLORS_DARK : STATUS_COLORS;
   const sc          = SC[application.status as ApplicationStatus] ?? SC['applied'];
-  const statusLabel =
-    STATUS_LABELS[application.status as ApplicationStatus] ??
-    application.status;
+  const statusLabel = STATUS_LABELS[application.status as ApplicationStatus] ?? application.status;
 
-  // ✅ FIXED: Use shared Avatar entity builder
-  const avatarEntity = useMemo(
-    () => buildAvatarEntity(application, role),
-    [application, role]
-  );
-
+  // ── Owner info (for display text) ─────────────────────────────────────────
   const isOrg = application.job?.jobType === 'organization';
   const owner = isOrg
     ? (application.job?.organization as any)
     : (application.job?.company as any);
 
   const mainName = isEmployer
-    ? (application.userInfo?.name ??
-       application.candidate?.name ??
-       'Candidate')
+    ? (application.userInfo?.name ?? application.candidate?.name ?? 'Candidate')
     : (application.job?.title ?? 'Position');
 
   const subName = isEmployer
-    ? (application.userInfo?.email ??
-       application.candidate?.email ??
-       '')
-    : (owner?.name ?? '');
+    ? (application.userInfo?.email ?? application.candidate?.email ?? '')
+    : (application.job?.ownerPreview?.name ?? owner?.name ?? '');
 
-  const isVerified = !isEmployer && !!(owner?.verified);
+  const isVerified = !isEmployer && !!(application.job?.ownerPreview?.verified ?? owner?.verified);
+
+  // ── Candidate entity (already works correctly everywhere) ─────────────────
+  const candidateEntity = useMemo(
+    () => candidateToEntity(application.candidate, application.userInfo),
+    [application.candidate, application.userInfo],
+  );
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   const appliedDate = formatShortDate(application.createdAt);
@@ -178,34 +125,16 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
     () =>
       StyleSheet.create({
         gradient: { paddingBottom: 0 },
-
         nav: {
-          flexDirection:     'row',
-          alignItems:        'center',
-          paddingHorizontal: SPACING.md,
-          paddingTop:        14,
-          paddingBottom:     SPACING.sm,
+          flexDirection: 'row', alignItems: 'center',
+          paddingHorizontal: SPACING.md, paddingTop: 14, paddingBottom: SPACING.sm,
         },
-        navBtn: {
-          width:          44,
-          height:         44,
-          alignItems:     'center',
-          justifyContent: 'center',
-        },
-        navTitle: {
-          flex:       1,
-          textAlign:  'center',
-          color:      '#FFFFFF',
-          fontWeight: '700',
-          fontSize:   16,
-        },
+        navBtn:   { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+        navTitle: { flex: 1, textAlign: 'center', color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
 
         heroRow: {
-          flexDirection:     'row',
-          alignItems:        'flex-start',
-          gap:               14,
-          paddingHorizontal: SPACING.lg,
-          paddingVertical:   SPACING.md,
+          flexDirection: 'row', alignItems: 'flex-start', gap: 14,
+          paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md,
         },
 
         nameBlock: { flex: 1, gap: 4 },
@@ -213,30 +142,20 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
         subName:   { color: withAlpha('#FFFFFF', 0.75), fontSize: 13 },
 
         statusPill: {
-          flexDirection:     'row',
-          alignItems:        'center',
-          gap:               5,
-          alignSelf:         'flex-start',
-          paddingHorizontal: 10,
-          paddingVertical:   4,
-          borderRadius:      RADIUS.full,
-          borderWidth:       1,
-          marginTop:         2,
+          flexDirection: 'row', alignItems: 'center', gap: 5,
+          alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4,
+          borderRadius: RADIUS.full, borderWidth: 1, marginTop: 2,
         },
         statusDot:  { width: 7, height: 7, borderRadius: 4 },
         statusText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
 
         statsBar: {
-          flexDirection:     'row',
-          backgroundColor:   withAlpha('#000000', 0.20),
-          paddingVertical:   10,
-          paddingHorizontal: SPACING.lg,
-          alignItems:        'center',
+          flexDirection: 'row', backgroundColor: withAlpha('#000000', 0.20),
+          paddingVertical: 10, paddingHorizontal: SPACING.lg, alignItems: 'center',
         },
         statDivider: {
-          width:            1,
-          height:           28,
-          backgroundColor:  withAlpha('#FFFFFF', 0.20),
+          width: 1, height: 28,
+          backgroundColor: withAlpha('#FFFFFF', 0.20),
           marginHorizontal: 4,
         },
       }),
@@ -267,12 +186,7 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
         </Text>
 
         {onShare ? (
-          <TouchableOpacity
-            onPress={onShare}
-            style={s.navBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Share"
-          >
+          <TouchableOpacity onPress={onShare} style={s.navBtn} accessibilityRole="button" accessibilityLabel="Share">
             <Ionicons name="share-social-outline" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         ) : (
@@ -280,24 +194,34 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
         )}
       </View>
 
-      {/* ✅ FIXED: Avatar + name block using shared Avatar component */}
+      {/* Avatar + name block */}
       <View style={s.heroRow}>
-        <Avatar
-          entity={avatarEntity}
-          size={64}
-          borderRadius={RADIUS.lg}
-          style={{ borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' }}
-        />
+        {isEmployer ? (
+          // Employer view → show candidate avatar (already works)
+          <Avatar
+            entity={candidateEntity}
+            size={64}
+            borderRadius={RADIUS.lg}
+            style={{ borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' }}
+          />
+        ) : (
+          // Candidate view → show company/org avatar
+          // AVATAR FIX: CompanyAvatar resolves from application.job.ownerPreview
+          <CompanyAvatar
+            application={application}
+            size={64}
+            borderRadius={RADIUS.lg}
+            style={{ borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' } as any}
+            verified={isVerified}
+            showDebug={showAvatarDebug}
+          />
+        )}
 
         <View style={s.nameBlock}>
-          <Text style={s.mainName} numberOfLines={2}>
-            {mainName}
-          </Text>
+          <Text style={s.mainName} numberOfLines={2}>{mainName}</Text>
 
           {subName ? (
-            <Text style={s.subName} numberOfLines={1}>
-              {subName}
-            </Text>
+            <Text style={s.subName} numberOfLines={1}>{subName}</Text>
           ) : null}
 
           <View
@@ -328,7 +252,7 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
         {!isEmployer && (
           <>
             <View style={s.statDivider} />
-            <StatItem icon="business-outline"  label="Type"    value={jobType} />
+            <StatItem icon="business-outline" label="Type" value={jobType} />
           </>
         )}
       </View>

@@ -1,25 +1,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  src/components/professionalTenders/ProfessionalTenderForm/Step3_EligibilityEvaluation.tsx
 // ─────────────────────────────────────────────────────────────────────────────
-//  Step 3 (post-refactor) — merges the old Step 3 (Eligibility & Scope) and
-//  Step 4 (Evaluation) into one cohesive scoring step.
-//
-//  Order: Eligibility → Scope → Evaluation
-//
-//  Critical: technicalWeight + financialWeight must sum to 100. The +/-
-//  buttons and direct numeric inputs both auto-rebalance the other side.
-// ─────────────────────────────────────────────────────────────────────────────
+//  FULLY REFACTORED: Premium Mint-themed with useTheme(), PremiumCard wrappers,
+//  themed WeightBar, consistent input styling.
 
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Controller, useFormContext, useWatch } from 'react-hook-form';
 import { Minus, Plus } from 'lucide-react-native';
 
-import { useThemeStore } from '../../../store/themeStore';
+import { useTheme } from '../../../hooks/useTheme';
 import {
   ChipInput,
   LabeledField,
   OptionGrid,
+  PremiumCard,
   SectionHeader,
   TextField,
   ToggleField,
@@ -31,13 +26,13 @@ import type { ProfessionalTenderFormValues } from './formSchema';
 // ═════════════════════════════════════════════════════════════════════════════
 
 const EVALUATION_METHOD_OPTIONS = [
-  { value: 'combined' as const,        label: 'Combined',         description: 'Technical + Financial' },
-  { value: 'technical_only' as const,  label: 'Technical Only',   description: 'No financial scoring' },
-  { value: 'financial_only' as const,  label: 'Financial Only',   description: 'Lowest-price wins' },
+  { value: 'combined' as const,        label: 'Combined',         description: 'Technical + Financial'  },
+  { value: 'technical_only' as const,  label: 'Technical Only',   description: 'No financial scoring'    },
+  { value: 'financial_only' as const,  label: 'Financial Only',   description: 'Lowest-price wins'       },
 ];
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  WEIGHT BAR
+//  WEIGHT BAR — themed with useTheme()
 // ═════════════════════════════════════════════════════════════════════════════
 
 const WeightBar: React.FC<{
@@ -45,31 +40,7 @@ const WeightBar: React.FC<{
   financial: number;
   onTechnicalChange: (next: number) => void;
 }> = ({ technical, financial, onTechnicalChange }) => {
-  const isDark = useThemeStore((s) => s.theme.isDark);
-  const palette = useMemo(
-    () => isDark
-      ? {
-          trackBg:   '#0F172A',
-          techBg:    '#3B82F6',
-          finBg:     '#A855F7',
-          text:      '#F1F5F9',
-          subText:   '#94A3B8',
-          btnBg:     '#1E293B',
-          btnFg:     '#F1F5F9',
-          btnBorder: '#334155',
-        }
-      : {
-          trackBg:   '#F1F5F9',
-          techBg:    '#3B82F6',
-          finBg:     '#A855F7',
-          text:      '#0F172A',
-          subText:   '#475569',
-          btnBg:     '#FFFFFF',
-          btnFg:     '#0F172A',
-          btnBorder: '#E2E8F0',
-        },
-    [isDark],
-  );
+  const { colors, spacing, radius } = useTheme();
 
   const safeTechnical = Math.max(0, Math.min(100, technical));
   const techPct = safeTechnical;
@@ -82,45 +53,106 @@ const WeightBar: React.FC<{
 
   return (
     <View style={styles.weightBarRoot}>
-      <View style={[styles.bar, { backgroundColor: palette.trackBg }]}>
-        <View style={[styles.barTech, { width: `${techPct}%`, backgroundColor: palette.techBg }]} />
+      {/* Progress Bar */}
+      <View
+        style={[
+          styles.bar,
+          {
+            backgroundColor: colors.border,
+            borderRadius: radius.full,
+            height: 14,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.barTech,
+            {
+              width: `${techPct}%`,
+              backgroundColor: colors.primary,
+              borderRadius: radius.full,
+            },
+          ]}
+        />
+      </View>
+
+      {/* Legend */}
+      <View style={styles.legendRow}>
+        <View style={styles.legendItem}>
+          <View
+            style={[
+              styles.legendDot,
+              {
+                backgroundColor: colors.primary,
+                borderRadius: radius.full,
+              },
+            ]}
+          />
+          <Text style={[styles.legendLabel, { color: colors.textMuted }]}>
+            Technical
+          </Text>
+        </View>
+        <Text style={[styles.legendValue, { color: colors.text }]}>
+          {techPct}%
+        </Text>
       </View>
 
       <View style={styles.legendRow}>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: palette.techBg }]} />
-          <Text style={[styles.legendLabel, { color: palette.subText }]}>Technical</Text>
+          <View
+            style={[
+              styles.legendDot,
+              {
+                backgroundColor: colors.info,
+                borderRadius: radius.full,
+              },
+            ]}
+          />
+          <Text style={[styles.legendLabel, { color: colors.textMuted }]}>
+            Financial
+          </Text>
         </View>
-        <Text style={[styles.legendValue, { color: palette.text }]}>{techPct}%</Text>
+        <Text style={[styles.legendValue, { color: colors.text }]}>
+          {finPct}%
+        </Text>
       </View>
 
-      <View style={styles.legendRow}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: palette.finBg }]} />
-          <Text style={[styles.legendLabel, { color: palette.subText }]}>Financial</Text>
-        </View>
-        <Text style={[styles.legendValue, { color: palette.text }]}>{finPct}%</Text>
-      </View>
-
-      <View style={styles.adjuster}>
+      {/* Adjuster Buttons */}
+      <View style={[styles.adjuster, { marginTop: spacing.sm }]}>
         <Pressable
           onPress={() => adjust(-5)}
-          style={[styles.adjusterBtn, { backgroundColor: palette.btnBg, borderColor: palette.btnBorder }]}
+          style={[
+            styles.adjusterBtn,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: radius.md,
+            },
+          ]}
           accessibilityLabel="Decrease technical weight by 5"
           accessibilityRole="button"
         >
-          <Minus size={16} color={palette.btnFg} strokeWidth={2.5} />
+          <Minus size={16} color={colors.text} strokeWidth={2.5} />
         </Pressable>
-        <Text style={[styles.adjusterCenter, { color: palette.subText }]}>
+
+        <Text style={[styles.adjusterCenter, { color: colors.textMuted }]}>
           Adjust Technical · auto-balances Financial
         </Text>
+
         <Pressable
           onPress={() => adjust(+5)}
-          style={[styles.adjusterBtn, { backgroundColor: palette.btnBg, borderColor: palette.btnBorder }]}
+          style={[
+            styles.adjusterBtn,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: radius.md,
+            },
+          ]}
           accessibilityLabel="Increase technical weight by 5"
           accessibilityRole="button"
         >
-          <Plus size={16} color={palette.btnFg} strokeWidth={2.5} />
+          <Plus size={16} color={colors.text} strokeWidth={2.5} />
         </Pressable>
       </View>
     </View>
@@ -132,7 +164,9 @@ const WeightBar: React.FC<{
 // ═════════════════════════════════════════════════════════════════════════════
 
 const Step3_EligibilityEvaluation: React.FC = () => {
-  const { control, setValue, formState: { errors } } = useFormContext<ProfessionalTenderFormValues>();
+  const { colors, spacing, radius } = useTheme();
+  const { control, setValue, formState: { errors } } =
+    useFormContext<ProfessionalTenderFormValues>();
   const eligErrors = errors.eligibility;
   const scopeErrors = errors.scope;
   const evalErrors = errors.evaluation;
@@ -141,207 +175,239 @@ const Step3_EligibilityEvaluation: React.FC = () => {
   const financialWeight = useWatch({ control, name: 'evaluation.financialWeight' });
 
   const setBalanced = (technical: number) => {
-    setValue('evaluation.technicalWeight', technical, { shouldValidate: true, shouldDirty: true });
-    setValue('evaluation.financialWeight', 100 - technical, { shouldValidate: true, shouldDirty: true });
+    setValue('evaluation.technicalWeight', technical, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+    setValue('evaluation.financialWeight', 100 - technical, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
   };
 
   return (
-    <View style={styles.root}>
-      {/* ─── Eligibility ─────────────────────────────────────────────────── */}
+    <View style={[styles.root, { gap: spacing.lg }]}>
+      
+      {/* ─── Eligibility ──────────────────────────────────────────────── */}
       <SectionHeader
         title="Eligibility Criteria"
         description="Requirements bidders must satisfy to qualify."
       />
 
-      <Controller
-        control={control}
-        name="eligibility.minimumExperience"
-        render={({ field }) => (
-          <LabeledField
-            label="Minimum Experience (years)"
-            error={eligErrors?.minimumExperience?.message}
-            helper="Years of relevant experience required from bidders."
-          >
-            <TextField
-              value={field.value !== undefined && field.value !== null ? String(field.value) : ''}
-              onChange={(v) => field.onChange(v === '' ? undefined : v)}
-              onBlur={field.onBlur}
-              placeholder="0"
-              keyboardType="numeric"
-              error={!!eligErrors?.minimumExperience}
-            />
-          </LabeledField>
-        )}
-      />
+      <PremiumCard>
+        <Controller
+          control={control}
+          name="eligibility.minimumExperience"
+          render={({ field }) => (
+            <LabeledField
+              label="Minimum Experience (years)"
+              error={eligErrors?.minimumExperience?.message}
+              helper="Years of relevant experience required from bidders."
+            >
+              <TextField
+                value={
+                  field.value !== undefined && field.value !== null
+                    ? String(field.value)
+                    : ''
+                }
+                onChange={(v) => field.onChange(v === '' ? undefined : v)}
+                onBlur={field.onBlur}
+                placeholder="0"
+                keyboardType="numeric"
+                error={!!eligErrors?.minimumExperience}
+              />
+            </LabeledField>
+          )}
+        />
 
-      <Controller
-        control={control}
-        name="eligibility.requiredCertifications"
-        render={({ field }) => (
-          <LabeledField
-            label="Required Certifications"
-            helper="Type a certification and press return. Examples: ISO 9001, PMP."
-          >
-            <ChipInput
-              values={field.value ?? []}
+        <View style={{ height: spacing.md }} />
+
+        <Controller
+          control={control}
+          name="eligibility.requiredCertifications"
+          render={({ field }) => (
+            <LabeledField
+              label="Required Certifications"
+              helper="Type a certification and press return. Examples: ISO 9001, PMP."
+            >
+              <ChipInput
+                values={field.value ?? []}
+                onChange={field.onChange}
+                placeholder="Add certification…"
+                max={20}
+              />
+            </LabeledField>
+          )}
+        />
+
+        <View style={{ height: spacing.md }} />
+
+        <Controller
+          control={control}
+          name="eligibility.legalRegistrationRequired"
+          render={({ field }) => (
+            <ToggleField
+              value={!!field.value}
               onChange={field.onChange}
-              placeholder="Add certification…"
-              max={20}
+              label="Legal Registration Required"
+              description="Bidders must be a registered legal entity in good standing."
             />
-          </LabeledField>
-        )}
-      />
+          )}
+        />
+      </PremiumCard>
 
-      <Controller
-        control={control}
-        name="eligibility.legalRegistrationRequired"
-        render={({ field }) => (
-          <ToggleField
-            value={!!field.value}
-            onChange={field.onChange}
-            label="Legal Registration Required"
-            description="Bidders must be a registered legal entity in good standing."
-          />
-        )}
-      />
-
-      {/* ─── Scope ──────────────────────────────────────────────────────── */}
+      {/* ─── Scope ────────────────────────────────────────────────────── */}
       <SectionHeader
         title="Scope of Work"
         description="What needs to be done — the heart of the tender."
       />
 
-      <Controller
-        control={control}
-        name="scope.description"
-        render={({ field }) => (
-          <LabeledField
-            label="Scope Description"
-            required
-            error={scopeErrors?.description?.message}
-            helper="Describe deliverables, technical requirements, and expected outcomes."
-          >
-            <TextField
-              value={field.value ?? ''}
-              onChange={field.onChange}
-              onBlur={field.onBlur}
-              placeholder="Detailed scope of work…"
-              multiline
-              numberOfLines={8}
-              error={!!scopeErrors?.description}
-            />
-          </LabeledField>
-        )}
-      />
+      <PremiumCard>
+        <Controller
+          control={control}
+          name="scope.description"
+          render={({ field }) => (
+            <LabeledField
+              label="Scope Description"
+              required
+              error={scopeErrors?.description?.message}
+              helper="Describe deliverables, technical requirements, and expected outcomes."
+            >
+              <TextField
+                value={field.value ?? ''}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                placeholder="Detailed scope of work…"
+                multiline
+                numberOfLines={8}
+                error={!!scopeErrors?.description}
+              />
+            </LabeledField>
+          )}
+        />
+      </PremiumCard>
 
-      {/* ─── Evaluation ────────────────────────────────────────────────── */}
+      {/* ─── Evaluation Method ────────────────────────────────────────── */}
       <SectionHeader
         title="Evaluation Method"
         description="How you'll score the bids."
       />
 
-      <Controller
-        control={control}
-        name="evaluation.evaluationMethod"
-        render={({ field }) => (
-          <LabeledField required error={evalErrors?.evaluationMethod?.message}>
-            <OptionGrid
-              value={field.value}
-              onChange={(v) => {
-                field.onChange(v);
-                if (v === 'technical_only')      setBalanced(100);
-                else if (v === 'financial_only') setBalanced(0);
-              }}
-              options={EVALUATION_METHOD_OPTIONS}
-              columns={1}
-              showDescriptions
-            />
-          </LabeledField>
-        )}
-      />
+      <PremiumCard>
+        <Controller
+          control={control}
+          name="evaluation.evaluationMethod"
+          render={({ field }) => (
+            <LabeledField required error={evalErrors?.evaluationMethod?.message}>
+              <OptionGrid
+                value={field.value}
+                onChange={(v) => {
+                  field.onChange(v);
+                  if (v === 'technical_only') setBalanced(100);
+                  else if (v === 'financial_only') setBalanced(0);
+                }}
+                options={EVALUATION_METHOD_OPTIONS}
+                columns={1}
+                showDescriptions
+              />
+            </LabeledField>
+          )}
+        />
+      </PremiumCard>
 
+      {/* ─── Scoring Weights ──────────────────────────────────────────── */}
       <SectionHeader
         title="Scoring Weights"
         description="Technical + Financial must sum to 100. Adjust either side — the other rebalances."
       />
 
-      <WeightBar
-        technical={technicalWeight ?? 70}
-        financial={financialWeight ?? 30}
-        onTechnicalChange={setBalanced}
-      />
+      <PremiumCard>
+        <WeightBar
+          technical={technicalWeight ?? 70}
+          financial={financialWeight ?? 30}
+          onTechnicalChange={setBalanced}
+        />
 
-      <View style={styles.weightInputs}>
-        <View style={styles.weightInputCol}>
-          <Controller
-            control={control}
-            name="evaluation.technicalWeight"
-            render={({ field }) => (
-              <LabeledField
-                label="Technical (%)"
-                error={evalErrors?.technicalWeight?.message}
-              >
-                <TextField
-                  value={field.value !== undefined ? String(field.value) : ''}
-                  onChange={(v) => {
-                    const n = Math.max(0, Math.min(100, Number(v) || 0));
-                    setBalanced(n);
-                  }}
-                  onBlur={field.onBlur}
-                  placeholder="0"
-                  keyboardType="numeric"
-                  error={!!evalErrors?.technicalWeight}
-                />
-              </LabeledField>
-            )}
-          />
-        </View>
-        <View style={styles.weightInputCol}>
-          <Controller
-            control={control}
-            name="evaluation.financialWeight"
-            render={({ field }) => (
-              <LabeledField
-                label="Financial (%)"
-                error={evalErrors?.financialWeight?.message}
-              >
-                <TextField
-                  value={field.value !== undefined ? String(field.value) : ''}
-                  onChange={(v) => {
-                    const n = Math.max(0, Math.min(100, Number(v) || 0));
-                    setBalanced(100 - n);
-                  }}
-                  onBlur={field.onBlur}
-                  placeholder="0"
-                  keyboardType="numeric"
-                  error={!!evalErrors?.financialWeight}
-                />
-              </LabeledField>
-            )}
-          />
-        </View>
-      </View>
-
-      <Controller
-        control={control}
-        name="evaluation.criteria"
-        render={({ field }) => (
-          <LabeledField
-            label="Evaluation Criteria"
-            error={evalErrors?.criteria?.message}
-            helper="Free-form description of how bids will be evaluated."
-          >
-            <TextField
-              value={field.value ?? ''}
-              onChange={field.onChange}
-              onBlur={field.onBlur}
-              placeholder="e.g., Technical: methodology 30%, team 25%, experience 15%. Financial: lowest evaluated price wins…"
-              multiline
-              numberOfLines={5}
+        <View style={[styles.weightInputs, { marginTop: spacing.md }]}>
+          <View style={styles.weightInputCol}>
+            <Controller
+              control={control}
+              name="evaluation.technicalWeight"
+              render={({ field }) => (
+                <LabeledField
+                  label="Technical (%)"
+                  error={evalErrors?.technicalWeight?.message}
+                >
+                  <TextField
+                    value={field.value !== undefined ? String(field.value) : ''}
+                    onChange={(v) => {
+                      const n = Math.max(0, Math.min(100, Number(v) || 0));
+                      setBalanced(n);
+                    }}
+                    onBlur={field.onBlur}
+                    placeholder="0"
+                    keyboardType="numeric"
+                    error={!!evalErrors?.technicalWeight}
+                  />
+                </LabeledField>
+              )}
             />
-          </LabeledField>
-        )}
+          </View>
+          <View style={styles.weightInputCol}>
+            <Controller
+              control={control}
+              name="evaluation.financialWeight"
+              render={({ field }) => (
+                <LabeledField
+                  label="Financial (%)"
+                  error={evalErrors?.financialWeight?.message}
+                >
+                  <TextField
+                    value={field.value !== undefined ? String(field.value) : ''}
+                    onChange={(v) => {
+                      const n = Math.max(0, Math.min(100, Number(v) || 0));
+                      setBalanced(100 - n);
+                    }}
+                    onBlur={field.onBlur}
+                    placeholder="0"
+                    keyboardType="numeric"
+                    error={!!evalErrors?.financialWeight}
+                  />
+                </LabeledField>
+              )}
+            />
+          </View>
+        </View>
+      </PremiumCard>
+
+      {/* ─── Evaluation Criteria ──────────────────────────────────────── */}
+      <SectionHeader
+        title="Evaluation Criteria"
+        description="Free-form description of how bids will be evaluated."
       />
+
+      <PremiumCard>
+        <Controller
+          control={control}
+          name="evaluation.criteria"
+          render={({ field }) => (
+            <LabeledField
+              label="Evaluation Criteria"
+              error={evalErrors?.criteria?.message}
+              helper="Describe how bids will be scored and compared."
+            >
+              <TextField
+                value={field.value ?? ''}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                placeholder="e.g., Technical: methodology 30%, team 25%, experience 15%. Financial: lowest evaluated price wins…"
+                multiline
+                numberOfLines={5}
+              />
+            </LabeledField>
+          )}
+        />
+      </PremiumCard>
     </View>
   );
 };
@@ -351,26 +417,34 @@ const Step3_EligibilityEvaluation: React.FC = () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 const styles = StyleSheet.create({
-  root: { gap: 18 },
+  root: {},
 
   weightBarRoot: { gap: 10 },
-  bar: { height: 14, borderRadius: 999, overflow: 'hidden' },
+  bar: { overflow: 'hidden' },
   barTech: { height: '100%' },
 
-  legendRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  legendDot:   { width: 10, height: 10, borderRadius: 999 },
+  legendDot: { width: 10, height: 10 },
   legendLabel: { fontSize: 13, fontWeight: '500' },
   legendValue: { fontSize: 14, fontWeight: '700' },
 
   adjuster: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    gap: 12, marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   adjusterBtn: {
-    width: 38, height: 38,
-    alignItems: 'center', justifyContent: 'center',
-    borderRadius: 10, borderWidth: 1,
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
   },
   adjusterCenter: { flex: 1, fontSize: 11, textAlign: 'center' },
 

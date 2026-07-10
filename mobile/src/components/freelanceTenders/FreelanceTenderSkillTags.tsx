@@ -3,36 +3,57 @@ import { View, Text, StyleSheet, ScrollView, ViewStyle } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
 import { withAlpha } from '../../theme/utils';
 
-interface Props {
-  skills: string[];
-  variant?: 'wrap' | 'scroll' | 'compact';
+interface FreelanceTenderSkillTagsProps {
+  skills:          string[];
+  variant?:        'wrap' | 'scroll' | 'compact';
   containerStyle?: ViewStyle;
-  maxVisible?: number;
+  maxVisible?:     number;
 }
 
-const FreelanceTenderSkillTags: React.FC<Props> = memo(({
+const FreelanceTenderSkillTags: React.FC<FreelanceTenderSkillTagsProps> = memo(({
   skills, variant = 'wrap', containerStyle, maxVisible = 4,
 }) => {
-  const { colors: c, radius, type } = useTheme();
-  const styles = useMemo(() => makeStyles(c, radius), [c, radius]);
+  const { colors, radius, type } = useTheme();
 
   if (!skills?.length) return null;
 
   const renderTag = (skill: string, index: number) => (
-    <View key={`${skill}-${index}`} style={styles.tag}>
-      <Text style={[type.caption, styles.tagText]}>{skill}</Text>
+    <View
+      key={`${skill}-${index}`}
+      style={[
+        tagS.tag,
+        {
+          backgroundColor: withAlpha(colors.text, 0.06),
+          borderColor:     colors.border,
+          borderRadius:    radius.full,
+        },
+      ]}
+    >
+      <Text style={[tagS.text, { color: colors.textSecondary }]}>{skill}</Text>
     </View>
   );
 
   if (variant === 'compact') {
-    const visible = skills.slice(0, maxVisible);
+    const visible   = skills.slice(0, maxVisible);
     const remaining = skills.length - maxVisible;
     return (
-      <View style={[styles.wrap, containerStyle]}>
+      <View style={[tagS.wrap, containerStyle]}>
         {visible.map(renderTag)}
         {remaining > 0 && (
-          <View style={[styles.tag, styles.moreTag]}>
-            <Text style={[type.caption, styles.moreText]}>+{remaining}</Text>
+          <View
+            style={[
+              tagS.tag,
+              tagS.moreTag,
+              {
+                backgroundColor: withAlpha(colors.primary, 0.08),
+                borderColor:     withAlpha(colors.primary, 0.22),
+                borderRadius:    radius.full,
+              },
+            ]}
+          >
+            <Text style={[tagS.text, { color: colors.primary, fontWeight: '700' }]}>
+              +{remaining}
+            </Text>
           </View>
         )}
       </View>
@@ -41,15 +62,18 @@ const FreelanceTenderSkillTags: React.FC<Props> = memo(({
 
   if (variant === 'scroll') {
     return (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.container, containerStyle]}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={[tagS.scrollContent, containerStyle]}
+      >
         {skills.map(renderTag)}
       </ScrollView>
     );
   }
 
   return (
-    <View style={[styles.wrap, containerStyle]}>
+    <View style={[tagS.wrap, containerStyle]}>
       {skills.map(renderTag)}
     </View>
   );
@@ -57,19 +81,12 @@ const FreelanceTenderSkillTags: React.FC<Props> = memo(({
 
 FreelanceTenderSkillTags.displayName = 'FreelanceTenderSkillTags';
 
-const makeStyles = (c: any, radius: any) =>
-  StyleSheet.create({
-    container: { gap: 8 },
-    wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    tag: {
-      backgroundColor: withAlpha(c.text, 0.07),
-      paddingHorizontal: 10, paddingVertical: 5,
-      borderRadius: radius.full,
-      borderWidth: 1, borderColor: c.border,
-    },
-    tagText: { color: c.textSecondary, fontWeight: '500' },
-    moreTag: { backgroundColor: withAlpha(c.textMuted, 0.14) },
-    moreText: { color: c.text, fontWeight: '700' },
-  });
+const tagS = StyleSheet.create({
+  scrollContent: { gap: 6 },
+  wrap:          { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  tag:           { paddingHorizontal: 9, paddingVertical: 4, borderWidth: 1 },
+  text:          { fontSize: 11, fontWeight: '500' },
+  moreTag:       {},
+});
 
 export default FreelanceTenderSkillTags;

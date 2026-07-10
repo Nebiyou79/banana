@@ -1,21 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// src/hooks/useProposal.ts
+// mobile/src/hooks/useProposal.ts
 // Banana Mobile App — Module 6B: Proposals
-//
 // All 13 React Query hooks for the Proposals module.
-// Query key namespace: ['proposals', ...]
-//
-// Cache-invalidation contracts:
-//   useSubmitProposal       → proposal detail + my-proposals list
-//   useWithdrawProposal     → proposal detail + my-proposals list
-//   useUpdateProposalStatus → tenderProposals list (+ proposal detail)
-//   useToggleShortlist      → tenderProposals list + proposal detail
-//   useUpdateProposalDraft  → proposal detail (silent — no toast)
-//   useUploadProposalAttachment → proposal detail
-//   useRemoveProposalAttachment → proposal detail
-//
 // Mirrors frontend/src/hooks/useProposal.ts pattern exactly.
-// ─────────────────────────────────────────────────────────────────────────────
 
 import {
   useQuery,
@@ -24,10 +10,10 @@ import {
   type UseQueryOptions,
   type UseMutationOptions,
 } from '@tanstack/react-query';
+import Toast from 'react-native-toast-message';
+import { useRef, useState, useCallback, useEffect } from 'react';
 
 import proposalService from '../services/proposalService';
-import { toast } from '../lib/toast';
-
 import type {
   Proposal,
   ProposalListItem,
@@ -39,15 +25,12 @@ import type {
   UpdateProposalStatusData,
   ProposalAttachment,
   UploadAttachmentResponse,
-  getTenderId as GetTenderIdFn,
 } from '../types/proposal';
-
 import { getTenderId } from '../types/proposal';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // QUERY KEYS
 // All keys live under the ['proposals'] namespace.
-// Keep keys referentially stable — consumers memoize with these.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const proposalKeys = {
@@ -183,7 +166,8 @@ export function useTenderProposalStats(
  * Equivalent to frontend Hook 28.
  *
  * On success:
- *   • Invalidates myProposals list (the new draft should appear there)
+ *   • Seeds the detail cache immediately
+ *   • Invalidates myProposals list
  *   • Invalidates myProposalForTender for the given tenderId
  */
 export function useCreateProposalDraft(
@@ -208,7 +192,7 @@ export function useCreateProposalDraft(
 
     onError: (err) => {
       console.error('[useCreateProposalDraft]', err);
-      toast.error('Could not start your proposal. Please try again.');
+      Toast.show({ type: 'error', text1: 'Could not start your proposal. Please try again.' });
     },
 
     ...options,
@@ -272,7 +256,7 @@ export function useSubmitProposal(
       proposalService.submitProposal(proposalId),
 
     onSuccess: (data) => {
-      toast.success('Proposal submitted successfully!');
+      Toast.show({ type: 'success', text1: 'Proposal submitted successfully!' });
 
       const tenderId = getTenderId(data.tender);
 
@@ -290,7 +274,7 @@ export function useSubmitProposal(
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
       const message =
         err?.response?.data?.message ?? 'Failed to submit proposal.';
-      toast.error(message);
+      Toast.show({ type: 'error', text1: message });
     },
 
     ...options,
@@ -316,7 +300,7 @@ export function useWithdrawProposal(
       proposalService.withdrawProposal(proposalId),
 
     onSuccess: (data) => {
-      toast.info('Proposal withdrawn.');
+      Toast.show({ type: 'info', text1: 'Proposal withdrawn.' });
 
       const tenderId = getTenderId(data.tender);
 
@@ -333,7 +317,7 @@ export function useWithdrawProposal(
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
       const message =
         err?.response?.data?.message ?? 'Could not withdraw proposal.';
-      toast.error(message);
+      Toast.show({ type: 'error', text1: message });
     },
 
     ...options,
@@ -372,7 +356,7 @@ export function useUpdateProposalStatus(
     onSuccess: (updatedProposal, variables) => {
       const msg =
         STATUS_MESSAGES[variables.data.status] ?? 'Status updated.';
-      toast.success(msg);
+      Toast.show({ type: 'success', text1: msg });
 
       // Resolve tenderId from variable hint or from the returned proposal
       const tenderId =
@@ -396,7 +380,7 @@ export function useUpdateProposalStatus(
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
       const message =
         err?.response?.data?.message ?? 'Failed to update status.';
-      toast.error(message);
+      Toast.show({ type: 'error', text1: message });
     },
 
     ...options,
@@ -455,7 +439,7 @@ export function useToggleShortlist(
           context.previousDetail,
         );
       }
-      toast.error('Could not update shortlist.');
+      Toast.show({ type: 'error', text1: 'Could not update shortlist.' });
     },
 
     onSettled: (_data, _err, { proposalId, tenderId }) => {
@@ -520,7 +504,7 @@ export function useUploadProposalAttachment(
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
       const message =
         err?.response?.data?.message ?? 'Upload failed. Please try again.';
-      toast.error(message);
+      Toast.show({ type: 'error', text1: message });
     },
 
     ...options,
@@ -554,9 +538,76 @@ export function useRemoveProposalAttachment(
     },
 
     onError: () => {
-      toast.error('Could not remove attachment.');
+      Toast.show({ type: 'error', text1: 'Could not remove attachment.' });
     },
 
     ...options,
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTO-SAVE HOOK (NEW)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type AutoSaveState = 'idle' | 'saving' | 'saved' | 'error';
+
+/**
+ * Debounced auto-save for proposal drafts.
+ * - Fires 3s after the last form change when isDirty && !isSubmitting && !!proposalId
+ * - forceSave() bypasses the debounce immediately
+ * - Reports saveState: "idle" | "saving" | "saved" | "error"
+ */
+export function useProposalAutoSave({
+  proposalId,
+  formData,
+  isDirty,
+  isSubmitting,
+}: {
+  proposalId: string | undefined | null;
+  formData: UpdateProposalData;
+  isDirty: boolean;
+  isSubmitting: boolean;
+}): { saveState: AutoSaveState; lastSavedAt: Date | null; forceSave: () => void } {
+  const [saveState, setSaveState] = useState<AutoSaveState>('idle');
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const updateDraft = useUpdateProposalDraft();
+
+  const save = useCallback(async () => {
+    if (!proposalId || isSubmitting) return;
+    setSaveState('saving');
+    try {
+      await updateDraft.mutateAsync({ proposalId, data: formData });
+      setSaveState('saved');
+      setLastSavedAt(new Date());
+    } catch {
+      setSaveState('error');
+    }
+  }, [proposalId, formData, isSubmitting, updateDraft]);
+
+  // Debounced auto-save triggered by formData changes
+  useEffect(() => {
+    if (!isDirty || isSubmitting || !proposalId) return;
+
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(save, 3000);
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [isDirty, isSubmitting, proposalId, save]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const forceSave = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    save();
+  }, [save]);
+
+  return { saveState, lastSavedAt, forceSave };
 }

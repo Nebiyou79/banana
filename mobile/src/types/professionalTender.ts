@@ -158,7 +158,40 @@ export interface Addendum {
   issuedAt: string;           // ISO
   issuedBy?: string;          // user id
 }
-
+export interface TenderInvitation {
+  _id:              string;
+  invitedUser?:     string;
+  invitedCompany?:  string;
+  email?:           string;
+  invitationStatus: 'pending' | 'accepted' | 'declined' | 'expired';
+  invitedAt?:       string;
+  respondedAt?:     string;
+  tokenExpires?:    string;
+  message?:         string;
+}
+ 
+export interface TenderWithMyInvitation {
+  _id:              string;
+  title:            string;
+  referenceNumber?: string;
+  deadline:         string;
+  status:           string;
+  visibilityType?:  string;
+  owner?:           { _id: string; name: string; email: string };
+  myInvitations:    TenderInvitation[];
+}
+ 
+export interface MyInvitationsResponse {
+  invitations: TenderWithMyInvitation[];
+  pagination: {
+    page:       number;
+    limit:      number;
+    total:      number;
+    totalPages: number;
+  };
+}
+ 
+export type InvitationRespondValue = 'accepted' | 'declined';
 export interface TenderAttachment {
   url(url: any): unknown;
   _id: string;
@@ -400,6 +433,11 @@ export interface ProfessionalTenderListResponse {
 
 /** GET /:id wraps the tender with an `isOwner` flag for role-aware rendering. */
 export interface ProfessionalTenderDetailResponse {
+  title: string | undefined;
+  deadline(deadline: any): string | undefined;
+  referenceNumber: import("react").JSX.Element;
+  workflowType: string;
+  status: string | undefined;
   data: ProfessionalTender;
   isOwner: boolean;
 }

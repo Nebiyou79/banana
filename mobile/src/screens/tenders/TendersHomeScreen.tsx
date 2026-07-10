@@ -1,7 +1,14 @@
 // src/screens/tenders/TendersHomeScreen.tsx
-// FIXED: Pulls stats from all 4 tender services (professional, freelance, bids, proposals)
-// FIXED: All navigation links corrected to real route names
-// FIXED: Sections show live data with proper loading states
+//
+// Wired to real data from:
+//   1. useMyPostedProfessionalTenders → ProfessionalTenderListResponse
+//        .tenders[]  (ProfessionalTenderListItem with .status, .bidCount)
+//        .pagination.total
+//   2. useMyPostedFreelanceTenders    → FreelanceTenderListResponse
+//        .tenders[]  (FreelanceTenderListItem with .status)
+//        .pagination.total
+//   3. useGetMyAllBids                → { pagination.total } or { totalBids }
+//   4. useMyProposals                 → { pagination.total }
 
 import React, { useMemo } from 'react';
 import {
@@ -31,6 +38,7 @@ import type {
   ProfessionalTenderListItem,
   ProfessionalTenderStatus,
 } from '../../types/professionalTender';
+import type { FreelanceTenderListItem } from '../../types/freelanceTender';
 
 export type TendersHomeRole = 'company' | 'organization';
 interface TendersHomeScreenProps { userRole: TendersHomeRole }
@@ -48,12 +56,12 @@ const StatTile: React.FC<{
 
   const toneColor = useMemo(() => {
     const map: Record<string, { fg: string; bg: string }> = {
-      blue:   { fg: c.candidate ?? c.primary,      bg: withAlpha(c.candidate ?? c.primary, 0.12) },
-      green:  { fg: c.success,                     bg: withAlpha(c.success, 0.12)                },
-      amber:  { fg: c.warning,                     bg: withAlpha(c.warning, 0.12)                },
-      purple: { fg: c.organization ?? c.secondary, bg: withAlpha(c.organization ?? c.secondary, 0.12) },
-      rose:   { fg: c.danger,                      bg: withAlpha(c.danger, 0.12)                 },
-      teal:   { fg: c.primary,                     bg: withAlpha(c.primary, 0.08)                },
+      blue:   { fg: c.candidate ?? c.primary,        bg: withAlpha(c.candidate ?? c.primary, 0.12) },
+      green:  { fg: c.success,                       bg: withAlpha(c.success, 0.12) },
+      amber:  { fg: c.warning,                       bg: withAlpha(c.warning, 0.12) },
+      purple: { fg: c.organization ?? c.primary,     bg: withAlpha(c.organization ?? c.primary, 0.12) },
+      rose:   { fg: c.danger,                        bg: withAlpha(c.danger, 0.12) },
+      teal:   { fg: c.primary,                       bg: withAlpha(c.primary, 0.08) },
     };
     return map[tone] ?? map.blue;
   }, [c, tone]);
@@ -65,7 +73,7 @@ const StatTile: React.FC<{
       style={({ pressed }) => [
         tile.root,
         {
-          backgroundColor: c.surface,
+          backgroundColor: c.bgCard,
           borderColor: c.border,
           borderRadius: radius.lg,
           opacity: onPress && pressed ? 0.88 : 1,
@@ -143,7 +151,7 @@ const QuickActionPill: React.FC<QuickActionItem> = ({ title, icon, onPress, badg
       style={({ pressed }) => [
         qa.pill,
         {
-          backgroundColor: c.surface,
+          backgroundColor: c.bgCard,
           borderColor:     c.border,
           borderRadius:    radius.lg,
           opacity:         pressed ? 0.85 : 1,
@@ -180,9 +188,9 @@ const qa = StyleSheet.create({
   badge:   { position: 'absolute', top: -4, right: -6, minWidth: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
 });
 
-// ─── Recent tender row ────────────────────────────────────────────────────────
+// ─── Recent professional tender row ──────────────────────────────────────────
 const RecentRow: React.FC<{ item: ProfessionalTenderListItem; onPress: () => void }> = ({ item, onPress }) => {
-  const { colors: c, radius, spacing, type } = useTheme();
+  const { colors: c, radius, type } = useTheme();
 
   const statusColor: Record<ProfessionalTenderStatus, string> = {
     draft:            c.textMuted,
@@ -192,7 +200,7 @@ const RecentRow: React.FC<{ item: ProfessionalTenderListItem; onPress: () => voi
     revealed:         c.primary,
     closed:           c.danger,
     cancelled:        c.textMuted,
-    awarded:          c.secondary,
+    awarded:          c.primary,
   };
 
   return (
@@ -200,7 +208,7 @@ const RecentRow: React.FC<{ item: ProfessionalTenderListItem; onPress: () => voi
       onPress={onPress}
       style={({ pressed }) => [
         recent.row,
-        { backgroundColor: c.surface, borderColor: c.border, borderRadius: radius.md, opacity: pressed ? 0.9 : 1 },
+        { backgroundColor: c.bgCard, borderColor: c.border, borderRadius: radius.md, opacity: pressed ? 0.9 : 1 },
       ]}
     >
       <View style={[recent.dot, { backgroundColor: statusColor[item.status] ?? c.textMuted }]} />
@@ -209,6 +217,7 @@ const RecentRow: React.FC<{ item: ProfessionalTenderListItem; onPress: () => voi
           {item.title}
         </Text>
         <Text style={[type.caption, { color: c.textMuted, marginTop: 2, textTransform: 'capitalize' }]} numberOfLines={1}>
+          {/* bidCount comes directly from ProfessionalTenderListItem */}
           {item.bidCount ?? 0} bid{(item.bidCount ?? 0) === 1 ? '' : 's'} · {item.status.replace(/_/g, ' ')}
         </Text>
       </View>
@@ -223,7 +232,7 @@ const recent = StyleSheet.create({
   content: { flex: 1, minWidth: 0 },
 });
 
-// ─── Summary row for freelance tenders / bids / proposals ─────────────────────
+// ─── Summary card (freelance / bids / proposals) ──────────────────────────────
 const SummaryCard: React.FC<{
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
@@ -246,7 +255,7 @@ const SummaryCard: React.FC<{
       style={({ pressed }) => [
         sum.card,
         {
-          backgroundColor: c.surface,
+          backgroundColor: c.bgCard,
           borderColor: c.border,
           borderRadius: radius.md,
           opacity: onPress && pressed ? 0.88 : 1,
@@ -286,7 +295,9 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
 
   const isCompany = userRole === 'company';
 
-  // ── 1. Professional tenders (owner-posted) ─────────────────────────────
+  // ── 1. Professional tenders posted by this owner ───────────────────────
+  // useMyPostedProfessionalTenders returns ProfessionalTenderListResponse:
+  //   { tenders: ProfessionalTenderListItem[], pagination: { total, ... } }
   const {
     data: profData,
     isLoading: profLoading,
@@ -294,7 +305,9 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
     isFetching: profFetching,
   } = useMyPostedProfessionalTenders({ page: 1, limit: 10 });
 
-  // ── 2. Freelance tenders (owner-posted) ───────────────────────────────
+  // ── 2. Freelance tenders posted by this owner ──────────────────────────
+  // useMyPostedFreelanceTenders returns FreelanceTenderListResponse:
+  //   { tenders: FreelanceTenderListItem[], pagination: { total, page, totalPages } }
   const {
     data: freelanceData,
     isLoading: freelanceLoading,
@@ -302,13 +315,14 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
   } = useMyPostedFreelanceTenders({ page: 1, limit: 5 });
 
   // ── 3. Bids received across all my tenders ────────────────────────────
+  // pagination.total is the authoritative total bid count from the server
   const {
     data: bidsData,
     isLoading: bidsLoading,
     refetch: refetchBids,
-  } = useGetMyAllBids({ page: 1, limit: 1 }); // we only need total
+  } = useGetMyAllBids({ page: 1, limit: 1 });
 
-  // ── 4. Proposals submitted by this user (freelancer role) ──────────────
+  // ── 4. Proposals submitted by this user ───────────────────────────────
   const {
     data: proposalsData,
     isLoading: proposalsLoading,
@@ -322,31 +336,46 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
   };
 
   // ── Professional tender stats ──────────────────────────────────────────
+  // tenders[] comes from ProfessionalTenderListItem which has status + bidCount
   const profStats = useMemo(() => {
     const tenders = profData?.tenders ?? [];
-    const total   = profData?.pagination?.total ?? tenders.length;
+    // Use server-side total from pagination when available, fall back to page length
+    const total = profData?.pagination?.total ?? tenders.length;
     return {
       total,
       draft:     tenders.filter(t => t.status === 'draft').length,
+      // 'published' and 'locked' are both "live" states
       published: tenders.filter(t => t.status === 'published' || t.status === 'locked').length,
       awarded:   tenders.filter(t => t.status === 'awarded').length,
-      bids:      tenders.reduce((s, t) => s + (t.bidCount ?? 0), 0),
+      // Sum bidCount from each ProfessionalTenderListItem for the current page
+      bids:      tenders.reduce((sum, t) => sum + (t.bidCount ?? 0), 0),
     };
   }, [profData]);
 
   // ── Freelance tender stats ─────────────────────────────────────────────
+  // FreelanceTenderListResponse has .tenders[] and .pagination.total
   const freelanceStats = useMemo(() => {
-    const tenders = (freelanceData as any)?.tenders ?? [];
-    const total   = (freelanceData as any)?.pagination?.total ?? tenders.length;
-    return { total, active: tenders.filter((t: any) => t.status === 'published').length };
+    const tenders: FreelanceTenderListItem[] = freelanceData?.tenders ?? [];
+    const total = freelanceData?.pagination?.total ?? tenders.length;
+    return {
+      total,
+      // 'published' is the active/live status for freelance tenders
+      active: tenders.filter(t => t.status === 'published').length,
+    };
   }, [freelanceData]);
 
-  // ── Bids stats (from paginated total) ─────────────────────────────────
-  const totalBidsReceived = (bidsData as any)?.pagination?.total ?? (bidsData as any)?.totalBids ?? 0;
+  // ── Bids total from pagination ─────────────────────────────────────────
+  // Prefer pagination.total (server-side count) over totalBids fallback
+  const totalBidsReceived: number =
+    (bidsData as any)?.pagination?.total ??
+    (bidsData as any)?.totalBids ??
+    0;
 
-  // ── Proposals stats ────────────────────────────────────────────────────
-  const totalProposals = (proposalsData as any)?.pagination?.total ?? 0;
+  // ── Proposals total from pagination ───────────────────────────────────
+  const totalProposals: number =
+    (proposalsData as any)?.pagination?.total ?? 0;
 
+  // ── Recent tenders (latest 3 from page 1) ─────────────────────────────
   const recentTenders = profData?.tenders.slice(0, 3) ?? [];
 
   // ── Quick actions ──────────────────────────────────────────────────────
@@ -374,7 +403,8 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
     {
       title:   'Received Bids',
       icon:    'mail-open-outline',
-      badge:   profStats.bids,
+      // Show total bids across all tenders on the badge
+      badge:   totalBidsReceived > 0 ? totalBidsReceived : undefined,
       onPress: () => navigation.navigate('Bids'),
     },
     {
@@ -383,7 +413,7 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
       badge:   totalProposals > 0 ? totalProposals : undefined,
       onPress: () => navigation.navigate('Proposals'),
     },
-  ], [isCompany, profStats.bids, totalProposals, navigation]);
+  ], [isCompany, totalBidsReceived, totalProposals, navigation]);
 
   return (
     <SafeAreaView style={[S.root, { backgroundColor: c.bg }]} edges={['top']}>
@@ -398,7 +428,7 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
               size={12}
               color={c.primary}
             />
-            <Text style={[type.caption, { color: c.primary, fontWeight: '700', letterSpacing: 0.4 }]}>
+            <Text style={[type.caption, { color: c.primary, fontWeight: '700', letterSpacing: 0.4 }]} numberOfLines={1}>
               {isCompany ? 'Company' : 'Organization'}
             </Text>
           </View>
@@ -424,6 +454,7 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
             onAction={() => navigation.navigate('ProfessionalTenders', { screen: 'MyProfessionalTenders' })}
           />
           <View style={S.statsRow}>
+            {/* profStats.total = pagination.total from server (all pages) */}
             <StatTile
               label="Total Posted"
               value={profStats.total}
@@ -432,6 +463,7 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
               loading={profLoading}
               onPress={() => navigation.navigate('ProfessionalTenders', { screen: 'MyProfessionalTenders' })}
             />
+            {/* published + locked = currently live */}
             <StatTile
               label="Live"
               value={profStats.published}
@@ -440,6 +472,7 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
               loading={profLoading}
               onPress={() => navigation.navigate('ProfessionalTenders', { screen: 'MyProfessionalTenders' })}
             />
+            {/* draft = not yet published */}
             <StatTile
               label="Drafts"
               value={profStats.draft}
@@ -448,6 +481,7 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
               loading={profLoading}
               onPress={() => navigation.navigate('ProfessionalTenders', { screen: 'MyProfessionalTenders' })}
             />
+            {/* bids = sum of bidCount across tenders on page 1 */}
             <StatTile
               label="Bids Received"
               value={profStats.bids}
@@ -459,10 +493,11 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
           </View>
         </View>
 
-        {/* ── Other Services Summary ─────────────────────────────────── */}
+        {/* ── Activity Overview ─────────────────────────────────────── */}
         <View style={[S.section, { marginTop: spacing.lg }]}>
           <SectionHeader label="Activity Overview" />
           <View style={{ gap: 8 }}>
+            {/* freelanceStats.total = pagination.total from server */}
             <SummaryCard
               icon="people-circle-outline"
               label="Freelance Tenders"
@@ -472,6 +507,7 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
               loading={freelanceLoading}
               onPress={() => navigation.navigate('FreelanceTenders', { screen: 'MyFreelanceTenders' })}
             />
+            {/* totalBidsReceived = bidsData.pagination.total (server-side) */}
             <SummaryCard
               icon="mail-open-outline"
               label="Total Bids Received"
@@ -481,6 +517,7 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
               loading={bidsLoading}
               onPress={() => navigation.navigate('Bids')}
             />
+            {/* totalProposals = proposalsData.pagination.total */}
             <SummaryCard
               icon="documents-outline"
               label="My Proposals"
@@ -492,7 +529,7 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
           </View>
         </View>
 
-        {/* ── Quick Actions (horizontal FlatList) ──────────────────────── */}
+        {/* ── Quick Actions ─────────────────────────────────────────── */}
         <View style={[S.section, { marginTop: spacing.lg }]}>
           <SectionHeader label="Quick Actions" />
           <FlatList
@@ -505,7 +542,7 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
           />
         </View>
 
-        {/* ── Recent Professional Tenders ───────────────────────────────── */}
+        {/* ── Recent Professional Tenders ───────────────────────────── */}
         <View style={[S.section, { marginTop: spacing.lg }]}>
           <SectionHeader
             label="Recent Tenders"
@@ -518,7 +555,7 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
               <ActivityIndicator size="small" color={c.primary} />
             </View>
           ) : recentTenders.length === 0 ? (
-            <View style={[S.emptyRecent, { borderColor: c.border, backgroundColor: c.surface, borderRadius: radius.lg }]}>
+            <View style={[S.emptyRecent, { borderColor: c.border, backgroundColor: c.bgCard, borderRadius: radius.lg }]}>
               <Ionicons name="albums-outline" size={28} color={c.textMuted} />
               <Text style={[type.bodySm, { color: c.text, fontWeight: '700' }]}>No tenders yet</Text>
               <Text style={[type.caption, { color: c.textMuted, textAlign: 'center', maxWidth: 260 }]}>
@@ -543,7 +580,7 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
           )}
         </View>
 
-        {/* ── Browse CTA (company only) ─────────────────────────────────── */}
+        {/* ── Browse CTA (company only) ─────────────────────────────── */}
         {isCompany && (
           <View style={[S.section, { marginTop: spacing.lg }]}>
             <Pressable
@@ -576,7 +613,14 @@ export const TendersHomeScreen: React.FC<TendersHomeScreenProps> = ({ userRole }
 const S = StyleSheet.create({
   root:          { flex: 1 },
   scrollContent: { paddingBottom: 24 },
-  roleChip:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4 },
+  roleChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    maxWidth: 110,
+  },
   section:       { paddingHorizontal: 14, gap: 10 },
   statsRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   recentLoading: { padding: 18, alignItems: 'center' },

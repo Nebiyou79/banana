@@ -1,38 +1,4 @@
-export {
-  ROLE_COLORS,
-  DARK_SOCIAL,
-  LIGHT_SOCIAL,
-  ROLE_SPLASH_LABELS,
-  REACTION_EMOJI,
-  SPACING,
-  RADIUS,
-  TYPE,
-  withAlpha,
-  useSocialTheme,
-} from '../../theme/socialTheme';
-export type { SocialTheme } from '../../theme/socialTheme';
-
-export {
-  useFadeIn,
-  useSlideUp,
-  usePressScale,
-  useLikeBurst,
-  useSkeletonPulse,
-  useTabIndicator,
-  useHeaderCollapse,
-} from '../../theme/animations';
-
-export {
-  ADS_CONFIG,
-  getAdForPlacement,
-  injectAdsIntoFeed,
-} from '../../theme/adsConfig';
-
-export {
-  getRoleBadgeStyle,
-  getFollowButtonStyle,
-  type FollowState,
-} from '../../theme/styleHelpers';
+// src/social/components/shared/RoleBadge.tsx
 import React, { memo } from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useSocialTheme } from '../../theme/socialTheme';
@@ -51,13 +17,10 @@ interface Props {
   style?: ViewStyle;
 }
 
-/**
- * Small uppercase pill that displays the owner's role. The role's own palette
- * is used (not the viewer's), so a candidate sees a freelancer's purple badge
- * on a freelancer's post. Background uses `withAlpha(roleColor, 0.12)`.
- */
 const RoleBadge: React.FC<Props> = memo(({ role, size = 'sm', style }) => {
-  const { roleColors, withAlpha, colors } = useSocialTheme();
+  const theme = useSocialTheme();
+  const { roleColors, withAlpha, dark } = theme;
+  
   if (!role) return null;
 
   const palette = roleColors[role] ?? roleColors.candidate;
@@ -68,6 +31,11 @@ const RoleBadge: React.FC<Props> = memo(({ role, size = 'sm', style }) => {
   const paddingHorizontal = md ? 8 : 6;
   const fontSize = md ? 11 : 10;
 
+  // Dark mode: more vibrant (higher opacity)
+  // Light mode: softer (lower opacity)
+  const bgOpacity = dark ? 0.18 : 0.10;
+  const borderOpacity = dark ? 0.35 : 0.20;
+
   return (
     <View
       style={[
@@ -75,8 +43,8 @@ const RoleBadge: React.FC<Props> = memo(({ role, size = 'sm', style }) => {
         {
           height,
           paddingHorizontal,
-          backgroundColor: withAlpha(palette.primary, 0.12),
-          borderColor: withAlpha(palette.primary, 0.28),
+          backgroundColor: withAlpha(palette.primary, bgOpacity),
+          borderColor: withAlpha(palette.primary, borderOpacity),
         },
         style,
       ]}
@@ -97,8 +65,6 @@ const RoleBadge: React.FC<Props> = memo(({ role, size = 'sm', style }) => {
     </View>
   );
 });
-
-RoleBadge.displayName = 'RoleBadge';
 
 const styles = StyleSheet.create({
   badge: {

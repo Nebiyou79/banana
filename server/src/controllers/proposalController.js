@@ -1,11 +1,7 @@
 // controllers/proposalController.js
 // All 14 controller functions for the Proposal microservice.
 // Groups: A (Freelancer), B (Owner), C (Attachments)
-//
-// req.user shape varies by JWT middleware version.
-// ALWAYS extract via: const userId = getUid(req);
-// which handles both req.user.userId and req.user._id.
-//
+
 const path = require('path');
 const fs = require('fs');
 const Proposal = require('../models/Proposal');
@@ -13,10 +9,11 @@ const FreelanceTender = require('../models/FreelanceTender');
 const FreelancerProfile = require('../models/Freelancer');
 const User = require('../models/User');
 const proposalEmailService = require('../services/proposalEmailService');
+// 🔔 NOTIFICATION
+const notificationService = require('../services/notificationService');
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
-/** Always resolves the caller's userId regardless of JWT middleware version */
 const getUid = (req) => (req.user.userId || req.user._id || '').toString();
 
 const handleError = (res, error, context = 'proposalController') => {
@@ -65,11 +62,6 @@ const buildPagination = (total, page, limit) => ({
 // GROUP A — FREELANCER ACTIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/**
- * A1. createDraft
- * POST /api/v1/proposals/create
- * Auth: freelancer
- */
 const createDraft = async (req, res) => {
   try {
     const userId = getUid(req);
@@ -100,7 +92,6 @@ const createDraft = async (req, res) => {
       });
     }
 
-    // Only block if a final (non-draft) submission already exists
     const existing = await Proposal.findOne({
       tender: tenderId,
       freelancer: userId,
@@ -139,11 +130,6 @@ const createDraft = async (req, res) => {
   }
 };
 
-/**
- * A2. updateDraft
- * PUT /api/v1/proposals/:proposalId
- * Auth: freelancer — requireProposalOwner sets req.proposal
- */
 const updateDraft = async (req, res) => {
   try {
     const proposal = req.proposal;
@@ -183,11 +169,6 @@ const updateDraft = async (req, res) => {
   }
 };
 
-/**
- * A3. submitProposal
- * POST /api/v1/proposals/:proposalId/submit
- * Auth: freelancer — requireProposalOwner sets req.proposal
- */
 const submitProposal = async (req, res) => {
   try {
     const userId = getUid(req);
@@ -219,7 +200,6 @@ const submitProposal = async (req, res) => {
       });
     }
 
-    // Cross-check required screening questions
     const tender = await FreelanceTender.findById(proposal.tender)
       .select('details.screeningQuestions owner title')
       .populate('owner', 'name email');
@@ -243,7 +223,32 @@ const submitProposal = async (req, res) => {
       }
     }
 
-    await proposal.submitProposal(); // sets isDraft=false, status=submitted, submittedAt=now
+    await proposal.submitProposal();
+
+    // 🔔 NOTIFICATION: Notify tender owner about new proposal
+    (async () => {
+      try {
+        await notificationService.create({
+          recipient: tender.owner._id || tender.owner,
+          actor: userId,
+          type: 'proposal_received',
+          title: 'New proposal',
+          body: `{actorName} submitted a proposal for "${tender?.title}"`,
+          data: {
+            entityType: 'FreelanceTender',
+            entityId: proposal.tender.toString(),
+            screen: 'TenderProposals',
+            params: { tenderId: proposal.tender, proposalId: proposal._id }
+          },
+          priority: 'high',
+          groupKey: `proposal_received:${proposal.tender}`,
+          channels: { inApp: true, push: true, email: true }
+        });
+      } catch (notifErr) {
+        console.warn('[Notification] submitProposal:', notifErr.message);
+      }
+    })();
+    // END NOTIFICATION
 
     await FreelanceTender.findByIdAndUpdate(
       proposal.tender,
@@ -284,11 +289,6 @@ const submitProposal = async (req, res) => {
   }
 };
 
-/**
- * A4. withdrawProposal
- * POST /api/v1/proposals/:proposalId/withdraw
- * Auth: freelancer — requireProposalOwner sets req.proposal
- */
 const withdrawProposal = async (req, res) => {
   try {
     const userId = getUid(req);
@@ -322,11 +322,6 @@ const withdrawProposal = async (req, res) => {
   }
 };
 
-/**
- * A5. getMyProposals
- * GET /api/v1/proposals/my-proposals
- * Auth: freelancer
- */
 const getMyProposals = async (req, res) => {
   try {
     const userId = getUid(req);
@@ -360,11 +355,6 @@ const getMyProposals = async (req, res) => {
   }
 };
 
-/**
- * A6. getMyProposalForTender
- * GET /api/v1/proposals/tenders/:tenderId/my-proposal
- * Auth: freelancer — returns null (not 404) when no proposal exists
- */
 const getMyProposalForTender = async (req, res) => {
   try {
     const userId = getUid(req);
@@ -389,11 +379,6 @@ const getMyProposalForTender = async (req, res) => {
 // GROUP B — OWNER ACTIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/**
- * B1. getTenderProposals
- * GET /api/v1/proposals/tenders/:tenderId/proposals
- * Auth: company/organization
- */
 const getTenderProposals = async (req, res) => {
   try {
     const userId = getUid(req);
@@ -443,11 +428,6 @@ const getTenderProposals = async (req, res) => {
   }
 };
 
-/**
- * B2. getProposalDetail
- * GET /api/v1/proposals/:proposalId
- * Auth: tender owner OR the freelancer who submitted
- */
 const getProposalDetail = async (req, res) => {
   try {
     const userId = getUid(req);
@@ -465,7 +445,6 @@ const getProposalDetail = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Proposal not found', code: 'PROPOSAL_NOT_FOUND' });
     }
 
-    // Safe extraction — freelancer and tender.owner may be populated objects or raw ObjectIds
     const freelancerId = (proposal.freelancer?._id || proposal.freelancer || '').toString();
     const tenderOwnerId = (proposal.tender?.owner?._id || proposal.tender?.owner || '').toString();
 
@@ -495,11 +474,6 @@ const getProposalDetail = async (req, res) => {
   }
 };
 
-/**
- * B3. updateProposalStatus
- * PATCH /api/v1/proposals/:proposalId/status
- * Auth: tender owner — requireTenderOwner sets req.proposal + req.tender
- */
 const updateProposalStatus = async (req, res) => {
   try {
     const userId = getUid(req);
@@ -533,6 +507,41 @@ const updateProposalStatus = async (req, res) => {
     if (ownerNotes !== undefined) proposal.ownerNotes = ownerNotes;
 
     await proposal.save();
+
+    // 🔔 NOTIFICATION: Notify freelancer about status change
+    (async () => {
+      try {
+        const propStatusMap = {
+          'under_review':        { type: 'proposal_status', title: 'Proposal under review', priority: 'normal' },
+          'shortlisted':         { type: 'proposal_shortlisted', title: 'Proposal shortlisted!', priority: 'high' },
+          'awarded':             { type: 'proposal_awarded', title: 'Proposal awarded! 🎉', priority: 'critical' },
+          'rejected':            { type: 'proposal_rejected', title: 'Proposal update', priority: 'normal' },
+          'interview_scheduled': { type: 'proposal_status', title: 'Interview scheduled', priority: 'high' }
+        };
+        const notifCfg = propStatusMap[status];
+        if (notifCfg) {
+          await notificationService.create({
+            recipient: proposal.freelancer,
+            actor: userId,
+            type: notifCfg.type,
+            title: notifCfg.title,
+            body: `Your proposal for "${req.tender?.title || 'the tender'}" is now: ${status}`,
+            data: {
+              entityType: 'Proposal',
+              entityId: req.params.proposalId,
+              screen: 'MyProposals',
+              params: { proposalId: req.params.proposalId }
+            },
+            priority: notifCfg.priority,
+            channels: { inApp: true, push: true, email: notifCfg.priority !== 'normal' }
+          });
+        }
+      } catch (notifErr) {
+        console.warn('[Notification] updateProposalStatus:', notifErr.message);
+      }
+    })();
+    // END NOTIFICATION
+
     await proposal.addAuditEntry(
       `status_changed_to_${status}`,
       userId,
@@ -581,11 +590,6 @@ const updateProposalStatus = async (req, res) => {
   }
 };
 
-/**
- * B4. toggleShortlist
- * POST /api/v1/proposals/:proposalId/shortlist
- * Auth: tender owner — requireTenderOwner sets req.proposal
- */
 const toggleShortlist = async (req, res) => {
   try {
     const proposal = req.proposal;
@@ -611,11 +615,6 @@ const toggleShortlist = async (req, res) => {
   }
 };
 
-/**
- * B5. getProposalStats
- * GET /api/v1/proposals/tenders/:tenderId/proposals/stats
- * Auth: tender owner
- */
 const getProposalStats = async (req, res) => {
   try {
     const userId = getUid(req);
@@ -680,15 +679,9 @@ const getProposalStats = async (req, res) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GROUP C — ATTACHMENTS
+// GROUP C — ATTACHMENTS (unchanged)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/**
- * C1. uploadAttachments
- * POST /api/v1/proposals/:proposalId/attachments
- * Auth: proposal owner — requireProposalOwner sets req.proposal
- * Middleware: localFileUpload.multiple('attachments', 5, 'proposals')
- */
 const uploadAttachments = async (req, res) => {
   try {
     const proposal = req.proposal;
@@ -728,7 +721,6 @@ const uploadAttachments = async (req, res) => {
     proposal.attachments.push(...newAttachments);
     await proposal.save();
 
-    // Patch downloadUrl now that _id values are assigned
     for (const att of proposal.attachments) {
       if (att.downloadUrl.includes('PLACEHOLDER')) {
         att.downloadUrl = `${baseUrl}/api/v1/proposals/${proposal._id}/attachments/${att._id}/download`;
@@ -747,11 +739,6 @@ const uploadAttachments = async (req, res) => {
   }
 };
 
-/**
- * C2. deleteAttachment
- * DELETE /api/v1/proposals/:proposalId/attachments/:attachmentId
- * Auth: proposal owner — requireProposalOwner sets req.proposal
- */
 const deleteAttachment = async (req, res) => {
   try {
     const proposal = req.proposal;
@@ -776,11 +763,6 @@ const deleteAttachment = async (req, res) => {
   }
 };
 
-/**
- * C3. downloadAttachment
- * GET /api/v1/proposals/:proposalId/attachments/:attachmentId/download
- * Auth: proposal owner OR tender owner
- */
 const downloadAttachment = async (req, res) => {
   try {
     const userId = getUid(req);
@@ -814,8 +796,6 @@ const downloadAttachment = async (req, res) => {
     return handleError(res, error, 'downloadAttachment');
   }
 };
-
-// ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
   createDraft,

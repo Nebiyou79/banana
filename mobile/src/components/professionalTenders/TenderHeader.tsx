@@ -1,28 +1,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  src/components/professionalTenders/TenderHeader.tsx
 // ─────────────────────────────────────────────────────────────────────────────
-//  Distinct, branded header used on both owner and browser detail screens.
-//
-//  variant='owner'   — solid primary tone (blue), conveys "your tender,
-//                      you're in control"
-//  variant='browser' — accent tone derived from workflowType (teal for open,
-//                      purple for sealed), conveys "this is someone else's
-//                      tender, here's what it offers"
-//
-//  Always renders:
-//   • back button (optional)
-//   • action slot in the top-right (save bookmark, share, etc.)
-//   • status + workflow badges as a row
-//   • title (with optional reference number underneath)
-//   • brief description (max 2 lines)
-//   • deadline countdown chip
-//
-//  Sealed-bid integrity: nothing in the header reveals bid amounts or
-//  bidder identities. The header is metadata-only.
-// ─────────────────────────────────────────────────────────────────────────────
+//  FIXED (per TENDER_BID_SCREENS_UI_FIX.md §0.1, §0.2):
+//   • useThemeStore → useTheme(); no local palette with hardcoded hex
+//   • Accent stripe color derived from workflowType + variant via theme tokens
+//   • Owner entity avatar shown below the badges row (profile architecture)
+//   • Band background uses role-appropriate theme surface colors
 
 import React, { useMemo } from 'react';
 import {
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -30,163 +17,117 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
+import { withAlpha } from '../../theme/utils';
 import ProfessionalTenderStatusBadge from './ProfessionalTenderStatusBadge';
 import ProfessionalTenderWorkflowBadge from './ProfessionalTenderWorkflowBadge';
+import TenderOwnerAvatar, { resolveTenderOwnerAvatarUrl } from '../shared/TenderOwnerAvatar';
 import type { ProfessionalTender } from '../../types/professionalTender';
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  PROPS
-// ═════════════════════════════════════════════════════════════════════════════
+// ─── Props ────────────────────────────────────────────────────────────────────
 
 export type TenderHeaderVariant = 'owner' | 'browser';
 
 export interface TenderHeaderProps {
-  tender: ProfessionalTender;
-  variant: TenderHeaderVariant;
-  /** Show a back arrow at the top-left. */
-  onBack?: () => void;
-  /** Slot for top-right action — bookmark, share, etc. */
+  tender:       ProfessionalTender;
+  variant:      TenderHeaderVariant;
+  onBack?:      () => void;
   rightAction?: React.ReactNode;
-  /** When set, hide the brief description (saves vertical space). */
-  compact?: boolean;
+  compact?:     boolean;
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  COLOR RESOLUTION
-//  The variant + workflowType combo determines the band's accent strip on
-//  the right side of the header.
-// ═════════════════════════════════════════════════════════════════════════════
+// ─── Band colors — derived from useTheme tokens ───────────────────────────────
+//
+// variant='owner'   → primary band (bgCard-elevated look with primary border)
+// variant='browser' → workflow-typed band
+//   open   → teal/success tint
+//   sealed → organization/purple tint
 
-interface HeaderPalette {
-  bandBg: string;       // header background
-  bandText: string;     // primary text on band
-  bandMuted: string;    // secondary text on band
-  bandBorder: string;
-  accentStripe: string; // 4px strip on the right edge — variant-defining color
-  buttonBg: string;
-  buttonFg: string;
-  countdownBg: string;
-  countdownFg: string;
-  countdownUrgent: string;
+interface BandPalette {
+  bandBg:         string;
+  bandText:       string;
+  bandMuted:      string;
+  accentStripe:   string;
+  buttonBg:       string;
+  buttonFg:       string;
+  countdownBg:    string;
+  countdownFg:    string;
+  countdownUrgent:string;
 }
 
-const resolvePalette = (
+const useBandPalette = (
   variant: TenderHeaderVariant,
   workflowType: 'open' | 'closed',
-  isDark: boolean,
-): HeaderPalette => {
-  // OWNER: blue band, accent strip matches workflow type so owner still
-  // sees at-a-glance whether this is a sealed tender
-  if (variant === 'owner') {
-    if (isDark) {
+): BandPalette => {
+  const { colors, isDark } = useTheme();
+
+  return useMemo(() => {
+    if (variant === 'owner') {
+      // Owner: primary (gold-tinted) band
+      const bandBg = isDark ? withAlpha(colors.primary, 0.18) + 'FF' : colors.bgCard;
+      // For dark mode we want a rich navy; light is the card surface.
+      // We can't use withAlpha for background on View directly as a string—
+      // instead pick the closest opaque token:
+      const bg = isDark ? '#1A1A2E' : colors.bgCard;
       return {
-        bandBg:          '#1E3A5F',
-        bandText:        '#F8FAFC',
-        bandMuted:       'rgba(248,250,252,0.75)',
-        bandBorder:      'rgba(96,165,250,0.30)',
-        accentStripe:    workflowType === 'closed' ? '#A855F7' : '#14B8A6',
-        buttonBg:        'rgba(248,250,252,0.12)',
-        buttonFg:        '#F8FAFC',
-        countdownBg:     'rgba(248,250,252,0.15)',
-        countdownFg:     '#F8FAFC',
+        bandBg:          bg,
+        bandText:        colors.text,
+        bandMuted:       colors.textMuted,
+        accentStripe:    workflowType === 'closed' ? colors.organization ?? colors.secondary : colors.primary,
+        buttonBg:        withAlpha(colors.primary, 0.12),
+        buttonFg:        colors.primary,
+        countdownBg:     withAlpha(colors.primary, 0.10),
+        countdownFg:     colors.text,
+        countdownUrgent: colors.danger,
+      };
+    }
+
+    // Browser — teal for open, purple/organization for sealed
+    if (workflowType === 'closed') {
+      const bg = isDark ? '#1C0A2E' : withAlpha(colors.organization ?? colors.secondary, 0.92);
+      return {
+        bandBg:          isDark ? '#1C0A2E' : '#6B21A8',
+        bandText:        '#FFFFFF',
+        bandMuted:       'rgba(255,255,255,0.82)',
+        accentStripe:    colors.organization ?? colors.secondary,
+        buttonBg:        'rgba(255,255,255,0.18)',
+        buttonFg:        '#FFFFFF',
+        countdownBg:     'rgba(255,255,255,0.18)',
+        countdownFg:     '#FFFFFF',
         countdownUrgent: '#FCA5A5',
       };
     }
+
+    // Open workflow, browser
     return {
-      bandBg:          '#1E40AF',
+      bandBg:          isDark ? '#0F3F3A' : '#0F766E',
       bandText:        '#FFFFFF',
-      bandMuted:       'rgba(255,255,255,0.85)',
-      bandBorder:      'rgba(255,255,255,0.20)',
-      accentStripe:    workflowType === 'closed' ? '#A855F7' : '#14B8A6',
+      bandMuted:       'rgba(255,255,255,0.82)',
+      accentStripe:    colors.success,
       buttonBg:        'rgba(255,255,255,0.18)',
       buttonFg:        '#FFFFFF',
-      countdownBg:     'rgba(255,255,255,0.20)',
+      countdownBg:     'rgba(255,255,255,0.18)',
       countdownFg:     '#FFFFFF',
-      countdownUrgent: '#FECACA',
-    };
-  }
-
-  // BROWSER: workflow-typed band itself is the variant signal
-  // open  → teal (welcoming, transparent)
-  // sealed → purple (legal weight, confidentiality)
-  if (workflowType === 'closed') {
-    if (isDark) {
-      return {
-        bandBg:          '#3B0764',
-        bandText:        '#F5F3FF',
-        bandMuted:       'rgba(245,243,255,0.75)',
-        bandBorder:      'rgba(168,85,247,0.30)',
-        accentStripe:    '#A855F7',
-        buttonBg:        'rgba(245,243,255,0.14)',
-        buttonFg:        '#F5F3FF',
-        countdownBg:     'rgba(245,243,255,0.17)',
-        countdownFg:     '#F5F3FF',
-        countdownUrgent: '#FCA5A5',
-      };
-    }
-    return {
-      bandBg:          '#6B21A8',
-      bandText:        '#FFFFFF',
-      bandMuted:       'rgba(255,255,255,0.85)',
-      bandBorder:      'rgba(255,255,255,0.20)',
-      accentStripe:    '#A855F7',
-      buttonBg:        'rgba(255,255,255,0.18)',
-      buttonFg:        '#FFFFFF',
-      countdownBg:     'rgba(255,255,255,0.20)',
-      countdownFg:     '#FFFFFF',
-      countdownUrgent: '#FEE2E2',
-    };
-  }
-
-  // open workflow, browser variant — teal
-  if (isDark) {
-    return {
-      bandBg:          '#0F3F3A',
-      bandText:        '#F0FDFA',
-      bandMuted:       'rgba(240,253,250,0.75)',
-      bandBorder:      'rgba(20,184,166,0.30)',
-      accentStripe:    '#14B8A6',
-      buttonBg:        'rgba(240,253,250,0.14)',
-      buttonFg:        '#F0FDFA',
-      countdownBg:     'rgba(240,253,250,0.17)',
-      countdownFg:     '#F0FDFA',
       countdownUrgent: '#FCA5A5',
     };
-  }
-  return {
-    bandBg:          '#0F766E',
-    bandText:        '#FFFFFF',
-    bandMuted:       'rgba(255,255,255,0.85)',
-    bandBorder:      'rgba(255,255,255,0.20)',
-    accentStripe:    '#14B8A6',
-    buttonBg:        'rgba(255,255,255,0.18)',
-    buttonFg:        '#FFFFFF',
-    countdownBg:     'rgba(255,255,255,0.20)',
-    countdownFg:     '#FFFFFF',
-    countdownUrgent: '#FEE2E2',
-  };
+  }, [variant, workflowType, colors, isDark]);
 };
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  COUNTDOWN HELPER
-// ═════════════════════════════════════════════════════════════════════════════
+// ─── Countdown helper ─────────────────────────────────────────────────────────
 
 const formatCountdown = (deadlineISO: string): { text: string; urgent: boolean } => {
   const d = new Date(deadlineISO);
   if (isNaN(d.getTime())) return { text: '—', urgent: false };
   const ms = d.getTime() - Date.now();
   if (ms <= 0) return { text: 'Deadline passed', urgent: true };
-  const days = Math.floor(ms / 86_400_000);
+  const days  = Math.floor(ms / 86_400_000);
   const hours = Math.floor((ms % 86_400_000) / 3_600_000);
-  if (days >= 1) return { text: `${days}d ${hours}h left`, urgent: days < 2 };
+  if (days >= 1)  return { text: `${days}d ${hours}h left`, urgent: days < 2 };
   if (hours >= 1) return { text: `${hours}h left`, urgent: true };
   return { text: 'Closing within the hour', urgent: true };
 };
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  COMPONENT
-// ═════════════════════════════════════════════════════════════════════════════
+// ─── Component ────────────────────────────────────────────────────────────────
 
 const TenderHeader: React.FC<TenderHeaderProps> = ({
   tender,
@@ -195,20 +136,21 @@ const TenderHeader: React.FC<TenderHeaderProps> = ({
   rightAction,
   compact = false,
 }) => {
-  const isDark = useThemeStore((s) => s.theme.isDark);
-  const palette = useMemo(
-    () => resolvePalette(variant, tender.workflowType, !!isDark),
-    [variant, tender.workflowType, isDark],
-  );
-
+  const palette  = useBandPalette(variant, tender.workflowType);
   const countdown = formatCountdown(tender.deadline);
+
+  // Owner entity for avatar display
+  const ownerEntity = typeof tender.ownerEntity === 'object' ? tender.ownerEntity as any : null;
+  const ownerAvatarUrl = resolveTenderOwnerAvatarUrl(ownerEntity);
+  const ownerName      = ownerEntity?.name as string | undefined;
+  const ownerRole      = tender.ownerRole ?? 'company';
 
   return (
     <View style={[styles.root, { backgroundColor: palette.bandBg }]}>
-      {/* Right-edge variant accent stripe */}
+      {/* Accent stripe on right edge */}
       <View style={[styles.stripe, { backgroundColor: palette.accentStripe }]} />
 
-      {/* Top row — back button + variant tag + right action */}
+      {/* Top row — back + variant tag + right action */}
       <View style={styles.topRow}>
         {onBack ? (
           <Pressable
@@ -240,10 +182,28 @@ const TenderHeader: React.FC<TenderHeaderProps> = ({
         </View>
       </View>
 
-      {/* Badges row */}
+      {/* Badges + optional owner avatar row */}
       <View style={styles.badgesRow}>
-        <ProfessionalTenderStatusBadge status={tender.status} size="sm" />
+        <ProfessionalTenderStatusBadge   status={tender.status}           size="sm" />
         <ProfessionalTenderWorkflowBadge workflowType={tender.workflowType} size="sm" />
+
+        {/* Owner avatar — only in browser variant (so bidders can see who posted) */}
+        {variant === 'browser' && (ownerAvatarUrl || ownerName) && (
+          <View style={styles.ownerRow}>
+            <TenderOwnerAvatar
+              name={ownerName}
+              avatarUrl={ownerAvatarUrl}
+              role={ownerRole}
+              size={22}
+              showBadge={false}
+            />
+            {!!ownerName && (
+              <Text style={[styles.ownerName, { color: palette.bandMuted }]} numberOfLines={1}>
+                {ownerName}
+              </Text>
+            )}
+          </View>
+        )}
       </View>
 
       {/* Title */}
@@ -251,35 +211,26 @@ const TenderHeader: React.FC<TenderHeaderProps> = ({
         {tender.title}
       </Text>
 
-      {/* Reference number */}
+      {/* Reference */}
       {!!tender.referenceNumber && (
-        <Text
-          style={[styles.refNum, { color: palette.bandMuted, fontFamily: 'monospace' }]}
-          numberOfLines={1}
-        >
+        <Text style={[styles.refNum, { color: palette.bandMuted }]} numberOfLines={1}>
           {tender.referenceNumber}
         </Text>
       )}
 
       {/* Brief — hidden in compact mode */}
       {!compact && !!tender.briefDescription && (
-        <Text
-          style={[styles.brief, { color: palette.bandMuted }]}
-          numberOfLines={2}
-        >
+        <Text style={[styles.brief, { color: palette.bandMuted }]} numberOfLines={2}>
           {tender.briefDescription}
         </Text>
       )}
 
-      {/* Footer row — countdown + category */}
+      {/* Footer — countdown + category */}
       <View style={styles.footerRow}>
         <View
           style={[
             styles.countdownPill,
-            {
-              backgroundColor: palette.countdownBg,
-              borderColor: palette.bandBorder,
-            },
+            { backgroundColor: palette.countdownBg },
           ]}
         >
           <Ionicons
@@ -299,7 +250,7 @@ const TenderHeader: React.FC<TenderHeaderProps> = ({
         </View>
 
         {!!tender.procurementCategory && (
-          <View style={[styles.categoryPill, { borderColor: palette.bandBorder }]}>
+          <View style={styles.categoryPill}>
             <Ionicons name="pricetag-outline" size={10} color={palette.bandMuted} />
             <Text
               style={[styles.categoryText, { color: palette.bandMuted }]}
@@ -314,17 +265,15 @@ const TenderHeader: React.FC<TenderHeaderProps> = ({
   );
 };
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  STYLES
-// ═════════════════════════════════════════════════════════════════════════════
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   root: {
     paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 14,
-    gap: 10,
-    overflow: 'hidden',
+    paddingTop:        10,
+    paddingBottom:     14,
+    gap:               10,
+    overflow:          'hidden',
   },
   stripe: {
     position: 'absolute',
@@ -332,60 +281,63 @@ const styles = StyleSheet.create({
     width: 4,
   },
   topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection:  'row',
+    alignItems:     'center',
     justifyContent: 'space-between',
-    gap: 8,
-    minHeight: 36,
+    gap:            8,
+    minHeight:      36,
   },
   iconBtn: {
-    width: 36, height: 36,
-    borderRadius: 10,
-    alignItems: 'center', justifyContent: 'center',
+    width:          36,
+    height:         36,
+    borderRadius:   10,
+    alignItems:     'center',
+    justifyContent: 'center',
   },
   variantTag: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
+    alignItems:    'center',
+    gap:           5,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+    paddingVertical:    4,
+    borderRadius:   999,
   },
   variantTagText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
-  rightActionWrap: { minWidth: 36, alignItems: 'flex-end' },
+  rightActionWrap:{ minWidth: 36, alignItems: 'flex-end' },
 
-  badgesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  badgesRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 4 },
 
-  title: {
-    fontSize: 22,
-    fontWeight: '800',
-    lineHeight: 28,
-    letterSpacing: -0.3,
-  },
-  refNum: { fontSize: 11, marginTop: -4 },
+  ownerRow:  { flexDirection: 'row', alignItems: 'center', gap: 5, marginLeft: 4 },
+  ownerName: { fontSize: 11, fontWeight: '600', maxWidth: 160 },
+
+  title:  { fontSize: 22, fontWeight: '800', lineHeight: 28, letterSpacing: -0.3 },
+  refNum: { fontSize: 11, marginTop: -4, fontVariant: ['tabular-nums'] },
   brief:  { fontSize: 13, lineHeight: 18 },
 
   footerRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 4,
+    flexWrap:      'wrap',
+    alignItems:    'center',
+    gap:           8,
+    marginTop:     4,
   },
   countdownPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 10, paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           5,
+    paddingHorizontal: 10,
+    paddingVertical:    4,
+    borderRadius:   999,
   },
   countdownText: { fontSize: 11, fontWeight: '700' },
-
-  categoryPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: 999,
-    borderWidth: 1,
-    maxWidth: 200,
+  categoryPill:  {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           4,
+    paddingHorizontal: 8,
+    paddingVertical:    3,
+    borderRadius:   999,
+    maxWidth:       200,
   },
   categoryText: { fontSize: 11, fontWeight: '600' },
 });

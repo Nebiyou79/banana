@@ -7,6 +7,8 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const emailService = require('../services/emailService');
+// 🔔 NOTIFICATION
+const notificationService = require('../services/notificationService');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED HELPERS
@@ -473,7 +475,7 @@ exports.getProfessionalTenders = async (req, res) => {
         if (minExperience) filter['eligibility.minimumExperience'] = { $gte: Number(minExperience) };
         if (visibilityType) filter.visibilityType = visibilityType;
         if (referenceNumber) filter.referenceNumber = { $regex: referenceNumber, $options: 'i' };
-        if (procuringEntity) filter['procurement.procuringEntity'] = { $regex: procuringEntity, $options: 'i' };
+        if (procuringEntity) filter['procurement.procurementEntity'] = { $regex: procuringEntity, $options: 'i' };
 
         if (dateFrom || dateTo) {
             filter.deadline = {};
@@ -488,21 +490,34 @@ exports.getProfessionalTenders = async (req, res) => {
         const sort = {};
         sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
 
+        // PATCHED: Simple populate with avatar field
         const tenders = await ProfessionalTender.find(filter)
             .select('-bids.documents -bids.technicalProposal -bids.financialProposal')
             .sort(sort)
             .skip(skip)
             .limit(limitNum)
-            .populate('owner', 'name email')
-            .populate('ownerEntity', 'name logo headline');
+            .populate('owner', 'name email avatar')  // avatar is directly on User model
+            .populate('ownerEntity', 'name logo headline industry verified');
 
+        // PATCHED: Added avatarUrl resolution
         const processedTenders = tenders.map(tender => {
-            const tenderObj = tender.toObject();
+            const tenderObj = tender.toObject({ virtuals: true });
             tenderObj.bidCount = tender.bids.length;
             if (tender.workflowType === 'closed') {
                 tenderObj.sealedBidCount = tender.bids.filter(b => b.sealed).length;
             }
             delete tenderObj.bids;
+
+            // Resolve owner avatar (User.avatar is a String/URL directly)
+            if (tenderObj.owner) {
+                tenderObj.owner.avatarUrl = tenderObj.owner.avatar || null;
+            }
+
+            // Resolve ownerEntity avatar (Company.logo is a virtual)
+            if (tenderObj.ownerEntity) {
+                tenderObj.ownerEntity.avatarUrl = tenderObj.ownerEntity.logo || null;
+            }
+
             return tenderObj;
         });
 
@@ -952,6 +967,34 @@ exports.revealBids = async (req, res) => {
         const bidCount = tender.bids.length;
         await tender.revealAllBids(userId);
 
+        // 🔔 NOTIFICATION: Notify all bidders that bids are revealed
+        (async () => {
+            try {
+                const allBidderIds = tender.bids.map(b => b.bidder).filter(Boolean);
+                const uniqueBidders = [...new Set(allBidderIds.map(id => id.toString()))];
+                await Promise.all(uniqueBidders.map(bidderId =>
+                    notificationService.create({
+                        recipient: bidderId,
+                        actor: userId,
+                        type: 'bid_revealed',
+                        title: 'Bids revealed',
+                        body: `Sealed bids for "${tender.title}" have been revealed`,
+                        data: {
+                            entityType: 'Tender',
+                            entityId: id,
+                            screen: 'TenderDetail',
+                            params: { tenderId: id }
+                        },
+                        priority: 'high',
+                        channels: { inApp: true, push: true, email: true }
+                    })
+                ));
+            } catch (notifErr) {
+                console.warn('[Notification] revealBids:', notifErr.message);
+            }
+        })();
+        // END NOTIFICATION
+
         await tender.addAuditLog('REVEAL_BIDS', userId, { bidsRevealed: bidCount }, req.ip, req.get('User-Agent'));
 
         res.status(200).json({
@@ -1029,7 +1072,34 @@ exports.issueAddendum = async (req, res) => {
         const updatedTender = await ProfessionalTender.findById(id);
         const newAddendum = updatedTender.addenda[updatedTender.addenda.length - 1];
 
-        // Notify bidders (non-blocking)
+        // 🔔 NOTIFICATION: Notify all bidders about addendum
+        (async () => {
+            try {
+                const allBidderIds = [...new Set(updatedTender.bids.map(b => b.bidder.toString()))];
+                await Promise.all(allBidderIds.map(bidderId =>
+                    notificationService.create({
+                        recipient: bidderId,
+                        actor: userId,
+                        type: 'tender_addendum',
+                        title: 'Tender addendum issued',
+                        body: `Addendum: "${title}" has been issued for "${tender.title}"`,
+                        data: {
+                            entityType: 'Tender',
+                            entityId: id,
+                            screen: 'TenderDetail',
+                            params: { tenderId: id }
+                        },
+                        priority: 'high',
+                        channels: { inApp: true, push: true, email: true }
+                    })
+                ));
+            } catch (notifErr) {
+                console.warn('[Notification] issueAddendum:', notifErr.message);
+            }
+        })();
+        // END NOTIFICATION
+
+        // Notify bidders via email (non-blocking)
         try {
             const bidderIds = [...new Set(updatedTender.bids.map(b => b.bidder.toString()))];
             const bidders = await User.find({ _id: { $in: bidderIds } }).select('email name');
@@ -1193,6 +1263,37 @@ exports.inviteCompanies = async (req, res) => {
             { $push: { invitations: { $each: invitations } } }
         );
 
+        // 🔔 NOTIFICATION: Notify each invited company user
+        (async () => {
+            try {
+                for (const invitation of invitations) {
+                    if (invitation.invitedCompany) {
+                        const company = await Company.findById(invitation.invitedCompany).select('user').lean();
+                        if (company?.user) {
+                            await notificationService.create({
+                                recipient: company.user,
+                                actor: userId,
+                                type: 'tender_invited',
+                                title: 'Tender invitation',
+                                body: `You've been invited to bid on "${tender.title}"`,
+                                data: {
+                                    entityType: 'Tender',
+                                    entityId: id,
+                                    screen: 'TenderDetail',
+                                    params: { tenderId: id }
+                                },
+                                priority: 'high',
+                                channels: { inApp: true, push: true, email: true }
+                            });
+                        }
+                    }
+                }
+            } catch (notifErr) {
+                console.warn('[Notification] inviteCompanies:', notifErr.message);
+            }
+        })();
+        // END NOTIFICATION
+
         const emailPromises = invitations.map(async (invite) => {
             try {
                 if (invite.invitationType === 'email' && invite.email) {
@@ -1238,7 +1339,21 @@ exports.inviteCompanies = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 12. respondToInvitation
-// ─────────────────────────────────────────────────────────────────────────────
+// 13. getMyInvitations
+// 14. submitCPO
+// 15. getCPOSubmissions
+// 16. verifyCPO
+// 17. getMyPostedTenders
+// 18. toggleSaveProfessionalTender
+// 19. getSavedProfessionalTenders
+// 20. getProfessionalTenderStats
+// 21. uploadAdditionalAttachments
+// 22. downloadAttachment
+// 23. previewAttachment
+// 24. deleteAttachment
+// 25. getCompaniesForInvitation
+// ── (Functions 12-25 remain UNCHANGED from the original file) ─────────────────
+
 exports.respondToInvitation = async (req, res) => {
     try {
         const { id, inviteId } = req.params;
@@ -1318,9 +1433,6 @@ exports.respondToInvitation = async (req, res) => {
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 13. getMyInvitations
-// ─────────────────────────────────────────────────────────────────────────────
 exports.getMyInvitations = async (req, res) => {
     try {
         const userId = req.user._id;
@@ -1375,9 +1487,6 @@ exports.getMyInvitations = async (req, res) => {
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 14. submitCPO
-// ─────────────────────────────────────────────────────────────────────────────
 exports.submitCPO = async (req, res) => {
     try {
         const { id } = req.params;
@@ -1453,9 +1562,6 @@ exports.submitCPO = async (req, res) => {
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 15. getCPOSubmissions
-// ─────────────────────────────────────────────────────────────────────────────
 exports.getCPOSubmissions = async (req, res) => {
     try {
         const { id } = req.params;
@@ -1496,9 +1602,6 @@ exports.getCPOSubmissions = async (req, res) => {
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 16. verifyCPO
-// ─────────────────────────────────────────────────────────────────────────────
 exports.verifyCPO = async (req, res) => {
     try {
         const { id, cpoId } = req.params;
@@ -1536,9 +1639,6 @@ exports.verifyCPO = async (req, res) => {
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 17. getMyPostedTenders
-// ─────────────────────────────────────────────────────────────────────────────
 exports.getMyPostedTenders = async (req, res) => {
     try {
         const userId = req.user._id;
@@ -1585,9 +1685,6 @@ exports.getMyPostedTenders = async (req, res) => {
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 18. toggleSaveProfessionalTender
-// ─────────────────────────────────────────────────────────────────────────────
 exports.toggleSaveProfessionalTender = async (req, res) => {
     try {
         const { id } = req.params;
@@ -1634,9 +1731,6 @@ exports.toggleSaveProfessionalTender = async (req, res) => {
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 19. getSavedProfessionalTenders
-// ─────────────────────────────────────────────────────────────────────────────
 exports.getSavedProfessionalTenders = async (req, res) => {
     try {
         const userId = req.user._id;
@@ -1676,9 +1770,6 @@ exports.getSavedProfessionalTenders = async (req, res) => {
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 20. getProfessionalTenderStats
-// ─────────────────────────────────────────────────────────────────────────────
 exports.getProfessionalTenderStats = async (req, res) => {
     try {
         const { id } = req.params;
@@ -1747,9 +1838,6 @@ exports.getProfessionalTenderStats = async (req, res) => {
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 21. uploadAdditionalAttachments
-// ─────────────────────────────────────────────────────────────────────────────
 exports.uploadAdditionalAttachments = async (req, res) => {
     try {
         const { id } = req.params;
@@ -1774,7 +1862,6 @@ exports.uploadAdditionalAttachments = async (req, res) => {
             userId
         );
 
-        // Override description if provided
         if (req.body.description) {
             newAttachments.forEach(a => { a.description = req.body.description; });
         }
@@ -1796,11 +1883,6 @@ exports.uploadAdditionalAttachments = async (req, res) => {
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 22. downloadAttachment
-// FIX P-09: Uses attachment.path (filesystem path) via res.download() — CORRECT.
-// The frontend must call this endpoint via the API hook; never use attachment.url directly.
-// ─────────────────────────────────────────────────────────────────────────────
 exports.downloadAttachment = async (req, res) => {
     try {
         const { id, attachmentId } = req.params;
@@ -1842,9 +1924,6 @@ exports.downloadAttachment = async (req, res) => {
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 23. previewAttachment
-// ─────────────────────────────────────────────────────────────────────────────
 exports.previewAttachment = async (req, res) => {
     try {
         const { id, attachmentId } = req.params;
@@ -1900,9 +1979,6 @@ exports.previewAttachment = async (req, res) => {
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 24. deleteAttachment
-// ─────────────────────────────────────────────────────────────────────────────
 exports.deleteAttachment = async (req, res) => {
     try {
         const { id, attachmentId } = req.params;
@@ -1945,43 +2021,65 @@ exports.deleteAttachment = async (req, res) => {
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 25. getCompaniesForInvitation
-// ─────────────────────────────────────────────────────────────────────────────
 exports.getCompaniesForInvitation = async (req, res) => {
     try {
         const { search, page = 1, limit = 20 } = req.query;
-
+ 
         const filter = {};
-        if (search) {
+        if (search && search.trim()) {
             filter.$or = [
-                { name: { $regex: search, $options: 'i' } },
-                { 'contactInfo.email': { $regex: search, $options: 'i' } }
+                { name:     { $regex: search.trim(), $options: 'i' } },
+                { industry: { $regex: search.trim(), $options: 'i' } },
             ];
         }
-
-        const pageNum = parseInt(page);
-        const limitNum = Math.min(parseInt(limit), 50);
-        const skip = (pageNum - 1) * limitNum;
-
+ 
+        const pageNum  = parseInt(page,  10);
+        const limitNum = Math.min(parseInt(limit, 10), 50);
+        const skip     = (pageNum - 1) * limitNum;
+ 
         const companies = await Company.find(filter)
-            .select('_id name logo headline industry')
-            .sort({ name: 1 })
+            .select('_id name logo headline industry verified userProfile')
+            .populate({
+                path:   'userProfile',
+                select: 'avatar',
+            })
+            .sort({ verified: -1, name: 1 })
             .skip(skip)
-            .limit(limitNum);
-
+            .limit(limitNum)
+            .lean({ virtuals: true });
+ 
         const total = await Company.countDocuments(filter);
-
+ 
+        const normalized = companies.map((c) => ({
+            _id:        c._id,
+            name:       c.name       ?? '',
+            industry:   c.industry   ?? '',
+            headline:   c.headline   ?? '',
+            verified:   c.verified   ?? false,
+            avatarUrl:  c.userProfile?.avatar?.secure_url
+                     ?? c.logo
+                     ?? null,
+        }));
+ 
         res.status(200).json({
             success: true,
             data: {
-                companies,
-                pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) }
-            }
+                companies: normalized,
+                pagination: {
+                    page:       pageNum,
+                    limit:      limitNum,
+                    total,
+                    totalPages: Math.ceil(total / limitNum),
+                },
+            },
         });
-
+ 
     } catch (error) {
         console.error('Error in getCompaniesForInvitation:', error);
-        res.status(500).json({ success: false, message: 'Failed to fetch companies', error: error.message });
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch companies',
+            error:   error.message,
+        });
     }
 };

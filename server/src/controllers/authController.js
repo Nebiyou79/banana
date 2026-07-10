@@ -8,6 +8,8 @@ const PasswordReset = require('../models/PasswordReset');
 const { sendOTPEmail, sendPasswordResetEmail } = require('../services/emailService');
 const { validationResult } = require('express-validator');
 const AppError = require('../utils/AppError');
+// 🔔 NOTIFICATION
+const notificationService = require('../services/notificationService');
 
 // NEW: Import promo code utilities and models
 const {
@@ -225,6 +227,25 @@ exports.verifyOTP = async (req, res, next) => {
       try {
         await completeReferralAfterVerification(user._id);
         console.log('Referral completed for user:', user._id);
+
+        // 🔔 NOTIFICATION: Notify referrer about new signup
+        (async () => {
+          try {
+            await notificationService.create({
+              recipient: user.referredBy,
+              actor: user._id,
+              type: 'referral_signup',
+              title: 'New referral!',
+              body: `Someone signed up using your referral code`,
+              data: { entityType: 'User', entityId: user._id.toString(), screen: 'ReferralStats', params: {} },
+              priority: 'normal',
+              channels: { inApp: true, push: false, email: false }
+            });
+          } catch (notifErr) {
+            console.warn('[Notification] Non-critical error:', notifErr.message);
+          }
+        })();
+        // END NOTIFICATION
       } catch (referralError) {
         console.error('Error completing referral:', referralError);
         // Don't fail verification

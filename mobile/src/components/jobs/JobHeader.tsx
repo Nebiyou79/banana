@@ -3,7 +3,13 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Gradient job header with company/organization avatar.
  *
- * FIXED: Avatar display with proper entity conversion
+ * AVATAR FIX — replaced Avatar + jobOwnerToEntity(job) with CompanyAvatar
+ * which automatically prefers job.ownerPreview (Profile-backed Cloudinary URL,
+ * added by the fixed jobController) over the raw populate sub-doc.
+ *
+ * DEBUG TOOLS — Added showAvatarDebug prop to trace resolution issues.
+ * All other logic, styling, and layout preserved exactly.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
@@ -14,32 +20,31 @@ import { useTheme } from '../../hooks/useTheme';
 import { withAlpha } from '../../theme/utils';
 import { SPACING, RADIUS } from '../../theme/tokens';
 import { Job } from '../../services/jobService';
-import { Avatar, jobOwnerToEntity } from '../shared/Avatar';
+// AVATAR FIX: use CompanyAvatar instead of Avatar + jobOwnerToEntity
+import CompanyAvatar from '../shared/CompanyAvatar';
 import { formatLocation } from '../../utils/jobHelpers';
+
+// ─── Debug flag ──────────────────────────────────────────────────────────────
+const DEBUG_AVATAR = __DEV__ && false; // Set to true to debug avatar resolution
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const getDeadlineInfo = (d?: string): { text: string; urgent: boolean } => {
   if (!d) return { text: 'No deadline', urgent: false };
   const diff = Math.ceil((new Date(d).getTime() - Date.now()) / 86_400_000);
-  if (diff < 0)  return { text: 'Expired',       urgent: true };
-  if (diff === 0) return { text: 'Closes today!', urgent: true };
+  if (diff < 0)   return { text: 'Expired',           urgent: true };
+  if (diff === 0) return { text: 'Closes today!',     urgent: true };
   if (diff <= 3)  return { text: `${diff} days left!`, urgent: true };
   if (diff <= 7)  return { text: `${diff} days left`,  urgent: false };
   return {
     text: new Date(d).toLocaleDateString('en-US', {
-      month: 'short',
-      day:   'numeric',
-      year:  'numeric',
+      month: 'short', day: 'numeric', year: 'numeric',
     }),
     urgent: false,
   };
 };
 
-const getGradientColors = (
-  job: Job,
-  isDark: boolean,
-): [string, string, string] => {
+const getGradientColors = (job: Job, isDark: boolean): [string, string, string] => {
   if (job.jobType === 'organization') {
     return isDark
       ? ['#1E1142', '#2D1B69', '#0F2040']
@@ -50,16 +55,15 @@ const getGradientColors = (
     : ['#0F2040', '#1C3A60', '#243352'];
 };
 
-const MetaBadge = React.memo<{ icon: React.ComponentProps<typeof Ionicons>['name']; label: string }>(
-  ({ icon, label }) => (
-    <View style={mb.badge}>
-      <Ionicons name={icon} size={12} color="rgba(255,255,255,0.85)" />
-      <Text style={mb.text} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  ),
-);
+const MetaBadge = React.memo<{
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+}>(({ icon, label }) => (
+  <View style={mb.badge}>
+    <Ionicons name={icon} size={12} color="rgba(255,255,255,0.85)" />
+    <Text style={mb.text} numberOfLines={1}>{label}</Text>
+  </View>
+));
 MetaBadge.displayName = 'JobHeader.MetaBadge';
 
 const mb = StyleSheet.create({
@@ -83,6 +87,7 @@ interface JobHeaderProps {
   onSave?: () => void;
   onShare?: () => void;
   isSaved?: boolean;
+  showAvatarDebug?: boolean; // DEBUG: overlays check/cross on avatar
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -93,20 +98,24 @@ export const JobHeader: React.FC<JobHeaderProps> = ({
   onSave,
   onShare,
   isSaved = false,
+  showAvatarDebug = DEBUG_AVATAR,
 }) => {
   const { colors: c, isDark } = useTheme();
 
-  // FIXED: Proper entity for Avatar
-  const ownerEntity = jobOwnerToEntity(job);
-  const owner       = job.jobType === 'organization' ? job.organization : job.company;
-  const gradColors  = getGradientColors(job, isDark);
-  const dl          = getDeadlineInfo(job.applicationDeadline);
+  // Owner info (for display text only — CompanyAvatar handles logo resolution)
+  const owner      = job.jobType === 'organization' ? job.organization : job.company;
+  const ownerName  = job.ownerPreview?.name ?? owner?.name ?? '';
+  const ownerIndustry = owner?.industry ?? null;
+  const ownerVerified = job.ownerPreview?.verified ?? owner?.verified ?? false;
+
+  const gradColors = getGradientColors(job, isDark);
+  const dl         = getDeadlineInfo(job.applicationDeadline);
 
   const salaryText = useMemo((): string | null => {
-    if (job.salaryDisplay)               return job.salaryDisplay;
-    if (job.salaryMode === 'negotiable') return 'Negotiable';
-    if (job.salaryMode === 'hidden')     return null;
-    if (job.salaryMode === 'company-scale') return 'Company scale';
+    if (job.salaryDisplay)                   return job.salaryDisplay;
+    if (job.salaryMode === 'negotiable')     return 'Negotiable';
+    if (job.salaryMode === 'hidden')         return null;
+    if (job.salaryMode === 'company-scale')  return 'Company scale';
     if (job.salary?.min && job.salary?.max) {
       const fmt = (n: number) =>
         n >= 1000 ? `${(n / 1000).toFixed(0)}K` : String(n);
@@ -130,12 +139,12 @@ export const JobHeader: React.FC<JobHeaderProps> = ({
           marginBottom:   12,
         },
         navBtn: {
-          width:          40,
-          height:         40,
-          borderRadius:   RADIUS.full,
+          width:           40,
+          height:          40,
+          borderRadius:    RADIUS.full,
           backgroundColor: withAlpha('#FFFFFF', 0.12),
-          alignItems:     'center',
-          justifyContent: 'center',
+          alignItems:      'center',
+          justifyContent:  'center',
         },
         navRight: { flexDirection: 'row', gap: SPACING.sm },
         bannerRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: 10 },
@@ -167,37 +176,25 @@ export const JobHeader: React.FC<JobHeaderProps> = ({
         companyName:  { fontSize: 15, fontWeight: '700', color: '#FFFFFF', marginBottom: 3 },
         industryRow:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
         industryText: { fontSize: 12, color: withAlpha('#FFFFFF', 0.70) },
-        typePill: {
-          paddingHorizontal: 10,
-          paddingVertical:   5,
-          borderRadius:      RADIUS.full,
-        },
+        typePill:     { paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.full },
         typePillText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
         title: {
-          fontSize:    22,
-          fontWeight:  '800',
-          color:       '#FFFFFF',
-          lineHeight:  30,
+          fontSize:     22,
+          fontWeight:   '800',
+          color:        '#FFFFFF',
+          lineHeight:   30,
           marginBottom: 14,
         },
-        metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
-        strip: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginBottom: 10 },
+        metaRow:  { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
+        strip:    { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginBottom: 10 },
         stripItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-        stripTextNormal: {
-          fontSize:   13,
-          fontWeight: '600',
-          color:      withAlpha('#FFFFFF', 0.75),
-        },
+        stripTextNormal: { fontSize: 13, fontWeight: '600', color: withAlpha('#FFFFFF', 0.75) },
         stripTextSalary: { fontSize: 13, fontWeight: '600', color: c.success },
         stripTextUrgent: { fontSize: 13, fontWeight: '600', color: c.danger },
         appStatus: {
-          flexDirection: 'row',
-          alignItems:    'center',
-          gap:           6,
-          paddingHorizontal: 12,
-          paddingVertical:   SPACING.sm,
-          borderRadius:  RADIUS.sm,
-          marginTop:     4,
+          flexDirection: 'row', alignItems: 'center', gap: 6,
+          paddingHorizontal: 12, paddingVertical: SPACING.sm,
+          borderRadius: RADIUS.sm, marginTop: 4,
         },
         appStatusText: { fontSize: 13, fontWeight: '600' },
       }),
@@ -261,23 +258,22 @@ export const JobHeader: React.FC<JobHeaderProps> = ({
           )}
           {job.featured && (
             <View style={[s.banner, { backgroundColor: c.primary }]}>
-              <Text style={[s.bannerText, { color: c.textInverse }]}>
-                FEATURED
-              </Text>
+              <Text style={[s.bannerText, { color: c.textInverse }]}>FEATURED</Text>
             </View>
           )}
         </View>
       )}
 
-      {/* FIXED: Company row with Avatar */}
+      {/* Company row — AVATAR FIX: CompanyAvatar resolves from job.ownerPreview */}
       <View style={s.companyRow}>
         <View style={s.avatarWrapper}>
-          <Avatar
-            entity={ownerEntity}
+          <CompanyAvatar
+            job={job}
             size={64}
             borderRadius={RADIUS.lg}
+            showDebug={showAvatarDebug}
           />
-          {owner?.verified && (
+          {ownerVerified && (
             <View style={s.verifiedBadge}>
               <Ionicons name="checkmark-circle" size={16} color={c.success} />
             </View>
@@ -285,19 +281,15 @@ export const JobHeader: React.FC<JobHeaderProps> = ({
         </View>
 
         <View style={s.companyInfo}>
-          <Text style={s.companyName} numberOfLines={1}>
-            {owner?.name ?? ''}
-          </Text>
-          {owner?.industry ? (
+          <Text style={s.companyName} numberOfLines={1}>{ownerName}</Text>
+          {ownerIndustry ? (
             <View style={s.industryRow}>
               <Ionicons
                 name="business-outline"
                 size={12}
                 color={withAlpha('#FFFFFF', 0.70)}
               />
-              <Text style={s.industryText} numberOfLines={1}>
-                {owner.industry}
-              </Text>
+              <Text style={s.industryText} numberOfLines={1}>{ownerIndustry}</Text>
             </View>
           ) : null}
         </View>
@@ -305,19 +297,13 @@ export const JobHeader: React.FC<JobHeaderProps> = ({
         <View
           style={[
             s.typePill,
-            {
-              backgroundColor:
-                job.jobType === 'organization' ? '#7C3AED' : c.primary,
-            },
+            { backgroundColor: job.jobType === 'organization' ? '#7C3AED' : c.primary },
           ]}
         >
           <Text
             style={[
               s.typePillText,
-              {
-                color:
-                  job.jobType === 'organization' ? '#FFFFFF' : c.textInverse,
-              },
+              { color: job.jobType === 'organization' ? '#FFFFFF' : c.textInverse },
             ]}
           >
             {job.jobType === 'organization'
@@ -333,16 +319,13 @@ export const JobHeader: React.FC<JobHeaderProps> = ({
       {/* Meta badges */}
       <View style={s.metaRow}>
         {(job.location?.city || job.location?.region) && (
-          <MetaBadge
-            icon="location-outline"
-            label={formatLocation(job.location)}
-          />
+          <MetaBadge icon="location-outline"    label={formatLocation(job.location)} />
         )}
         {job.type && (
-          <MetaBadge icon="briefcase-outline" label={job.type} />
+          <MetaBadge icon="briefcase-outline"   label={job.type} />
         )}
         {job.remote && job.remote !== 'on-site' && (
-          <MetaBadge icon="globe-outline" label={job.remote} />
+          <MetaBadge icon="globe-outline"       label={job.remote} />
         )}
         {job.experienceLevel && (
           <MetaBadge icon="trending-up-outline" label={job.experienceLevel} />
@@ -364,11 +347,7 @@ export const JobHeader: React.FC<JobHeaderProps> = ({
             size={16}
             color={dl.urgent ? c.danger : withAlpha('#FFFFFF', 0.70)}
           />
-          <Text
-            style={
-              dl.urgent ? s.stripTextUrgent : s.stripTextNormal
-            }
-          >
+          <Text style={dl.urgent ? s.stripTextUrgent : s.stripTextNormal}>
             {dl.text}
           </Text>
         </View>
@@ -410,9 +389,7 @@ export const JobHeader: React.FC<JobHeaderProps> = ({
           <Text
             style={[
               s.appStatusText,
-              {
-                color: job.applicationInfo.canApply ? c.success : c.danger,
-              },
+              { color: job.applicationInfo.canApply ? c.success : c.danger },
             ]}
           >
             {job.applicationInfo.canApply

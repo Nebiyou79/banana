@@ -2,6 +2,8 @@
 const PromoCode = require('../models/PromoCode');
 const User = require('../models/User');
 const ReferralHistory = require('../models/ReferralHistory');
+// 🔔 NOTIFICATION
+const notificationService = require('../services/notificationService');
 const {
     generateReferralCodeForUser,
     validatePromoCode,
@@ -17,7 +19,6 @@ exports.generateMyReferralCode = async (req, res) => {
     try {
         const userId = req.user.userId;
 
-        // Check if user already has a code
         const existingPromo = await PromoCode.findOne({ userId, type: 'referral' });
         if (existingPromo) {
             return res.json({
@@ -34,7 +35,6 @@ exports.generateMyReferralCode = async (req, res) => {
             });
         }
 
-        // Get user details
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({
@@ -43,7 +43,6 @@ exports.generateMyReferralCode = async (req, res) => {
             });
         }
 
-        // Generate new code
         const promoCode = await generateReferralCodeForUser(userId, user.name);
 
         res.status(201).json({
@@ -82,7 +81,6 @@ exports.getMyReferralStats = async (req, res) => {
 
         const promoCode = await PromoCode.findOne({ userId, type: 'referral' });
 
-        // Get detailed referral history with pagination
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
         const skip = (page - 1) * limit;
@@ -95,7 +93,6 @@ exports.getMyReferralStats = async (req, res) => {
 
         const totalReferrals = await ReferralHistory.countDocuments({ referrerId: userId });
 
-        // Calculate success rate
         const completedReferrals = await ReferralHistory.countDocuments({
             referrerId: userId,
             status: 'completed'
@@ -105,7 +102,6 @@ exports.getMyReferralStats = async (req, res) => {
             ? ((completedReferrals / totalReferrals) * 100).toFixed(1)
             : 0;
 
-        // Get recent activity
         const recentActivity = referrals.slice(0, 5).map(ref => ({
             id: ref._id,
             user: ref.referredUserId?.name || 'Unknown',
@@ -172,7 +168,7 @@ exports.getMyReferralStats = async (req, res) => {
 exports.validatePromoCode = async (req, res) => {
     try {
         const { code } = req.body;
-        const currentUserId = req.user?.userId; // Optional, if user is logged in
+        const currentUserId = req.user?.userId;
 
         if (!code) {
             return res.status(400).json({
@@ -273,3 +269,17 @@ exports.backfillUsers = async (req, res) => {
         });
     }
 };
+
+// 🔔 NOTE: referral_signup notification should be triggered in authController
+// when a new user registers with a referral code. Add this pattern there:
+//
+// await notificationService.create({
+//   recipient: referrerId,
+//   actor: newUserId,
+//   type: 'referral_signup',
+//   title: 'New referral!',
+//   body: `Someone signed up using your referral code`,
+//   data: { entityType: 'User', entityId: newUserId, screen: 'ReferralStats', params: {} },
+//   priority: 'normal',
+//   channels: { inApp: true, push: false, email: false }
+// });

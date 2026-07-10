@@ -558,10 +558,25 @@ isOnline: {
     min: 0
   },
 
-  // Backfill flag for existing users
   referralBackfilled: {
     type: Boolean,
     default: false
+  },
+
+  // ========== NOTIFICATION SYSTEM FIELDS ==========
+  notificationPreference: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'NotificationPreference',
+    default: null
+  },
+  unreadNotificationCount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  lastNotificationSeen: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true,

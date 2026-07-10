@@ -4,6 +4,8 @@ const Post = require('../models/Post');
 const Like = require('../models/Like');
 const User = require('../models/User');
 const { validationResult } = require('express-validator');
+// 🔔 NOTIFICATION
+const notificationService = require('../services/notificationService');
 
 /**
  * @desc    Add comment to post or reply to comment
@@ -61,7 +63,6 @@ exports.addComment = async (req, res) => {
         });
       }
     } else if (parentType === 'Comment') {
-      // FIX: Properly handle comment replies
       parent = await Comment.findById(parentId).session(session);
       if (!parent || parent.moderation.status !== 'active') {
         await session.abortTransaction();
@@ -72,7 +73,6 @@ exports.addComment = async (req, res) => {
         });
       }
 
-      // Check depth limit
       if (parent.metadata.depth >= 10) {
         await session.abortTransaction();
         session.endSession();
@@ -82,7 +82,6 @@ exports.addComment = async (req, res) => {
         });
       }
 
-      // FIX: Ensure we're replying to a comment, not creating duplicate
       console.log('Replying to comment:', {
         parentId: parent._id,
         parentDepth: parent.metadata.depth
@@ -116,7 +115,7 @@ exports.addComment = async (req, res) => {
       mentions: mentionIds,
       metadata: {
         depth: parentType === 'Post' ? 0 : (parent.metadata.depth + 1),
-        path: '', // Will be set in pre-save
+        path: '',
         hashtags: hashtags || []
       }
     };
@@ -130,7 +129,6 @@ exports.addComment = async (req, res) => {
     const comment = new Comment(commentData);
     await comment.save({ session });
 
-    // FIX: Proper population
     await comment.populate([
       {
         path: 'author',
@@ -151,7 +149,6 @@ exports.addComment = async (req, res) => {
       );
       console.log('Updated post comments count');
     } else {
-      // FIX: Increment parent comment replies
       await Comment.findByIdAndUpdate(
         parentId,
         { $inc: { 'engagement.replies': 1 } },
@@ -173,6 +170,78 @@ exports.addComment = async (req, res) => {
 
     commentWithReaction.userReaction = userLike ? userLike.reaction : null;
     commentWithReaction.hasLiked = !!userLike;
+
+    // 🔔 NOTIFICATION: Triggers for comments
+    (async () => {
+      try {
+        if (parentType === 'Post') {
+          // Notify post owner about new comment
+          const originalPost = await Post.findById(parentId).select('author').lean();
+          if (originalPost && originalPost.author.toString() !== req.user.userId.toString()) {
+            await notificationService.create({
+              recipient: originalPost.author,
+              actor: req.user.userId,
+              type: 'post_comment',
+              title: 'New comment',
+              body: `{actorName} commented on your post`,
+              data: {
+                entityType: 'Post',
+                entityId: parentId,
+                screen: 'PostDetail',
+                params: { postId: parentId, commentId: comment._id }
+              },
+              priority: 'normal',
+              groupKey: `post_comment:${parentId}`,
+              channels: { inApp: true, push: true, email: false }
+            });
+          }
+        } else if (parentType === 'Comment') {
+          // Notify parent comment author about reply
+          const parentCommentDoc = await Comment.findById(parentId).select('author').lean();
+          if (parentCommentDoc && parentCommentDoc.author.toString() !== req.user.userId.toString()) {
+            await notificationService.create({
+              recipient: parentCommentDoc.author,
+              actor: req.user.userId,
+              type: 'comment_reply',
+              title: 'New reply',
+              body: `{actorName} replied to your comment`,
+              data: {
+                entityType: 'Comment',
+                entityId: comment._id,
+                screen: 'PostDetail',
+                params: { commentId: parentId }
+              },
+              priority: 'normal',
+              channels: { inApp: true, push: true, email: false }
+            });
+          }
+        }
+
+        // Notify each mentioned user
+        for (const mentionedUserId of mentionIds) {
+          if (mentionedUserId.toString() !== req.user.userId.toString()) {
+            await notificationService.create({
+              recipient: mentionedUserId,
+              actor: req.user.userId,
+              type: 'comment_mentioned',
+              title: 'You were mentioned',
+              body: `{actorName} mentioned you in a comment`,
+              data: {
+                entityType: 'Post',
+                entityId: parentType === 'Post' ? parentId : null,
+                screen: 'PostDetail',
+                params: { postId: parentType === 'Post' ? parentId : null, commentId: comment._id }
+              },
+              priority: 'high',
+              channels: { inApp: true, push: true, email: false }
+            });
+          }
+        }
+      } catch (notifErr) {
+        console.warn('[Notification] Non-critical error:', notifErr.message);
+      }
+    })();
+    // END NOTIFICATION
 
     res.status(201).json({
       success: true,
@@ -219,7 +288,6 @@ exports.getComments = async (req, res) => {
       limit
     });
 
-    // Validate post exists
     const post = await Post.findById(id);
     if (!post) {
       return res.status(404).json({
@@ -228,7 +296,6 @@ exports.getComments = async (req, res) => {
       });
     }
 
-    // Get comments with replies
     const comments = await Comment.getForParent('Post', id, {
       page: parseInt(page),
       limit: parseInt(limit),
@@ -240,7 +307,6 @@ exports.getComments = async (req, res) => {
 
     console.log(`Found ${comments.length} root comments for post ${id}`);
 
-    // Get like status for authenticated users
     let userLikes = [];
     if (req.user) {
       const commentIds = comments.map(comment => comment._id);
@@ -252,7 +318,6 @@ exports.getComments = async (req, res) => {
       console.log(`Found ${userLikes.length} user likes`);
     }
 
-    // FIXED: Get replies for each comment if includeReplies is true
     const enhancedComments = await Promise.all(
       comments.map(async (comment) => {
         const commentObj = comment.toObject ? comment.toObject() : comment;
@@ -260,7 +325,6 @@ exports.getComments = async (req, res) => {
           like.targetId.toString() === comment._id.toString()
         );
 
-        // Get replies if includeReplies is true and comment has replies
         let replies = [];
         if (includeReplies === 'true' && comment.engagement?.replies > 0) {
           try {
@@ -273,7 +337,6 @@ exports.getComments = async (req, res) => {
             });
             console.log(`Found ${replies.length} replies for comment ${comment._id}`);
 
-            // Get user likes for replies
             if (req.user && replies.length > 0) {
               const replyIds = replies.map(reply => reply._id);
               const replyLikes = await Like.find({
@@ -366,7 +429,6 @@ exports.updateComment = async (req, res) => {
       });
     }
 
-    // Check ownership or admin role
     if (!comment.author.equals(req.user.userId) && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -374,7 +436,6 @@ exports.updateComment = async (req, res) => {
       });
     }
 
-    // Check if comment can be edited (not deleted)
     if (comment.moderation.status === 'deleted') {
       return res.status(400).json({
         success: false,
@@ -382,7 +443,6 @@ exports.updateComment = async (req, res) => {
       });
     }
 
-    // Update fields
     const updateData = {};
     if (content !== undefined) updateData.content = content.trim();
     if (media !== undefined) updateData.media = media;
@@ -433,7 +493,6 @@ exports.deleteComment = async (req, res) => {
       });
     }
 
-    // Check ownership or admin role
     if (!comment.author.equals(req.user.userId) && req.user.role !== 'admin') {
       await session.abortTransaction();
       session.endSession();
@@ -443,11 +502,9 @@ exports.deleteComment = async (req, res) => {
       });
     }
 
-    // Soft delete
     comment.moderation.status = 'deleted';
     await comment.save({ session });
 
-    // Decrement comment count on parent
     if (comment.parentType === 'Post') {
       await Post.findByIdAndUpdate(
         comment.parentId,
@@ -517,7 +574,6 @@ exports.getCommentReplies = async (req, res) => {
 
     console.log(`Found ${replies.length} replies for comment ${id}`);
 
-    // Get like status for authenticated users
     let userLikes = [];
     if (req.user) {
       const replyIds = replies.map(reply => reply._id);
@@ -594,7 +650,6 @@ exports.toggleCommentLike = async (req, res) => {
       });
     }
 
-    // Check for existing like
     const existingLike = await Like.findOne({
       user: userId,
       targetType: 'Comment',
@@ -604,7 +659,6 @@ exports.toggleCommentLike = async (req, res) => {
     let result;
 
     if (existingLike) {
-      // Unlike
       await Like.findByIdAndDelete(existingLike._id, { session });
       await comment.incrementLikes(-1);
 
@@ -616,7 +670,6 @@ exports.toggleCommentLike = async (req, res) => {
 
       console.log('Comment unliked:', result);
     } else {
-      // Like
       const like = new Like({
         user: userId,
         targetType: 'Comment',
@@ -640,6 +693,28 @@ exports.toggleCommentLike = async (req, res) => {
       };
 
       console.log('Comment liked:', result);
+
+      // 🔔 NOTIFICATION: Notify comment author about like (not self-likes)
+      (async () => {
+        try {
+          if (comment.author.toString() !== userId.toString()) {
+            await notificationService.create({
+              recipient: comment.author,
+              actor: userId,
+              type: 'post_liked',
+              title: 'Comment liked',
+              body: `{actorName} liked your comment`,
+              data: { entityType: 'Comment', entityId: id, screen: 'PostDetail', params: { commentId: id } },
+              priority: 'low',
+              groupKey: `comment_liked:${id}`,
+              channels: { inApp: true, push: false, email: false }
+            });
+          }
+        } catch (notifErr) {
+          console.warn('[Notification] Non-critical error:', notifErr.message);
+        }
+      })();
+      // END NOTIFICATION
     }
 
     await session.commitTransaction();
@@ -657,7 +732,6 @@ exports.toggleCommentLike = async (req, res) => {
     console.error('Toggle comment like error:', error);
 
     if (error.code === 11000) {
-      // Clean up duplicate likes
       await Like.deleteMany({
         user: req.user.userId,
         targetType: 'Comment',
@@ -697,7 +771,6 @@ exports.reportComment = async (req, res) => {
       });
     }
 
-    // Users cannot report their own comments
     if (comment.author.equals(req.user.userId)) {
       return res.status(400).json({
         success: false,
@@ -864,7 +937,6 @@ exports.moderateComment = async (req, res) => {
       });
     }
 
-    // Update moderation fields
     comment.moderation.status = status;
     comment.moderation.moderatedBy = req.user.userId;
 
@@ -872,7 +944,6 @@ exports.moderateComment = async (req, res) => {
       comment.moderation.moderationNotes = moderationNotes;
     }
 
-    // If restoring comment, reset report counts
     if (status === 'active') {
       comment.moderation.reportedCount = 0;
       comment.moderation.reportedBy = [];

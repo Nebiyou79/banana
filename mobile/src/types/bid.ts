@@ -1,6 +1,6 @@
 // src/types/bid.ts
 // Module 7B — Bids
-// Matches server/src/models/Bid.js exactly.
+// FIXED: workflowType and deadline made non-optional where needed
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -8,13 +8,13 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 export enum BidStatus {
-  Submitted         = 'submitted',
-  UnderReview       = 'under_review',
-  Shortlisted       = 'shortlisted',
+  Submitted          = 'submitted',
+  UnderReview        = 'under_review',
+  Shortlisted        = 'shortlisted',
   InterviewScheduled = 'interview_scheduled',
-  Awarded           = 'awarded',
-  Rejected          = 'rejected',
-  Withdrawn         = 'withdrawn',
+  Awarded            = 'awarded',
+  Rejected           = 'rejected',
+  Withdrawn          = 'withdrawn',
 }
 
 export enum BidDocumentType {
@@ -36,17 +36,18 @@ export enum BidDocumentType {
 
 export type BidCurrency = 'ETB' | 'USD' | 'EUR' | 'GBP';
 
+/** Category for financial breakdown line items (web FinancialBreakdownTable pattern). */
+export type BidFinancialCategory = 'labor' | 'materials' | 'logistics' | 'overhead' | 'tax' | 'other';
+
+/** Workflow type for tenders */
+export type WorkflowType = 'open' | 'closed';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // SUB-INTERFACES
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Cover sheet — all required company details submitted with a bid.
- * BUG-C1: `currency` here is the *cover-sheet* currency.
- * When serialised to FormData it MUST be sent as `coverSheetCurrency`
- * to avoid collision with the top-level bid `currency` field.
- */
 export interface BidCoverSheet {
+  authorizedRepresentative: string;
   companyName: string;
   representative: string;
   representativeTitle?: string;
@@ -56,61 +57,122 @@ export interface BidCoverSheet {
   tinNumber?: string;
   licenseNumber?: string;
   totalBidValue: number;
-  /** Serialise as `coverSheetCurrency` in FormData (BUG-C1 FIX). */
   currency: BidCurrency;
   bidValidityPeriod?: number;
   declarationAccepted: boolean;
-  declarationAcceptedAt?: string; // ISO
+  declarationAcceptedAt?: string;
 }
 
-/** A single line item in the financial breakdown table. */
 export interface BidFinancialLineItem {
   description: string;
   quantity: number;
   unit: string;
   unitPrice: number;
   totalPrice: number;
+  category?: BidFinancialCategory;
 }
 
-/** A document attached to a bid. */
 export interface BidDocument {
   _id: string;
   documentType: BidDocumentType;
   originalName: string;
+  fileName?: string;
   size: number;
   mimeType: string;
-  uploadedAt: string; // ISO
+  uploadedAt: string;
 }
 
-/** One entry in the bid's status history timeline. */
 export interface BidStatusHistoryEntry {
   status: BidStatus;
-  changedAt: string; // ISO
-  changedBy?: string; // user id
+  changedAt: string;
+  changedBy?: string;
   notes?: string;
 }
 
-/** Populated reference shapes. */
-export interface BidBidder {
+export interface BidEvaluation {
+  preliminaryPassed?: boolean;
+  preliminaryNotes?: string;
+  preliminaryCheckedAt?: string;
+  technicalScore?: number;
+  technicalNotes?: string;
+  technicalPassMark?: number;
+  passedTechnical?: boolean;
+  technicalEvaluatedAt?: string;
+  financialScore?: number;
+  financialNotes?: string;
+  financialEvaluatedAt?: string;
+  combinedScore?: number;
+  overallRank?: number;
+}
+
+export interface BidCPO {
+  bidSecurityType?: 'cpo' | 'bank_guarantee' | 'insurance_bond';
+  cpoNumber?: string;
+  amount?: number;
+  currency?: BidCurrency;
+  issuingBank?: string;
+  issueDate?: string;
+  expiryDate?: string;
+  status?: string;
+  returnStatus?: 'pending' | 'returned' | 'forfeited';
+  returnNotes?: string;
+}
+
+export interface ComplianceItem {
+  documentType: BidDocumentType;
+  submitted: boolean;
+  verifiedByOwner: boolean;
+  notes?: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// POPULATED REFERENCE SHAPES
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface BidUser {
   _id: string;
-  name: string;
-  email: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
   avatar?: string;
 }
 
-export interface BidBidderCompany {
+export interface BidCompany {
   _id: string;
   name: string;
-  logo?: { secure_url?: string; url?: string } | string;
+  logo?: string;
+  email?: string;
+  phone?: string;
 }
 
-export interface BidTenderRef {
+/**
+ * Populated tender reference.
+ * FIXED: workflowType and deadline are required (non-optional) to match usage.
+ */
+export interface BidTender {
   _id: string;
   title: string;
   referenceNumber?: string;
+  /** Always present when populated — required for sealed/open logic */
   deadline: string;
   status: string;
-  workflowType?: string;
+  /** Always present when populated — required for sealed/open logic */
+  workflowType: WorkflowType;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FINANCIAL BREAKDOWN (server shape)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface FinancialBreakdown {
+  items: BidFinancialLineItem[];
+  subtotal?: number;
+  vatPercentage?: number;
+  vatAmount?: number;
+  discount?: number;
+  totalWithVAT?: number;
+  paymentTerms?: string;
+  currency?: BidCurrency;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -119,28 +181,25 @@ export interface BidTenderRef {
 
 export interface Bid {
   _id: string;
-  bidNumber: string;                            // BID-YYYY-NNNN
-
-  bidder: BidBidder | string;
-  bidderCompany: BidBidderCompany | string;
-  tender: BidTenderRef | string;
-
+  bidNumber: string;
+  bidder: BidUser | string;
+  bidderCompany: BidCompany | string;
+  tender: BidTender | string;
   status: BidStatus;
   sealed: boolean;
-
   coverSheet: BidCoverSheet;
   technicalProposal?: string;
-  financialBreakdown: BidFinancialLineItem[];
-
+  financialProposal?: string;
+  financialBreakdown?: FinancialBreakdown;
   bidAmount: number;
   currency: BidCurrency;
-
   documents: BidDocument[];
   statusHistory: BidStatusHistoryEntry[];
-
-  /** Owner-only notes visible only to tender owner. */
+  evaluation?: BidEvaluation;
+  cpo?: BidCPO;
+  complianceChecklist?: ComplianceItem[];
   ownerNotes?: string;
-
+  submittedAt: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -149,7 +208,6 @@ export interface Bid {
 // LIGHTWEIGHT LIST SHAPE
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Compact shape for list views — avoids loading full document arrays. */
 export interface BidListItem {
   _id: string;
   bidNumber: string;
@@ -158,7 +216,17 @@ export interface BidListItem {
   bidAmount: number;
   currency: BidCurrency;
   bidderCompany?: { _id: string; name: string; logo?: string };
-  tender: { _id: string; title: string; referenceNumber?: string; deadline: string };
+  tender: {
+    _id: string;
+    title: string;
+    referenceNumber?: string;
+    /** Required for sealed/open logic in list cards */
+    deadline: string;
+    /** Required for sealed/open logic in list cards */
+    workflowType: WorkflowType;
+    status?: string;
+  };
+  submittedAt: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -167,27 +235,28 @@ export interface BidListItem {
 // FORM / MUTATION PAYLOADS
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Data payload used by useSubmitBid / useUpdateBid.
- * Files are passed separately as `{ file, documentType }[]`.
- * The service layer builds FormData from this via buildBidFormData().
- */
 export interface SubmitBidData {
   coverSheet: BidCoverSheet;
   technicalProposal?: string;
+  financialProposal?: string;
   financialBreakdown?: BidFinancialLineItem[];
-  /** Top-level bid currency (separate from coverSheet.currency). */
   currency?: BidCurrency;
+  bidAmount?: number;
+  bidSecurityType?: 'cpo' | 'bank_guarantee' | 'insurance_bond';
+  cpoNumber?: string;
+  cpoAmount?: number;
+  cpoCurrency?: BidCurrency;
+  cpoIssuingBank?: string;
+  cpoIssueDate?: string;
+  cpoExpiryDate?: string;
 }
 
-/** Params for useGetMyAllBids pagination / filtering. */
 export interface BidListParams {
   status?: BidStatus;
   page?: number;
   limit?: number;
 }
 
-/** Paginated response shape from GET /bids/my-bids. */
 export interface BidPagination {
   total: number;
   page: number;
@@ -200,7 +269,6 @@ export interface MyAllBidsResponse {
   pagination: BidPagination;
 }
 
-/** Response shape from GET /bids/:tenderId (owner endpoint). */
 export interface GetBidsResponse {
   bids: Bid[];
   totalBids: number;
@@ -209,8 +277,17 @@ export interface GetBidsResponse {
   canBid?: boolean;
 }
 
-/** Payload for PATCH .../status (owner only). */
 export interface UpdateBidStatusData {
   status: BidStatus;
   ownerNotes?: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RNFile type (used by bidService for React Native file uploads)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface RNFile {
+  uri: string;
+  name: string;
+  type: string;
 }

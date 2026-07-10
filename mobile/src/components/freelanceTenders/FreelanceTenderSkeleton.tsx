@@ -3,80 +3,110 @@ import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
 import { withAlpha } from '../../theme/utils';
 
-export interface FreelanceTenderSkeletonProps { count?: number }
+export interface FreelanceTenderSkeletonProps {
+  count?: number;
+}
 
-const ShimmerBox: React.FC<{ width: number | `${number}%`; height: number; borderRadius?: number }> = ({
-  width, height, borderRadius = 6,
-}) => {
-  const { colors: c } = useTheme();
-  const opacity = useRef(new Animated.Value(0.4)).current;
+// ─── Shimmer box ──────────────────────────────────────────────────────────────
+
+const ShimmerBox: React.FC<{
+  width: number | `${number}%`;
+  height: number;
+  borderRadius?: number;
+}> = ({ width, height, borderRadius = 6 }) => {
+  const { colors } = useTheme();
+  const opacity    = useRef(new Animated.Value(0.35)).current;
 
   useEffect(() => {
     const anim = Animated.loop(
       Animated.sequence([
-        Animated.timing(opacity, { toValue: 1,   duration: 700, easing: Easing.linear, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.4, duration: 700, easing: Easing.linear, useNativeDriver: true }),
-      ])
+        Animated.timing(opacity, { toValue: 0.85, duration: 750, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.35, duration: 750, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
     );
     anim.start();
     return () => anim.stop();
   }, []);
 
   return (
-    <Animated.View style={{
-      width: width as number, height, borderRadius,
-      backgroundColor: c.skeleton ?? withAlpha(c.textMuted, 0.20),
-      opacity,
-    }} />
+    <Animated.View
+      style={{
+        width:           width as number,
+        height,
+        borderRadius,
+        backgroundColor: colors.skeleton ?? withAlpha(colors.textMuted, 0.18),
+        opacity,
+      }}
+    />
   );
 };
 
+// ─── Single skeleton card ─────────────────────────────────────────────────────
+
 const SkeletonCard: React.FC = () => {
-  const { colors: c, radius, spacing, shadows } = useTheme();
-  const styles = useMemo(() => makeStyles(c, radius, spacing, shadows), [c, radius, spacing, shadows]);
+  const { colors, radius, shadows } = useTheme();
   return (
-    <View style={styles.card}>
-      <View style={styles.row}>
-        <ShimmerBox width="60%" height={16} />
-        <ShimmerBox width={60} height={22} borderRadius={10} />
+    <View
+      style={[
+        skS.card,
+        {
+          backgroundColor: colors.bgCard,
+          borderRadius:    radius.lg,
+          borderColor:     colors.border,
+          ...shadows.sm,
+        },
+      ]}
+    >
+      {/* Row 1: avatar + title */}
+      <View style={skS.row}>
+        <ShimmerBox width={40} height={40} borderRadius={10} />
+        <View style={{ flex: 1, gap: 6 }}>
+          <ShimmerBox width="75%" height={14} />
+          <ShimmerBox width="45%" height={11} />
+        </View>
+        <ShimmerBox width={64} height={22} borderRadius={11} />
       </View>
-      <View style={[styles.row, styles.mt8]}>
-        <ShimmerBox width="40%" height={12} />
-        <ShimmerBox width={56} height={12} />
+
+      {/* Row 2: category + deadline */}
+      <View style={[skS.row, { marginTop: 12 }]}>
+        <ShimmerBox width={90} height={22} borderRadius={6} />
+        <ShimmerBox width={60} height={22} borderRadius={6} />
       </View>
-      <View style={[styles.row, styles.mt10]}>
-        <ShimmerBox width={110} height={26} borderRadius={8} />
+
+      {/* Row 3: budget + save */}
+      <View style={[skS.row, { marginTop: 10 }]}>
+        <ShimmerBox width={110} height={26} borderRadius={6} />
+        <ShimmerBox width={24} height={24} borderRadius={6} />
       </View>
-      <View style={[styles.chipRow, styles.mt10]}>
-        <ShimmerBox width={60} height={24} borderRadius={8} />
-        <ShimmerBox width={80} height={24} borderRadius={8} />
-        <ShimmerBox width={52} height={24} borderRadius={8} />
+
+      {/* Row 4: skill chips */}
+      <View style={[skS.chipRow, { marginTop: 10 }]}>
+        <ShimmerBox width={60}  height={24} borderRadius={12} />
+        <ShimmerBox width={80}  height={24} borderRadius={12} />
+        <ShimmerBox width={52}  height={24} borderRadius={12} />
+        <ShimmerBox width={36}  height={24} borderRadius={12} />
       </View>
     </View>
   );
 };
 
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
 const FreelanceTenderSkeleton: React.FC<FreelanceTenderSkeletonProps> = memo(({ count = 3 }) => (
-  <View style={styles.wrap}>
-    {Array.from({ length: count }).map((_, i) => <SkeletonCard key={i} />)}
+  <View style={skS.wrap}>
+    {Array.from({ length: count }).map((_, i) => (
+      <SkeletonCard key={i} />
+    ))}
   </View>
 ));
 
 FreelanceTenderSkeleton.displayName = 'FreelanceTenderSkeleton';
 
-const makeStyles = (c: any, radius: any, spacing: any, shadows: any) =>
-  StyleSheet.create({
-    card: {
-      borderRadius: radius.lg, padding: spacing.lg,
-      marginBottom: 12, backgroundColor: c.surface ?? c.bgCard,
-      ...shadows.sm,
-    },
-    row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-    chipRow: { flexDirection: 'row', gap: 6 },
-    mt8:  { marginTop: 8 },
-    mt10: { marginTop: 10 },
-  });
-
-const styles = StyleSheet.create({ wrap: { padding: 16 } });
+const skS = StyleSheet.create({
+  wrap:    { padding: 16 },
+  card:    { padding: 16, marginBottom: 12, borderWidth: StyleSheet.hairlineWidth },
+  row:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  chipRow: { flexDirection: 'row', gap: 6 },
+});
 
 export default FreelanceTenderSkeleton;

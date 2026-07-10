@@ -1,34 +1,39 @@
 /**
  * src/services/applicationService.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Full application service — mirrors backend routes exactly.
- * Uses the NEW expo-file-system (File / Directory classes) for downloads.
+ * AVATAR FIX — Application.job.company and Application.job.organization now
+ * include all avatar field names (avatar, avatarUrl, profileImage, avatarPublicId)
+ * that the fixed backend populate projections return.
+ *
+ * AVATAR FIX — Application.job now includes ownerPreview (new backend field).
+ *
+ * All prior logic (file download, buildAttachments, service methods) is
+ * preserved unchanged.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 import  httpClient  from '../lib/httpClient';
-import * as FileSystem from 'expo-file-system/legacy'; // legacy kept for Sharing compat
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 export const APPLICATIONS = {
-  MY_CVS: '/applications/my-cvs',
-  MY_APPLICATIONS: '/applications/my-applications',
-  APPLY: (jobId: string) => `/applications/apply/${jobId}`,
-  WITHDRAW: (id: string) => `/applications/${id}/withdraw`,
-  STATISTICS: '/applications/statistics/overview',
-  COMPANY_LIST: '/applications/company/applications',
-  COMPANY_DETAIL: (id: string) => `/applications/company/${id}`,
-  ORG_LIST: '/applications/organization/applications',
-  ORG_DETAIL: (id: string) => `/applications/organization/${id}`,
-  JOB_LIST: (jobId: string) => `/applications/job/${jobId}`,
-  UPDATE_STATUS: (id: string) => `/applications/${id}/status`,
-  COMPANY_RESPONSE: (id: string) => `/applications/${id}/company-response`,
-  ATTACHMENTS: (id: string) => `/applications/${id}/attachments`,
-  FILE_DOWNLOAD: (appId: string, fileId: string) =>
-    `/applications/${appId}/files/${fileId}/download`,
-  FILE_VIEW: (appId: string, fileId: string) =>
-    `/applications/${appId}/files/${fileId}/view`,
+  MY_CVS:           '/applications/my-cvs',
+  MY_APPLICATIONS:  '/applications/my-applications',
+  APPLY:            (jobId: string) => `/applications/apply/${jobId}`,
+  WITHDRAW:         (id: string)    => `/applications/${id}/withdraw`,
+  STATISTICS:       '/applications/statistics/overview',
+  COMPANY_LIST:     '/applications/company/applications',
+  COMPANY_DETAIL:   (id: string)    => `/applications/company/${id}`,
+  ORG_LIST:         '/applications/organization/applications',
+  ORG_DETAIL:       (id: string)    => `/applications/organization/${id}`,
+  JOB_LIST:         (jobId: string) => `/applications/job/${jobId}`,
+  UPDATE_STATUS:    (id: string)    => `/applications/${id}/status`,
+  COMPANY_RESPONSE: (id: string)    => `/applications/${id}/company-response`,
+  ATTACHMENTS:      (id: string)    => `/applications/${id}/attachments`,
+  FILE_DOWNLOAD:    (appId: string, fileId: string) => `/applications/${appId}/files/${fileId}/download`,
+  FILE_VIEW:        (appId: string, fileId: string) => `/applications/${appId}/files/${fileId}/view`,
+  BY_ID:            (id: string)    => `/applications/${id}`,
 } as const;
 
 // ─── Enums / Union Types ──────────────────────────────────────────────────────
@@ -39,18 +44,18 @@ export type ApplicationStatus =
   | 'offer-rejected' | 'on-hold' | 'rejected' | 'withdrawn';
 
 export const STATUS_LABELS: Record<ApplicationStatus, string> = {
-  'applied': 'Applied',
-  'under-review': 'Under Review',
-  'shortlisted': 'Shortlisted',
-  'interview-scheduled': 'Interview Scheduled',
-  'interviewed': 'Interviewed',
-  'offer-pending': 'Offer Pending',
-  'offer-made': 'Offer Made',
-  'offer-accepted': 'Offer Accepted',
-  'offer-rejected': 'Offer Rejected',
-  'on-hold': 'On Hold',
-  'rejected': 'Not Selected',
-  'withdrawn': 'Withdrawn',
+  'applied':              'Applied',
+  'under-review':         'Under Review',
+  'shortlisted':          'Shortlisted',
+  'interview-scheduled':  'Interview Scheduled',
+  'interviewed':          'Interviewed',
+  'offer-pending':        'Offer Pending',
+  'offer-made':           'Offer Made',
+  'offer-accepted':       'Offer Accepted',
+  'offer-rejected':       'Offer Rejected',
+  'on-hold':              'On Hold',
+  'rejected':             'Not Selected',
+  'withdrawn':            'Withdrawn',
 };
 
 export const STATUS_COLORS: Record<ApplicationStatus, { bg: string; text: string; dot: string; border: string }> = {
@@ -115,13 +120,8 @@ export interface Reference {
   notes?: string;
   providedAsDocument: boolean;
   document?: {
-    _id?: string;
-    filename?: string;
-    originalName?: string;
-    url?: string;
-    downloadUrl?: string;
-    size?: number;
-    mimetype?: string;
+    _id?: string; filename?: string; originalName?: string;
+    url?: string; downloadUrl?: string; size?: number; mimetype?: string;
   };
 }
 
@@ -138,13 +138,8 @@ export interface WorkExperience {
   supervisor?: { name: string; position: string; contact: string };
   providedAsDocument: boolean;
   document?: {
-    _id?: string;
-    filename?: string;
-    originalName?: string;
-    url?: string;
-    downloadUrl?: string;
-    size?: number;
-    mimetype?: string;
+    _id?: string; filename?: string; originalName?: string;
+    url?: string; downloadUrl?: string; size?: number; mimetype?: string;
   };
 }
 
@@ -190,6 +185,44 @@ export interface CompanyResponse {
   interviewDetails?: { date: string; location: string; type: string; time?: string };
 }
 
+/**
+ * AVATAR FIX — Extended company/org interface with all avatar fields.
+ * Previously only had logoUrl — the fixed backend populate projection now
+ * also returns: avatar, avatarUrl, profileImage, avatarPublicId, user.
+ */
+export interface ApplicationJobOwner {
+  _id: string;
+  name: string;
+  // Avatar fields — all may be present depending on populate projection
+  logoUrl?: string;
+  logo?: string;
+  avatar?: string;
+  avatarUrl?: string;
+  profileImage?: string;
+  avatarPublicId?: string;
+  // Metadata
+  verified: boolean;
+  industry?: string;
+  organizationType?: string;
+  website?: string;
+  user?: string;
+}
+
+/**
+ * AVATAR FIX — Backend-synthesised owner preview.
+ * Always contains a correctly-resolved logoUrl from Profile.avatar.secure_url.
+ */
+export interface ApplicationJobOwnerPreview {
+  _id?: string;
+  type: 'company' | 'organization';
+  name: string;
+  logoUrl?: string;
+  avatarUrl?: string;
+  avatarPublicId?: string;
+  verified?: boolean;
+  industry?: string;
+}
+
 export interface Application {
   _id: string;
   job: {
@@ -198,10 +231,20 @@ export interface Application {
     description?: string;
     location?: any;
     jobType: 'company' | 'organization';
-    company?: { _id: string; name: string; logoUrl?: string; verified: boolean; industry?: string };
-    organization?: { _id: string; name: string; logoUrl?: string; verified: boolean; organizationType?: string };
+    // AVATAR FIX — use extended ApplicationJobOwner instead of the minimal inline type
+    company?:      ApplicationJobOwner;
+    organization?: ApplicationJobOwner;
+    /**
+     * AVATAR FIX — new field from fixed backend.
+     * Always present in responses from the fixed applicationController.
+     * Components should prefer this for avatar resolution.
+     */
+    ownerPreview?: ApplicationJobOwnerPreview;
   };
-  candidate: { _id: string; name: string; email: string; avatar?: string; phone?: string; location?: string };
+  candidate: {
+    _id: string; name: string; email: string;
+    avatar?: string; phone?: string; location?: string;
+  };
   userInfo: UserInfo;
   selectedCVs: Array<{
     cvId: string; _id?: string; filename: string; originalName: string;
@@ -300,7 +343,6 @@ export interface ApplicationStats {
   successRate?: number;
 }
 
-// Normalised attachment shape used by the shared AttachmentsTab
 export interface NormalizedAttachment {
   id: string;
   name: string;
@@ -311,9 +353,7 @@ export interface NormalizedAttachment {
   fileType: string;
   uploadedAt: string;
   applicationId: string;
-  /** The real MongoDB _id of the file object (for the download endpoint) */
   fileId: string;
-  /** cvId field for selected CVs */
   cvId?: string;
   mimetype?: string;
 }
@@ -341,13 +381,10 @@ export const formatFileSize = (bytes?: number): string => {
 export const getCVDisplayName = (cv: CV): string =>
   cv.originalName ?? cv.filename ?? 'CV Document';
 
-// ─── Build normalised attachment list from an Application ────────────────────
-
 export const buildAttachments = (application: Application): NormalizedAttachment[] => {
   const list: NormalizedAttachment[] = [];
   const appId = application._id;
 
-  // Selected CVs
   (application.selectedCVs ?? []).forEach((cv, i) => {
     const realId = cv._id ?? cv.cvId;
     if (!realId) return;
@@ -367,7 +404,6 @@ export const buildAttachments = (application: Application): NormalizedAttachment
     });
   });
 
-  // References with documents
   (application.references ?? []).forEach((ref, i) => {
     if (!ref.document?._id) return;
     list.push({
@@ -385,7 +421,6 @@ export const buildAttachments = (application: Application): NormalizedAttachment
     });
   });
 
-  // Work experience with documents
   (application.workExperience ?? []).forEach((exp, i) => {
     if (!exp.document?._id) return;
     list.push({
@@ -406,13 +441,8 @@ export const buildAttachments = (application: Application): NormalizedAttachment
   return list;
 };
 
-// ─── File download (new expo-file-system API) ─────────────────────────────────
+// ─── File download ────────────────────────────────────────────────────────────
 
-/**
- * Downloads a file to the device's cache directory and then opens the share
- * sheet so the user can save or open it. Uses the *legacy* FileSystem API
- * because expo-sharing still needs a file URI.
- */
 export const downloadAndShare = async (
   applicationId: string,
   fileId: string,
@@ -422,16 +452,12 @@ export const downloadAndShare = async (
   const token = getAuthToken();
   if (!token) throw new Error('Not authenticated');
 
-  // Build the authenticated download URL
   const baseUrl = (httpClient.defaults.baseURL ?? '').replace(/\/$/, '');
   const url = `${baseUrl}${APPLICATIONS.FILE_DOWNLOAD(applicationId, fileId)}`;
-
   const dest = FileSystem.cacheDirectory + encodeURIComponent(fileName);
 
   const downloadResumable = FileSystem.createDownloadResumable(
-    url,
-    dest,
-    { headers: { Authorization: `Bearer ${token}` } },
+    url, dest, { headers: { Authorization: `Bearer ${token}` } },
   );
 
   const result = await downloadResumable.downloadAsync();
@@ -494,38 +520,28 @@ export const applicationService = {
     formData.append('contactInfo', JSON.stringify(data.contactInfo));
     if (data.userInfo) formData.append('userInfo', JSON.stringify(data.userInfo));
 
-    // References — assign _tempId for document-based ones
     const refs = (data.references ?? []).map((r) => ({
       ...r,
       _tempId: r.providedAsDocument ? (r._tempId ?? generateTempId()) : undefined,
     }));
     formData.append('references', JSON.stringify(refs));
 
-    // Work experience — assign _tempId for document-based ones
     const exps = (data.workExperience ?? []).map((e) => ({
       ...e,
       _tempId: e.providedAsDocument ? (e._tempId ?? generateTempId()) : undefined,
     }));
     formData.append('workExperience', JSON.stringify(exps));
 
-    // Attach reference files
     (data.referenceFiles ?? []).forEach((f, i) => {
       formData.append('referencePdfs', { uri: f.uri, name: f.name, type: f.type } as any);
       formData.append(`referencePdfs_${i}_tempId`, f._tempId);
-      formData.append(
-        `referencePdfs_metadata_${i}`,
-        JSON.stringify({ _tempId: f._tempId, fileName: f.name })
-      );
+      formData.append(`referencePdfs_metadata_${i}`, JSON.stringify({ _tempId: f._tempId, fileName: f.name }));
     });
 
-    // Attach experience files
     (data.experienceFiles ?? []).forEach((f, i) => {
       formData.append('experiencePdfs', { uri: f.uri, name: f.name, type: f.type } as any);
       formData.append(`experiencePdfs_${i}_tempId`, f._tempId);
-      formData.append(
-        `experiencePdfs_metadata_${i}`,
-        JSON.stringify({ _tempId: f._tempId, fileName: f.name })
-      );
+      formData.append(`experiencePdfs_metadata_${i}`, JSON.stringify({ _tempId: f._tempId, fileName: f.name }));
     });
 
     const res = await httpClient
@@ -553,6 +569,15 @@ export const applicationService = {
     } catch {
       return {};
     }
+  },
+
+  // ── Fetch single application by ID ────────────────────────────────────────
+
+  getById: async (applicationId: string): Promise<Application> => {
+    const res = await httpClient
+      .get<ApplicationResponse>(APPLICATIONS.BY_ID(applicationId))
+      .catch((e) => { throw new Error(parseError(e)); });
+    return res.data.data.application;
   },
 
   // ── Company / Org ──────────────────────────────────────────────────────────
@@ -587,7 +612,7 @@ export const applicationService = {
 
   getJobApplications: async (
     jobId: string,
-    params?: ApplicationFilters
+    params?: ApplicationFilters,
   ): Promise<ApplicationsListResponse> => {
     const res = await httpClient
       .get<ApplicationsListResponse>(APPLICATIONS.JOB_LIST(jobId), { params })
@@ -597,7 +622,7 @@ export const applicationService = {
 
   updateApplicationStatus: async (
     applicationId: string,
-    data: UpdateStatusData
+    data: UpdateStatusData,
   ): Promise<ApplicationResponse> => {
     const res = await httpClient
       .put<ApplicationResponse>(APPLICATIONS.UPDATE_STATUS(applicationId), data)
@@ -607,7 +632,7 @@ export const applicationService = {
 
   addCompanyResponse: async (
     applicationId: string,
-    data: CompanyResponseData
+    data: CompanyResponseData,
   ): Promise<ApplicationResponse> => {
     const res = await httpClient
       .put<ApplicationResponse>(APPLICATIONS.COMPANY_RESPONSE(applicationId), data)

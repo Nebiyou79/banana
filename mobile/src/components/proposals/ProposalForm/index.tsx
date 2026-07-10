@@ -1,7 +1,9 @@
 // src/components/proposals/ProposalForm/index.tsx
-// Banana Mobile App — Module 6B: Proposals
-// Multi-step proposal form shell. Stores draftId in state.
-// CRITICAL: Draft is created FIRST, then auto-saved on every step navigation.
+// Multi-step proposal form - 4 step version
+// Step 1: Cover Letter + Attachments + Portfolio Links
+// Step 2: Pricing + Timeline + Start Date
+// Step 3: Milestones + Screening Questions
+// Step 4: Review & Submit
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
@@ -23,12 +25,10 @@ import {
   useUploadProposalAttachment,
   useRemoveProposalAttachment,
 } from '../../../hooks/useProposal';
-import { Step1_CoverLetter } from './Step1_CoverLetter';
-import { Step2_Pricing } from './Step2_Pricing';
-import { Step3_Milestones } from './Step3_Milestones';
-import { Step4_ScreeningAnswers } from './Step4_ScreeningAnswers';
-import { Step5_Attachments } from './Step5_Attachments';
-import { Step6_Review } from './Step6_Review';
+import { Step1_CoverLetterAttachments } from './Step1_CoverLetterAttachments';
+import { Step2_PricingWithDate } from './Step2_PricingWithDate';
+import { Step3_MilestonesScreening } from './Step3_MilestonesScreening';
+import { Step4_Review } from './Step4_Review';
 import type {
   Proposal,
   ProposalTender,
@@ -71,12 +71,10 @@ interface FormState {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STEP_LABELS = [
-  'Cover Letter',
-  'Bid & Timeline',
-  'Milestones',
-  'Screening',
-  'Files',
-  'Review',
+  'Cover Letter & Files',
+  'Pricing & Timeline',
+  'Milestones & Questions',
+  'Review & Submit',
 ];
 
 const AUTO_SAVE_DELAY_MS = 2500;
@@ -478,16 +476,23 @@ export const ProposalForm: React.FC<ProposalFormProps> = ({
 
           {/* Step content */}
           {step === 0 && (
-            <Step1_CoverLetter
+            <Step1_CoverLetterAttachments
               coverLetter={form.coverLetter}
-              onChange={(v) => updateForm({ coverLetter: v })}
+              attachments={attachments}
+              portfolioLinks={form.portfolioLinks}
+              onCoverLetterChange={(v) => updateForm({ coverLetter: v })}
+              onPortfolioLinksChange={(v) => updateForm({ portfolioLinks: v })}
+              onUpload={handleUpload}
+              onDeleteAttachment={handleDeleteAttachment}
+              isUploading={uploadMutation.isPending}
+              proposalId={draftId}
               saveState={saveState}
               tenderTitle={tender.title}
             />
           )}
 
           {step === 1 && (
-            <Step2_Pricing
+            <Step2_PricingWithDate
               bidType={form.bidType}
               proposedAmount={form.proposedAmount}
               currency={form.currency}
@@ -512,42 +517,27 @@ export const ProposalForm: React.FC<ProposalFormProps> = ({
           )}
 
           {step === 2 && (
-            <Step3_Milestones
+            <Step3_MilestonesScreening
               milestones={form.milestones}
               proposedAmount={parseFloat(form.proposedAmount) || 0}
               currency={form.currency}
+              screeningQuestions={screeningQuestions}
+              screeningAnswers={form.screeningAnswers}
               onMilestonesChange={(v) => updateForm({ milestones: v })}
-            />
-          )}
-
-          {step === 3 && (
-            <Step4_ScreeningAnswers
-              questions={screeningQuestions}
-              answers={form.screeningAnswers}
-              onAnswersChange={(v) => updateForm({ screeningAnswers: v })}
+              onScreeningAnswersChange={(v) => updateForm({ screeningAnswers: v })}
               showValidation={showValidation}
             />
           )}
 
-          {step === 4 && (
-            <Step5_Attachments
-              proposalId={draftId}
-              attachments={attachments}
-              portfolioLinks={form.portfolioLinks}
-              onUpload={handleUpload}
-              onDeleteAttachment={handleDeleteAttachment}
-              onPortfolioLinksChange={(v) => updateForm({ portfolioLinks: v })}
-              isUploading={uploadMutation.isPending}
-            />
-          )}
-
-          {step === 5 && (
-            <Step6_Review
+          {step === 3 && (
+            <Step4_Review
               data={{
                 coverLetter: form.coverLetter,
                 bidType: form.bidType,
                 proposedAmount: parseFloat(form.proposedAmount) || 0,
                 currency: form.currency,
+                hourlyRate: parseFloat(form.hourlyRate) || 0,
+                estimatedWeeklyHours: parseInt(form.estimatedWeeklyHours) || 0,
                 deliveryTime: {
                   value: parseInt(form.deliveryValue) || 1,
                   unit: form.deliveryUnit,
@@ -574,7 +564,7 @@ export const ProposalForm: React.FC<ProposalFormProps> = ({
         </ScrollView>
 
         {/* Navigation footer (hidden on review step) */}
-        {step < 5 && (
+        {step < 3 && (
           <View
             style={[
               styles.navFooter,
@@ -603,7 +593,7 @@ export const ProposalForm: React.FC<ProposalFormProps> = ({
               activeOpacity={0.85}
             >
               <Text style={styles.nextBtnText}>
-                {step === 4 ? 'Review →' : 'Continue →'}
+                {step === 2 ? 'Review →' : 'Continue →'}
               </Text>
             </TouchableOpacity>
           </View>

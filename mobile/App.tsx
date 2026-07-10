@@ -1,3 +1,4 @@
+// App.tsx
 import React, { useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -6,13 +7,22 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import { StatusBar } from 'expo-status-bar';
-
+import { configureGoogleSignIn } from './src/components/auth/GoogleSignInButton';
 import { queryClient } from './src/lib/queryClient';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { useAuthStore } from './src/store/authStore';
 import { useThemeStore } from './src/store/themeStores';
 import { useTheme } from './src/hooks/useTheme';
 import { SplashScreen } from './src/screens/auth/SplashScreen';
+
+// 🔔 NOTIFICATION IMPORTS
+import { configureForegroundNotifications } from './src/services/pushTokenService';
+import { NotificationBootstrap } from './src/components/notifications/NotificationBootstrap';
+import { InAppNotificationToast } from './src/components/notifications/InAppNotificationToast';
+import { setNavigationRef } from './src/utils/notificationNavigation';
+
+// Configure foreground notifications once at module level
+configureForegroundNotifications();
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
@@ -21,7 +31,6 @@ export default function App() {
   const { theme, setDark, setLight } = useThemeStore();
   const deviceTheme = useColorScheme();
 
-  // Sync theme with device preference only when mode is 'system'
   useEffect(() => {
     if (theme.mode === 'system' && deviceTheme) {
       if (deviceTheme === 'dark') {
@@ -34,7 +43,11 @@ export default function App() {
 
   useEffect(() => {
     const init = async () => {
-      await hydrateFromStorage();
+try {
+  configureGoogleSignIn();
+} catch (e) {
+  console.warn('Google Sign-In not available in this build');
+}      await hydrateFromStorage();
       await new Promise((r) => setTimeout(r, 1800));
       setIsReady(true);
     };
@@ -63,12 +76,21 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <NavigationContainer theme={navTheme}>
+          {/* 🔔 Notification bootstrap (socket + push + count fetch) */}
+          <NotificationBootstrap />
+          
+          <NavigationContainer
+            theme={navTheme}
+            ref={(ref) => setNavigationRef(ref)}
+          >
             <StatusBar style={isDark ? 'light' : 'dark'} />
             <RootNavigator />
             <Toast />
           </NavigationContainer>
         </QueryClientProvider>
+        
+        {/* 🔔 In-app notification toast (floating overlay) */}
+        <InAppNotificationToast />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

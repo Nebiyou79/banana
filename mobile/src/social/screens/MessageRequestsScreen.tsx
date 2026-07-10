@@ -1,15 +1,13 @@
 // src/social/screens/MessageRequestsScreen.tsx
+// ✅ role-theme-migrated — FIXED
 /**
- * MessageRequestsScreen — dedicated list of incoming message requests.
- * ─────────────────────────────────────────────────────────────────────────────
- * Features:
- *   - Inline Accept/Decline with loading states
- *   - Tapping the body opens the conversation
- *   - Pull-to-refresh
- *   - Empty state with clear messaging
- *   - Full socialTheme integration
- *   - Professional card layout
- * ─────────────────────────────────────────────────────────────────────────────
+ * FIXES:
+ *  - theme.primary → theme.colors.primary everywhere (canonical form)
+ *  - theme.subtext → theme.colors.subtext (via flat alias — both work; canonicalised)
+ *  - Animated SafeAreaView opacity: style prop accepts Animated values
+ *    → keep existing pattern but use theme.bg for backgroundColor
+ *  - EmptyState title='' removed in skeleton branch — was showing blank EmptyState
+ *    during initial load; replaced with centred ActivityIndicator
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
@@ -36,13 +34,8 @@ import {
 } from '../hooks/useConversations';
 import { RequestCard } from '../components/chat';
 import type { Conversation } from '../types/chat';
-import { EmptyState } from '../components';
-
-// ─── Types ───────────────────────────────────────────────────────────────────
 
 type AnyNav = NativeStackNavigationProp<any>;
-
-// ─── Component ───────────────────────────────────────────────────────────────
 
 const MessageRequestsScreen: React.FC = () => {
   const theme = useSocialTheme();
@@ -63,7 +56,6 @@ const MessageRequestsScreen: React.FC = () => {
   const { mutate: acceptRequest, isPending: accepting } = useAcceptRequest();
   const { mutate: declineRequest, isPending: declining } = useDeclineRequest();
 
-  // Extract list safely from infinite query
   const requests: Conversation[] = useMemo(() => {
     if (!data) return [];
     const enhanced = data as any;
@@ -74,7 +66,6 @@ const MessageRequestsScreen: React.FC = () => {
     return [];
   }, [data]);
 
-  // Per-row pending state
   const [pendingById, setPendingById] = useState<Record<string, 'accept' | 'decline' | null>>({});
 
   const setPending = useCallback((id: string, v: 'accept' | 'decline' | null) => {
@@ -139,14 +130,21 @@ const MessageRequestsScreen: React.FC = () => {
     if (isLoading) {
       return (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          // FIX: theme.primary → theme.colors.primary
+          <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       );
     }
     return (
       <View style={styles.empty}>
-        <View style={[styles.emptyIconWrap, { backgroundColor: theme.withAlpha(theme.primary, 0.08) }]}>
-          <Ionicons name="mail-open-outline" size={48} color={theme.primary} />
+        <View
+          style={[
+            styles.emptyIconWrap,
+            // FIX: theme.primary → theme.colors.primary
+            { backgroundColor: theme.withAlpha(theme.colors.primary, 0.08) },
+          ]}
+        >
+          <Ionicons name="mail-open-outline" size={48} color={theme.colors.primary} />
         </View>
         <Text style={[styles.emptyTitle, { color: theme.text }]}>
           No message requests
@@ -158,7 +156,8 @@ const MessageRequestsScreen: React.FC = () => {
     );
   }, [isLoading, theme, styles]);
 
-  // ── Loading ──────────────────────────────────────────────────────────
+  // ── Loading (initial, no items yet) ──────────────────────────────────
+  // FIX: removed blank <EmptyState title='' /> in favour of centred spinner
   if (isLoading && requests.length === 0) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['top']}>
@@ -169,14 +168,20 @@ const MessageRequestsScreen: React.FC = () => {
           <Text style={[styles.title, { color: theme.text }]}>Message Requests</Text>
           <View style={{ width: 44 }} />
         </View>
-        <EmptyState title={''} />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
       </SafeAreaView>
     );
   }
 
-  // ── Render ───────────────────────────────────────────────────────────
+  // ── Main render ──────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg, opacity: fadeIn }]} edges={['top']}>
+    <SafeAreaView
+      // FIX: opacity animated value on SafeAreaView style is fine in RN
+      style={[styles.container, { backgroundColor: theme.bg, opacity: fadeIn }]}
+      edges={['top']}
+    >
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: theme.border }]}>
         <TouchableOpacity
@@ -188,9 +193,7 @@ const MessageRequestsScreen: React.FC = () => {
         >
           <Ionicons name="chevron-back" size={26} color={theme.text} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: theme.text }]}>
-          Message Requests
-        </Text>
+        <Text style={[styles.title, { color: theme.text }]}>Message Requests</Text>
         <View style={{ width: 44 }} />
       </View>
 
@@ -214,15 +217,16 @@ const MessageRequestsScreen: React.FC = () => {
           <RefreshControl
             refreshing={isRefetching}
             onRefresh={refetch}
-            tintColor={theme.primary}
-            colors={[theme.primary]}
+            // FIX: theme.primary → theme.colors.primary
+            tintColor={theme.colors.primary}
+            colors={[theme.colors.primary]}
           />
         }
         ListEmptyComponent={EmptyComponent}
         ListFooterComponent={
           hasNextPage && requests.length > 0 ? (
             <ActivityIndicator
-              color={theme.primary}
+              color={theme.colors.primary}
               style={{ paddingVertical: 16 }}
             />
           ) : null
@@ -237,9 +241,7 @@ const MessageRequestsScreen: React.FC = () => {
 
 const makeStyles = (theme: ReturnType<typeof useSocialTheme>) =>
   StyleSheet.create({
-    container: {
-      flex: 1,
-    },
+    container: { flex: 1 },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -265,12 +267,8 @@ const makeStyles = (theme: ReturnType<typeof useSocialTheme>) =>
       paddingVertical: theme.spacing.sm,
       borderBottomWidth: StyleSheet.hairlineWidth,
     },
-    subtitle: {
-      fontSize: 13,
-    },
-    listContent: {
-      paddingBottom: theme.spacing.xl,
-    },
+    subtitle: { fontSize: 13 },
+    listContent: { paddingBottom: theme.spacing.xl },
     centered: {
       alignItems: 'center',
       justifyContent: 'center',
@@ -291,16 +289,8 @@ const makeStyles = (theme: ReturnType<typeof useSocialTheme>) =>
       justifyContent: 'center',
       marginBottom: 4,
     },
-    emptyTitle: {
-      fontSize: 17,
-      fontWeight: '700',
-      textAlign: 'center',
-    },
-    emptySub: {
-      fontSize: 14,
-      textAlign: 'center',
-      lineHeight: 20,
-    },
+    emptyTitle: { fontSize: 17, fontWeight: '700', textAlign: 'center' },
+    emptySub: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
   });
 
 export default MessageRequestsScreen;

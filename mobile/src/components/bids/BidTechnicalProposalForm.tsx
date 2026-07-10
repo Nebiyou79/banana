@@ -1,13 +1,13 @@
 // src/components/bids/BidTechnicalProposalForm.tsx
-// Multiline technical proposal textarea with live char counter.
-// Min 100 chars, max 10000 chars.
+// UPDATED: Added onValidChange, onDataChange, initialValue props for BidForm integration
+// FIXED: Removed callbacks from useEffect dependency array to prevent infinite loop
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
-import { Control, Controller, FieldErrors } from 'react-hook-form';
+import { Control, Controller, FieldErrors, useForm } from 'react-hook-form';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -21,43 +21,68 @@ const MAX_CHARS = 10_000;
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
-  control: Control<TechnicalProposalFormValues>;
-  errors: FieldErrors<TechnicalProposalFormValues>;
+  control?: Control<TechnicalProposalFormValues>;
+  errors?: FieldErrors<TechnicalProposalFormValues>;
+  onValidChange?: (valid: boolean) => void;
+  onDataChange?: (data: TechnicalProposalFormValues | null) => void;
+  initialValue?: string;
 }
 
-export const BidTechnicalProposalForm: React.FC<Props> = ({ control, errors }) => {
-  const isDark = useThemeStore((s) => s.theme.isDark);
+export const BidTechnicalProposalForm: React.FC<Props> = ({
+  control: externalControl,
+  errors: externalErrors,
+  onValidChange,
+  onDataChange,
+  initialValue,
+}) => {
+  const { colors, radius, spacing } = useTheme();
 
-  const palette = {
-    card:        isDark ? '#1E293B' : '#FFFFFF',
-    headerBg:    isDark ? '#1A2540' : '#F1F5F9',
-    border:      isDark ? '#334155' : '#E2E8F0',
-    inputBg:     isDark ? '#0F172A' : '#F8FAFC',
-    inputBorder: isDark ? '#475569' : '#CBD5E1',
-    errorBorder: '#EF4444',
-    text:        isDark ? '#F1F5F9' : '#0F172A',
-    placeholder: isDark ? '#475569' : '#94A3B8',
-    muted:       isDark ? '#94A3B8' : '#64748B',
-    required:    '#EF4444',
-    accent:      '#0A2540',
-    counterOk:   isDark ? '#94A3B8' : '#64748B',
-    counterWarn: '#F59E0B',
-    counterMin:  '#EF4444',
-    hintBg:      isDark ? '#0F172A' : '#F1F5F9',
-  };
+  // Internal form when used standalone
+  const {
+    control: internalControl,
+    formState: { errors: internalErrors, isValid },
+    watch,
+  } = useForm<TechnicalProposalFormValues>({
+    defaultValues: {
+      technicalProposal: initialValue ?? '',
+    },
+    mode: 'onChange',
+  });
+
+  const ctrl = externalControl ?? internalControl;
+  const errs = externalErrors ?? internalErrors;
+
+  // ── FIX: Use refs for callbacks to prevent infinite loop ──────────────
+  const onValidChangeRef = useRef(onValidChange);
+  const onDataChangeRef = useRef(onDataChange);
+
+  useEffect(() => {
+    onValidChangeRef.current = onValidChange;
+    onDataChangeRef.current = onDataChange;
+  });
+
+  // Watch value for callbacks
+  const watchedValue = watch('technicalProposal');
+  
+  // FIX: Removed onValidChange and onDataChange from dependency array
+  useEffect(() => {
+    const len = watchedValue?.length ?? 0;
+    onValidChangeRef.current?.(len >= MIN_CHARS && len <= MAX_CHARS);
+    onDataChangeRef.current?.({ technicalProposal: watchedValue ?? '' });
+  }, [watchedValue]);
 
   return (
-    <View style={[styles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
+    <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border, borderRadius: radius.xl }]}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: palette.headerBg, borderBottomColor: palette.border }]}>
-        <Ionicons name="document-text-outline" size={16} color={palette.accent} />
-        <Text style={[styles.title, { color: palette.text }]}>Technical Proposal</Text>
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <Ionicons name="document-text-outline" size={16} color={colors.primary} />
+        <Text style={[styles.title, { color: colors.text }]}>Technical Proposal</Text>
       </View>
 
       {/* Hint */}
-      <View style={[styles.hint, { backgroundColor: palette.hintBg, borderBottomColor: palette.border }]}>
-        <Ionicons name="information-circle-outline" size={14} color={palette.muted} />
-        <Text style={[styles.hintText, { color: palette.muted }]}>
+      <View style={[styles.hint, { backgroundColor: colors.inputBg, borderBottomColor: colors.border }]}>
+        <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
+        <Text style={[styles.hintText, { color: colors.textMuted }]}>
           Describe your technical approach, methodology, team qualifications, and why you are best placed to deliver.
           Minimum {MIN_CHARS} characters.
         </Text>
@@ -65,7 +90,7 @@ export const BidTechnicalProposalForm: React.FC<Props> = ({ control, errors }) =
 
       <View style={styles.body}>
         <Controller
-          control={control}
+          control={ctrl}
           name="technicalProposal"
           rules={{
             required: 'Technical proposal is required',
@@ -80,29 +105,30 @@ export const BidTechnicalProposalForm: React.FC<Props> = ({ control, errors }) =
             const isAtMax = remaining <= 0;
 
             const counterColor = isAtMax
-              ? palette.counterMin
+              ? colors.danger
               : isUnderMin
-              ? palette.counterWarn
+              ? colors.warning
               : isNearMax
-              ? palette.counterWarn
-              : palette.counterOk;
+              ? colors.warning
+              : colors.textMuted;
 
             return (
-              <View style={{ gap: 6 }}>
+              <View style={{ gap: spacing.sm }}>
                 <TextInput
                   value={value}
                   onChangeText={(t) => onChange(t.slice(0, MAX_CHARS))}
                   onBlur={onBlur}
                   placeholder="Describe your technical approach, methodology, qualifications, and relevant experience…"
-                  placeholderTextColor={palette.placeholder}
+                  placeholderTextColor={colors.inputPlaceholder}
                   multiline
                   textAlignVertical="top"
                   style={[
                     styles.textarea,
                     {
-                      backgroundColor: palette.inputBg,
-                      borderColor: errors.technicalProposal ? palette.errorBorder : palette.inputBorder,
-                      color: palette.text,
+                      backgroundColor: colors.inputBg,
+                      borderColor: errs.technicalProposal ? colors.danger : colors.inputBorder,
+                      color: colors.text,
+                      borderRadius: radius.md,
                     },
                   ]}
                 />
@@ -111,8 +137,8 @@ export const BidTechnicalProposalForm: React.FC<Props> = ({ control, errors }) =
                 <View style={styles.counterRow}>
                   {isUnderMin ? (
                     <View style={styles.counterLeft}>
-                      <Ionicons name="alert-circle" size={12} color={palette.counterWarn} />
-                      <Text style={[styles.counterHint, { color: palette.counterWarn }]}>
+                      <Ionicons name="alert-circle" size={12} color={colors.warning} />
+                      <Text style={[styles.counterHint, { color: colors.warning }]}>
                         {MIN_CHARS - len} more character{MIN_CHARS - len !== 1 ? 's' : ''} needed
                       </Text>
                     </View>
@@ -125,11 +151,11 @@ export const BidTechnicalProposalForm: React.FC<Props> = ({ control, errors }) =
                 </View>
 
                 {/* Validation error */}
-                {!!errors.technicalProposal && (
+                {!!errs.technicalProposal && (
                   <View style={styles.errorRow}>
-                    <Ionicons name="alert-circle" size={12} color={palette.required} />
-                    <Text style={[styles.errorText, { color: palette.required }]}>
-                      {errors.technicalProposal.message}
+                    <Ionicons name="alert-circle" size={12} color={colors.danger} />
+                    <Text style={[styles.errorText, { color: colors.danger }]}>
+                      {errs.technicalProposal.message}
                     </Text>
                   </View>
                 )}
@@ -146,7 +172,6 @@ export const BidTechnicalProposalForm: React.FC<Props> = ({ control, errors }) =
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
   },

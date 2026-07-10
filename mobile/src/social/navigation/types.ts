@@ -61,6 +61,7 @@ export type SocialStackParamList = {
   Chat:            { conversationId: string; otherUser?: ChatRouteOtherUser };
   MessageRequests: undefined;
   NewChat:         { preselectedUserId?: string } | undefined;
+   CreatePost: undefined
 };
 
 // ─── Bottom-tab screens (SocialNavigator) ────────────────────────────────────

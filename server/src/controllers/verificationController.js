@@ -1,5 +1,7 @@
 // server/src/controllers/verificationController.js
 const User = require('../models/User');
+// 🔔 NOTIFICATION
+const notificationService = require('../services/notificationService');
 
 exports.updateVerification = async (req, res) => {
     try {
@@ -36,6 +38,38 @@ exports.updateVerification = async (req, res) => {
         }
 
         await user.save();
+
+        // 🔔 NOTIFICATION: Notify user about verification status change
+        (async () => {
+            try {
+                const verifNotifMap = {
+                    'full':    { type: 'verification_approved', title: 'Account verified! ✅', priority: 'critical' },
+                    'partial': { type: 'verification_status', title: 'Partial verification', priority: 'high' },
+                    'none':    { type: 'verification_rejected', title: 'Verification update', priority: 'normal' }
+                };
+                const notifCfg = verifNotifMap[user.verificationStatus];
+                if (notifCfg) {
+                    await notificationService.create({
+                        recipient: userId,
+                        actor: req.user._id,
+                        type: notifCfg.type,
+                        title: notifCfg.title,
+                        body: user.getVerificationMessage(),
+                        data: {
+                            entityType: 'User',
+                            entityId: userId,
+                            screen: 'VerificationStatus',
+                            params: {}
+                        },
+                        priority: notifCfg.priority,
+                        channels: { inApp: true, push: true, email: true }
+                    });
+                }
+            } catch (notifErr) {
+                console.warn('[Notification] Non-critical error:', notifErr.message);
+            }
+        })();
+        // END NOTIFICATION
 
         res.json({
             success: true,
@@ -102,7 +136,7 @@ exports.requestVerification = async (req, res) => {
         // Create verification request
         const verificationRequest = {
             userId,
-            verificationType: verificationType || 'profile', // profile, social, document
+            verificationType: verificationType || 'profile',
             description,
             status: 'pending',
             requestedAt: new Date(),
@@ -111,8 +145,6 @@ exports.requestVerification = async (req, res) => {
             reviewNotes: null
         };
 
-        // In a real app, you would save this to a separate VerificationRequest collection
-        // For now, we'll add to user's verification requests array
         if (!user.verificationRequests) {
             user.verificationRequests = [];
         }
@@ -120,7 +152,33 @@ exports.requestVerification = async (req, res) => {
         user.verificationRequests.push(verificationRequest);
         await user.save();
 
-        // TODO: Send notification to admin about new verification request
+        // 🔔 NOTIFICATION: Notify admin(s) about new verification request
+        (async () => {
+            try {
+                const admins = await User.find({ role: 'admin', isActive: true }).select('_id').lean();
+                for (const admin of admins) {
+                    await notificationService.create({
+                        recipient: admin._id,
+                        actor: userId,
+                        type: 'verification_submitted',
+                        title: 'Verification request',
+                        body: `{actorName} submitted a verification request`,
+                        data: {
+                            entityType: 'User',
+                            entityId: userId,
+                            screen: 'AdminVerifications',
+                            params: { userId }
+                        },
+                        priority: 'normal',
+                        groupKey: 'verification_submitted:admin',
+                        channels: { inApp: true, push: false, email: true }
+                    });
+                }
+            } catch (notifErr) {
+                console.warn('[Notification] Non-critical error:', notifErr.message);
+            }
+        })();
+        // END NOTIFICATION
 
         res.json({
             success: true,
@@ -138,7 +196,6 @@ exports.requestVerification = async (req, res) => {
 
 exports.getVerificationRequests = async (req, res) => {
     try {
-        // Get users with pending verification requests
         const users = await User.find({
             'verificationRequests.status': 'pending'
         })

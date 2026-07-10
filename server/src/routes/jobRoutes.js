@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const {
   getJobs,
+  getNearbyJobs,
   getJob,
   getCompanyJobs,
   createJob,
@@ -649,6 +650,11 @@ const updateJobValidation = [
 // ========== PUBLIC ROUTES ==========
 router.get('/', getJobs);
 router.get('/categories', getCategories);
+
+// ── Geo: Jobs near a GPS location (no auth required) ──────────────────────────
+// IMPORTANT: must stay ABOVE verifyToken and the /:id route so Express does
+// not try to resolve the literal string "near" as a MongoDB ObjectId.
+router.get('/near', getNearbyJobs);
 
 // ========== PROTECTED ROUTES ==========
 router.use(verifyToken);

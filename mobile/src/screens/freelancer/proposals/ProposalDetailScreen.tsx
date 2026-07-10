@@ -1,9 +1,11 @@
 // screens/freelancer/proposals/ProposalDetailScreen.tsx
+// Enhanced to show complete proposal information
 
-import React, { useLayoutEffect } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, Alert, ActivityIndicator, Linking,
+  Share,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -33,21 +35,17 @@ import type { FreelancerStackParamList } from '../../../navigation/FreelancerNav
 type ScreenRouteProp = RouteProp<{ ProposalDetail: { proposalId: string } }, 'ProposalDetail'>;
 type NavProp = NativeStackNavigationProp<FreelancerStackParamList>;
 
-// ─── Status lifecycle steps ───────────────────────────────────────────────────
-
 const LIFECYCLE_STEPS: { status: ProposalStatus; label: string }[] = [
-  { status: 'submitted',           label: 'Submitted' },
-  { status: 'under_review',        label: 'Under Review' },
-  { status: 'shortlisted',         label: 'Shortlisted' },
+  { status: 'submitted', label: 'Submitted' },
+  { status: 'under_review', label: 'Under Review' },
+  { status: 'shortlisted', label: 'Shortlisted' },
   { status: 'interview_scheduled', label: 'Interview' },
-  { status: 'awarded',             label: 'Awarded' },
+  { status: 'awarded', label: 'Awarded' },
 ];
 
 const STEP_ORDER: ProposalStatus[] = [
   'submitted', 'under_review', 'shortlisted', 'interview_scheduled', 'awarded',
 ];
-
-// ─── Section card ─────────────────────────────────────────────────────────────
 
 interface SectionCardColors { bgCard: string; border: string; textMuted: string; }
 
@@ -65,14 +63,7 @@ const sectionStyles = StyleSheet.create({
   title: { fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: -4 },
 });
 
-// ─── Status timeline — horizontal scroll to avoid overflow ───────────────────
-
-interface StatusTimelineProps {
-  currentStatus: ProposalStatus;
-  colors: { border: string; textMuted: string; text: string; primary: string; success: string; textInverse: string };
-}
-
-const StatusTimeline: React.FC<StatusTimelineProps> = ({ currentStatus, colors }) => {
+const StatusTimeline: React.FC<{ currentStatus: ProposalStatus; colors: any }> = ({ currentStatus, colors }) => {
   const isTerminal = ['withdrawn', 'rejected', 'draft'].includes(currentStatus);
   if (isTerminal) return null;
 
@@ -99,7 +90,7 @@ const StatusTimeline: React.FC<StatusTimelineProps> = ({ currentStatus, colors }
                 {done ? (
                   <Ionicons name="checkmark" size={10} color="#fff" />
                 ) : (
-                  <Text style={[timelineStyles.numText, { color: active ? colors.textInverse : colors.textMuted }]}>
+                  <Text style={[timelineStyles.numText, { color: active ? '#fff' : colors.textMuted }]}>
                     {i + 1}
                   </Text>
                 )}
@@ -135,8 +126,6 @@ const timelineStyles = StyleSheet.create({
   line: { width: 24, height: 2, marginBottom: 20 },
 });
 
-// ─── Status message ───────────────────────────────────────────────────────────
-
 const StatusMessageBox: React.FC<{ status: ProposalStatus }> = ({ status }) => {
   const { colors } = useTheme();
   const cfg = PROPOSAL_STATUS_CONFIGS[status];
@@ -156,8 +145,6 @@ const smStyles = StyleSheet.create({
   text: { flex: 1, fontSize: 13, lineHeight: 20, fontWeight: '500' },
 });
 
-// ─── Screen ───────────────────────────────────────────────────────────────────
-
 const ProposalDetailScreen: React.FC = () => {
   const route = useRoute<ScreenRouteProp>();
   const navigation = useNavigation<NavProp>();
@@ -166,12 +153,30 @@ const ProposalDetailScreen: React.FC = () => {
 
   const { proposalId } = route.params;
 
-  const { data: proposal, isLoading, error } = useProposalDetail(proposalId);
+  const { data: proposal, isLoading, error, refetch } = useProposalDetail(proposalId);
   const withdrawMutation = useWithdrawProposal();
 
   useLayoutEffect(() => {
-    navigation.setOptions({ title: 'Proposal Details' });
-  }, [navigation]);
+    navigation.setOptions({
+      title: 'Proposal Details',
+      headerRight: () => (
+        <TouchableOpacity onPress={handleShare} style={{ marginRight: 16 }}>
+          <Ionicons name="share-outline" size={22} color={colors.primary} />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, proposal]);
+
+  const handleShare = async () => {
+    if (!proposal) return;
+    try {
+      await Share.share({
+        message: `Check out my proposal for "${tender?.title}" - ${proposal.currency} ${proposal.proposedAmount.toLocaleString()}`,
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const handleWithdraw = () => {
     if (!proposal) return;
@@ -236,7 +241,11 @@ const ProposalDetailScreen: React.FC = () => {
 
   const isRejected = proposal.status === 'rejected';
   const tender = typeof proposal.tender === 'object' && proposal.tender !== null
-    ? proposal.tender as { title?: string; _id?: string }
+    ? proposal.tender as { title?: string; _id?: string; ownerEntity?: any; details?: any }
+    : null;
+
+  const freelancerProfile = typeof proposal.freelancerProfile === 'object'
+    ? proposal.freelancerProfile as { headline?: string; successRate?: number; onTimeDelivery?: number; ratings?: { average: number; count: number } }
     : null;
 
   return (
@@ -254,6 +263,12 @@ const ProposalDetailScreen: React.FC = () => {
               <Text style={styles.awardedText}>AWARDED — Congratulations!</Text>
             </View>
           )}
+          {proposal.isShortlisted && proposal.status !== 'awarded' && (
+            <View style={[styles.shortlistedBanner, { backgroundColor: withAlpha(colors.primary, 0.1) }]}>
+              <Ionicons name="star" size={14} color={colors.primary} />
+              <Text style={[styles.shortlistedText, { color: colors.primary }]}>Shortlisted</Text>
+            </View>
+          )}
           <View style={styles.heroBody}>
             <View style={styles.heroHeader}>
               <View style={styles.heroTitleBlock}>
@@ -261,6 +276,11 @@ const ProposalDetailScreen: React.FC = () => {
                 <Text style={[styles.heroTitle, { color: colors.text }]} numberOfLines={2}>
                   {tender?.title ?? 'Tender'}
                 </Text>
+                {tender?.ownerEntity && typeof tender.ownerEntity === 'object' && (
+                  <Text style={[styles.clientName, { color: colors.textMuted }]}>
+                    {tender.ownerEntity.name || ''}
+                  </Text>
+                )}
               </View>
               <ProposalStatusBadge status={proposal.status} size="md" />
             </View>
@@ -280,12 +300,11 @@ const ProposalDetailScreen: React.FC = () => {
               )}
             </View>
 
-            {/* Status timeline — horizontal scroll */}
+            {/* Status timeline */}
             {!['draft', 'withdrawn', 'rejected'].includes(proposal.status) && (
               <StatusTimeline currentStatus={proposal.status} colors={colors} />
             )}
 
-            {/* Status message */}
             <StatusMessageBox status={proposal.status} />
 
             {/* Interview scheduled */}
@@ -312,7 +331,7 @@ const ProposalDetailScreen: React.FC = () => {
             {/* Client feedback */}
             {proposal.ownerNotes && (
               <View style={[styles.feedbackBox, {
-                backgroundColor: isRejected ? colors.dangerBg : withAlpha(colors.primary, 0.06),
+                backgroundColor: isRejected ? withAlpha(colors.danger, 0.08) : withAlpha(colors.primary, 0.06),
                 borderColor: isRejected ? colors.danger : withAlpha(colors.primary, 0.30),
               }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -341,13 +360,61 @@ const ProposalDetailScreen: React.FC = () => {
         </SectionCard>
 
         {/* Work Plan */}
-        {proposal.proposalPlan ? (
+        {proposal.proposalPlan && (
           <SectionCard title="Work Plan" colors={colors}>
             <Text style={[styles.coverText, { color: colors.textSecondary }]}>
               {proposal.proposalPlan}
             </Text>
           </SectionCard>
-        ) : null}
+        )}
+
+        {/* Bid Details */}
+        <SectionCard title="Bid Details" colors={colors}>
+          <View style={styles.bidDetailsGrid}>
+            <View style={styles.bidDetailItem}>
+              <Text style={[styles.bidDetailLabel, { color: colors.textMuted }]}>Bid Type</Text>
+              <Text style={[styles.bidDetailValue, { color: colors.text }]}>
+                {proposal.bidType === 'hourly' ? 'Hourly Rate' : 'Fixed Price'}
+              </Text>
+            </View>
+            {proposal.bidType === 'hourly' && proposal.hourlyRate && (
+              <View style={styles.bidDetailItem}>
+                <Text style={[styles.bidDetailLabel, { color: colors.textMuted }]}>Hourly Rate</Text>
+                <Text style={[styles.bidDetailValue, { color: colors.text }]}>
+                  {proposal.currency} {proposal.hourlyRate.toLocaleString()}/hr
+                </Text>
+              </View>
+            )}
+            {proposal.bidType === 'hourly' && proposal.estimatedWeeklyHours && (
+              <View style={styles.bidDetailItem}>
+                <Text style={[styles.bidDetailLabel, { color: colors.textMuted }]}>Weekly Hours</Text>
+                <Text style={[styles.bidDetailValue, { color: colors.text }]}>
+                  {proposal.estimatedWeeklyHours} hrs/week
+                </Text>
+              </View>
+            )}
+            <View style={styles.bidDetailItem}>
+              <Text style={[styles.bidDetailLabel, { color: colors.textMuted }]}>Delivery Time</Text>
+              <Text style={[styles.bidDetailValue, { color: colors.text }]}>
+                {proposal.deliveryTime?.value} {proposal.deliveryTime?.unit}
+              </Text>
+            </View>
+            <View style={styles.bidDetailItem}>
+              <Text style={[styles.bidDetailLabel, { color: colors.textMuted }]}>Availability</Text>
+              <Text style={[styles.bidDetailValue, { color: colors.text }]}>
+                {proposal.availability === 'full-time' ? 'Full-time' : proposal.availability === 'part-time' ? 'Part-time' : 'Flexible'}
+              </Text>
+            </View>
+            {proposal.proposedStartDate && (
+              <View style={styles.bidDetailItem}>
+                <Text style={[styles.bidDetailLabel, { color: colors.textMuted }]}>Proposed Start Date</Text>
+                <Text style={[styles.bidDetailValue, { color: colors.text }]}>
+                  {formatDate(proposal.proposedStartDate)}
+                </Text>
+              </View>
+            )}
+          </View>
+        </SectionCard>
 
         {/* Milestones */}
         {proposal.milestones && proposal.milestones.length > 0 && (
@@ -377,7 +444,7 @@ const ProposalDetailScreen: React.FC = () => {
                 style={[styles.linkRow, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
               >
                 <Ionicons name="link-outline" size={14} color={colors.textMuted} />
-                <Text style={[styles.linkText, { color: colors.candidate }]} numberOfLines={1}>{link}</Text>
+                <Text style={[styles.linkText, { color: colors.primary }]} numberOfLines={1}>{link}</Text>
                 <Ionicons name="open-outline" size={14} color={colors.textMuted} />
               </TouchableOpacity>
             ))}
@@ -388,6 +455,37 @@ const ProposalDetailScreen: React.FC = () => {
         {proposal.attachments && proposal.attachments.length > 0 && (
           <SectionCard title={`Attachments (${proposal.attachments.length})`} colors={colors}>
             <ProposalAttachmentList attachments={proposal.attachments} canDelete={false} />
+          </SectionCard>
+        )}
+
+        {/* Freelancer Profile (self-view) */}
+        {freelancerProfile && (
+          <SectionCard title="Your Profile Info" colors={colors}>
+            {freelancerProfile.headline && (
+              <Text style={[styles.profileHeadline, { color: colors.textSecondary }]}>
+                {freelancerProfile.headline}
+              </Text>
+            )}
+            <View style={styles.perfMetrics}>
+              {freelancerProfile.successRate != null && (
+                <View style={styles.perfMetric}>
+                  <Text style={[styles.perfValue, { color: colors.success }]}>{freelancerProfile.successRate}%</Text>
+                  <Text style={[styles.perfLabel, { color: colors.textMuted }]}>Success Rate</Text>
+                </View>
+              )}
+              {freelancerProfile.onTimeDelivery != null && (
+                <View style={styles.perfMetric}>
+                  <Text style={[styles.perfValue, { color: colors.info }]}>{freelancerProfile.onTimeDelivery}%</Text>
+                  <Text style={[styles.perfLabel, { color: colors.textMuted }]}>On-time Delivery</Text>
+                </View>
+              )}
+              {freelancerProfile.ratings && freelancerProfile.ratings.count > 0 && (
+                <View style={styles.perfMetric}>
+                  <Text style={[styles.perfValue, { color: colors.warning }]}>{freelancerProfile.ratings.average.toFixed(1)}</Text>
+                  <Text style={[styles.perfLabel, { color: colors.textMuted }]}>Rating ({freelancerProfile.ratings.count})</Text>
+                </View>
+              )}
+            </View>
           </SectionCard>
         )}
 
@@ -415,7 +513,7 @@ const ProposalDetailScreen: React.FC = () => {
           </SectionCard>
         )}
 
-        {/* Withdraw */}
+        {/* Withdraw button */}
         {canWithdraw(proposal.status) && (
           <TouchableOpacity
             onPress={handleWithdraw}
@@ -423,7 +521,7 @@ const ProposalDetailScreen: React.FC = () => {
             activeOpacity={0.75}
             style={[styles.withdrawBtn, {
               borderColor: colors.danger,
-              backgroundColor: withdrawMutation.isPending ? colors.dangerBg : 'transparent',
+              backgroundColor: withdrawMutation.isPending ? withAlpha(colors.danger, 0.1) : 'transparent',
             }]}
           >
             {withdrawMutation.isPending ? (
@@ -452,11 +550,14 @@ const styles = StyleSheet.create({
   accentStrip: { height: 4, width: '100%' },
   awardedBanner: { paddingHorizontal: 16, paddingVertical: 6 },
   awardedText: { color: '#fff', fontSize: 12, fontWeight: '800', letterSpacing: 0.3 },
+  shortlistedBanner: { paddingHorizontal: 16, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  shortlistedText: { fontSize: 12, fontWeight: '700' },
   heroBody: { padding: 16, gap: 14 },
   heroHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
   heroTitleBlock: { flex: 1, gap: 3 },
   heroLabel: { fontSize: 11, fontWeight: '600' },
   heroTitle: { fontSize: 17, fontWeight: '700', lineHeight: 24 },
+  clientName: { fontSize: 12, marginTop: 2 },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   metaItem: { fontSize: 12 },
   interviewBox: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 4 },
@@ -467,10 +568,7 @@ const styles = StyleSheet.create({
   feedbackLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
   feedbackText: { fontSize: 13, lineHeight: 20 },
   coverText: { fontSize: 14, lineHeight: 22 },
-  linkRow: {
-    flexDirection: 'row', alignItems: 'center', borderRadius: 10,
-    borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, gap: 8,
-  },
+  linkRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
   linkText: { flex: 1, fontSize: 13 },
   auditRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   auditDot: { width: 8, height: 8, borderRadius: 4, marginTop: 5, flexShrink: 0 },
@@ -478,12 +576,18 @@ const styles = StyleSheet.create({
   auditAction: { fontSize: 13, fontWeight: '600', textTransform: 'capitalize' },
   auditDate: { fontSize: 11 },
   auditNote: { fontSize: 12, fontStyle: 'italic' },
-  withdrawBtn: {
-    borderWidth: 1.5, borderRadius: 14, paddingVertical: 14,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  withdrawBtn: { borderWidth: 1.5, borderRadius: 14, paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
   withdrawText: { fontSize: 15, fontWeight: '700' },
   bottomSpacer: { height: 24 },
+  bidDetailsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  bidDetailItem: { flex: 1, minWidth: '45%', gap: 4 },
+  bidDetailLabel: { fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  bidDetailValue: { fontSize: 14, fontWeight: '600' },
+  profileHeadline: { fontSize: 13, lineHeight: 20, marginBottom: 8 },
+  perfMetrics: { flexDirection: 'row', gap: 16, marginTop: 8 },
+  perfMetric: { alignItems: 'center' },
+  perfValue: { fontSize: 18, fontWeight: '800' },
+  perfLabel: { fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
 });
 
 export default ProposalDetailScreen;

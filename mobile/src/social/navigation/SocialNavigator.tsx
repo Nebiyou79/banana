@@ -118,7 +118,7 @@ function SocialTabBar({ state, navigation }: any) {
         {
           backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
           borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-          paddingBottom: insets.bottom + 4,
+          paddingBottom: insets.bottom + 4
         },
       ]}
     >

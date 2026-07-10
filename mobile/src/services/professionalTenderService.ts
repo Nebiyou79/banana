@@ -22,12 +22,15 @@ import type {
   AddendumData,
   CPOData,
   CreateProfessionalTenderData,
+  InvitationRespondValue,
+  MyInvitationsResponse,
   MyProfessionalTendersFilters,
   ProfessionalTender,
   ProfessionalTenderBid,
   ProfessionalTenderDetailResponse,
   ProfessionalTenderFilters,
   ProfessionalTenderListResponse,
+  TenderInvitation,
   UpdateProfessionalTenderData,
 } from '../types/professionalTender';
 
@@ -449,7 +452,35 @@ const professionalTenderService = {
     );
     return unwrap(response.data, 'Failed to toggle save status');
   },
+  getMyInvitations: async (params?: {
+    status?: 'pending' | 'accepted' | 'declined' | 'expired';
+    page?:   number;
+    limit?:  number;
+  }): Promise<MyInvitationsResponse> => {
+    // Remove undefined keys so we don't send ?status=undefined
+    const cleanParams: Record<string, string | number> = {};
+    if (params?.status) cleanParams.status = params.status;
+    if (params?.page)   cleanParams.page   = params.page;
+    if (params?.limit)  cleanParams.limit  = params.limit;
+ 
+    const response = await api.get<ApiEnvelope<MyInvitationsResponse>>(
+      `${BASE}/my-invitations`,
+      { params: cleanParams },
+    );
+    return unwrap(response.data, 'Failed to fetch invitations');
+  },
 
+  respondToInvitation: async (
+    tenderId:  string,
+    inviteId:  string,
+    response:  InvitationRespondValue,
+  ): Promise<TenderInvitation> => {
+    const res = await api.post<ApiEnvelope<TenderInvitation>>(
+      `${BASE}/${tenderId}/invitations/${inviteId}/respond`,
+      { response },
+    );
+    return unwrap(res.data, 'Failed to respond to invitation');
+  },
   // ─── CATEGORIES ────────────────────────────────────────────────────────────
   /**
    * Fetches all professional-tender categories. Backend returns either an

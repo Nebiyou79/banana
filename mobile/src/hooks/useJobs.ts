@@ -29,6 +29,9 @@ import {
   CreateJobData,
   UpdateJobData,
   JobStatus,
+  NearbyJobFilters,
+  NearbyJob,
+  NearbyJobListResponse,
 } from '../services/jobService';
 import { useToast } from './useToast';
 
@@ -42,6 +45,7 @@ const K = {
   detail:        (id?: string)    => ['job',  id]                as const,
   saved:         ()               => ['jobs', 'saved']           as const,
   categories:    ()               => ['jobs', 'categories']      as const,
+  nearby:        (f?: Omit<NearbyJobFilters, 'page'> | null) => ['jobs', 'nearby', f] as const,
 };
 
 // ─── Public / Candidate browse ───────────────────────────────────────────────
@@ -290,4 +294,36 @@ export const useCompanyJobsByStatus = ({
     getNextPageParam: lastPage =>
       lastPage.pagination.nextPage ?? undefined,
     initialPageParam: 1,
+  });
+
+// ─── Nearby Jobs (Geo) ────────────────────────────────────────────────────────
+
+/**
+ * useNearbyJobs
+ *
+ * Infinite-scroll hook that calls GET /api/v1/job/near.
+ * Pass `null` as filters to disable the query (e.g. while awaiting GPS permission).
+ *
+ * Usage:
+ *   const { data, fetchNextPage, isLoading } = useNearbyJobs(
+ *     userLocation ? { lat: userLocation.lat, lng: userLocation.lng, radius: 25 } : null
+ *   );
+ *
+ *   const jobs: NearbyJob[] = data?.pages.flatMap(p => p.jobs) ?? [];
+ */
+export const useNearbyJobs = (
+  filters: Omit<NearbyJobFilters, 'page'> | null
+) =>
+  useInfiniteQuery({
+    queryKey:  K.nearby(filters),
+    enabled:   !!filters,
+    queryFn:   ({ pageParam = 1 }) =>
+      jobService.getNearbyJobs({ ...filters!, page: pageParam as number }),
+    getNextPageParam: (last: NearbyJobListResponse) =>
+      last.pagination.current < last.pagination.totalPages
+        ? last.pagination.current + 1
+        : undefined,
+    initialPageParam: 1,
+    // Location changes frequently — keep cache fresh
+    staleTime: 2 * 60 * 1000,
   });

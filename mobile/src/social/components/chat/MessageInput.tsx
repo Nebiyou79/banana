@@ -1,21 +1,4 @@
-// =============================================================================
-// FILE: mobile/src/social/components/chat/MessageInput.tsx
-// =============================================================================
-
-/**
- * MessageInput — composer bar at the bottom of ChatScreen.
- * ─────────────────────────────────────────────────────────────────────────────
- * Features:
- * - Auto-growing multiline input (max 4 lines)
- * - Emoji picker toggle
- * - Send button with disabled state
- * - Typing indicator emission
- * - Request-disabled state (recipient must accept before replying)
- * - Professional styling matching Telegram/WhatsApp aesthetic
- * - Proper touch targets (44px minimum)
- * - Haptic-ready buttons
- */
-
+// src/social/components/chat/MessageInput.tsx
 import React, { useState } from 'react';
 import {
   Keyboard,
@@ -29,8 +12,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSocialTheme } from '../../theme/socialTheme';
 import EmojiPicker from './EmojiPicker';
 
-// ─── Props ───────────────────────────────────────────────────────────────────
-
 export interface MessageInputProps {
   value: string;
   onChangeText: (text: string) => void;
@@ -40,14 +21,10 @@ export interface MessageInputProps {
   placeholder?: string;
 }
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-
 const MAX_LINES = 4;
 const LINE_HEIGHT = 20;
 const INPUT_MIN_HEIGHT = 40;
 const INPUT_MAX_HEIGHT = LINE_HEIGHT * MAX_LINES + 20;
-
-// ─── Component ───────────────────────────────────────────────────────────────
 
 const MessageInput: React.FC<MessageInputProps> = ({
   value,
@@ -58,6 +35,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
   placeholder = 'Type a message…',
 }) => {
   const theme = useSocialTheme();
+  const { colors, spacing, radius, dark } = theme;
+  
   const [inputHeight, setInputHeight] = useState(INPUT_MIN_HEIGHT);
   const [showEmoji, setShowEmoji] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -75,17 +54,24 @@ const MessageInput: React.FC<MessageInputProps> = ({
     onChangeText(value + emoji);
   };
 
+  // Dark mode: darker input background, vibrant border on focus
+  // Light mode: light input background, clean border
+  const inputBg = dark ? colors.inputBg : colors.cardAlt;
+  const borderColor = isFocused ? colors.primary : colors.border;
+  const borderWidth = isFocused ? 1.5 : 1;
+
   return (
     <>
-      {/* Composer bar */}
       <View
         style={[
           styles.container,
           {
-            backgroundColor: theme.card,
-            borderTopColor: theme.border,
-            paddingHorizontal: theme.spacing.sm,
-            paddingVertical: theme.spacing.sm,
+            backgroundColor: colors.card,
+            borderTopColor: colors.border,
+            paddingHorizontal: spacing.sm,
+            paddingVertical: spacing.sm,
+            paddingBottom: 10,
+            borderTopWidth: StyleSheet.hairlineWidth,
           },
         ]}
       >
@@ -96,8 +82,9 @@ const MessageInput: React.FC<MessageInputProps> = ({
             styles.iconButton,
             {
               backgroundColor: showEmoji
-                ? theme.withAlpha(theme.primary, 0.1)
+                ? theme.withAlpha(colors.primary, 0.1)
                 : 'transparent',
+              borderRadius: radius.pill,
             },
           ]}
           accessibilityRole="button"
@@ -108,7 +95,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
           <Ionicons
             name={showEmoji ? 'close-outline' : 'happy-outline'}
             size={24}
-            color={showEmoji ? theme.primary : theme.muted}
+            color={showEmoji ? colors.primary : colors.muted}
           />
         </TouchableOpacity>
 
@@ -117,7 +104,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
           value={value}
           onChangeText={handleChangeText}
           placeholder={disabled ? 'Accept request to reply' : placeholder}
-          placeholderTextColor={theme.muted}
+          placeholderTextColor={colors.muted}
           multiline
           maxLength={2000}
           onFocus={() => setIsFocused(true)}
@@ -133,13 +120,19 @@ const MessageInput: React.FC<MessageInputProps> = ({
           style={[
             styles.input,
             {
-              backgroundColor: theme.inputBg,
-              color: theme.text,
+              backgroundColor: inputBg,
+              color: colors.text,
               height: inputHeight,
               maxHeight: INPUT_MAX_HEIGHT,
-              borderRadius: theme.radius.pill,
-              borderColor: isFocused ? theme.primary : theme.border,
-              borderWidth: isFocused ? 1.5 : 1,
+              borderRadius: radius.pill,
+              borderColor: borderColor,
+              borderWidth: borderWidth,
+              paddingHorizontal: 16,
+              paddingTop: 10,
+              paddingBottom: 10,
+              fontSize: 15,
+              lineHeight: LINE_HEIGHT,
+              minHeight: 40,
             },
           ]}
           editable={!disabled}
@@ -160,8 +153,13 @@ const MessageInput: React.FC<MessageInputProps> = ({
           style={[
             styles.sendButton,
             {
-              backgroundColor: canSend ? theme.primary : theme.cardAlt,
-              borderRadius: theme.radius.pill,
+              backgroundColor: canSend ? colors.primary : colors.cardAlt,
+              borderRadius: radius.pill,
+              width: 44,
+              height: 44,
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
             },
           ]}
           accessibilityRole="button"
@@ -172,12 +170,11 @@ const MessageInput: React.FC<MessageInputProps> = ({
           <Ionicons
             name="send"
             size={18}
-            color={canSend ? theme.colors.white : theme.muted} // theme.colors.onPrimary → theme.colors.white
+            color={canSend ? colors.white : colors.muted}
           />
         </TouchableOpacity>
       </View>
 
-      {/* Emoji picker */}
       <EmojiPicker
         visible={showEmoji}
         onClose={() => setShowEmoji(false)}
@@ -187,41 +184,25 @@ const MessageInput: React.FC<MessageInputProps> = ({
   );
 };
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    borderTopWidth: StyleSheet.hairlineWidth,
     gap: 8,
-    paddingBottom: 10,
   },
   iconButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
   input: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
-    fontSize: 15,
-    lineHeight: LINE_HEIGHT,
-    minHeight: 40,
   },
   sendButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
     flexShrink: 0,
   },
 });
 
 export default MessageInput;
-// ✅ theme-migrated

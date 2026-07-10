@@ -14,7 +14,7 @@ const {
 } = require('../controllers/authController');
 const { verifyToken } = require('../middleware/authMiddleware');
 const  adminAuth  = require('../middleware/adminAuth');
-
+const googleAuthRoutes = require('./googleAuthRoutes');
 const router = express.Router();
 
 // Admin routes
@@ -30,7 +30,7 @@ router.post('/resend-otp', resendOTP);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 router.post('/verify-reset-otp', verifyResetOTP);
-
+router.use('/google', googleAuthRoutes);
 // Protected routes
 router.get('/me', verifyToken, getCurrentUser);
 

@@ -315,7 +315,7 @@ exports.getProfile = async (req, res) => {
   }
 };
 
-// Update the updateProfile function to handle socialLinks
+// Update the updateProfile function to properly handle socialLinks
 exports.updateProfile = async (req, res) => {
   try {
     const userId = req.user.userId || req.user._id;
@@ -362,11 +362,12 @@ exports.updateProfile = async (req, res) => {
       );
     }
 
-    // Clean social links - NEW
+    // Clean social links - FIXED: Handle both user and freelancer socialLinks
+    let cleanedSocialLinks = {};
     if (updateData.socialLinks) {
       Object.keys(updateData.socialLinks).forEach(key => {
-        if (!updateData.socialLinks[key] || updateData.socialLinks[key].trim() === '') {
-          updateData.socialLinks[key] = undefined;
+        if (updateData.socialLinks[key] && updateData.socialLinks[key].trim() !== '') {
+          cleanedSocialLinks[key] = updateData.socialLinks[key].trim();
         }
       });
     }
@@ -386,8 +387,11 @@ exports.updateProfile = async (req, res) => {
     const userUpdateData = {};
     const freelancerUpdateData = {};
 
+    // User fields - socialLinks should NOT be here
     const userFields = ['name', 'bio', 'location', 'phone', 'website', 'avatar', 'skills', 'experience', 'education', 'dateOfBirth', 'gender'];
-    const freelancerFields = ['headline', 'hourlyRate', 'availability', 'experienceLevel', 'englishProficiency', 'timezone', 'specialization', 'services', 'socialLinks']; // ADDED socialLinks
+    
+    // Freelancer fields - socialLinks IS here
+    const freelancerFields = ['headline', 'hourlyRate', 'availability', 'experienceLevel', 'englishProficiency', 'timezone', 'specialization', 'services', 'socialLinks'];
 
     Object.keys(updateData).forEach(key => {
       if (userFields.includes(key)) {
@@ -415,9 +419,28 @@ exports.updateProfile = async (req, res) => {
       updatedUser = await User.findById(userId).select('-passwordHash -loginAttempts -lockUntil');
     }
 
-    // Update freelancer profile data
+    // Update freelancer profile data - FIXED: Handle socialLinks explicitly
     let updatedFreelancerProfile;
     if (Object.keys(freelancerUpdateData).length > 0) {
+      // If socialLinks is in the update data, handle it properly
+      if (freelancerUpdateData.socialLinks) {
+        // Merge with existing socialLinks instead of replacing
+        const existingSocialLinks = freelancerProfile.socialLinks || {};
+        const mergedSocialLinks = {
+          ...existingSocialLinks,
+          ...freelancerUpdateData.socialLinks
+        };
+        
+        // Remove undefined/empty values
+        Object.keys(mergedSocialLinks).forEach(key => {
+          if (!mergedSocialLinks[key] || mergedSocialLinks[key].trim() === '') {
+            delete mergedSocialLinks[key];
+          }
+        });
+        
+        freelancerUpdateData.socialLinks = mergedSocialLinks;
+      }
+
       updatedFreelancerProfile = await FreelancerProfile.findOneAndUpdate(
         { user: userId },
         { $set: freelancerUpdateData },
@@ -461,7 +484,7 @@ exports.updateProfile = async (req, res) => {
       message: 'Profile updated successfully',
       data: profileData,
       profileCompletion,
-      age, // Return age
+      age,
       code: 'PROFILE_UPDATED'
     });
 
@@ -487,7 +510,6 @@ exports.updateProfile = async (req, res) => {
   }
 };
 
-// Update prepareProfileData function
 async function prepareProfileData(user, freelancerProfile) {
   // Only include Cloudinary portfolio items
   const cloudinaryPortfolio = (user.portfolio || []).filter(item => 
@@ -515,14 +537,14 @@ async function prepareProfileData(user, freelancerProfile) {
     avatar: user.avatar && user.avatar.includes('cloudinary.com') ? user.avatar : '',
     dateOfBirth: user.dateOfBirth,
     gender: user.gender,
-    age: age, // Make sure age is included
+    age: age,
     skills: transformedSkills,
     experience: user.experience || [],
     education: user.education || [],
     profileCompleted: user.profileCompleted || false,
     verificationStatus: user.verificationStatus || 'none',
     portfolio: transformedPortfolio,
-    socialLinks: freelancerProfile.socialLinks || {}, // Use freelancerProfile socialLinks
+    socialLinks: freelancerProfile.socialLinks || {}, // FIXED: Use freelancerProfile.socialLinks
     freelancerProfile: {
       headline: freelancerProfile.headline,
       hourlyRate: freelancerProfile.hourlyRate,
@@ -538,7 +560,7 @@ async function prepareProfileData(user, freelancerProfile) {
       ratings: freelancerProfile.ratings || { average: 0, count: 0 },
       verified: freelancerProfile.verified || false,
       profileViews: freelancerProfile.profileViews || 0,
-      socialLinks: freelancerProfile.socialLinks || {} // Include socialLinks here too
+      socialLinks: freelancerProfile.socialLinks || {} // FIXED: Use freelancerProfile.socialLinks
     }
   };
 
@@ -1067,7 +1089,7 @@ exports.getPublicProfile = async (req, res) => {
         { user: usernameOrId }
       ]
     })
-    .populate('user', 'name avatar bio location skills portfolio socialLinks website experience education dateOfBirth gender')
+    .populate('user', 'name avatar bio location skills portfolio website experience education dateOfBirth gender')
     .select('-user.passwordHash -user.loginAttempts -user.lockUntil');
 
     if (!freelancerProfile) {
@@ -1094,6 +1116,9 @@ exports.getPublicProfile = async (req, res) => {
     if (userData.dateOfBirth) {
       userData.age = calculateAge(userData.dateOfBirth);
     }
+
+    // FIXED: Use socialLinks from freelancerProfile, not user
+    userData.socialLinks = freelancerProfile.socialLinks || {};
 
     await FreelancerProfile.findByIdAndUpdate(freelancerProfile._id, {
       $inc: { profileViews: 1 }

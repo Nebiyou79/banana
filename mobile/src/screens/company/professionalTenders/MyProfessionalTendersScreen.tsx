@@ -1,4 +1,6 @@
 // src/screens/professional/tenders/MyProfessionalTendersScreen.tsx
+// UPDATED: Uses TenderBidCard with live bid counts from bid service
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
@@ -23,6 +25,7 @@ import {
   useMyPostedProfessionalTenders,
   usePublishProfessionalTender,
 } from '../../../hooks/useProfessionalTender';
+import { TenderBidCard } from '../../../components/professionalTenders/TenderBidCard';
 import type {
   ProfessionalTenderListItem,
   ProfessionalTenderStatus,
@@ -39,146 +42,6 @@ const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'closed',    label: 'Closed' },
   { key: 'awarded',   label: 'Awarded' },
 ];
-
-// ─── Status badge ─────────────────────────────────────────────────────────────
-
-type ColorFn = (colors: ReturnType<typeof useTheme>['colors']) => { bg: string; fg: string };
-
-const STATUS_META: Record<ProfessionalTenderStatus, { label: string; getColors: ColorFn }> = {
-  draft:            { label: 'Draft',            getColors: (c) => ({ bg: withAlpha(c.textMuted, 0.15),   fg: c.textMuted }) },
-  published:        { label: 'Published',        getColors: (c) => ({ bg: c.successBg,                   fg: c.success }) },
-  closed:           { label: 'Closed',           getColors: (c) => ({ bg: c.dangerBg,                    fg: c.danger }) },
-  awarded:          { label: 'Awarded',          getColors: (c) => ({ bg: c.successBg,                   fg: c.success }) },
-  revealed:         { label: 'Revealed',         getColors: (c) => ({ bg: c.infoBg,                      fg: c.info }) },
-  cancelled:        { label: 'Cancelled',        getColors: (c) => ({ bg: c.dangerBg,                    fg: c.danger }) },
-  locked:           { label: 'Locked',           getColors: (c) => ({ bg: withAlpha(c.warning, 0.15),    fg: c.warning }) },
-  deadline_reached: { label: 'Deadline Reached', getColors: (c) => ({ bg: withAlpha(c.warning, 0.15),    fg: c.warning }) },
-};
-
-const StatusBadge: React.FC<{ status: ProfessionalTenderStatus }> = ({ status }) => {
-  const { colors } = useTheme();
-  const meta = STATUS_META[status] ?? {
-    label: status,
-    getColors: (c: ReturnType<typeof useTheme>['colors']) => ({ bg: withAlpha(c.textMuted, 0.15), fg: c.textMuted }),
-  };
-  const { bg, fg } = meta.getColors(colors);
-  return (
-    <View style={[sb.root, { backgroundColor: bg }]}>
-      <Text style={[sb.label, { color: fg }]}>{meta.label.toUpperCase()}</Text>
-    </View>
-  );
-};
-
-// ─── Tender card ──────────────────────────────────────────────────────────────
-
-interface TenderCardProps {
-  item: ProfessionalTenderListItem;
-  onPress: () => void;
-  onEdit: () => void;
-  onViewBids: () => void;
-  onPublish: () => void;
-  onDelete: () => void;
-}
-
-const TenderCard = React.memo<TenderCardProps>(({
-  item, onPress, onEdit, onViewBids, onPublish, onDelete,
-}) => {
-  const { colors } = useTheme();
-  const bidsCount = item.metadata?.totalBids ?? item.bidCount ?? 0;
-
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.8}
-      accessibilityRole="button"
-      style={[tc.root, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-    >
-      {/* Title + badge */}
-      <View style={tc.topRow}>
-        <Text style={[tc.title, { color: colors.text }]} numberOfLines={2}>
-          {item.title}
-        </Text>
-        <StatusBadge status={item.status} />
-      </View>
-
-      {/* Meta */}
-      <Text style={[tc.meta, { color: colors.textMuted }]} numberOfLines={1}>
-        {item.referenceNumber ?? '—'}
-        {item.procurementCategory ? `  ·  ${item.procurementCategory}` : ''}
-      </Text>
-
-      {/* Deadline */}
-      {item.deadline && (
-        <View style={tc.deadlineRow}>
-          <Ionicons name="time-outline" size={13} color={colors.textMuted} />
-          <Text style={[tc.deadlineText, { color: colors.textMuted }]}>
-            {new Date(item.deadline).toLocaleDateString('en-US', {
-              month: 'short', day: 'numeric', year: 'numeric',
-            })}
-          </Text>
-        </View>
-      )}
-
-      {/* Stats */}
-      <View style={[tc.statsRow, { borderTopColor: colors.border }]}>
-        <Text style={[tc.statText, { color: colors.textMuted }]}>
-          {bidsCount} bid{bidsCount !== 1 ? 's' : ''}
-        </Text>
-        <Text style={[tc.statText, { color: colors.textMuted }]}>
-          {item.metadata?.views ?? 0} views
-        </Text>
-      </View>
-
-      {/* Action buttons */}
-      <View style={tc.actionsRow}>
-        <ActionButton label={`Bids (${bidsCount})`} onPress={onViewBids} variant="primary" />
-        <ActionButton label="Edit"                  onPress={onEdit}     variant="neutral" />
-        {item.status === 'draft' && (
-          <ActionButton label="Publish" onPress={onPublish} variant="success" />
-        )}
-        {item.status === 'draft' && (
-          <ActionButton label="Delete" onPress={onDelete} variant="danger" />
-        )}
-      </View>
-    </TouchableOpacity>
-  );
-});
-
-type Variant = 'primary' | 'neutral' | 'success' | 'danger';
-
-const ActionButton: React.FC<{ label: string; onPress: () => void; variant: Variant }> = ({
-  label, onPress, variant,
-}) => {
-  const { colors } = useTheme();
-
-  const getStyle = (): { bg: string; border: string; text: string } => {
-    switch (variant) {
-      case 'primary': return {
-        bg: withAlpha(colors.primary, 0.10), border: withAlpha(colors.primary, 0.30), text: colors.primary,
-      };
-      case 'success': return {
-        bg: withAlpha(colors.success, 0.10), border: withAlpha(colors.success, 0.30), text: colors.success,
-      };
-      case 'danger': return {
-        bg: withAlpha(colors.danger, 0.08), border: withAlpha(colors.danger, 0.25), text: colors.danger,
-      };
-      default: return {
-        bg: colors.bgCard, border: colors.border, text: colors.text,
-      };
-    }
-  };
-
-  const s = getStyle();
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      accessibilityRole="button"
-      style={[ab.btn, { backgroundColor: s.bg, borderColor: s.border }]}
-    >
-      <Text style={[ab.text, { color: s.text }]}>{label}</Text>
-    </TouchableOpacity>
-  );
-};
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
@@ -258,18 +121,40 @@ const MyProfessionalTendersScreen: React.FC = () => {
     [publishMutation],
   );
 
+  // Navigation handlers
+  const handleTenderPress = useCallback(
+    (item: ProfessionalTenderListItem) => {
+      navigation.navigate('ProfessionalTenderDetail', { tenderId: item._id });
+    },
+    [navigation],
+  );
+
+  const handleEdit = useCallback(
+    (item: ProfessionalTenderListItem) => {
+      navigation.navigate('EditProfessionalTender', { tenderId: item._id });
+    },
+    [navigation],
+  );
+
+  const handleViewBids = useCallback(
+    (item: ProfessionalTenderListItem) => {
+      navigation.navigate('IncomingBids', { tenderId: item._id });
+    },
+    [navigation],
+  );
+
   const renderItem = useCallback(
     ({ item }: { item: ProfessionalTenderListItem }) => (
-      <TenderCard
-        item={item}
-        onPress={() => navigation.navigate('ProfessionalTenderDetail', { tenderId: item._id })}
-        onEdit={() => navigation.navigate('EditProfessionalTender', { tenderId: item._id })}
-        onViewBids={() => navigation.navigate('IncomingBids', { tenderId: item._id })}
+      <TenderBidCard
+        tender={item}
+        onPress={() => handleTenderPress(item)}
+        onEdit={() => handleEdit(item)}
+        onViewBids={() => handleViewBids(item)}
         onPublish={() => handlePublish(item)}
         onDelete={() => handleDelete(item)}
       />
     ),
-    [navigation, handlePublish, handleDelete],
+    [handleTenderPress, handleEdit, handleViewBids, handlePublish, handleDelete],
   );
 
   return (
@@ -406,28 +291,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
   },
-});
-
-const tc = StyleSheet.create({
-  root:        { borderWidth: 1, borderRadius: 16, padding: 16 },
-  topRow:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 4 },
-  title:       { flex: 1, fontSize: 16, fontWeight: '700', lineHeight: 22 },
-  meta:        { fontSize: 12, marginBottom: 6 },
-  deadlineRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
-  deadlineText:{ fontSize: 12 },
-  statsRow:    { flexDirection: 'row', gap: 16, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, marginBottom: 12 },
-  statText:    { fontSize: 12 },
-  actionsRow:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-});
-
-const ab = StyleSheet.create({
-  btn:  { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, minHeight: 44, justifyContent: 'center' },
-  text: { fontSize: 13, fontWeight: '600' },
-});
-
-const sb = StyleSheet.create({
-  root:  { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
-  label: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
 });
 
 const es = StyleSheet.create({

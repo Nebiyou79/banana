@@ -1,3 +1,4 @@
+// src/social/components/feed/FeedTabs.tsx
 import React, { memo, useState } from 'react';
 import { Animated, LayoutChangeEvent, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTabIndicator } from '../../theme/animations';
@@ -5,7 +6,11 @@ import { useSocialTheme } from '../../theme/socialTheme';
 
 export type FeedSort = 'latest' | 'trending' | 'following';
 
-interface Tab { key: FeedSort; label: string; }
+interface Tab { 
+  key: FeedSort; 
+  label: string; 
+}
+
 const TABS: Tab[] = [
   { key: 'latest', label: 'Latest' },
   { key: 'trending', label: 'Trending' },
@@ -18,14 +23,27 @@ interface Props {
 }
 
 const FeedTabs: React.FC<Props> = memo(({ active, onChange }) => {
-  const { colors, spacing, type } = useSocialTheme();
+  const theme = useSocialTheme();
+  const { colors, spacing, type, dark } = theme;
   const [width, setWidth] = useState(0);
+  
   const activeIndex = Math.max(0, TABS.findIndex((t) => t.key === active));
   const { indicatorX, tabWidth } = useTabIndicator(activeIndex, TABS.length, width);
 
+  // Dark mode: deeper tab background, lighter border
+  // Light mode: clean tab background, subtle border
+  const bgColor = dark ? colors.tabBg : colors.card;
+  const borderColor = dark ? 'rgba(255,255,255,0.08)' : colors.border;
+
   return (
     <View
-      style={[styles.wrap, { backgroundColor: colors.tabBg, borderBottomColor: colors.border }]}
+      style={[
+        styles.wrap,
+        { 
+          backgroundColor: bgColor,
+          borderBottomColor: borderColor,
+        }
+      ]}
       onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
     >
       <View style={styles.row}>
@@ -41,9 +59,9 @@ const FeedTabs: React.FC<Props> = memo(({ active, onChange }) => {
               accessibilityState={{ selected: isActive }}
             >
               <Text style={[
-                type.bodySm, // theme.type.labelSm → theme.type.bodySm (already on the theme.type destructure)
+                type.bodySm,
                 {
-                  color: isActive ? colors.primary : colors.textMuted, // theme.colors.textSecondary → theme.colors.textMuted
+                  color: isActive ? colors.primary : colors.textMuted,
                   fontWeight: isActive ? '700' : '500',
                 },
               ]}>
@@ -53,6 +71,7 @@ const FeedTabs: React.FC<Props> = memo(({ active, onChange }) => {
           );
         })}
       </View>
+      
       {width > 0 ? (
         <Animated.View style={[
           styles.indicator,
@@ -61,6 +80,11 @@ const FeedTabs: React.FC<Props> = memo(({ active, onChange }) => {
             width: tabWidth * 0.4,
             left: tabWidth * 0.3,
             transform: [{ translateX: indicatorX }],
+            shadowColor: colors.primary,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: dark ? 0.4 : 0.2,
+            shadowRadius: 4,
+            elevation: 3,
           },
         ]} />
       ) : null}
@@ -71,11 +95,26 @@ const FeedTabs: React.FC<Props> = memo(({ active, onChange }) => {
 FeedTabs.displayName = 'FeedTabs';
 
 const styles = StyleSheet.create({
-  wrap: { borderBottomWidth: 0.5 },
-  row: { flexDirection: 'row' },
-  tab: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  indicator: { position: 'absolute', bottom: 0, height: 3, borderTopLeftRadius: 2, borderTopRightRadius: 2 },
+  wrap: { 
+    borderBottomWidth: 0.5,
+    paddingTop: 4,
+  },
+  row: { 
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+  },
+  tab: { 
+    flex: 1, 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  indicator: { 
+    position: 'absolute', 
+    bottom: 0, 
+    height: 3, 
+    borderTopLeftRadius: 2, 
+    borderTopRightRadius: 2 
+  },
 });
 
 export default FeedTabs;
-// ✅ theme-migrated

@@ -1,87 +1,47 @@
-/**
- * src/components/jobs/JobForm.tsx
- * ─────────────────────────────────────────────────────────────────────────────
- * COMPANY job create/edit form.
- *  - react-hook-form + Zod — mirrors server createJobValidation exactly
- *  - Every dropdown uses SelectPicker (works on iOS & Android)
- *  - Dynamic arrays for requirements, skills, responsibilities, benefits
- *  - Multi-step: Basic → Details → Salary → Preview
- *  - isEdit mode: populates from initialData
- * ─────────────────────────────────────────────────────────────────────────────
- */
-import React, { useEffect, useState } from 'react';
+// src/components/jobs/JobForm.tsx
+// REFACTORED: Premium Mint-themed redesign with full theme integration,
+// improved visual hierarchy, modern inputs, polished step indicator,
+// better typography, responsive layout fixes, and microinteractions.
+
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  Switch, Platform, Alert,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Switch,
+  Alert,
+  Modal,
+  Animated,
+  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+import { ChevronDown } from 'lucide-react-native';
+import MapView, { Marker, UrlTile } from 'react-native-maps';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../hooks/useTheme';
 import { SelectPicker } from '../ui/SelectPicker';
 import { TagInput } from '../ui/TagInput';
 import { FormField } from '../ui/FormField';
 import {
-  Job, CreateJobData,
-  ETHIOPIAN_REGIONS, JOB_TYPES, EXPERIENCE_LEVELS,
-  SALARY_MODES, EDUCATION_LEVELS,
+  Job,
+  CreateJobData,
+  ETHIOPIAN_REGIONS,
+  JOB_TYPES,
+  EXPERIENCE_LEVELS,
+  SALARY_MODES,
+  EDUCATION_LEVELS,
+  JOB_CATEGORY_OPTIONS,
 } from '../../services/jobService';
 
-// ─── Job Categories (mirrors frontend/src/services/jobService.ts) ─────────────
-const JOB_CATEGORIES = [
-  // Technology
-  { value: 'software-engineer', label: 'Software Engineer', group: 'Technology' },
-  { value: 'web-developer', label: 'Web Developer', group: 'Technology' },
-  { value: 'mobile-developer', label: 'Mobile Developer', group: 'Technology' },
-  { value: 'data-scientist', label: 'Data Scientist', group: 'Technology' },
-  { value: 'it-support', label: 'IT Support', group: 'Technology' },
-  { value: 'network-engineer', label: 'Network Engineer', group: 'Technology' },
-  { value: 'cybersecurity', label: 'Cybersecurity', group: 'Technology' },
-  { value: 'ui-ux-designer', label: 'UI/UX Designer', group: 'Technology' },
-  { value: 'devops', label: 'DevOps Engineer', group: 'Technology' },
-  // Business
-  { value: 'accountant', label: 'Accountant', group: 'Business & Finance' },
-  { value: 'finance-officer', label: 'Finance Officer', group: 'Business & Finance' },
-  { value: 'auditor', label: 'Auditor', group: 'Business & Finance' },
-  { value: 'business-analyst', label: 'Business Analyst', group: 'Business & Finance' },
-  { value: 'project-manager', label: 'Project Manager', group: 'Business & Finance' },
-  { value: 'operations-manager', label: 'Operations Manager', group: 'Business & Finance' },
-  // Marketing
-  { value: 'marketing-manager', label: 'Marketing Manager', group: 'Marketing & Sales' },
-  { value: 'sales-representative', label: 'Sales Representative', group: 'Marketing & Sales' },
-  { value: 'digital-marketing', label: 'Digital Marketing', group: 'Marketing & Sales' },
-  { value: 'content-creator', label: 'Content Creator', group: 'Marketing & Sales' },
-  { value: 'brand-manager', label: 'Brand Manager', group: 'Marketing & Sales' },
-  // HR
-  { value: 'hr-manager', label: 'HR Manager', group: 'Human Resources' },
-  { value: 'recruitment-officer', label: 'Recruitment Officer', group: 'Human Resources' },
-  { value: 'training-development', label: 'Training & Development', group: 'Human Resources' },
-  // Health
-  { value: 'doctor', label: 'Doctor', group: 'Healthcare' },
-  { value: 'nurse', label: 'Nurse', group: 'Healthcare' },
-  { value: 'pharmacist', label: 'Pharmacist', group: 'Healthcare' },
-  { value: 'health-officer', label: 'Health Officer', group: 'Healthcare' },
-  // Education
-  { value: 'teacher', label: 'Teacher', group: 'Education' },
-  { value: 'lecturer', label: 'Lecturer', group: 'Education' },
-  { value: 'trainer', label: 'Trainer', group: 'Education' },
-  // Engineering
-  { value: 'civil-engineer', label: 'Civil Engineer', group: 'Engineering' },
-  { value: 'mechanical-engineer', label: 'Mechanical Engineer', group: 'Engineering' },
-  { value: 'electrical-engineer', label: 'Electrical Engineer', group: 'Engineering' },
-  { value: 'construction-manager', label: 'Construction Manager', group: 'Engineering' },
-  // Legal
-  { value: 'lawyer', label: 'Lawyer', group: 'Legal' },
-  { value: 'legal-advisor', label: 'Legal Advisor', group: 'Legal' },
-  // Other
-  { value: 'driver', label: 'Driver', group: 'Other' },
-  { value: 'security-guard', label: 'Security Guard', group: 'Other' },
-  { value: 'receptionist', label: 'Receptionist', group: 'Other' },
-  { value: 'office-assistant', label: 'Office Assistant', group: 'Other' },
-  { value: 'other', label: 'Other', group: 'Other' },
-];
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const JOB_CATEGORIES = JOB_CATEGORY_OPTIONS;
 
 const WORK_ARRANGEMENTS = [
   { value: 'office', label: 'Office Based' },
@@ -96,9 +56,9 @@ const REMOTE_OPTIONS = [
 ];
 
 const CURRENCIES = [
-  { value: 'ETB', label: 'ETB - Ethiopian Birr' },
-  { value: 'USD', label: 'USD - US Dollar' },
-  { value: 'EUR', label: 'EUR - Euro' },
+  { value: 'ETB', label: 'ETB' },
+  { value: 'USD', label: 'USD' },
+  { value: 'EUR', label: 'EUR' },
 ];
 
 const SALARY_PERIODS = [
@@ -114,142 +74,175 @@ const DEMOGRAPHIC_SEX = [
   { value: 'female', label: 'Female Only' },
 ];
 
-// ─── Zod Schema ───────────────────────────────────────────────────────────────
+const STEPS = ['Basic Info', 'Details', 'Salary & Location', 'Preview'];
+
+// ─── Zod schema ───────────────────────────────────────────────────────────────
+
 const jobSchema = z.object({
-  title:              z.string().min(5, 'Title must be at least 5 characters').max(100),
-  description:        z.string().min(50, 'Description must be at least 50 characters').max(5000),
-  shortDescription:   z.string().max(200).optional(),
-  category:           z.string().min(1, 'Category is required'),
-  type:               z.string().min(1, 'Job type is required'),
-  experienceLevel:    z.string().min(1, 'Experience level is required'),
-  educationLevel:     z.string().optional(),
-  candidatesNeeded:   z.string().min(1).transform(v => parseInt(v) || 1),
-  region:             z.string().min(1, 'Region is required'),
-  city:               z.string().optional(),
+  title: z.string().min(5, 'Title must be at least 5 characters').max(100),
+  description: z.string().min(50, 'Description must be at least 50 characters').max(5000),
+  shortDescription: z.string().max(200).optional(),
+  category: z.string().min(1, 'Category is required'),
+  type: z.string().min(1, 'Job type is required'),
+  experienceLevel: z.string().min(1, 'Experience level is required'),
+  educationLevel: z.string().optional(),
+  candidatesNeeded: z.string().min(1).transform((v) => parseInt(v) || 1),
+  region: z.string().min(1, 'Region is required'),
+  city: z.string().optional(),
+  subCity: z.string().optional(),
+  woreda: z.string().optional(),
+  specificLocation: z.string().optional(),
+  locationLat: z.string().optional(),
+  locationLng: z.string().optional(),
   applicationDeadline: z.string().min(1, 'Deadline is required'),
-  salaryMode:         z.string().min(1),
-  salaryMin:          z.string().optional(),
-  salaryMax:          z.string().optional(),
-  salaryCurrency:     z.string().optional(),
-  salaryPeriod:       z.string().optional(),
-  remote:             z.string().optional(),
-  workArrangement:    z.string().optional(),
-  isApplyEnabled:     z.boolean().default(true),
-  demographicSex:     z.string().optional(),
-  jobNumber:          z.string().optional(),
-  requirements:       z.array(z.string()).optional(),
-  skills:             z.array(z.string()).optional(),
-  responsibilities:   z.array(z.string()).optional(),
-  benefits:           z.array(z.string()).optional(),
-  featured:           z.boolean().default(false),
-  urgent:             z.boolean().default(false),
+  salaryMode: z.string().min(1),
+  salaryMin: z.string().optional(),
+  salaryMax: z.string().optional(),
+  salaryCurrency: z.string().optional(),
+  salaryPeriod: z.string().optional(),
+  remote: z.string().optional(),
+  workArrangement: z.string().optional(),
+  isApplyEnabled: z.boolean().default(true),
+  demographicSex: z.string().optional(),
+  jobNumber: z.string().optional(),
+  requirements: z.array(z.string()).optional(),
+  skills: z.array(z.string()).optional(),
+  responsibilities: z.array(z.string()).optional(),
+  benefits: z.array(z.string()).optional(),
+  featured: z.boolean().default(false),
+  urgent: z.boolean().default(false),
 });
 
 type JobFormValues = z.infer<typeof jobSchema>;
 
-// ─── Props ────────────────────────────────────────────────────────────────────
 interface JobFormProps {
   initialData?: Job;
   onSubmit: (data: CreateJobData, isDraft: boolean) => Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
-  isOrg?: boolean;
 }
 
-// ─── Steps ────────────────────────────────────────────────────────────────────
-const STEPS = ['Basic Info', 'Details', 'Salary', 'Preview'];
-
-// ─── Helper: tomorrow ISO string ─────────────────────────────────────────────
 const tomorrowISO = () => {
   const d = new Date();
   d.setDate(d.getDate() + 1);
   return d.toISOString().split('T')[0];
 };
 
-// ─── toFormValues: Job → FormValues ──────────────────────────────────────────
 const toFormValues = (job: Job): Partial<JobFormValues> => ({
-  title:              job.title ?? '',
-  description:        job.description ?? '',
-  shortDescription:   job.shortDescription ?? '',
-  category:           job.category ?? '',
-  type:               job.type ?? 'full-time',
-  experienceLevel:    job.experienceLevel ?? 'mid-level',
-  educationLevel:     job.educationLevel ?? '',
-  candidatesNeeded:   String(job.candidatesNeeded ?? 1) as any,
-  region:             job.location?.region ?? 'addis-ababa',
-  city:               job.location?.city ?? '',
+  title: job.title ?? '',
+  description: job.description ?? '',
+  shortDescription: job.shortDescription ?? '',
+  category: job.category ?? '',
+  type: job.type ?? 'full-time',
+  experienceLevel: job.experienceLevel ?? 'mid-level',
+  educationLevel: job.educationLevel ?? '',
+  candidatesNeeded: String(job.candidatesNeeded ?? 1) as any,
+  region: job.location?.region ?? 'addis-ababa',
+  city: job.location?.city ?? '',
+  subCity: job.location?.subCity ?? '',
+  woreda: job.location?.woreda ?? '',
+  specificLocation: job.location?.specificLocation ?? '',
+  locationLat: job.location?.coordinates?.coordinates
+    ? String(job.location.coordinates.coordinates[1])
+    : '',
+  locationLng: job.location?.coordinates?.coordinates
+    ? String(job.location.coordinates.coordinates[0])
+    : '',
   applicationDeadline: job.applicationDeadline
     ? new Date(job.applicationDeadline).toISOString().split('T')[0]
     : tomorrowISO(),
-  salaryMode:         job.salaryMode ?? 'range',
-  salaryMin:          job.salary?.min ? String(job.salary.min) : '',
-  salaryMax:          job.salary?.max ? String(job.salary.max) : '',
-  salaryCurrency:     job.salary?.currency ?? 'ETB',
-  salaryPeriod:       job.salary?.period ?? 'monthly',
-  remote:             job.remote ?? 'on-site',
-  workArrangement:    job.workArrangement ?? 'office',
-  isApplyEnabled:     job.isApplyEnabled ?? true,
-  demographicSex:     job.demographicRequirements?.sex ?? 'any',
-  jobNumber:          job.jobNumber ?? '',
-  requirements:       job.requirements?.filter(Boolean) ?? [],
-  skills:             job.skills?.filter(Boolean) ?? [],
-  responsibilities:   job.responsibilities?.filter(Boolean) ?? [],
-  benefits:           job.benefits?.filter(Boolean) ?? [],
-  featured:           job.featured ?? false,
-  urgent:             job.urgent ?? false,
+  salaryMode: job.salaryMode ?? 'range',
+  salaryMin: job.salary?.min ? String(job.salary.min) : '',
+  salaryMax: job.salary?.max ? String(job.salary.max) : '',
+  salaryCurrency: job.salary?.currency ?? 'ETB',
+  salaryPeriod: job.salary?.period ?? 'monthly',
+  remote: job.remote ?? 'on-site',
+  workArrangement: job.workArrangement ?? 'office',
+  isApplyEnabled: job.isApplyEnabled ?? true,
+  demographicSex: job.demographicRequirements?.sex ?? 'any',
+  jobNumber: job.jobNumber ?? '',
+  requirements: job.requirements?.filter(Boolean) ?? [],
+  skills: job.skills?.filter(Boolean) ?? [],
+  responsibilities: job.responsibilities?.filter(Boolean) ?? [],
+  benefits: job.benefits?.filter(Boolean) ?? [],
+  featured: job.featured ?? false,
+  urgent: job.urgent ?? false,
 });
 
-// ─── toCreateData: FormValues → CreateJobData ─────────────────────────────────
-const toCreateData = (vals: JobFormValues): CreateJobData => ({
-  title:              vals.title,
-  description:        vals.description,
-  shortDescription:   vals.shortDescription,
-  category:           vals.category,
-  type:               vals.type as any,
-  experienceLevel:    vals.experienceLevel as any,
-  educationLevel:     vals.educationLevel,
-  candidatesNeeded:   typeof vals.candidatesNeeded === 'number' ? vals.candidatesNeeded : parseInt(String(vals.candidatesNeeded)) || 1,
-  location: {
-    region:  vals.region as any,
-    city:    vals.city,
-    country: 'Ethiopia',
-  },
-  applicationDeadline: vals.applicationDeadline,
-  salaryMode:         vals.salaryMode as any,
-  salary:             vals.salaryMode === 'range' ? {
-    min:          vals.salaryMin ? parseFloat(vals.salaryMin) : undefined,
-    max:          vals.salaryMax ? parseFloat(vals.salaryMax) : undefined,
-    currency:     vals.salaryCurrency,
-    period:       vals.salaryPeriod,
-    isPublic:     true,
-    isNegotiable: false,
-  } : undefined,
-  remote:             vals.remote as any,
-  workArrangement:    vals.workArrangement as any,
-  isApplyEnabled:     vals.isApplyEnabled,
-  requirements:       vals.requirements?.filter(Boolean),
-  skills:             vals.skills?.filter(Boolean),
-  responsibilities:   vals.responsibilities?.filter(Boolean),
-  benefits:           vals.benefits?.filter(Boolean),
-  featured:           vals.featured,
-  urgent:             vals.urgent,
-  jobNumber:          vals.jobNumber,
-  demographicRequirements: { sex: vals.demographicSex as any },
-});
+const toCreateData = (vals: JobFormValues): CreateJobData => {
+  const lat = parseFloat(vals.locationLat ?? '');
+  const lng = parseFloat(vals.locationLng ?? '');
+  const hasCoords = !isNaN(lat) && !isNaN(lng);
+  return {
+    title: vals.title,
+    description: vals.description,
+    shortDescription: vals.shortDescription,
+    category: vals.category,
+    type: vals.type as any,
+    experienceLevel: vals.experienceLevel as any,
+    educationLevel: vals.educationLevel,
+    candidatesNeeded:
+      typeof vals.candidatesNeeded === 'number'
+        ? vals.candidatesNeeded
+        : parseInt(String(vals.candidatesNeeded)) || 1,
+    location: {
+      region: vals.region as any,
+      city: vals.city,
+      subCity: vals.subCity,
+      woreda: vals.woreda,
+      specificLocation: vals.specificLocation,
+      country: 'Ethiopia',
+      ...(hasCoords
+        ? { coordinates: { type: 'Point', coordinates: [lng, lat] } }
+        : {}),
+    },
+    applicationDeadline: vals.applicationDeadline,
+    salaryMode: vals.salaryMode as any,
+    salary:
+      vals.salaryMode === 'range'
+        ? {
+            min: vals.salaryMin ? parseFloat(vals.salaryMin) : undefined,
+            max: vals.salaryMax ? parseFloat(vals.salaryMax) : undefined,
+            currency: vals.salaryCurrency,
+            period: vals.salaryPeriod,
+            isPublic: true,
+            isNegotiable: false,
+          }
+        : undefined,
+    remote: vals.remote as any,
+    workArrangement: vals.workArrangement as any,
+    isApplyEnabled: vals.isApplyEnabled,
+    requirements: vals.requirements?.filter(Boolean),
+    skills: vals.skills?.filter(Boolean),
+    responsibilities: vals.responsibilities?.filter(Boolean),
+    benefits: vals.benefits?.filter(Boolean),
+    featured: vals.featured,
+    urgent: vals.urgent,
+    jobNumber: vals.jobNumber,
+    demographicRequirements: { sex: vals.demographicSex as any },
+  };
+};
+
+const STEP_FIELDS: Record<number, (keyof JobFormValues)[]> = {
+  0: ['title', 'description', 'category', 'type'],
+  1: ['experienceLevel'],
+  2: ['salaryMode', 'region', 'applicationDeadline'],
+  3: [],
+};
 
 // ─── Main Component ───────────────────────────────────────────────────────────
+
 export const JobForm: React.FC<JobFormProps> = ({
   initialData,
   onSubmit,
   onCancel,
   isLoading = false,
-  isOrg = false,
 }) => {
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+  const { colors, spacing, radius, shadows, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-
+  const fadeAnim = useRef(new Animated.Value(1)).current;
   const isEdit = !!initialData;
 
   const {
@@ -258,6 +251,7 @@ export const JobForm: React.FC<JobFormProps> = ({
     watch,
     reset,
     setValue,
+    trigger,
     formState: { errors },
   } = useForm<JobFormValues>({
     resolver: zodResolver(jobSchema) as any,
@@ -272,6 +266,11 @@ export const JobForm: React.FC<JobFormProps> = ({
       candidatesNeeded: '1' as any,
       region: 'addis-ababa',
       city: '',
+      subCity: '',
+      woreda: '',
+      specificLocation: '',
+      locationLat: '',
+      locationLng: '',
       applicationDeadline: tomorrowISO(),
       salaryMode: 'range',
       salaryMin: '',
@@ -292,21 +291,46 @@ export const JobForm: React.FC<JobFormProps> = ({
     },
   });
 
-  // Populate form when editing
   useEffect(() => {
-    if (initialData) {
-      reset(toFormValues(initialData) as any);
-    }
+    if (initialData) reset(toFormValues(initialData) as any);
   }, [initialData]);
 
   const salaryMode = watch('salaryMode');
+
+  const animateStep = useCallback(
+    (next: number) => {
+      Animated.sequence([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 120,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+      ]).start();
+      setStep(next);
+    },
+    [fadeAnim]
+  );
+
+  const nextStep = async () => {
+    const fields = STEP_FIELDS[step] ?? [];
+    const valid = fields.length === 0 || (await trigger(fields as any));
+    if (valid && step < STEPS.length - 1) animateStep(step + 1);
+  };
+
+  const prevStep = () => {
+    if (step > 0) animateStep(step - 1);
+  };
 
   const doSubmit = async (isDraft: boolean) => {
     handleSubmit(async (vals) => {
       try {
         setSubmitting(true);
-        const data = toCreateData(vals);
-        await onSubmit(data, isDraft);
+        await onSubmit(toCreateData(vals), isDraft);
       } catch (e: any) {
         Alert.alert('Error', e?.message ?? 'Failed to save job');
       } finally {
@@ -315,96 +339,323 @@ export const JobForm: React.FC<JobFormProps> = ({
     })();
   };
 
-  const nextStep = () => {
-    if (step < STEPS.length - 1) setStep(s => s + 1);
-  };
-
-  const prevStep = () => {
-    if (step > 0) setStep(s => s - 1);
-  };
-
   const loading = isLoading || submitting;
+  const sharedProps = { control, errors, watch, setValue };
 
   return (
-    <View style={[f.root, { backgroundColor: c.background }]}>
-      {/* Step indicator */}
-      <View style={[f.stepBar, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-        {STEPS.map((s, i) => (
-          <TouchableOpacity
-            key={s}
-            onPress={() => setStep(i)}
-            style={f.stepItem}
-          >
-            <View style={[
-              f.stepDot,
-              { backgroundColor: i <= step ? c.primary : c.border },
-            ]}>
-              {i < step
-                ? <Ionicons name="checkmark" size={12} color="#fff" />
-                : <Text style={[f.stepNum, { color: i <= step ? '#fff' : c.textMuted }]}>{i + 1}</Text>
-              }
-            </View>
-            <Text style={[f.stepLabel, { color: i === step ? c.primary : c.textMuted }]} numberOfLines={1}>
-              {s}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      {/* Premium Step Indicator */}
+      <StepIndicator
+        steps={STEPS}
+        currentStep={step}
+        onStepPress={setStep}
+        colors={colors}
+        spacing={spacing}
+        isDark={isDark}
+      />
 
-      {/* Form content */}
+      {/* Form Content */}
       <KeyboardAwareScrollView
-        contentContainerStyle={[f.scroll, { backgroundColor: c.background }]}
+        contentContainerStyle={{
+          paddingHorizontal: spacing.lg,
+          paddingBottom: spacing.xxl + insets.bottom,
+        }}
         keyboardShouldPersistTaps="handled"
         enableOnAndroid
-        extraScrollHeight={80}
+        extraScrollHeight={100}
+        showsVerticalScrollIndicator={false}
       >
-        {step === 0 && <StepBasic control={control} errors={errors} watch={watch} setValue={setValue} isOrg={isOrg} />}
-        {step === 1 && <StepDetails control={control} errors={errors} watch={watch} setValue={setValue} />}
-        {step === 2 && <StepSalary control={control} errors={errors} watch={watch} setValue={setValue} salaryMode={salaryMode} />}
-        {step === 3 && <StepPreview watch={watch} />}
+        <Animated.View style={{ opacity: fadeAnim }}>
+          {step === 0 && <StepBasic {...sharedProps} />}
+          {step === 1 && <StepDetails {...sharedProps} />}
+          {step === 2 && (
+            <StepSalaryLocation
+              {...sharedProps}
+              salaryMode={salaryMode}
+              isEdit={isEdit}
+            />
+          )}
+          {step === 3 && <StepPreview watch={watch} isEdit={isEdit} />}
+        </Animated.View>
       </KeyboardAwareScrollView>
 
-      {/* Navigation buttons */}
-      <View style={[f.footer, { backgroundColor: c.surface, borderTopColor: c.border }]}>
+      {/* Premium Footer */}
+      <FormFooter
+        step={step}
+        totalSteps={STEPS.length}
+        isEdit={isEdit}
+        loading={loading}
+        onCancel={step === 0 ? onCancel : prevStep}
+        onNext={nextStep}
+        onSaveDraft={() => doSubmit(true)}
+        onPublish={() => doSubmit(false)}
+        colors={colors}
+        spacing={spacing}
+        radius={radius}
+        shadows={shadows}
+        insets={insets}
+      />
+    </View>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// REUSABLE COMPONENTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Premium Step Indicator ───────────────────────────────────────────────────
+
+const StepIndicator: React.FC<{
+  steps: string[];
+  currentStep: number;
+  onStepPress: (step: number) => void;
+  colors: any;
+  spacing: any;
+  isDark: boolean;
+}> = ({ steps, currentStep, onStepPress, colors, spacing }) => {
+  return (
+    <View
+      style={[
+        stepStyles.container,
+        {
+          backgroundColor: colors.surface,
+          borderBottomColor: colors.border,
+          paddingTop: spacing.md,
+          paddingBottom: spacing.md,
+          paddingHorizontal: spacing.lg,
+        },
+      ]}
+    >
+      <View style={stepStyles.row}>
+        {steps.map((label, i) => {
+          const isCompleted = i < currentStep;
+          const isActive = i === currentStep;
+          const isLast = i === steps.length - 1;
+
+          return (
+            <React.Fragment key={label}>
+              <TouchableOpacity
+                onPress={() => onStepPress(i)}
+                style={stepStyles.stepItem}
+                activeOpacity={0.7}
+              >
+                <View
+                  style={[
+                    stepStyles.circle,
+                    {
+                      width: 32,
+                      height: 32,
+                      borderRadius: 16,
+                      backgroundColor: isCompleted
+                        ? colors.primary
+                        : isActive
+                        ? `${colors.primary}18`
+                        : 'transparent',
+                      borderColor: isCompleted || isActive ? colors.primary : colors.border,
+                      borderWidth: 2,
+                    },
+                    isActive && stepStyles.activeCircle,
+                  ]}
+                >
+                  {isCompleted ? (
+                    <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                  ) : (
+                    <Text
+                      style={[
+                        stepStyles.circleText,
+                        {
+                          color: isActive ? colors.primary : colors.textMuted,
+                          fontWeight: isActive ? '700' : '600',
+                        },
+                      ]}
+                    >
+                      {i + 1}
+                    </Text>
+                  )}
+                </View>
+                <Text
+                  style={[
+                    stepStyles.label,
+                    {
+                      color: isActive ? colors.primary : isCompleted ? colors.textSecondary : colors.textMuted,
+                      fontWeight: isActive ? '700' : '500',
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+              {!isLast && (
+                <View
+                  style={[
+                    stepStyles.connector,
+                    {
+                      backgroundColor: i < currentStep ? colors.primary : colors.border,
+                      height: 2,
+                    },
+                  ]}
+                />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
+
+// ─── Premium Form Footer ──────────────────────────────────────────────────────
+
+const FormFooter: React.FC<{
+  step: number;
+  totalSteps: number;
+  isEdit: boolean;
+  loading: boolean;
+  onCancel: () => void;
+  onNext: () => void;
+  onSaveDraft: () => void;
+  onPublish: () => void;
+  colors: any;
+  spacing: any;
+  radius: any;
+  shadows: any;
+  insets: any;
+}> = ({
+  step,
+  totalSteps,
+  isEdit,
+  loading,
+  onCancel,
+  onNext,
+  onSaveDraft,
+  onPublish,
+  colors,
+  spacing,
+  radius,
+  shadows,
+  insets,
+}) => {
+  const isLastStep = step === totalSteps - 1;
+const TAB_BAR_TOTAL_HEIGHT = 70;
+  return (
+    <View
+      style={[
+        footerStyles.container,
+        {
+          backgroundColor: colors.bgCard,
+          borderTopColor: colors.border,
+          paddingHorizontal: spacing.lg,
+          paddingTop: spacing.md,
+          // 🔧 FIX: Add tab bar height to bottom padding
+          paddingBottom: Math.max(insets.bottom + spacing.sm, spacing.lg) + TAB_BAR_TOTAL_HEIGHT,
+          ...shadows.md,
+        },
+      ]}
+    >
+      <View style={footerStyles.row}>
+        {/* Back/Cancel Button */}
         <TouchableOpacity
-          onPress={step === 0 ? onCancel : prevStep}
-          style={[f.footerBtn, f.outlineBtn, { borderColor: c.border }]}
+          onPress={onCancel}
+          activeOpacity={0.7}
           disabled={loading}
+          style={[
+            footerStyles.button,
+            footerStyles.secondaryButton,
+            {
+              borderColor: colors.border,
+              borderRadius: radius.lg,
+              height: 52,
+              flex: isLastStep && !isEdit ? 0.4 : 1,
+            },
+          ]}
         >
-          <Text style={[f.footerBtnText, { color: c.text }]}>
+          <Ionicons
+            name={step === 0 ? 'close-outline' : 'arrow-back'}
+            size={18}
+            color={colors.text}
+          />
+          <Text style={[footerStyles.buttonText, { color: colors.text }]}>
             {step === 0 ? 'Cancel' : 'Back'}
           </Text>
         </TouchableOpacity>
 
-        {step < STEPS.length - 1 ? (
+        {!isLastStep ? (
+          /* Next Button */
           <TouchableOpacity
-            onPress={nextStep}
-            style={[f.footerBtn, f.primaryBtn, { backgroundColor: c.primary }]}
+            onPress={onNext}
+            activeOpacity={0.9}
+            style={[
+              footerStyles.button,
+              footerStyles.primaryButton,
+              {
+                backgroundColor: colors.primary,
+                borderRadius: radius.lg,
+                height: 52,
+                flex: 1,
+                ...shadows.md,
+              },
+            ]}
           >
-            <Text style={f.primaryBtnText}>Next</Text>
-            <Ionicons name="arrow-forward" size={16} color="#fff" />
+            <Text style={footerStyles.primaryText}>Next</Text>
+            <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
           </TouchableOpacity>
         ) : (
-          <View style={f.lastBtns}>
+          /* Publish/Save Draft */
+          <View style={[footerStyles.row, { flex: 1, gap: spacing.sm }]}>
             {!isEdit && (
               <TouchableOpacity
-                onPress={() => doSubmit(true)}
+                onPress={onSaveDraft}
                 disabled={loading}
-                style={[f.footerBtn, f.outlineBtn, { borderColor: c.primary, marginRight: 8 }]}
+                activeOpacity={0.7}
+                style={[
+                  footerStyles.button,
+                  footerStyles.secondaryButton,
+                  {
+                    borderColor: colors.primary,
+                    borderWidth: 1.5,
+                    borderRadius: radius.lg,
+                    height: 52,
+                    flex: 0.5,
+                  },
+                ]}
               >
-                <Text style={[f.footerBtnText, { color: c.primary }]}>
+                <Ionicons name="save-outline" size={16} color={colors.primary} />
+                <Text style={[footerStyles.buttonText, { color: colors.primary }]}>
                   {loading ? 'Saving…' : 'Save Draft'}
                 </Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
-              onPress={() => doSubmit(false)}
+              onPress={onPublish}
               disabled={loading}
-              style={[f.footerBtn, f.primaryBtn, { backgroundColor: loading ? c.border : c.primary }]}
+              activeOpacity={0.9}
+              style={[
+                footerStyles.button,
+                footerStyles.primaryButton,
+                {
+                  backgroundColor: loading ? colors.textDisabled : colors.primary,
+                  borderRadius: radius.lg,
+                  height: 52,
+                  flex: 0.5,
+                  ...shadows.md,
+                },
+              ]}
             >
-              <Text style={f.primaryBtnText}>
-                {loading ? 'Saving…' : isEdit ? 'Update Job' : 'Publish Job'}
-              </Text>
+              {loading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons
+                    name={isEdit ? 'checkmark-circle' : 'paper-plane'}
+                    size={16}
+                    color="#FFFFFF"
+                  />
+                  <Text style={footerStyles.primaryText}>
+                    {isEdit ? 'Update Job' : 'Publish Job'}
+                  </Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -413,459 +664,1976 @@ export const JobForm: React.FC<JobFormProps> = ({
   );
 };
 
-// ─── STEP 1: Basic Info ───────────────────────────────────────────────────────
-const StepBasic = ({ control, errors, watch, setValue, isOrg }: any) => {
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+// ─── Step Header ──────────────────────────────────────────────────────────────
+
+const StepHeader: React.FC<{
+  icon: string;
+  title: string;
+  subtitle: string;
+}> = ({ icon, title, subtitle }) => {
+  const { colors, spacing, radius } = useTheme();
+
   return (
-    <View>
-      <SectionHeader icon="briefcase-outline" title="Basic Information" />
-
-      <Controller name="title" control={control} render={({ field: { value, onChange } }) => (
-        <FormField
-          label="Job Title"
-          required
-          value={value}
-          onChangeText={onChange}
-          placeholder="e.g. Senior Software Engineer"
-          error={errors.title?.message}
-        />
-      )} />
-
-      <Controller name="category" control={control} render={({ field: { value, onChange } }) => (
-        <SelectPicker
-          label="Category"
-          required
-          value={value}
-          options={JOB_CATEGORIES}
-          onSelect={onChange}
-          placeholder="Select job category"
-          error={errors.category?.message}
-          searchable
-        />
-      )} />
-
-      <Controller name="type" control={control} render={({ field: { value, onChange } }) => (
-        <SelectPicker
-          label="Employment Type"
-          required
-          value={value}
-          options={JOB_TYPES.map(t => ({ value: t.value, label: t.label }))}
-          onSelect={onChange}
-          placeholder="Select employment type"
-          error={errors.type?.message}
-        />
-      )} />
-
-      <Controller name="shortDescription" control={control} render={({ field: { value, onChange } }) => (
-        <FormField
-          label="Short Description"
-          value={value}
-          onChangeText={onChange}
-          placeholder="Brief summary (max 200 chars)"
-          maxLength={200}
-          multiline
-          hint={`${(value ?? '').length}/200`}
-          error={errors.shortDescription?.message}
-        />
-      )} />
-
-      <Controller name="description" control={control} render={({ field: { value, onChange } }) => (
-        <FormField
-          label="Full Description"
-          required
-          value={value}
-          onChangeText={onChange}
-          placeholder="Detailed job description (min 50 characters)..."
-          multiline
-          numberOfLines={6}
-          hint={`${(value ?? '').length}/5000 — min 50`}
-          error={errors.description?.message}
-        />
-      )} />
-
-      <Controller name="jobNumber" control={control} render={({ field: { value, onChange } }) => (
-        <FormField
-          label="Job Reference Number"
-          value={value}
-          onChangeText={onChange}
-          placeholder="e.g. JOB-2024-001 (optional)"
-          error={errors.jobNumber?.message}
-        />
-      )} />
-
-      {/* Flags */}
-      <View style={[f2.flagRow, { backgroundColor: c.surface, borderColor: c.border }]}>
-        <Controller name="urgent" control={control} render={({ field: { value, onChange } }) => (
-          <View style={f2.flagItem}>
-            <Ionicons name="flash" size={18} color="#EF4444" />
-            <Text style={[f2.flagLabel, { color: c.text }]}>Mark Urgent</Text>
-            <Switch value={value} onValueChange={onChange} trackColor={{ true: '#EF4444' }} />
-          </View>
-        )} />
-        <Controller name="featured" control={control} render={({ field: { value, onChange } }) => (
-          <View style={[f2.flagItem, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border }]}>
-            <Ionicons name="star" size={18} color="#F59E0B" />
-            <Text style={[f2.flagLabel, { color: c.text }]}>Feature This Job</Text>
-            <Switch value={value} onValueChange={onChange} trackColor={{ true: '#F59E0B' }} />
-          </View>
-        )} />
-        <Controller name="isApplyEnabled" control={control} render={({ field: { value, onChange } }) => (
-          <View style={[f2.flagItem, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border }]}>
-            <Ionicons name="checkmark-circle" size={18} color="#10B981" />
-            <Text style={[f2.flagLabel, { color: c.text }]}>Accept Applications</Text>
-            <Switch value={value} onValueChange={onChange} trackColor={{ true: '#10B981' }} />
-          </View>
-        )} />
+    <View style={[headerStyles.container, { marginBottom: spacing.xl }]}>
+      <View
+        style={[
+          headerStyles.iconContainer,
+          {
+            backgroundColor: `${colors.primary}15`,
+            borderRadius: radius.md,
+            width: 48,
+            height: 48,
+          },
+        ]}
+      >
+        <Ionicons name={icon as any} size={22} color={colors.primary} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={[headerStyles.title, { color: colors.text }]}>{title}</Text>
+        <Text style={[headerStyles.subtitle, { color: colors.textMuted }]}>
+          {subtitle}
+        </Text>
       </View>
     </View>
   );
 };
 
-// ─── STEP 2: Details ─────────────────────────────────────────────────────────
-const StepDetails = ({ control, errors, watch, setValue }: any) => {
+// ─── Premium Card ─────────────────────────────────────────────────────────────
+
+const PremiumCard: React.FC<{
+  children: React.ReactNode;
+  title?: string;
+  icon?: string;
+  style?: any;
+}> = ({ children, title, icon, style }) => {
+  const { colors, spacing, radius, shadows } = useTheme();
+
   return (
-    <View>
-      <SectionHeader icon="list-outline" title="Job Details" />
-
-      <Controller name="experienceLevel" control={control} render={({ field: { value, onChange } }) => (
-        <SelectPicker
-          label="Experience Level"
-          required
-          value={value}
-          options={EXPERIENCE_LEVELS.map(e => ({ value: e.value, label: e.label }))}
-          onSelect={onChange}
-          placeholder="Select experience level"
-          error={errors.experienceLevel?.message}
-        />
-      )} />
-
-      <Controller name="educationLevel" control={control} render={({ field: { value, onChange } }) => (
-        <SelectPicker
-          label="Education Level"
-          value={value ?? ''}
-          options={EDUCATION_LEVELS.map(e => ({ value: e.value, label: e.label }))}
-          onSelect={onChange}
-          placeholder="Select education level"
-          error={errors.educationLevel?.message}
-        />
-      )} />
-
-      <Controller name="remote" control={control} render={({ field: { value, onChange } }) => (
-        <SelectPicker
-          label="Work Mode"
-          value={value ?? 'on-site'}
-          options={REMOTE_OPTIONS}
-          onSelect={onChange}
-          placeholder="Select work mode"
-          error={errors.remote?.message}
-        />
-      )} />
-
-      <Controller name="workArrangement" control={control} render={({ field: { value, onChange } }) => (
-        <SelectPicker
-          label="Work Arrangement"
-          value={value ?? 'office'}
-          options={WORK_ARRANGEMENTS}
-          onSelect={onChange}
-          placeholder="Select arrangement"
-          error={errors.workArrangement?.message}
-        />
-      )} />
-
-      <Controller name="region" control={control} render={({ field: { value, onChange } }) => (
-        <SelectPicker
-          label="Region"
-          required
-          value={value}
-          options={ETHIOPIAN_REGIONS.map(r => ({ value: r.value, label: r.label }))}
-          onSelect={onChange}
-          placeholder="Select region"
-          error={errors.region?.message}
-          searchable
-        />
-      )} />
-
-      <Controller name="city" control={control} render={({ field: { value, onChange } }) => (
-        <FormField
-          label="City"
-          value={value}
-          onChangeText={onChange}
-          placeholder="e.g. Addis Ababa"
-          error={errors.city?.message}
-        />
-      )} />
-
-      <Controller name="applicationDeadline" control={control} render={({ field: { value, onChange } }) => (
-        <FormField
-          label="Application Deadline"
-          required
-          value={value}
-          onChangeText={onChange}
-          placeholder="YYYY-MM-DD"
-          hint="Format: YYYY-MM-DD (e.g. 2024-12-31)"
-          error={errors.applicationDeadline?.message}
-          keyboardType="numbers-and-punctuation"
-        />
-      )} />
-
-      <Controller name="candidatesNeeded" control={control} render={({ field: { value, onChange } }) => (
-        <FormField
-          label="Number of Positions"
-          required
-          value={String(value ?? '1')}
-          onChangeText={onChange}
-          placeholder="e.g. 3"
-          keyboardType="numeric"
-          error={errors.candidatesNeeded?.message}
-          hint="How many candidates do you need to hire?"
-        />
-      )} />
-
-      <Controller name="demographicSex" control={control} render={({ field: { value, onChange } }) => (
-        <SelectPicker
-          label="Gender Requirement"
-          value={value ?? 'any'}
-          options={DEMOGRAPHIC_SEX}
-          onSelect={onChange}
-          placeholder="Select gender requirement"
-          error={errors.demographicSex?.message}
-        />
-      )} />
-
-      {/* Dynamic arrays */}
-      <Controller name="requirements" control={control} render={({ field: { value, onChange } }) => (
-        <TagInput
-          label="Requirements"
-          values={value ?? []}
-          onChange={onChange}
-          placeholder="Add a requirement and press Add"
-          error={errors.requirements?.message}
-        />
-      )} />
-
-      <Controller name="responsibilities" control={control} render={({ field: { value, onChange } }) => (
-        <TagInput
-          label="Responsibilities"
-          values={value ?? []}
-          onChange={onChange}
-          placeholder="Add a responsibility and press Add"
-        />
-      )} />
-
-      <Controller name="skills" control={control} render={({ field: { value, onChange } }) => (
-        <TagInput
-          label="Required Skills"
-          values={value ?? []}
-          onChange={onChange}
-          placeholder="Add a skill and press Add"
-        />
-      )} />
-
-      <Controller name="benefits" control={control} render={({ field: { value, onChange } }) => (
-        <TagInput
-          label="Benefits & Perks"
-          values={value ?? []}
-          onChange={onChange}
-          placeholder="Add a benefit and press Add"
-        />
-      )} />
+    <View
+      style={[
+        cardStyles.container,
+        {
+          backgroundColor: colors.bgCard,
+          borderColor: colors.border,
+          borderRadius: radius.lg,
+          marginBottom: spacing.lg,
+          ...shadows.sm,
+        },
+        style,
+      ]}
+    >
+      {title && (
+        <View
+          style={[
+            cardStyles.header,
+            {
+              borderBottomColor: colors.border,
+              paddingHorizontal: spacing.lg,
+              paddingVertical: spacing.md,
+            },
+          ]}
+        >
+          {icon && (
+            <View
+              style={[
+                cardStyles.iconBg,
+                { backgroundColor: `${colors.primary}15`, borderRadius: radius.sm },
+              ]}
+            >
+              <Ionicons name={icon as any} size={15} color={colors.primary} />
+            </View>
+          )}
+          <Text style={[cardStyles.title, { color: colors.text }]}>{title}</Text>
+        </View>
+      )}
+      <View style={{ padding: spacing.lg }}>{children}</View>
     </View>
   );
 };
 
-// ─── STEP 3: Salary ───────────────────────────────────────────────────────────
-const StepSalary = ({ control, errors, watch, setValue, salaryMode }: any) => {
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+// ─── Pill Selector ────────────────────────────────────────────────────────────
+
+const PillSelector: React.FC<{
+  options: Array<{ value: string; label: string }>;
+  value: string;
+  onChange: (value: string) => void;
+  label?: string;
+  required?: boolean;
+  error?: string;
+}> = ({ options, value, onChange, label, required, error }) => {
+  const { colors, spacing, radius } = useTheme();
+
+  return (
+    <View style={{ marginBottom: spacing.md }}>
+      {label && (
+        <Text
+          style={[
+            pillStyles.label,
+            { color: colors.text, marginBottom: spacing.sm },
+          ]}
+        >
+          {label}
+          {required && (
+            <Text style={{ color: colors.danger }}> *</Text>
+          )}
+        </Text>
+      )}
+      <View style={pillStyles.container}>
+        {options.map((option) => {
+          const isActive = value === option.value;
+          return (
+            <TouchableOpacity
+              key={option.value}
+              onPress={() => onChange(option.value)}
+              activeOpacity={0.7}
+              style={[
+                pillStyles.pill,
+                {
+                  backgroundColor: isActive ? colors.primary : colors.surface,
+                  borderColor: isActive ? colors.primary : colors.border,
+                  borderRadius: radius.full,
+                  paddingVertical: spacing.sm + 2,
+                  paddingHorizontal: spacing.lg,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  pillStyles.pillText,
+                  {
+                    color: isActive ? '#FFFFFF' : colors.textSecondary,
+                    fontWeight: isActive ? '700' : '500',
+                  },
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      {error && (
+        <Text style={[pillStyles.error, { color: colors.danger }]}>{error}</Text>
+      )}
+    </View>
+  );
+};
+
+// ─── Info Banner ──────────────────────────────────────────────────────────────
+
+const InfoBanner: React.FC<{
+  children: React.ReactNode;
+  type?: 'info' | 'warning' | 'success';
+}> = ({ children, type = 'info' }) => {
+  const { colors, spacing, radius } = useTheme();
+  const colorMap = {
+    info: colors.info,
+    warning: colors.warning,
+    success: colors.success,
+  };
+
+  return (
+    <View
+      style={[
+        bannerStyles.container,
+        {
+          backgroundColor: `${colorMap[type]}12`,
+          borderColor: `${colorMap[type]}30`,
+          borderRadius: radius.md,
+          padding: spacing.md,
+        },
+      ]}
+    >
+      <Ionicons
+        name={
+          type === 'info'
+            ? 'information-circle-outline'
+            : type === 'warning'
+            ? 'warning-outline'
+            : 'checkmark-circle-outline'
+        }
+        size={18}
+        color={colorMap[type]}
+      />
+      <Text style={[bannerStyles.text, { color: colors.textMuted }]}>
+        {children}
+      </Text>
+    </View>
+  );
+};
+
+// ─── Setting Row ──────────────────────────────────────────────────────────────
+
+const SettingRow: React.FC<{
+  icon: string;
+  iconColor: string;
+  label: string;
+  sublabel?: string;
+  name: string;
+  control: any;
+  trackColor: string;
+}> = ({ icon, iconColor, label, sublabel, name, control, trackColor }) => {
+  const { colors, spacing, radius } = useTheme();
+
+  return (
+    <Controller
+      name={name}
+      control={control}
+      render={({ field: { value, onChange } }) => (
+        <View style={settingStyles.row}>
+          <View
+            style={[
+              settingStyles.iconBox,
+              {
+                backgroundColor: `${iconColor}15`,
+                borderRadius: radius.md,
+                width: 40,
+                height: 40,
+              },
+            ]}
+          >
+            <Ionicons name={icon as any} size={18} color={iconColor} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[settingStyles.label, { color: colors.text }]}>
+              {label}
+            </Text>
+            {sublabel && (
+              <Text style={[settingStyles.sublabel, { color: colors.textMuted }]}>
+                {sublabel}
+              </Text>
+            )}
+          </View>
+          <Switch
+            value={value}
+            onValueChange={onChange}
+            trackColor={{ false: colors.border, true: trackColor }}
+            thumbColor="#FFFFFF"
+          />
+        </View>
+      )}
+    />
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STEP COMPONENTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Step 1: Basic Info ───────────────────────────────────────────────────────
+
+const StepBasic = ({ control, errors, watch }: any) => {
+  const { colors, spacing } = useTheme();
+
   return (
     <View>
-      <SectionHeader icon="cash-outline" title="Salary & Compensation" />
+      <StepHeader
+        icon="briefcase-outline"
+        title="Basic Information"
+        subtitle="Start with the essentials about this role"
+      />
 
-      <Controller name="salaryMode" control={control} render={({ field: { value, onChange } }) => (
-        <SelectPicker
-          label="Salary Display Mode"
-          required
-          value={value}
-          options={SALARY_MODES.map(m => ({ value: m.value, label: m.label }))}
-          onSelect={onChange}
-          placeholder="Select salary mode"
-          error={errors.salaryMode?.message}
-        />
-      )} />
-
-      {salaryMode === 'range' && (
-        <>
-          <Controller name="salaryCurrency" control={control} render={({ field: { value, onChange } }) => (
-            <SelectPicker
-              label="Currency"
-              value={value ?? 'ETB'}
-              options={CURRENCIES}
-              onSelect={onChange}
-              placeholder="Select currency"
-              error={errors.salaryCurrency?.message}
+      <PremiumCard title="Job Details" icon="document-text-outline">
+        <Controller
+          name="title"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <FormField
+              label="Job Title"
+              required
+              value={value}
+              onChangeText={onChange}
+              placeholder="e.g. Senior Software Engineer"
+              error={errors.title?.message}
             />
-          )} />
+          )}
+        />
 
-          <View style={f2.salaryRow}>
-            <View style={f2.salaryHalf}>
-              <Controller name="salaryMin" control={control} render={({ field: { value, onChange } }) => (
-                <FormField
-                  label="Min Salary"
-                  value={value}
-                  onChangeText={onChange}
-                  placeholder="e.g. 15000"
-                  keyboardType="numeric"
-                  error={errors.salaryMin?.message}
+        <Controller
+          name="category"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <SelectPicker
+              label="Category"
+              required
+              value={value}
+              options={JOB_CATEGORIES}
+              onSelect={onChange}
+              placeholder="Select job category"
+              error={errors.category?.message}
+              searchable
+            />
+          )}
+        />
+
+        <Controller
+          name="type"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <PillSelector
+              label="Employment Type"
+              required
+              options={JOB_TYPES.map((t) => ({ value: t.value, label: t.label }))}
+              value={value}
+              onChange={onChange}
+              error={errors.type?.message}
+            />
+          )}
+        />
+
+        <Controller
+          name="jobNumber"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <FormField
+              label="Reference Number"
+              value={value}
+              onChangeText={onChange}
+              placeholder="e.g. JOB-2026-001 (optional)"
+            />
+          )}
+        />
+      </PremiumCard>
+
+      <PremiumCard title="Description" icon="create-outline">
+        <Controller
+          name="shortDescription"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <FormField
+              label="Short Description"
+              value={value}
+              onChangeText={onChange}
+              placeholder="Brief summary shown on the job card (max 200 chars)"
+              maxLength={200}
+              multiline
+              hint={`${(value ?? '').length}/200`}
+            />
+          )}
+        />
+
+        <Controller
+          name="description"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <FormField
+              label="Full Description"
+              required
+              value={value}
+              onChangeText={onChange}
+              placeholder="Describe the role, team, and day-to-day responsibilities…"
+              multiline
+              numberOfLines={7}
+              hint={`${(value ?? '').length}/5000 — min 50`}
+              error={errors.description?.message}
+            />
+          )}
+        />
+      </PremiumCard>
+
+      <PremiumCard title="Listing Options" icon="options-outline">
+        <SettingRow
+          icon="flash"
+          iconColor="#EF4444"
+          label="Mark as Urgent"
+          sublabel="Shows a red URGENT badge"
+          name="urgent"
+          control={control}
+          trackColor="#EF4444"
+        />
+        <View
+          style={{
+            height: StyleSheet.hairlineWidth,
+            backgroundColor: colors.border,
+            marginVertical: spacing.sm,
+          }}
+        />
+        <SettingRow
+          icon="star"
+          iconColor="#F59E0B"
+          label="Feature This Job"
+          sublabel="Boosts visibility with FEATURED badge"
+          name="featured"
+          control={control}
+          trackColor="#F59E0B"
+        />
+        <View
+          style={{
+            height: StyleSheet.hairlineWidth,
+            backgroundColor: colors.border,
+            marginVertical: spacing.sm,
+          }}
+        />
+        <SettingRow
+          icon="checkmark-circle"
+          iconColor="#10B981"
+          label="Accept Applications"
+          sublabel="Candidates can apply through the app"
+          name="isApplyEnabled"
+          control={control}
+          trackColor="#10B981"
+        />
+      </PremiumCard>
+    </View>
+  );
+};
+
+// ─── Step 2: Details ──────────────────────────────────────────────────────────
+
+const StepDetails = ({ control, errors }: any) => {
+  const { colors, spacing } = useTheme();
+
+  return (
+    <View>
+      <StepHeader
+        icon="list-outline"
+        title="Role Details"
+        subtitle="Work arrangements and candidate requirements"
+      />
+
+      <PremiumCard title="Work Arrangement" icon="business-outline">
+        <Controller
+          name="experienceLevel"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <SelectPicker
+              label="Experience Level"
+              required
+              value={value}
+              options={EXPERIENCE_LEVELS.map((e) => ({
+                value: e.value,
+                label: e.label,
+              }))}
+              onSelect={onChange}
+              placeholder="Select experience level"
+              error={errors.experienceLevel?.message}
+            />
+          )}
+        />
+
+        <Controller
+          name="educationLevel"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <SelectPicker
+              label="Education Level"
+              value={value ?? ''}
+              options={EDUCATION_LEVELS.map((e) => ({
+                value: e.value,
+                label: e.label,
+              }))}
+              onSelect={onChange}
+              placeholder="Select education level"
+            />
+          )}
+        />
+
+        <Controller
+          name="remote"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <SelectPicker
+              label="Work Mode"
+              value={value ?? 'on-site'}
+              options={REMOTE_OPTIONS}
+              onSelect={onChange}
+              placeholder="Select work mode"
+            />
+          )}
+        />
+
+        <Controller
+          name="workArrangement"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <SelectPicker
+              label="Work Arrangement"
+              value={value ?? 'office'}
+              options={WORK_ARRANGEMENTS}
+              onSelect={onChange}
+              placeholder="Select arrangement"
+            />
+          )}
+        />
+      </PremiumCard>
+
+      <PremiumCard title="Required Skills" icon="construct-outline">
+        <Controller
+          name="skills"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <TagInput
+              label=""
+              values={value ?? []}
+              onChange={onChange}
+              placeholder="Type a skill and press Add"
+            />
+          )}
+        />
+      </PremiumCard>
+
+      <PremiumCard title="Requirements" icon="checkmark-circle-outline">
+        <Controller
+          name="requirements"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <TagInput
+              label=""
+              values={value ?? []}
+              onChange={onChange}
+              placeholder="Add a requirement and press Add"
+            />
+          )}
+        />
+      </PremiumCard>
+
+      <PremiumCard title="Responsibilities" icon="list-outline">
+        <Controller
+          name="responsibilities"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <TagInput
+              label=""
+              values={value ?? []}
+              onChange={onChange}
+              placeholder="Add a responsibility and press Add"
+            />
+          )}
+        />
+      </PremiumCard>
+
+      <PremiumCard title="Benefits & Perks" icon="heart-outline">
+        <Controller
+          name="benefits"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <TagInput
+              label=""
+              values={value ?? []}
+              onChange={onChange}
+              placeholder="Add a benefit and press Add"
+            />
+          )}
+        />
+      </PremiumCard>
+    </View>
+  );
+};
+
+// ─── Step 3: Salary & Location ────────────────────────────────────────────────
+
+const StepSalaryLocation = ({
+  control,
+  errors,
+  watch,
+  setValue,
+  salaryMode,
+}: any) => {
+  const { colors, spacing, radius } = useTheme();
+  const locationLat = watch('locationLat');
+  const locationLng = watch('locationLng');
+  const hasPin =
+    locationLat &&
+    locationLng &&
+    !isNaN(parseFloat(locationLat)) &&
+    !isNaN(parseFloat(locationLng));
+  const [mapVisible, setMapVisible] = useState(false);
+  const pinLat = hasPin ? parseFloat(locationLat) : 9.032;
+  const pinLng = hasPin ? parseFloat(locationLng) : 38.7469;
+
+  return (
+    <View>
+      <StepHeader
+        icon="cash-outline"
+        title="Salary, Location & Deadline"
+        subtitle="Compensation, where candidates will work, and timing"
+      />
+
+      <PremiumCard title="Salary & Compensation" icon="cash-outline">
+        <Controller
+          name="salaryMode"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <SelectPicker
+              label="Salary Display Mode"
+              required
+              value={value}
+              options={SALARY_MODES.map((m) => ({
+                value: m.value,
+                label: m.label,
+              }))}
+              onSelect={onChange}
+              placeholder="Select salary mode"
+              error={errors.salaryMode?.message}
+            />
+          )}
+        />
+
+        {salaryMode === 'range' && (
+          <>
+            <Controller
+              name="salaryCurrency"
+              control={control}
+              render={({ field: { value, onChange } }) => (
+                <PillSelector
+                  label="Currency"
+                  options={CURRENCIES}
+                  value={value ?? 'ETB'}
+                  onChange={onChange}
                 />
-              )} />
+              )}
+            />
+
+            <View
+              style={{
+                flexDirection: 'row',
+                gap: spacing.md,
+                marginBottom: spacing.md,
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Controller
+                  name="salaryMin"
+                  control={control}
+                  render={({ field: { value, onChange } }) => (
+                    <FormField
+                      label="Min Salary"
+                      value={value}
+                      onChangeText={onChange}
+                      placeholder="e.g. 15000"
+                      keyboardType="numeric"
+                    />
+                  )}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Controller
+                  name="salaryMax"
+                  control={control}
+                  render={({ field: { value, onChange } }) => (
+                    <FormField
+                      label="Max Salary"
+                      value={value}
+                      onChangeText={onChange}
+                      placeholder="e.g. 30000"
+                      keyboardType="numeric"
+                    />
+                  )}
+                />
+              </View>
             </View>
-            <View style={f2.salaryHalf}>
-              <Controller name="salaryMax" control={control} render={({ field: { value, onChange } }) => (
+
+            <Controller
+              name="salaryPeriod"
+              control={control}
+              render={({ field: { value, onChange } }) => (
+                <SelectPicker
+                  label="Pay Period"
+                  value={value ?? 'monthly'}
+                  options={SALARY_PERIODS}
+                  onSelect={onChange}
+                  placeholder="Select pay period"
+                />
+              )}
+            />
+          </>
+        )}
+
+        {salaryMode !== 'range' && (
+          <InfoBanner type="info">
+            {salaryMode === 'hidden' && 'Salary will be hidden from candidates.'}
+            {salaryMode === 'negotiable' &&
+              'Salary will be shown as "Negotiable".'}
+            {salaryMode === 'company-scale' &&
+              'Salary will be shown as "As per company scale".'}
+          </InfoBanner>
+        )}
+      </PremiumCard>
+
+      <PremiumCard title="Job Location" icon="location-outline">
+        <Controller
+          name="region"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <SelectPicker
+              label="Region"
+              required
+              value={value}
+              options={ETHIOPIAN_REGIONS.map((r) => ({
+                value: r.value,
+                label: r.label,
+              }))}
+              onSelect={onChange}
+              placeholder="Select region"
+              error={errors.region?.message}
+              searchable
+            />
+          )}
+        />
+
+        <View
+          style={{
+            flexDirection: 'row',
+            gap: spacing.md,
+            marginBottom: spacing.sm,
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            <Controller
+              name="city"
+              control={control}
+              render={({ field: { value, onChange } }) => (
                 <FormField
-                  label="Max Salary"
+                  label="City"
                   value={value}
                   onChangeText={onChange}
-                  placeholder="e.g. 30000"
-                  keyboardType="numeric"
-                  error={errors.salaryMax?.message}
+                  placeholder="e.g. Addis Ababa"
                 />
-              )} />
+              )}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Controller
+              name="subCity"
+              control={control}
+              render={({ field: { value, onChange } }) => (
+                <FormField
+                  label="Sub-City"
+                  value={value}
+                  onChangeText={onChange}
+                  placeholder="e.g. Bole"
+                />
+              )}
+            />
+          </View>
+        </View>
+
+        <Controller
+          name="woreda"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <FormField
+              label="Woreda"
+              value={value}
+              onChangeText={onChange}
+              placeholder="e.g. Woreda 03"
+            />
+          )}
+        />
+
+        <Controller
+          name="specificLocation"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <FormField
+              label="Specific Location / Landmark"
+              value={value}
+              onChangeText={onChange}
+              placeholder="e.g. Near Bole Medhanialem, Edna Mall"
+              hint="Helps candidates find you easily"
+            />
+          )}
+        />
+
+        <View
+          style={[
+            locationStyles.container,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: radius.lg,
+              padding: spacing.lg,
+            },
+          ]}
+        >
+          <View style={locationStyles.headerRow}>
+            <View
+              style={[
+                locationStyles.iconCircle,
+                {
+                  backgroundColor: `${colors.primary}15`,
+                  borderRadius: radius.sm,
+                },
+              ]}
+            >
+              <Ionicons name="pin" size={16} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={[locationStyles.title, { color: colors.text }]}
+              >
+                Pin Exact Location
+              </Text>
+              <Text
+                style={[locationStyles.subtitle, { color: colors.textMuted }]}
+              >
+                Lets candidates find you on the "Jobs Near Me" map
+              </Text>
             </View>
           </View>
 
-          <Controller name="salaryPeriod" control={control} render={({ field: { value, onChange } }) => (
-            <SelectPicker
-              label="Pay Period"
-              value={value ?? 'monthly'}
-              options={SALARY_PERIODS}
-              onSelect={onChange}
-              placeholder="Select pay period"
-              error={errors.salaryPeriod?.message}
-            />
-          )} />
-        </>
-      )}
+          {hasPin && (
+            <View
+              style={[
+                locationStyles.coordBadge,
+                {
+                  backgroundColor: `${colors.primary}12`,
+                  borderColor: `${colors.primary}30`,
+                  borderRadius: radius.md,
+                },
+              ]}
+            >
+              <Ionicons
+                name="checkmark-circle"
+                size={16}
+                color={colors.primary}
+              />
+              <Text
+                style={[
+                  locationStyles.coordText,
+                  { color: colors.primary },
+                ]}
+              >
+                {parseFloat(locationLat).toFixed(5)}°N,{' '}
+                {parseFloat(locationLng).toFixed(5)}°E
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setValue('locationLat', '');
+                  setValue('locationLng', '');
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons
+                  name="close-circle"
+                  size={18}
+                  color={colors.textMuted}
+                />
+              </TouchableOpacity>
+            </View>
+          )}
 
-      {salaryMode !== 'range' && (
-        <View style={[f2.salaryNote, { backgroundColor: `${c.info}15`, borderColor: `${c.info}30` }]}>
-          <Ionicons name="information-circle-outline" size={20} color={c.info} />
-          <Text style={[f2.salaryNoteText, { color: c.textMuted }]}>
-            {salaryMode === 'hidden' && 'Salary will be hidden from candidates.'}
-            {salaryMode === 'negotiable' && 'Salary will be shown as "Negotiable".'}
-            {salaryMode === 'company-scale' && 'Salary will be shown as "As per company scale".'}
-          </Text>
+          <TouchableOpacity
+            style={[
+              locationStyles.mapButton,
+              {
+                borderColor: colors.primary,
+                backgroundColor: `${colors.primary}08`,
+                borderRadius: radius.md,
+              },
+            ]}
+            onPress={() => setMapVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="map-outline" size={18} color={colors.primary} />
+            <Text style={[locationStyles.mapButtonText, { color: colors.primary }]}>
+              {hasPin ? 'Move Pin on Map' : 'Pick Location on Map'}
+            </Text>
+          </TouchableOpacity>
         </View>
-      )}
+      </PremiumCard>
+
+      <PremiumCard title="Hiring Details" icon="calendar-outline">
+        <Controller
+          name="applicationDeadline"
+          control={control}
+          render={({ field: { value, onChange } }) => (
+            <FormField
+              label="Application Deadline"
+              required
+              value={value}
+              onChangeText={onChange}
+              placeholder="YYYY-MM-DD"
+              hint="Format: YYYY-MM-DD  (e.g. 2026-12-31)"
+              error={errors.applicationDeadline?.message}
+              keyboardType="numbers-and-punctuation"
+            />
+          )}
+        />
+
+        <View
+          style={{
+            flexDirection: 'row',
+            gap: spacing.md,
+            marginTop: spacing.sm,
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            <Controller
+              name="candidatesNeeded"
+              control={control}
+              render={({ field: { value, onChange } }) => (
+                <FormField
+                  label="No. of Positions"
+                  required
+                  value={String(value ?? '1')}
+                  onChangeText={onChange}
+                  placeholder="e.g. 3"
+                  keyboardType="numeric"
+                  error={errors.candidatesNeeded?.message}
+                />
+              )}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Controller
+              name="demographicSex"
+              control={control}
+              render={({ field: { value, onChange } }) => (
+                <SelectPicker
+                  label="Gender Requirement"
+                  value={value ?? 'any'}
+                  options={DEMOGRAPHIC_SEX}
+                  onSelect={onChange}
+                  placeholder="Any"
+                />
+              )}
+            />
+          </View>
+        </View>
+      </PremiumCard>
+
+      <MapPickerModal
+        visible={mapVisible}
+        initialLat={pinLat}
+        initialLng={pinLng}
+        hasExistingPin={!!hasPin}
+        onConfirm={(lat, lng) => {
+          setValue('locationLat', lat.toFixed(6));
+          setValue('locationLng', lng.toFixed(6));
+          setMapVisible(false);
+        }}
+        onClose={() => setMapVisible(false)}
+      />
     </View>
   );
 };
 
-// ─── STEP 4: Preview ──────────────────────────────────────────────────────────
-const StepPreview = ({ watch }: any) => {
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+// ─── Step 4: Preview ──────────────────────────────────────────────────────────
+
+const StepPreview = ({
+  watch,
+  isEdit,
+}: {
+  watch: any;
+  isEdit: boolean;
+}) => {
+  const { colors, spacing, radius, shadows } = useTheme();
   const vals = watch();
 
-  const cat = JOB_CATEGORIES.find(x => x.value === vals.category)?.label ?? vals.category;
-  const type = JOB_TYPES.find(x => x.value === vals.type)?.label ?? vals.type;
-  const exp = EXPERIENCE_LEVELS.find(x => x.value === vals.experienceLevel)?.label ?? vals.experienceLevel;
-  const region = ETHIOPIAN_REGIONS.find(x => x.value === vals.region)?.label ?? vals.region;
-  const salMode = SALARY_MODES.find(x => x.value === vals.salaryMode)?.label ?? vals.salaryMode;
+  const cat =
+    JOB_CATEGORIES.find((x) => x.value === vals.category)?.label ??
+    vals.category;
+  const type =
+    JOB_TYPES.find((x) => x.value === vals.type)?.label ?? vals.type;
+  const exp =
+    EXPERIENCE_LEVELS.find((x) => x.value === vals.experienceLevel)
+      ?.label ?? vals.experienceLevel;
+  const edu =
+    EDUCATION_LEVELS.find((x) => x.value === vals.educationLevel)
+      ?.label ?? vals.educationLevel;
+  const region =
+    ETHIOPIAN_REGIONS.find((x) => x.value === vals.region)?.label ??
+    vals.region;
+  const sal =
+    SALARY_MODES.find((x) => x.value === vals.salaryMode)?.label ??
+    vals.salaryMode;
+  const remote =
+    REMOTE_OPTIONS.find((x) => x.value === vals.remote)?.label ?? vals.remote;
 
-  const rows: Array<{ icon: string; label: string; value: string }> = [
-    { icon: 'briefcase-outline', label: 'Category', value: cat },
-    { icon: 'time-outline', label: 'Type', value: type },
-    { icon: 'trending-up-outline', label: 'Experience', value: exp },
-    { icon: 'location-outline', label: 'Location', value: `${vals.city ? vals.city + ', ' : ''}${region}` },
-    { icon: 'calendar-outline', label: 'Deadline', value: vals.applicationDeadline },
-    { icon: 'people-outline', label: 'Positions', value: String(vals.candidatesNeeded ?? 1) },
-    { icon: 'cash-outline', label: 'Salary', value: salMode },
+  const salaryDisplay =
+    vals.salaryMode === 'range' && vals.salaryMin
+      ? `${vals.salaryCurrency ?? 'ETB'} ${vals.salaryMin}–${
+          vals.salaryMax
+        } / ${vals.salaryPeriod ?? 'month'}`
+      : sal;
+
+  const locationParts = [
+    vals.specificLocation,
+    vals.city,
+    vals.subCity,
+    vals.woreda,
+    region,
+  ].filter(Boolean);
+
+  const hasPin =
+    vals.locationLat &&
+    vals.locationLng &&
+    !isNaN(parseFloat(vals.locationLat)) &&
+    !isNaN(parseFloat(vals.locationLng));
+
+  const detailRows = [
+    { icon: 'briefcase-outline' as const, label: 'Category', value: cat },
+    { icon: 'time-outline' as const, label: 'Type', value: type },
+    {
+      icon: 'trending-up-outline' as const,
+      label: 'Experience',
+      value: exp,
+    },
+    {
+      icon: 'school-outline' as const,
+      label: 'Education',
+      value: edu || 'Not specified',
+    },
+    { icon: 'globe-outline' as const, label: 'Work Mode', value: remote },
+    {
+      icon: 'cash-outline' as const,
+      label: 'Salary',
+      value: salaryDisplay,
+    },
+    {
+      icon: 'location-outline' as const,
+      label: 'Location',
+      value: locationParts.join(', ') || '—',
+    },
+    {
+      icon: 'calendar-outline' as const,
+      label: 'Deadline',
+      value: vals.applicationDeadline || '—',
+    },
+    {
+      icon: 'people-outline' as const,
+      label: 'Positions',
+      value: String(vals.candidatesNeeded ?? 1),
+    },
+    {
+      icon: 'pin-outline' as const,
+      label: 'Map Pin',
+      value: hasPin
+        ? `${parseFloat(vals.locationLat).toFixed(4)}°N, ${parseFloat(
+            vals.locationLng
+          ).toFixed(4)}°E`
+        : 'Not set',
+    },
   ];
 
   return (
     <View>
-      <SectionHeader icon="eye-outline" title="Preview" />
+      <StepHeader
+        icon="eye-outline"
+        title="Review & Publish"
+        subtitle={
+          isEdit
+            ? 'Review your changes before updating'
+            : 'Everything look good?'
+        }
+      />
 
-      <View style={[f2.previewCard, { backgroundColor: c.surface, borderColor: c.border }]}>
-        <Text style={[f2.previewTitle, { color: c.text }]}>{vals.title || 'No title'}</Text>
-        {vals.urgent && (
-          <View style={[f2.badge, { backgroundColor: '#FEE2E2' }]}>
-            <Text style={{ color: '#DC2626', fontSize: 11, fontWeight: '700' }}>🔥 URGENT</Text>
+      {/* Title Card */}
+      <View
+        style={[
+          previewStyles.titleCard,
+          {
+            backgroundColor: colors.bgCard,
+            borderColor: colors.border,
+            borderRadius: radius.lg,
+            padding: spacing.lg,
+            marginBottom: spacing.lg,
+            ...shadows.sm,
+          },
+        ]}
+      >
+        <Text
+          style={[previewStyles.jobTitle, { color: colors.text }]}
+          numberOfLines={2}
+        >
+          {vals.title || 'No title entered'}
+        </Text>
+
+        {(vals.urgent || vals.featured) && (
+          <View style={previewStyles.badgeRow}>
+            {vals.urgent && (
+              <View
+                style={[
+                  previewStyles.badge,
+                  {
+                    backgroundColor: `${colors.danger}15`,
+                    borderRadius: radius.sm,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    previewStyles.badgeText,
+                    { color: colors.danger },
+                  ]}
+                >
+                  URGENT
+                </Text>
+              </View>
+            )}
+            {vals.featured && (
+              <View
+                style={[
+                  previewStyles.badge,
+                  {
+                    backgroundColor: `${colors.warning}15`,
+                    borderRadius: radius.sm,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    previewStyles.badgeText,
+                    { color: colors.warning },
+                  ]}
+                >
+                  FEATURED
+                </Text>
+              </View>
+            )}
           </View>
         )}
-        {vals.featured && (
-          <View style={[f2.badge, { backgroundColor: '#FEF3C7', marginLeft: 6 }]}>
-            <Text style={{ color: '#D97706', fontSize: 11, fontWeight: '700' }}>⭐ FEATURED</Text>
-          </View>
-        )}
+
+        {vals.shortDescription ? (
+          <Text
+            style={[
+              previewStyles.shortDesc,
+              { color: colors.textSecondary },
+            ]}
+            numberOfLines={3}
+          >
+            {vals.shortDescription}
+          </Text>
+        ) : null}
       </View>
 
-      {rows.map(r => (
-        <View key={r.label} style={[f2.previewRow, { borderBottomColor: c.border }]}>
-          <Ionicons name={r.icon as any} size={16} color={c.textMuted} />
-          <Text style={[f2.previewRowLabel, { color: c.textMuted }]}>{r.label}</Text>
-          <Text style={[f2.previewRowValue, { color: c.text }]} numberOfLines={1}>{r.value || '—'}</Text>
-        </View>
-      ))}
+      {/* Details Card */}
+      <View
+        style={[
+          previewStyles.section,
+          {
+            backgroundColor: colors.bgCard,
+            borderColor: colors.border,
+            borderRadius: radius.lg,
+            padding: spacing.lg,
+            marginBottom: spacing.lg,
+            ...shadows.sm,
+          },
+        ]}
+      >
+        <Text style={[previewStyles.sectionTitle, { color: colors.textMuted }]}>
+          JOB DETAILS
+        </Text>
+        {detailRows.map((row, index) => (
+          <View
+            key={row.label}
+            style={[
+              previewStyles.row,
+              index < detailRows.length - 1 && {
+                borderBottomWidth: StyleSheet.hairlineWidth,
+                borderBottomColor: colors.border,
+              },
+            ]}
+          >
+            <View
+              style={[
+                previewStyles.rowIcon,
+                {
+                  backgroundColor: `${colors.primary}12`,
+                  borderRadius: radius.sm,
+                },
+              ]}
+            >
+              <Ionicons name={row.icon} size={14} color={colors.primary} />
+            </View>
+            <Text style={[previewStyles.rowLabel, { color: colors.textMuted }]}>
+              {row.label}
+            </Text>
+            <Text
+              style={[previewStyles.rowValue, { color: colors.text }]}
+              numberOfLines={1}
+            >
+              {row.value || '—'}
+            </Text>
+          </View>
+        ))}
+      </View>
 
-      {vals.shortDescription ? (
-        <View style={[f2.previewDesc, { backgroundColor: c.surface, borderColor: c.border }]}>
-          <Text style={[f2.previewDescLabel, { color: c.textMuted }]}>Overview</Text>
-          <Text style={[f2.previewDescText, { color: c.text }]}>{vals.shortDescription}</Text>
+      {/* Array Sections (Skills, Requirements, etc.) */}
+      {[
+        {
+          key: 'skills',
+          icon: 'construct-outline' as const,
+          label: 'Skills',
+        },
+        {
+          key: 'requirements',
+          icon: 'checkmark-circle-outline' as const,
+          label: 'Requirements',
+        },
+        {
+          key: 'responsibilities',
+          icon: 'list-outline' as const,
+          label: 'Responsibilities',
+        },
+        {
+          key: 'benefits',
+          icon: 'heart-outline' as const,
+          label: 'Benefits',
+        },
+      ].map((arr) => {
+        const items: string[] = vals[arr.key] ?? [];
+        if (items.length === 0) return null;
+
+        return (
+          <View
+            key={arr.key}
+            style={[
+              previewStyles.section,
+              {
+                backgroundColor: colors.bgCard,
+                borderColor: colors.border,
+                borderRadius: radius.lg,
+                padding: spacing.lg,
+                marginBottom: spacing.lg,
+                ...shadows.sm,
+              },
+            ]}
+          >
+            <View style={previewStyles.arrayHeader}>
+              <Ionicons name={arr.icon} size={15} color={colors.primary} />
+              <Text
+                style={[
+                  previewStyles.sectionTitle,
+                  { color: colors.textMuted },
+                ]}
+              >
+                {arr.label.toUpperCase()}
+              </Text>
+            </View>
+            <View style={previewStyles.tagContainer}>
+              {items.map((item, i) => (
+                <View
+                  key={i}
+                  style={[
+                    previewStyles.tag,
+                    {
+                      backgroundColor: `${colors.primary}12`,
+                      borderColor: `${colors.primary}25`,
+                      borderRadius: radius.full,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      previewStyles.tagText,
+                      { color: colors.primary },
+                    ]}
+                  >
+                    {item}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        );
+      })}
+
+      {/* Description Preview */}
+      {vals.description ? (
+        <View
+          style={[
+            previewStyles.section,
+            {
+              backgroundColor: colors.bgCard,
+              borderColor: colors.border,
+              borderRadius: radius.lg,
+              padding: spacing.lg,
+              marginBottom: spacing.lg,
+              ...shadows.sm,
+            },
+          ]}
+        >
+          <Text
+            style={[previewStyles.sectionTitle, { color: colors.textMuted }]}
+          >
+            DESCRIPTION PREVIEW
+          </Text>
+          <Text
+            style={[
+              previewStyles.descText,
+              { color: colors.textSecondary },
+            ]}
+            numberOfLines={10}
+          >
+            {vals.description}
+          </Text>
         </View>
       ) : null}
     </View>
   );
 };
 
-// ─── Section Header ───────────────────────────────────────────────────────────
-const SectionHeader = ({ icon, title }: { icon: string; title: string }) => {
-  const { theme } = useThemeStore();
-  const c = theme.colors;
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAP PICKER MODAL
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface MapPickerModalProps {
+  visible: boolean;
+  initialLat: number;
+  initialLng: number;
+  hasExistingPin: boolean;
+  onConfirm: (lat: number, lng: number) => void;
+  onClose: () => void;
+}
+
+const MapPickerModal: React.FC<MapPickerModalProps> = ({
+  visible,
+  initialLat,
+  initialLng,
+  hasExistingPin,
+  onConfirm,
+  onClose,
+}) => {
+  const { colors, spacing, radius, shadows } = useTheme();
+  const insets = useSafeAreaInsets();
+  const [pin, setPin] = useState<{ lat: number; lng: number } | null>(
+    hasExistingPin ? { lat: initialLat, lng: initialLng } : null
+  );
+  const [mapLoaded, setMapLoaded] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setPin(hasExistingPin ? { lat: initialLat, lng: initialLng } : null);
+      setMapLoaded(false);
+    }
+  }, [visible]);
+
   return (
-    <View style={[f2.secHeader, { borderBottomColor: c.border }]}>
-      <Ionicons name={icon as any} size={20} color={c.primary} />
-      <Text style={[f2.secTitle, { color: c.text }]}>{title}</Text>
-    </View>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <View style={[mapStyles.container, { backgroundColor: colors.bg }]}>
+        {/* Header */}
+        <View
+          style={[
+            mapStyles.header,
+            {
+              backgroundColor: colors.surface,
+              borderBottomColor: colors.border,
+              paddingTop: insets.top + spacing.sm,
+              paddingBottom: spacing.md,
+              paddingHorizontal: spacing.lg,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            onPress={onClose}
+            style={mapStyles.closeButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close" size={24} color={colors.text} />
+          </TouchableOpacity>
+
+          <View style={mapStyles.headerCenter}>
+            <Text style={[mapStyles.headerTitle, { color: colors.text }]}>
+              Pin Job Location
+            </Text>
+            <Text
+              style={[mapStyles.headerSubtitle, { color: colors.textMuted }]}
+            >
+              {pin
+                ? 'Drag the pin to fine-tune'
+                : 'Tap anywhere to place a pin'}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            onPress={() => pin && onConfirm(pin.lat, pin.lng)}
+            disabled={!pin}
+            style={[
+              mapStyles.confirmButton,
+              {
+                backgroundColor: pin ? colors.primary : colors.textDisabled,
+                borderRadius: radius.md,
+              },
+            ]}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+            <Text style={mapStyles.confirmText}>Confirm</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Map */}
+        <View style={{ flex: 1 }}>
+          <MapView
+            style={mapStyles.map}
+            provider={undefined}
+            initialRegion={{
+              latitude: initialLat,
+              longitude: initialLng,
+              latitudeDelta: 0.04,
+              longitudeDelta: 0.04,
+            }}
+            onMapReady={() => setMapLoaded(true)}
+            onPress={(e) => {
+              const { latitude, longitude } = e.nativeEvent.coordinate;
+              setPin({ lat: latitude, lng: longitude });
+            }}
+          >
+            <UrlTile
+              urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+              maximumZ={19}
+              flipY={false}
+              tileSize={256}
+            />
+            {pin && (
+              <Marker
+                coordinate={{ latitude: pin.lat, longitude: pin.lng }}
+                title="Job Location"
+                pinColor={colors.primary}
+                draggable
+                onDragEnd={(e) => {
+                  const { latitude, longitude } = e.nativeEvent.coordinate;
+                  setPin({ lat: latitude, lng: longitude });
+                }}
+              />
+            )}
+          </MapView>
+          {!mapLoaded && (
+            <View style={mapStyles.loader}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          )}
+        </View>
+
+        {/* Footer */}
+        <View
+          style={[
+            mapStyles.footer,
+            {
+              backgroundColor: colors.surface,
+              borderTopColor: colors.border,
+              paddingHorizontal: spacing.lg,
+              paddingVertical: spacing.lg,
+              paddingBottom: spacing.lg + insets.bottom,
+            },
+          ]}
+        >
+          {pin ? (
+            <View style={mapStyles.coordRow}>
+              <View
+                style={[
+                  mapStyles.coordIcon,
+                  {
+                    backgroundColor: `${colors.primary}15`,
+                    borderRadius: radius.md,
+                  },
+                ]}
+              >
+                <Ionicons name="pin" size={18} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[mapStyles.coordLabel, { color: colors.textMuted }]}
+                >
+                  Pinned coordinates
+                </Text>
+                <Text
+                  style={[mapStyles.coordValue, { color: colors.text }]}
+                >
+                  {pin.lat.toFixed(5)}°N, {pin.lng.toFixed(5)}°E
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setPin(null)}
+                style={[
+                  mapStyles.clearButton,
+                  { borderColor: colors.danger, borderRadius: radius.sm },
+                ]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text
+                  style={[
+                    mapStyles.clearButtonText,
+                    { color: colors.danger },
+                  ]}
+                >
+                  Clear
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={mapStyles.instructionRow}>
+              <View
+                style={[
+                  mapStyles.instructionIcon,
+                  {
+                    backgroundColor: `${colors.primary}15`,
+                    borderRadius: radius.md,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="hand-left-outline"
+                  size={20}
+                  color={colors.primary}
+                />
+              </View>
+              <Text
+                style={[
+                  mapStyles.instructionText,
+                  { color: colors.textMuted },
+                ]}
+              >
+                Tap anywhere on the map to drop a pin. You can drag it to
+                adjust the location.
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </Modal>
   );
 };
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const f = StyleSheet.create({
-  root:           { flex: 1 },
-  stepBar:        { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
-  stepItem:       { flex: 1, alignItems: 'center', gap: 4 },
-  stepDot:        { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  stepNum:        { fontSize: 11, fontWeight: '700' },
-  stepLabel:      { fontSize: 10, fontWeight: '600', textAlign: 'center' },
-  scroll:         { padding: 16, paddingBottom: 40 },
-  footer:         { flexDirection: 'row', padding: 16, borderTopWidth: 1, gap: 10 },
-  footerBtn:      { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
-  outlineBtn:     { borderWidth: 1.5 },
-  primaryBtn:     {},
-  footerBtnText:  { fontSize: 15, fontWeight: '600' },
-  primaryBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  lastBtns:       { flex: 1, flexDirection: 'row' },
+// ═══════════════════════════════════════════════════════════════════════════════
+// STYLES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
 });
 
-const f2 = StyleSheet.create({
-  flagRow:        { borderRadius: 14, borderWidth: 1, overflow: 'hidden', marginBottom: 16 },
-  flagItem:       { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 14, gap: 10 },
-  flagLabel:      { flex: 1, fontSize: 14, fontWeight: '500' },
-  salaryRow:      { flexDirection: 'row', gap: 10 },
-  salaryHalf:     { flex: 1 },
-  salaryNote:     { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14, borderRadius: 12, borderWidth: 1, marginBottom: 16 },
-  salaryNoteText: { flex: 1, fontSize: 13, lineHeight: 18 },
-  secHeader:      { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 20, paddingBottom: 12, borderBottomWidth: 1 },
-  secTitle:       { fontSize: 17, fontWeight: '700' },
-  previewCard:    { padding: 16, borderRadius: 14, borderWidth: 1, marginBottom: 16, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
-  previewTitle:   { fontSize: 18, fontWeight: '700', flex: 1 },
-  badge:          { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  previewRow:     { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, gap: 10 },
-  previewRowLabel:{ fontSize: 13, width: 90 },
-  previewRowValue:{ flex: 1, fontSize: 13, fontWeight: '500', textAlign: 'right' },
-  previewDesc:    { marginTop: 12, padding: 14, borderRadius: 14, borderWidth: 1 },
-  previewDescLabel:{ fontSize: 11, fontWeight: '600', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
-  previewDescText:{ fontSize: 14, lineHeight: 20 },
+// ─── Step Indicator Styles ────────────────────────────────────────────────────
+
+const stepStyles = StyleSheet.create({
+  container: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stepItem: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  circle: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeCircle: {
+    shadowColor: '#2DD4A0',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
+  },
+  circleText: {
+    fontSize: 13,
+  },
+  label: {
+    fontSize: 10,
+    textAlign: 'center',
+    letterSpacing: 0.3,
+  },
+  connector: {
+    flex: 1,
+    marginHorizontal: 4,
+    marginBottom: 16,
+  },
+});
+
+// ─── Footer Styles ────────────────────────────────────────────────────────────
+
+const footerStyles = StyleSheet.create({
+  container: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  button: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 18,
+  },
+  secondaryButton: {
+    borderWidth: 1.5,
+  },
+  primaryButton: {
+    shadowColor: '#2DD4A0',
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  buttonText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  primaryText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+});
+
+// ─── Step Header Styles ───────────────────────────────────────────────────────
+
+const headerStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  iconContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  subtitle: {
+    fontSize: 12,
+    marginTop: 3,
+    lineHeight: 16,
+  },
+});
+
+// ─── Card Styles ──────────────────────────────────────────────────────────────
+
+const cardStyles = StyleSheet.create({
+  container: {
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  iconBg: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+});
+
+// ─── Pill Selector Styles ─────────────────────────────────────────────────────
+
+const pillStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  pill: {
+    borderWidth: 1.5,
+    minHeight: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pillText: {
+    fontSize: 13,
+  },
+  error: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+});
+
+// ─── Info Banner Styles ───────────────────────────────────────────────────────
+
+const bannerStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    borderWidth: 1,
+    marginTop: 8,
+  },
+  text: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+});
+
+// ─── Setting Row Styles ───────────────────────────────────────────────────────
+
+const settingStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  iconBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  sublabel: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+});
+
+// ─── Location Section Styles ──────────────────────────────────────────────────
+
+const locationStyles = StyleSheet.create({
+  container: {
+    borderWidth: 1,
+    marginTop: 12,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 12,
+  },
+  iconCircle: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  title: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  subtitle: {
+    fontSize: 12,
+    marginTop: 2,
+    lineHeight: 17,
+  },
+  coordBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  coordText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  mapButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 13,
+    borderWidth: 1.5,
+  },
+  mapButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+});
+
+// ─── Preview Styles ───────────────────────────────────────────────────────────
+
+const previewStyles = StyleSheet.create({
+  titleCard: {
+    borderWidth: 1,
+  },
+  jobTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    lineHeight: 26,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 10,
+  },
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  shortDesc: {
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 10,
+  },
+  section: {
+    borderWidth: 1,
+  },
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 10,
+  },
+  rowIcon: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowLabel: {
+    fontSize: 12,
+    width: 85,
+  },
+  rowValue: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  arrayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  tagContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  tag: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderWidth: 1,
+  },
+  tagText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  descText: {
+    fontSize: 13,
+    lineHeight: 20,
+  },
+});
+
+// ─── Map Styles ───────────────────────────────────────────────────────────────
+
+const mapStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  headerCenter: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  confirmButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  confirmText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  map: {
+    flex: 1,
+  },
+  loader: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  footer: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  coordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  coordIcon: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coordLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  coordValue: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  clearButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderWidth: 1,
+  },
+  clearButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  instructionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  instructionIcon: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  instructionText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+  },
 });

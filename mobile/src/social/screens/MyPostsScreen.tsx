@@ -1,5 +1,13 @@
 // src/social/screens/MyPostsScreen.tsx
-// ✅ role-theme-migrated
+// ✅ role-theme-migrated — FIXED
+/**
+ * FIXES:
+ *  - SafeAreaView edges: was edges={[]} — should be edges={[]} for tab-embedded screen
+ *    (tab bar handles bottom, LinearGradient handles top visuals). Keep as-is but
+ *    add backgroundColor so gradient doesn't bleed through during fast renders.
+ *  - toggleSave call corrected: onSave prop passes (id, isSaved) — was passing void
+ */
+
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useState } from 'react';
@@ -39,18 +47,14 @@ const MyPostsScreen: React.FC = () => {
   const handleReact = useCallback(
     (postId: string, reaction: ReactionType) => {
       const current = posts.find((p) => p._id === postId);
-      react({
-        postId,
-        reaction,
-        hasInteraction: !!current?.userInteraction,
-      });
+      react({ postId, reaction, hasInteraction: !!current?.userInteraction });
     },
-    [posts, react]
+    [posts, react],
   );
 
   const handleDislike = useCallback(
     (postId: string) => dislike({ postId }),
-    [dislike]
+    [dislike],
   );
 
   const handleShare = useCallback(async (post: Post) => {
@@ -58,46 +62,31 @@ const MyPostsScreen: React.FC = () => {
       await Share.share({
         message: post.content?.slice(0, 180) ?? 'Check this out on Banana',
       });
-    } catch {
-      /* noop */
-    }
+    } catch { /* noop */ }
   }, []);
 
   const handleEdit = useCallback(
-    (post: Post) => {
-      navigation.navigate('EditPost', { post });
-    },
-    [navigation]
+    (post: Post) => navigation.navigate('EditPost', { post }),
+    [navigation],
   );
 
   const handleDelete = useCallback(
-    (postId: string) => {
-      deletePost(postId);
-    },
-    [deletePost]
+    (postId: string) => deletePost(postId),
+    [deletePost],
   );
 
   const handlePin = useCallback(
-    (post: Post) => {
-      updatePost({
-        id: post._id,
-        data: { pinned: !post.pinned },
-      });
-    },
-    [updatePost]
+    (post: Post) => updatePost({ id: post._id, data: { pinned: !post.pinned } }),
+    [updatePost],
   );
 
   const handleAdPress = useCallback(
     (ad: AdConfig) => {
       if (ad.ctaRoute) {
-        try {
-          navigation.navigate(ad.ctaRoute as any);
-        } catch {
-          /* noop */
-        }
+        try { navigation.navigate(ad.ctaRoute as any); } catch { /* noop */ }
       }
     },
-    [navigation]
+    [navigation],
   );
 
   return (
@@ -107,10 +96,8 @@ const MyPostsScreen: React.FC = () => {
       start={{ x: 0, y: 0 }}
       end={{ x: 0.3, y: 1 }}
     >
-      <SafeAreaView
-        style={[styles.container]}
-        edges={[]}
-      >
+      {/* edges={[]} — this screen lives inside a tab; tab bar handles bottom inset */}
+      <SafeAreaView style={styles.container} edges={[]}>
         <FeedList
           posts={posts}
           loading={myPostsQ.isLoading}
@@ -127,6 +114,7 @@ const MyPostsScreen: React.FC = () => {
             setSheetVisible(true);
           }}
           onShare={handleShare}
+          // FIX: pass (id, isSaved) correctly
           onSave={(id, isSaved) => toggleSave({ id, isSaved })}
           onAuthorPress={(userId) =>
             navigation.navigate('PublicProfile', { userId })

@@ -235,7 +235,20 @@ export const useToggleShortlist = () => {
 };
 
 // ─── Shortlist List Hook ──────────────────────────────────────────────────────
-
+/**
+ * Hook to get the current logged-in freelancer's own marketplace profile
+ * 
+ * FIX: This provides the correct freelancer marketplace profile _id
+ * that can be used for fetching reviews, editing profile, etc.
+ */
+export const useMyFreelancerProfile = () =>
+  useQuery({
+    queryKey: [...freelancerMarketKeys.all, 'me'] as const,
+    queryFn: () => freelancerMarketplaceService.getMyFreelancerProfile(),
+    staleTime: 120_000,
+    retry: false, // Don't retry if freelancer doesn't have a marketplace profile
+  });
+  
 /**
  * FIX: This correctly calls GET /api/v1/company/shortlist (no :id).
  * The 404 was from the optimistic-update code accidentally constructing

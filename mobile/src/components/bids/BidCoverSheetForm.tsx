@@ -2,16 +2,17 @@
 // react-hook-form controlled section for Cover Sheet fields.
 // Required fields: companyName, representative, companyEmail, companyPhone,
 //                  totalBidValue, currency, declarationAccepted.
+// UPDATED: Fixed infinite re-render loop caused by watch() in useEffect
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, Pressable, ScrollView,
-  Modal, FlatList, StyleSheet, KeyboardTypeOptions,
+  Modal, StyleSheet, KeyboardTypeOptions,
 } from 'react-native';
-import { Control, Controller, FieldErrors, UseFormSetValue } from 'react-hook-form';
+import { Control, Controller, FieldErrors, UseFormSetValue, useForm } from 'react-hook-form';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 import { BidCurrency } from '../../types/bid';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -25,9 +26,9 @@ export interface CoverSheetFormValues {
   companyAddress: string;
   tinNumber: string;
   licenseNumber: string;
-  totalBidValue: string;         // kept as string for TextInput, parsed on submit
+  totalBidValue: string;
   currency: BidCurrency;
-  bidValidityPeriod: string;     // string for TextInput
+  bidValidityPeriod: string;
   declarationAccepted: boolean;
 }
 
@@ -40,55 +41,33 @@ const CURRENCY_LABELS: Record<BidCurrency, string> = {
   GBP: 'GBP — British Pound',
 };
 
-// ── Palette helper ────────────────────────────────────────────────────────────
-
-function usePalette(isDark: boolean) {
-  return {
-    bg:          isDark ? '#0F172A' : '#F8FAFC',
-    card:        isDark ? '#1E293B' : '#FFFFFF',
-    headerBg:    isDark ? '#1A2540' : '#F1F5F9',
-    border:      isDark ? '#334155' : '#E2E8F0',
-    inputBg:     isDark ? '#0F172A' : '#F8FAFC',
-    inputBorder: isDark ? '#475569' : '#CBD5E1',
-    errorBorder: '#EF4444',
-    text:        isDark ? '#F1F5F9' : '#0F172A',
-    placeholder: isDark ? '#475569' : '#94A3B8',
-    muted:       isDark ? '#94A3B8' : '#64748B',
-    required:    '#EF4444',
-    accent:      '#F1BB03',
-    accentDark:  '#0A2540',
-    checkBg:     isDark ? '#1E293B' : '#FFFFFF',
-    checkActive: '#F1BB03',
-    modal:       isDark ? '#1E293B' : '#FFFFFF',
-    modalBorder: isDark ? '#334155' : '#E2E8F0',
-  };
-}
-
 // ── Shared field components ───────────────────────────────────────────────────
 
 interface FieldWrapProps {
   label: string;
   required?: boolean;
   error?: string;
-  palette: ReturnType<typeof usePalette>;
   children: React.ReactNode;
 }
 
-const FieldWrap: React.FC<FieldWrapProps> = ({ label, required, error, palette, children }) => (
-  <View style={fieldStyles.wrap}>
-    <Text style={[fieldStyles.label, { color: palette.muted }]}>
-      {label}
-      {required && <Text style={{ color: palette.required }}> *</Text>}
-    </Text>
-    {children}
-    {!!error && (
-      <View style={fieldStyles.errorRow}>
-        <Ionicons name="alert-circle" size={12} color={palette.required} />
-        <Text style={[fieldStyles.errorText, { color: palette.required }]}>{error}</Text>
-      </View>
-    )}
-  </View>
-);
+const FieldWrap: React.FC<FieldWrapProps> = ({ label, required, error, children }) => {
+  const { colors } = useTheme();
+  return (
+    <View style={fieldStyles.wrap}>
+      <Text style={[fieldStyles.label, { color: colors.textMuted }]}>
+        {label}
+        {required && <Text style={{ color: colors.danger }}> *</Text>}
+      </Text>
+      {children}
+      {!!error && (
+        <View style={fieldStyles.errorRow}>
+          <Ionicons name="alert-circle" size={12} color={colors.danger} />
+          <Text style={[fieldStyles.errorText, { color: colors.danger }]}>{error}</Text>
+        </View>
+      )}
+    </View>
+  );
+};
 
 interface StyledInputProps {
   value: string;
@@ -99,44 +78,47 @@ interface StyledInputProps {
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   multiline?: boolean;
   hasError?: boolean;
-  palette: ReturnType<typeof usePalette>;
 }
 
 const StyledInput: React.FC<StyledInputProps> = ({
   value, onChangeText, onBlur, placeholder, keyboardType,
-  autoCapitalize, multiline, hasError, palette,
-}) => (
-  <TextInput
-    value={value}
-    onChangeText={onChangeText}
-    onBlur={onBlur}
-    placeholder={placeholder}
-    placeholderTextColor={palette.placeholder}
-    keyboardType={keyboardType ?? 'default'}
-    autoCapitalize={autoCapitalize ?? 'sentences'}
-    multiline={multiline}
-    style={[
-      fieldStyles.input,
-      {
-        backgroundColor: palette.inputBg,
-        borderColor: hasError ? palette.errorBorder : palette.inputBorder,
-        color: palette.text,
-        minHeight: multiline ? 70 : 44,
-        textAlignVertical: multiline ? 'top' : 'center',
-      },
-    ]}
-  />
-);
+  autoCapitalize, multiline, hasError,
+}) => {
+  const { colors, radius } = useTheme();
+  return (
+    <TextInput
+      value={value}
+      onChangeText={onChangeText}
+      onBlur={onBlur}
+      placeholder={placeholder}
+      placeholderTextColor={colors.inputPlaceholder}
+      keyboardType={keyboardType ?? 'default'}
+      autoCapitalize={autoCapitalize ?? 'sentences'}
+      multiline={multiline}
+      style={[
+        fieldStyles.input,
+        {
+          backgroundColor: colors.inputBg,
+          borderColor: hasError ? colors.danger : colors.inputBorder,
+          color: colors.text,
+          borderRadius: radius.sm,
+          minHeight: multiline ? 70 : 44,
+          textAlignVertical: multiline ? 'top' : 'center',
+        },
+      ]}
+    />
+  );
+};
 
 // ── Currency picker modal ─────────────────────────────────────────────────────
 
 interface CurrencyPickerProps {
   value: BidCurrency;
   onChange: (v: BidCurrency) => void;
-  palette: ReturnType<typeof usePalette>;
 }
 
-const CurrencyPicker: React.FC<CurrencyPickerProps> = ({ value, onChange, palette }) => {
+const CurrencyPicker: React.FC<CurrencyPickerProps> = ({ value, onChange }) => {
+  const { colors, radius } = useTheme();
   const [open, setOpen] = useState(false);
 
   return (
@@ -146,8 +128,9 @@ const CurrencyPicker: React.FC<CurrencyPickerProps> = ({ value, onChange, palett
         style={[
           fieldStyles.input,
           {
-            backgroundColor: palette.inputBg,
-            borderColor: palette.inputBorder,
+            backgroundColor: colors.inputBg,
+            borderColor: colors.inputBorder,
+            borderRadius: radius.sm,
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -155,28 +138,28 @@ const CurrencyPicker: React.FC<CurrencyPickerProps> = ({ value, onChange, palett
           },
         ]}
       >
-        <Text style={{ color: palette.text, fontSize: 14 }}>{value}</Text>
-        <Ionicons name="chevron-down" size={16} color={palette.muted} />
+        <Text style={{ color: colors.text, fontSize: 14 }}>{value}</Text>
+        <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
       </Pressable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={modalStyles.overlay} onPress={() => setOpen(false)}>
-          <View style={[modalStyles.sheet, { backgroundColor: palette.modal, borderColor: palette.modalBorder }]}>
-            <Text style={[modalStyles.title, { color: palette.text }]}>Select Currency</Text>
+          <View style={[modalStyles.sheet, { backgroundColor: colors.bgCard, borderColor: colors.border, borderRadius: radius.xl }]}>
+            <Text style={[modalStyles.title, { color: colors.text }]}>Select Currency</Text>
             {CURRENCIES.map((cur) => (
               <Pressable
                 key={cur}
                 onPress={() => { onChange(cur); setOpen(false); }}
                 style={[
                   modalStyles.option,
-                  { borderBottomColor: palette.modalBorder },
-                  cur === value && { backgroundColor: palette.accent + '22' },
+                  { borderBottomColor: colors.border },
+                  cur === value && { backgroundColor: colors.primaryBg },
                 ]}
               >
-                <Text style={[modalStyles.optionText, { color: palette.text }]}>
+                <Text style={[modalStyles.optionText, { color: colors.text }]}>
                   {CURRENCY_LABELS[cur]}
                 </Text>
-                {cur === value && <Ionicons name="checkmark" size={16} color={palette.accent} />}
+                {cur === value && <Ionicons name="checkmark" size={16} color={colors.primary} />}
               </Pressable>
             ))}
           </View>
@@ -189,38 +172,113 @@ const CurrencyPicker: React.FC<CurrencyPickerProps> = ({ value, onChange, palett
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface Props {
-  control: Control<CoverSheetFormValues>;
-  errors: FieldErrors<CoverSheetFormValues>;
-  setValue: UseFormSetValue<CoverSheetFormValues>;
+  control?: Control<CoverSheetFormValues>;
+  errors?: FieldErrors<CoverSheetFormValues>;
+  setValue?: UseFormSetValue<CoverSheetFormValues>;
+  onValidChange?: (valid: boolean) => void;
+  onDataChange?: (data: CoverSheetFormValues | null) => void;
+  initialValues?: CoverSheetFormValues | null;
+  tenderCurrency?: BidCurrency;
 }
 
-export const BidCoverSheetForm: React.FC<Props> = ({ control, errors, setValue }) => {
-  const isDark = useThemeStore((s) => s.theme.isDark);
-  const palette = usePalette(isDark);
+export const BidCoverSheetForm: React.FC<Props> = ({
+  control: externalControl,
+  errors: externalErrors,
+  setValue: externalSetValue,
+  onValidChange,
+  onDataChange,
+  initialValues,
+  tenderCurrency = 'ETB',
+}) => {
+  const { colors, radius, spacing } = useTheme();
+
+  // Internal form when used standalone (no external control)
+  const {
+    control: internalControl,
+    formState: { errors: internalErrors, isValid },
+    setValue: internalSetValue,
+    watch,
+  } = useForm<CoverSheetFormValues>({
+    defaultValues: initialValues ?? {
+      companyName: '',
+      representative: '',
+      representativeTitle: '',
+      companyEmail: '',
+      companyPhone: '',
+      companyAddress: '',
+      tinNumber: '',
+      licenseNumber: '',
+      totalBidValue: '',
+      currency: tenderCurrency,
+      bidValidityPeriod: '',
+      declarationAccepted: false,
+    },
+    mode: 'onChange',
+  });
+
+  const ctrl = externalControl ?? internalControl;
+  const errs = externalErrors ?? internalErrors;
+  const sv = externalSetValue ?? internalSetValue;
+
+  // ── FIX: Use refs to prevent infinite loop ──────────────────────────────
+  
+  // Store callbacks in refs to avoid dependency issues
+  const onValidChangeRef = useRef(onValidChange);
+  const onDataChangeRef = useRef(onDataChange);
+  
+  // Update refs when props change (no dependency array needed for refs)
+  useEffect(() => {
+    onValidChangeRef.current = onValidChange;
+    onDataChangeRef.current = onDataChange;
+  });
+
+  // Use a ref to track previous values to avoid unnecessary updates
+  const prevDataRef = useRef<string>('');
+  const prevValidRef = useRef<boolean | null>(null);
+
+  // Watch form values - but don't use watchedValues directly in useEffect
+  const watchedValues = watch();
+
+  // FIX: Use a stable callback to prevent infinite loop
+  useEffect(() => {
+    // Only call if validity actually changed
+    if (prevValidRef.current !== isValid) {
+      prevValidRef.current = isValid;
+      onValidChangeRef.current?.(isValid);
+    }
+
+    // Serialize to compare objects (avoid reference comparison)
+    const dataString = JSON.stringify(watchedValues);
+    if (prevDataRef.current !== dataString) {
+      prevDataRef.current = dataString;
+      onDataChangeRef.current?.(watchedValues as CoverSheetFormValues);
+    }
+    // Now we only depend on watchedValues and isValid, not the callbacks
+  }, [watchedValues, isValid]);
 
   return (
-    <View style={[sectionStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
+    <View style={[sectionStyles.card, { backgroundColor: colors.bgCard, borderColor: colors.border, borderRadius: radius.xl }]}>
       {/* Section header */}
-      <View style={[sectionStyles.header, { backgroundColor: palette.headerBg, borderBottomColor: palette.border }]}>
-        <Ionicons name="business-outline" size={16} color={palette.accentDark} />
-        <Text style={[sectionStyles.title, { color: palette.text }]}>Cover Sheet</Text>
-        <View style={[sectionStyles.reqNote, { backgroundColor: palette.required + '18' }]}>
-          <Text style={[sectionStyles.reqNoteText, { color: palette.required }]}>* Required</Text>
+      <View style={[sectionStyles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <Ionicons name="business-outline" size={16} color={colors.primary} />
+        <Text style={[sectionStyles.title, { color: colors.text }]}>Cover Sheet</Text>
+        <View style={[sectionStyles.reqNote, { backgroundColor: colors.dangerBg }]}>
+          <Text style={[sectionStyles.reqNoteText, { color: colors.danger }]}>* Required</Text>
         </View>
       </View>
 
-      <View style={sectionStyles.body}>
+      <ScrollView style={sectionStyles.body} nestedScrollEnabled>
         {/* ── Company Name ─────────────────────────────────────────── */}
         <Controller
-          control={control}
+          control={ctrl}
           name="companyName"
           rules={{ required: 'Company name is required' }}
           render={({ field: { value, onChange, onBlur } }) => (
-            <FieldWrap label="Company Name" required error={errors.companyName?.message} palette={palette}>
+            <FieldWrap label="Company Name" required error={errs.companyName?.message}>
               <StyledInput
                 value={value} onChangeText={onChange} onBlur={onBlur}
                 placeholder="Legal company name"
-                hasError={!!errors.companyName} palette={palette}
+                hasError={!!errs.companyName}
               />
             </FieldWrap>
           )}
@@ -228,15 +286,15 @@ export const BidCoverSheetForm: React.FC<Props> = ({ control, errors, setValue }
 
         {/* ── Representative ───────────────────────────────────────── */}
         <Controller
-          control={control}
+          control={ctrl}
           name="representative"
           rules={{ required: 'Authorized representative is required' }}
           render={({ field: { value, onChange, onBlur } }) => (
-            <FieldWrap label="Authorized Representative" required error={errors.representative?.message} palette={palette}>
+            <FieldWrap label="Authorized Representative" required error={errs.representative?.message}>
               <StyledInput
                 value={value} onChangeText={onChange} onBlur={onBlur}
                 placeholder="Full name of authorized signatory"
-                hasError={!!errors.representative} palette={palette}
+                hasError={!!errs.representative}
               />
             </FieldWrap>
           )}
@@ -244,14 +302,13 @@ export const BidCoverSheetForm: React.FC<Props> = ({ control, errors, setValue }
 
         {/* ── Representative Title ─────────────────────────────────── */}
         <Controller
-          control={control}
+          control={ctrl}
           name="representativeTitle"
           render={({ field: { value, onChange, onBlur } }) => (
-            <FieldWrap label="Representative Title" palette={palette}>
+            <FieldWrap label="Representative Title">
               <StyledInput
                 value={value} onChangeText={onChange} onBlur={onBlur}
                 placeholder="e.g. CEO, Procurement Director"
-                palette={palette}
               />
             </FieldWrap>
           )}
@@ -259,19 +316,19 @@ export const BidCoverSheetForm: React.FC<Props> = ({ control, errors, setValue }
 
         {/* ── Email ────────────────────────────────────────────────── */}
         <Controller
-          control={control}
+          control={ctrl}
           name="companyEmail"
           rules={{
             required: 'Company email is required',
             pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Enter a valid email' },
           }}
           render={({ field: { value, onChange, onBlur } }) => (
-            <FieldWrap label="Company Email" required error={errors.companyEmail?.message} palette={palette}>
+            <FieldWrap label="Company Email" required error={errs.companyEmail?.message}>
               <StyledInput
                 value={value} onChangeText={onChange} onBlur={onBlur}
                 placeholder="procurement@company.com"
                 keyboardType="email-address" autoCapitalize="none"
-                hasError={!!errors.companyEmail} palette={palette}
+                hasError={!!errs.companyEmail}
               />
             </FieldWrap>
           )}
@@ -279,16 +336,16 @@ export const BidCoverSheetForm: React.FC<Props> = ({ control, errors, setValue }
 
         {/* ── Phone ────────────────────────────────────────────────── */}
         <Controller
-          control={control}
+          control={ctrl}
           name="companyPhone"
           rules={{ required: 'Company phone is required' }}
           render={({ field: { value, onChange, onBlur } }) => (
-            <FieldWrap label="Company Phone" required error={errors.companyPhone?.message} palette={palette}>
+            <FieldWrap label="Company Phone" required error={errs.companyPhone?.message}>
               <StyledInput
                 value={value} onChangeText={onChange} onBlur={onBlur}
                 placeholder="+251 911 000 000"
                 keyboardType="phone-pad" autoCapitalize="none"
-                hasError={!!errors.companyPhone} palette={palette}
+                hasError={!!errs.companyPhone}
               />
             </FieldWrap>
           )}
@@ -296,14 +353,14 @@ export const BidCoverSheetForm: React.FC<Props> = ({ control, errors, setValue }
 
         {/* ── Address ──────────────────────────────────────────────── */}
         <Controller
-          control={control}
+          control={ctrl}
           name="companyAddress"
           render={({ field: { value, onChange, onBlur } }) => (
-            <FieldWrap label="Company Address" palette={palette}>
+            <FieldWrap label="Company Address">
               <StyledInput
                 value={value} onChangeText={onChange} onBlur={onBlur}
                 placeholder="Physical address"
-                multiline palette={palette}
+                multiline
               />
             </FieldWrap>
           )}
@@ -311,14 +368,14 @@ export const BidCoverSheetForm: React.FC<Props> = ({ control, errors, setValue }
 
         {/* ── TIN ──────────────────────────────────────────────────── */}
         <Controller
-          control={control}
+          control={ctrl}
           name="tinNumber"
           render={({ field: { value, onChange, onBlur } }) => (
-            <FieldWrap label="TIN Number" palette={palette}>
+            <FieldWrap label="TIN Number">
               <StyledInput
                 value={value} onChangeText={onChange} onBlur={onBlur}
                 placeholder="Tax Identification Number"
-                autoCapitalize="characters" palette={palette}
+                autoCapitalize="characters"
               />
             </FieldWrap>
           )}
@@ -326,14 +383,14 @@ export const BidCoverSheetForm: React.FC<Props> = ({ control, errors, setValue }
 
         {/* ── License ──────────────────────────────────────────────── */}
         <Controller
-          control={control}
+          control={ctrl}
           name="licenseNumber"
           render={({ field: { value, onChange, onBlur } }) => (
-            <FieldWrap label="Business License Number" palette={palette}>
+            <FieldWrap label="Business License Number">
               <StyledInput
                 value={value} onChangeText={onChange} onBlur={onBlur}
                 placeholder="License registration number"
-                autoCapitalize="characters" palette={palette}
+                autoCapitalize="characters"
               />
             </FieldWrap>
           )}
@@ -343,19 +400,19 @@ export const BidCoverSheetForm: React.FC<Props> = ({ control, errors, setValue }
         <View style={sectionStyles.twoCol}>
           <View style={{ flex: 2 }}>
             <Controller
-              control={control}
+              control={ctrl}
               name="totalBidValue"
               rules={{
                 required: 'Bid value is required',
                 validate: (v) => (parseFloat(v) > 0) || 'Must be greater than 0',
               }}
               render={({ field: { value, onChange, onBlur } }) => (
-                <FieldWrap label="Total Bid Value" required error={errors.totalBidValue?.message} palette={palette}>
+                <FieldWrap label="Total Bid Value" required error={errs.totalBidValue?.message}>
                   <StyledInput
                     value={value} onChangeText={onChange} onBlur={onBlur}
                     placeholder="0.00"
                     keyboardType="decimal-pad"
-                    hasError={!!errors.totalBidValue} palette={palette}
+                    hasError={!!errs.totalBidValue}
                   />
                 </FieldWrap>
               )}
@@ -363,12 +420,12 @@ export const BidCoverSheetForm: React.FC<Props> = ({ control, errors, setValue }
           </View>
           <View style={{ flex: 1 }}>
             <Controller
-              control={control}
+              control={ctrl}
               name="currency"
               rules={{ required: 'Currency required' }}
               render={({ field: { value, onChange } }) => (
-                <FieldWrap label="Currency" required error={errors.currency?.message} palette={palette}>
-                  <CurrencyPicker value={value} onChange={onChange} palette={palette} />
+                <FieldWrap label="Currency" required error={errs.currency?.message}>
+                  <CurrencyPicker value={value} onChange={onChange} />
                 </FieldWrap>
               )}
             />
@@ -377,14 +434,14 @@ export const BidCoverSheetForm: React.FC<Props> = ({ control, errors, setValue }
 
         {/* ── Bid Validity Period ───────────────────────────────────── */}
         <Controller
-          control={control}
+          control={ctrl}
           name="bidValidityPeriod"
           render={({ field: { value, onChange, onBlur } }) => (
-            <FieldWrap label="Bid Validity Period (days)" palette={palette}>
+            <FieldWrap label="Bid Validity Period (days)">
               <StyledInput
                 value={value} onChangeText={onChange} onBlur={onBlur}
                 placeholder="e.g. 90"
-                keyboardType="number-pad" palette={palette}
+                keyboardType="number-pad"
               />
             </FieldWrap>
           )}
@@ -392,7 +449,7 @@ export const BidCoverSheetForm: React.FC<Props> = ({ control, errors, setValue }
 
         {/* ── Declaration Accepted ─────────────────────────────────── */}
         <Controller
-          control={control}
+          control={ctrl}
           name="declarationAccepted"
           rules={{ validate: (v) => v === true || 'You must accept the declaration to proceed' }}
           render={({ field: { value, onChange } }) => (
@@ -402,33 +459,34 @@ export const BidCoverSheetForm: React.FC<Props> = ({ control, errors, setValue }
                 style={[
                   sectionStyles.checkbox,
                   {
-                    backgroundColor: value ? palette.checkActive : palette.checkBg,
-                    borderColor: errors.declarationAccepted ? palette.required : (value ? palette.checkActive : palette.inputBorder),
+                    backgroundColor: value ? colors.primary : colors.inputBg,
+                    borderColor: errs.declarationAccepted ? colors.danger : (value ? colors.primary : colors.inputBorder),
+                    borderRadius: radius.sm,
                   },
                 ]}
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: value }}
               >
-                {value && <Ionicons name="checkmark" size={14} color="#0A2540" />}
+                {value && <Ionicons name="checkmark" size={14} color={colors.textInverse} />}
               </Pressable>
               <Pressable onPress={() => onChange(!value)} style={{ flex: 1 }}>
-                <Text style={[sectionStyles.declarationText, { color: palette.muted }]}>
+                <Text style={[sectionStyles.declarationText, { color: colors.textMuted }]}>
                   I confirm all information is accurate and complete, and I authorise this submission on behalf of my company.
-                  <Text style={{ color: palette.required }}> *</Text>
+                  <Text style={{ color: colors.danger }}> *</Text>
                 </Text>
               </Pressable>
             </View>
           )}
         />
-        {!!errors.declarationAccepted && (
+        {!!errs.declarationAccepted && (
           <View style={fieldStyles.errorRow}>
-            <Ionicons name="alert-circle" size={12} color={palette.required} />
-            <Text style={[fieldStyles.errorText, { color: palette.required }]}>
-              {errors.declarationAccepted.message}
+            <Ionicons name="alert-circle" size={12} color={colors.danger} />
+            <Text style={[fieldStyles.errorText, { color: colors.danger }]}>
+              {errs.declarationAccepted.message}
             </Text>
           </View>
         )}
-      </View>
+      </ScrollView>
     </View>
   );
 };
@@ -437,7 +495,6 @@ export const BidCoverSheetForm: React.FC<Props> = ({ control, errors, setValue }
 
 const sectionStyles = StyleSheet.create({
   card: {
-    borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
   },
@@ -465,12 +522,13 @@ const sectionStyles = StyleSheet.create({
   },
   body: {
     padding: 16,
-    gap: 14,
+    maxHeight: 500,
   },
   twoCol: {
     flexDirection: 'row',
     gap: 10,
     alignItems: 'flex-start',
+    marginBottom: 14,
   },
   declarationWrap: {
     flexDirection: 'row',
@@ -495,7 +553,7 @@ const sectionStyles = StyleSheet.create({
 });
 
 const fieldStyles = StyleSheet.create({
-  wrap: { gap: 5 },
+  wrap: { gap: 5, marginBottom: 14 },
   label: {
     fontSize: 11,
     fontWeight: '700',
@@ -532,7 +590,6 @@ const modalStyles = StyleSheet.create({
   sheet: {
     width: '100%',
     maxWidth: 360,
-    borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
   },

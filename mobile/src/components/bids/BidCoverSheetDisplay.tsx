@@ -1,12 +1,13 @@
 // src/components/bids/BidCoverSheetDisplay.tsx
 // Read-only key-value display of all BidCoverSheet fields.
 // Grouped: Company Info | Contact | Identifiers | Bid Value | Declaration
+// UPDATED: Migrated to useTheme hook
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
 import { BidCoverSheet } from '../../types/bid';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -74,7 +75,7 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     title: 'Declaration',
-    icon: 'checkmark-shield-outline',
+    icon: 'close-circle',
     fields: [
       {
         key: 'declarationAccepted',
@@ -100,24 +101,20 @@ const SECTIONS: SectionConfig[] = [
   },
 ];
 
-// ── Row component ─────────────────────────────────────────────────────────────
+// ── Field row ─────────────────────────────────────────────────────────────────
 
-interface RowProps {
+interface FieldRowProps {
   label: string;
-  value?: string;
-  textColor: string;
-  mutedColor: string;
-  borderColor: string;
-  accentColor: string;
+  value: string;
 }
 
-const FieldRow: React.FC<RowProps> = ({ label, value, textColor, mutedColor, borderColor, accentColor }) => {
-  if (!value || value === '—') return null;
+const FieldRow: React.FC<FieldRowProps> = ({ label, value }) => {
+  const { colors } = useTheme();
 
   return (
-    <View style={[rowStyles.root, { borderBottomColor: borderColor }]}>
-      <Text style={[rowStyles.label, { color: mutedColor }]}>{label}</Text>
-      <Text style={[rowStyles.value, { color: textColor }]}>{value}</Text>
+    <View style={[rowStyles.root, { borderBottomColor: colors.border }]}>
+      <Text style={[rowStyles.label, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[rowStyles.value, { color: colors.text }]}>{value}</Text>
     </View>
   );
 };
@@ -127,10 +124,11 @@ const FieldRow: React.FC<RowProps> = ({ label, value, textColor, mutedColor, bor
 interface SectionProps {
   config: SectionConfig;
   data: BidCoverSheet;
-  palette: ReturnType<typeof usePalette>;
 }
 
-const Section: React.FC<SectionProps> = ({ config, data, palette }) => {
+const Section: React.FC<SectionProps> = ({ config, data }) => {
+  const { colors, radius } = useTheme();
+
   // Filter out empty/null fields before rendering section
   const visibleFields = config.fields.filter((f) => {
     const raw = data[f.key];
@@ -141,11 +139,11 @@ const Section: React.FC<SectionProps> = ({ config, data, palette }) => {
   if (visibleFields.length === 0) return null;
 
   return (
-    <View style={[sectionStyles.root, { borderColor: palette.border, backgroundColor: palette.card }]}>
+    <View style={[sectionStyles.root, { borderColor: colors.border, backgroundColor: colors.bgCard, borderRadius: radius.lg }]}>
       {/* Header */}
-      <View style={[sectionStyles.header, { borderBottomColor: palette.border, backgroundColor: palette.headerBg }]}>
-        <Ionicons name={config.icon} size={15} color={palette.accent} />
-        <Text style={[sectionStyles.title, { color: palette.text }]}>{config.title}</Text>
+      <View style={[sectionStyles.header, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
+        <Ionicons name={config.icon} size={15} color={colors.primary} />
+        <Text style={[sectionStyles.title, { color: colors.text }]}>{config.title}</Text>
       </View>
 
       {/* Rows */}
@@ -158,10 +156,6 @@ const Section: React.FC<SectionProps> = ({ config, data, palette }) => {
               key={f.key}
               label={f.label}
               value={formatted}
-              textColor={palette.text}
-              mutedColor={palette.muted}
-              borderColor={palette.border}
-              accentColor={palette.accent}
             />
           );
         })}
@@ -170,20 +164,6 @@ const Section: React.FC<SectionProps> = ({ config, data, palette }) => {
   );
 };
 
-// ── Palette helper ────────────────────────────────────────────────────────────
-
-function usePalette(isDark: boolean) {
-  return {
-    bg:       isDark ? '#0F172A' : '#F8FAFC',
-    card:     isDark ? '#1E293B' : '#FFFFFF',
-    headerBg: isDark ? '#1A2540' : '#F1F5F9',
-    border:   isDark ? '#334155' : '#E2E8F0',
-    text:     isDark ? '#F1F5F9' : '#0F172A',
-    muted:    isDark ? '#94A3B8' : '#64748B',
-    accent:   '#0A2540',
-  };
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface Props {
@@ -191,17 +171,15 @@ interface Props {
 }
 
 export const BidCoverSheetDisplay: React.FC<Props> = ({ coverSheet }) => {
-  const isDark = useThemeStore((s) => s.theme.isDark);
-  const palette = usePalette(isDark);
+  const { colors, spacing } = useTheme();
 
   return (
-    <View style={[styles.root, { backgroundColor: palette.bg }]}>
+    <View style={[styles.root, { gap: spacing.md }]}>
       {SECTIONS.map((section) => (
         <Section
           key={section.title}
           config={section}
           data={coverSheet}
-          palette={palette}
         />
       ))}
     </View>

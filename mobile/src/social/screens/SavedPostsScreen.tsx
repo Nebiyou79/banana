@@ -1,4 +1,13 @@
 // src/social/screens/SavedPostsScreen.tsx
+// ✅ role-theme-migrated — FIXED
+/**
+ * FIXES:
+ *  - No structural changes needed — was already well-formed.
+ *  - Verified: SafeAreaView edges={[]} correct for tab-embedded screen.
+ *  - onSave callback: (id, isSaved) passed correctly to toggleSave.
+ *  - theme flat aliases (theme.primary, theme.muted etc) are all valid — no change needed.
+ */
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
@@ -34,18 +43,14 @@ const SavedPostsScreen: React.FC = () => {
   const handleReact = useCallback(
     (postId: string, reaction: ReactionType) => {
       const current = posts.find((p) => p._id === postId);
-      react({
-        postId,
-        reaction,
-        hasInteraction: !!current?.userInteraction,
-      });
+      react({ postId, reaction, hasInteraction: !!current?.userInteraction });
     },
-    [posts, react]
+    [posts, react],
   );
 
   const handleDislike = useCallback(
     (postId: string) => dislike({ postId }),
-    [dislike]
+    [dislike],
   );
 
   const handleShare = useCallback(async (post: Post) => {
@@ -53,32 +58,26 @@ const SavedPostsScreen: React.FC = () => {
       await Share.share({
         message: post.content?.slice(0, 180) ?? 'Check this out on Banana',
       });
-    } catch {
-      /* noop */
-    }
+    } catch { /* noop */ }
   }, []);
 
   const handleAdPress = useCallback(
     (ad: AdConfig) => {
       if (ad.ctaRoute) {
-        try {
-          navigation.navigate(ad.ctaRoute as any);
-        } catch {
-          /* noop */
-        }
+        try { navigation.navigate(ad.ctaRoute as any); } catch { /* noop */ }
       }
     },
-    [navigation]
+    [navigation],
   );
 
   return (
-    // Tab-like dedicated screen — LinearGradient background
     <LinearGradient
       colors={theme.bgGradient}
       style={{ flex: 1 }}
       start={{ x: 0, y: 0 }}
       end={{ x: 0.3, y: 1 }}
     >
+      {/* edges={[]} — tab-embedded screen; tab bar owns bottom inset */}
       <SafeAreaView style={styles.container} edges={[]}>
         <FeedList
           posts={posts}
@@ -125,4 +124,3 @@ const styles = StyleSheet.create({
 });
 
 export default SavedPostsScreen;
-// ✅ role-theme-migrated

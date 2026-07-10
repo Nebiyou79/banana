@@ -1,12 +1,12 @@
 /**
  * src/screens/company/JobManagementScreen.tsx
+ * FIXED: Removed SafeAreaView, removed useSafeAreaInsets manual padding
  */
+
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, TextInput, Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
@@ -19,38 +19,60 @@ import { FONT_SIZE } from '../../theme/tokens';
 
 interface Props { navigation: any }
 
-type TabStatus = Exclude<JobStatus, undefined>;
+type TabStatus = Exclude<JobStatus, undefined> | 'expired';
 
 export const JobManagementScreen: React.FC<Props> = ({ navigation }) => {
   const { colors, spacing } = useTheme();
-  const insets = useSafeAreaInsets();
   const [activeStatus, setActiveStatus] = useState<TabStatus | undefined>(undefined);
   const [search, setSearch] = useState('');
 
-  // STATUS_TABS built with theme tokens
   const STATUS_TABS = useMemo(() => [
-    { key: undefined,  label: 'All',    color: colors.textMuted },
-    { key: 'active',   label: 'Active', color: colors.success },
-    { key: 'draft',    label: 'Draft',  color: colors.textMuted },
-    { key: 'paused',   label: 'Paused', color: colors.warning },
-    { key: 'closed',   label: 'Closed', color: colors.danger },
+    { key: undefined,  label: 'All',     color: colors.textMuted },
+    { key: 'active',   label: 'Active',  color: colors.success },
+    { key: 'expired',  label: 'Expired', color: colors.danger },
+    { key: 'draft',    label: 'Draft',   color: colors.textMuted },
+    { key: 'paused',   label: 'Paused',  color: colors.warning },
+    { key: 'closed',   label: 'Closed',  color: colors.danger },
   ], [colors]);
 
+  // When the "expired" tab is selected, query active jobs and filter client-side.
+  // Expired = active status but applicationDeadline has passed.
+  const queryStatus = activeStatus === 'expired' ? 'active' : activeStatus as JobStatus | undefined;
+
   const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage, refetch } =
-    useCompanyJobs({ status: activeStatus, limit: 15 });
+    useCompanyJobs({ status: queryStatus, limit: 50 });
 
   const deleteMut = useDeleteJob();
   const updateMut = useUpdateJob();
 
+  const now = Date.now();
+
   const allJobs: Job[] = useMemo(() => (data?.pages ?? []).flatMap(p => p.jobs), [data]);
 
+  // When tab = 'active': exclude jobs whose deadline has passed
+  // When tab = 'expired': only jobs whose deadline has passed
+  const tabFilteredJobs = useMemo(() => {
+    if (activeStatus === 'active') {
+      return allJobs.filter(j => {
+        if (!j.applicationDeadline) return true;
+        return new Date(j.applicationDeadline).getTime() > now;
+      });
+    }
+    if (activeStatus === 'expired') {
+      return allJobs.filter(j =>
+        j.applicationDeadline && new Date(j.applicationDeadline).getTime() <= now
+      );
+    }
+    return allJobs;
+  }, [allJobs, activeStatus, now]);
+
   const jobs = useMemo(() => {
-    if (!search.trim()) return allJobs;
+    if (!search.trim()) return tabFilteredJobs;
     const q = search.toLowerCase();
-    return allJobs.filter(j =>
+    return tabFilteredJobs.filter(j =>
       j.title.toLowerCase().includes(q) || (j.category ?? '').toLowerCase().includes(q),
     );
-  }, [allJobs, search]);
+  }, [tabFilteredJobs, search]);
 
   const totalJobs = data?.pages[0]?.pagination?.totalResults ?? 0;
 
@@ -81,7 +103,7 @@ export const JobManagementScreen: React.FC<Props> = ({ navigation }) => {
   ), [navigation, handleDelete, handleStatusToggle]);
 
   return (
-    <SafeAreaView style={[s.root, { backgroundColor: colors.bg }]} edges={['top']}>
+    <View style={[s.root, { backgroundColor: colors.bg }]}>
       {/* Header */}
       <View style={[s.header, { paddingHorizontal: spacing.lg }]}>
         <View>
@@ -91,7 +113,7 @@ export const JobManagementScreen: React.FC<Props> = ({ navigation }) => {
           </Text>
         </View>
         <TouchableOpacity
-          onPress={() => navigation.navigate('JobCreate')}
+          onPress={() => navigation.getParent()?.navigate('JobCreate') ?? navigation.navigate('JobCreate')}
           style={[s.createBtn, { backgroundColor: colors.primary }]}
         >
           <Ionicons name="add" size={20} color={colors.textInverse} />
@@ -160,7 +182,7 @@ export const JobManagementScreen: React.FC<Props> = ({ navigation }) => {
           data={jobs}
           renderItem={renderItem}
           keyExtractor={item => item._id}
-          contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing.xxl }}
+          contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl }}
           onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage(); }}
           onEndReachedThreshold={0.4}
           onRefresh={refetch}
@@ -169,15 +191,20 @@ export const JobManagementScreen: React.FC<Props> = ({ navigation }) => {
           ListEmptyComponent={
             <EmptyState
               icon="briefcase-outline"
-              title={search ? 'No matching jobs' : activeStatus ? `No ${activeStatus} jobs` : 'No jobs posted yet'}
+              title={
+                search ? 'No matching jobs'
+                : activeStatus === 'expired' ? 'No expired jobs'
+                : activeStatus ? `No ${activeStatus} jobs`
+                : 'No jobs posted yet'
+              }
               subtitle={!activeStatus && !search ? 'Create your first job posting to start hiring.' : undefined}
               actionLabel="Post a Job"
-              onAction={() => navigation.navigate('JobCreate')}
+              onAction={() => navigation.getParent()?.navigate('JobCreate') ?? navigation.navigate('JobCreate')}
             />
           }
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 

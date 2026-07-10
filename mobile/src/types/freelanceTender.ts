@@ -1,5 +1,6 @@
 // mobile/src/types/freelanceTender.ts
 // Source of truth: server/src/models/FreelanceTender.js
+// FIXED: Added missing fields, aligned with web version
 
 // ─── String literal unions ────────────────────────────────────────────────────
 
@@ -89,6 +90,7 @@ export interface TenderMetadata {
 }
 
 export interface TenderAttachment {
+  fileUrl: Promise<any>;
   _id: string;
   originalName: string;
   fileName: string;
@@ -112,6 +114,17 @@ export interface TenderOwnerEntity {
   name: string;
   logo?: { secure_url?: string; url?: string } | string;
   headline?: string;
+  verified?: boolean;
+  website?: string;
+  industry?: string;
+  location?: string;
+  description?: string;
+  foundedYear?: number;
+  employeeCount?: number;
+  country?: string;
+  email?: string;
+  specializations?: string[];
+  tendersPosted?: number;
 }
 
 export interface TenderOwner {
@@ -119,6 +132,10 @@ export interface TenderOwner {
   name: string;
   email?: string;
   avatar?: string;
+  firstName?: string;
+  lastName?: string;
+  headline?: string;
+  location?: string;
 }
 
 export interface TenderApplicant {
@@ -126,6 +143,8 @@ export interface TenderApplicant {
   name: string;
   email?: string;
   avatar?: string;
+  headline?: string;
+  location?: string;
 }
 
 export interface FreelanceTenderApplication {
@@ -139,11 +158,14 @@ export interface FreelanceTenderApplication {
   cvPath?: string;
   cvFileName?: string;
   cvOriginalName?: string;
-  screeningAnswers?: Array<{ questionIndex: number; answer: string }>;
+  cv?: { secure_url?: string; url?: string };
+  screeningAnswers?: Array<{ questionIndex: number; answer: string; questionText?: string }>;
   status: ApplicationStatus;
   submittedAt: string;
   reviewedAt?: string;
   ownerNotes?: string;
+  reviewNotes?: string;
+  numberOfPositions?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -270,4 +292,17 @@ export interface SubmitApplicationData {
   portfolioLinks?: string[];
   screeningAnswers?: Array<{ questionIndex: number; answer: string }>;
   cvFile?: { uri: string; name: string; mimeType: string };
+}
+
+// ─── Stats ──────────────────────────────────────────────────────────────────────
+
+export interface FreelanceTenderStats {
+  totalApplications: number;
+  totalViews: number;
+  totalSaves: number;
+  averageBid?: number;
+  minBid?: number;
+  maxBid?: number;
+  applicationsByStatus: Record<ApplicationStatus, number>;
+  lastUpdated?: string;
 }

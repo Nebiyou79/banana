@@ -1,4 +1,5 @@
 // mobile/src/components/freelanceTenders/FreelanceTenderForm/Step4SkillsAttachments.tsx
+// UPDATED: useTheme() instead of useThemeStore(), all colors from theme
 
 import React, { memo, useRef, useState } from 'react';
 import {
@@ -10,7 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useThemeStore } from '../../../store/themeStore';
+import { useTheme } from '../../../hooks/useTheme';
+import { MIN_TOUCH_TARGET } from '../../../theme/tokens';
 import type { FreelanceTenderFormData } from '../../../types/freelanceTender';
 
 export interface Step4SkillsAttachmentsProps {
@@ -31,23 +33,25 @@ const MAX_ATTACHMENTS = 20;
 interface SkillChipProps {
   label: string;
   onRemove: () => void;
-  primaryColor: string;
 }
 
-const SkillChip: React.FC<SkillChipProps> = memo(({ label, onRemove, primaryColor }) => (
-  <View style={[styles.skillChip, { backgroundColor: primaryColor + '18', borderColor: primaryColor + '44' }]}>
-    <Text style={[styles.skillChipText, { color: primaryColor }]}>{label}</Text>
-    <TouchableOpacity
-      onPress={onRemove}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      accessibilityRole="button"
-      accessibilityLabel={`Remove skill ${label}`}
-      style={styles.skillRemove}
-    >
-      <Text style={[styles.skillRemoveText, { color: primaryColor }]}>×</Text>
-    </TouchableOpacity>
-  </View>
-));
+const SkillChip: React.FC<SkillChipProps> = memo(({ label, onRemove }) => {
+  const { colors: c, radius } = useTheme();
+  return (
+    <View style={[styles.skillChip, { backgroundColor: c.primaryBg, borderColor: c.borderAccent, borderRadius: radius.full }]}>
+      <Text style={[styles.skillChipText, { color: c.primary }]}>{label}</Text>
+      <TouchableOpacity
+        onPress={onRemove}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityRole="button"
+        accessibilityLabel={`Remove skill ${label}`}
+        style={styles.skillRemove}
+      >
+        <Text style={[styles.skillRemoveText, { color: c.danger }]}>×</Text>
+      </TouchableOpacity>
+    </View>
+  );
+});
 
 // ─── Attachment row ───────────────────────────────────────────────────────────
 
@@ -61,21 +65,17 @@ function formatBytes(bytes?: number): string {
 interface AttachmentRowProps {
   file: { name: string; mimeType: string; size?: number };
   onRemove: () => void;
-  textColor: string;
-  mutedColor: string;
-  surfaceColor: string;
-  borderColor: string;
-  errorColor: string;
 }
 
-const AttachmentRow: React.FC<AttachmentRowProps> = memo(
-  ({ file, onRemove, textColor, mutedColor, surfaceColor, borderColor, errorColor }) => (
-    <View style={[styles.attachRow, { backgroundColor: surfaceColor, borderColor }]}>
+const AttachmentRow: React.FC<AttachmentRowProps> = memo(({ file, onRemove }) => {
+  const { colors: c, radius } = useTheme();
+  return (
+    <View style={[styles.attachRow, { backgroundColor: c.surface, borderColor: c.border, borderRadius: radius.md }]}>
       <View style={styles.attachInfo}>
-        <Text style={[styles.attachName, { color: textColor }]} numberOfLines={1}>
+        <Text style={[styles.attachName, { color: c.text }]} numberOfLines={1}>
           {file.name}
         </Text>
-        <Text style={[styles.attachMeta, { color: mutedColor }]}>
+        <Text style={[styles.attachMeta, { color: c.textMuted }]}>
           {file.mimeType.split('/')[1]?.toUpperCase() ?? 'FILE'}
           {file.size ? ` · ${formatBytes(file.size)}` : ''}
         </Text>
@@ -87,18 +87,17 @@ const AttachmentRow: React.FC<AttachmentRowProps> = memo(
         accessibilityRole="button"
         accessibilityLabel={`Remove file ${file.name}`}
       >
-        <Text style={[styles.attachRemoveText, { color: errorColor }]}>✕</Text>
+        <Text style={[styles.attachRemoveText, { color: c.danger }]}>✕</Text>
       </TouchableOpacity>
     </View>
-  )
-);
+  );
+});
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
 const Step4SkillsAttachments: React.FC<Step4SkillsAttachmentsProps> = memo(
   ({ skillsRequired, attachmentFiles, onChange, onAttachmentsChange, errors }) => {
-    const { theme } = useThemeStore();
-    const c = theme.colors;
+    const { colors: c, radius, spacing, type } = useTheme();
     const [skillInput, setSkillInput] = useState('');
     const inputRef = useRef<TextInput>(null);
 
@@ -123,9 +122,6 @@ const Step4SkillsAttachments: React.FC<Step4SkillsAttachmentsProps> = memo(
       onAttachmentsChange(attachmentFiles.filter((_, i) => i !== index));
     };
 
-    // In production, integrate with expo-document-picker.
-    // Here we show the intent — the parent screen calls onAttachmentsChange
-    // after picking files via expo-document-picker.
     const handlePickFiles = () => {
       Alert.alert(
         'Attach Files',
@@ -136,10 +132,15 @@ const Step4SkillsAttachments: React.FC<Step4SkillsAttachmentsProps> = memo(
 
     const inputStyle = [
       styles.input,
-      { backgroundColor: c.surface ?? c.card, borderColor: c.border ?? c.textMuted + '44', color: c.text },
+      {
+        backgroundColor: c.inputBg,
+        borderColor: c.border,
+        color: c.text,
+        borderRadius: radius.md,
+      },
     ];
     const labelStyle = [styles.label, { color: c.text }];
-    const errorStyle = [styles.error, { color: c.error ?? '#EF4444' }];
+    const errorStyle = [styles.error, { color: c.danger }];
     const hintStyle = [styles.hint, { color: c.textMuted }];
 
     return (
@@ -153,7 +154,6 @@ const Step4SkillsAttachments: React.FC<Step4SkillsAttachmentsProps> = memo(
             </Text>
           </View>
 
-          {/* Chips */}
           {skillsRequired.length > 0 && (
             <View style={styles.chipWrap}>
               {skillsRequired.map((skill) => (
@@ -161,13 +161,11 @@ const Step4SkillsAttachments: React.FC<Step4SkillsAttachmentsProps> = memo(
                   key={skill}
                   label={skill}
                   onRemove={() => removeSkill(skill)}
-                  primaryColor={c.primary}
                 />
               ))}
             </View>
           )}
 
-          {/* Input */}
           {skillsRequired.length < MAX_SKILLS && (
             <View style={styles.skillInputRow}>
               <TextInput
@@ -183,12 +181,12 @@ const Step4SkillsAttachments: React.FC<Step4SkillsAttachmentsProps> = memo(
               />
               <TouchableOpacity
                 onPress={handleSkillKeySubmit}
-                style={[styles.addSkillBtn, { backgroundColor: c.primary }]}
+                style={[styles.addSkillBtn, { backgroundColor: c.primary, borderRadius: radius.md }]}
                 disabled={!skillInput.trim()}
                 activeOpacity={0.8}
                 accessibilityRole="button"
               >
-                <Text style={styles.addSkillBtnText}>Add</Text>
+                <Text style={[styles.addSkillBtnText, { color: c.textInverse }]}>Add</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -217,11 +215,6 @@ const Step4SkillsAttachments: React.FC<Step4SkillsAttachmentsProps> = memo(
                   key={`${file.name}-${i}`}
                   file={file}
                   onRemove={() => removeAttachment(i)}
-                  textColor={c.text}
-                  mutedColor={c.textMuted}
-                  surfaceColor={c.surface ?? c.card}
-                  borderColor={c.border ?? c.textMuted + '44'}
-                  errorColor={c.error ?? '#EF4444'}
                 />
               ))}
             </View>
@@ -233,8 +226,9 @@ const Step4SkillsAttachments: React.FC<Step4SkillsAttachmentsProps> = memo(
               style={[
                 styles.dropzone,
                 {
-                  borderColor: c.primary + '66',
-                  backgroundColor: c.primary + '08',
+                  borderColor: c.borderAccent,
+                  backgroundColor: c.primaryBg,
+                  borderRadius: radius.md,
                 },
               ]}
               activeOpacity={0.75}
@@ -270,11 +264,10 @@ const styles = StyleSheet.create({
   count: { fontSize: 12 },
   input: {
     borderWidth: 1,
-    borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    minHeight: 50,
+    minHeight: MIN_TOUCH_TARGET + 6,
   },
   error: { fontSize: 12, marginTop: 4 },
   hint: { fontSize: 11, marginTop: 4 },
@@ -285,28 +278,25 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingLeft: 12,
     paddingRight: 6,
-    borderRadius: 16,
     borderWidth: 1,
     gap: 4,
   },
   skillChipText: { fontSize: 13, fontWeight: '600' },
-  skillRemove: { minWidth: 24, minHeight: 24, alignItems: 'center', justifyContent: 'center' },
+  skillRemove: { minWidth: MIN_TOUCH_TARGET - 20, minHeight: MIN_TOUCH_TARGET - 20, alignItems: 'center', justifyContent: 'center' },
   skillRemoveText: { fontSize: 18, lineHeight: 20 },
   skillInputRow: { flexDirection: 'row', gap: 10 },
   addSkillBtn: {
     paddingHorizontal: 18,
-    borderRadius: 10,
     justifyContent: 'center',
-    minHeight: 50,
+    minHeight: MIN_TOUCH_TARGET + 6,
     minWidth: 60,
   },
-  addSkillBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  addSkillBtnText: { fontSize: 14, fontWeight: '700' },
   attachList: { gap: 8, marginTop: 10 },
   attachRow: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    borderRadius: 10,
     borderWidth: 1,
     gap: 10,
   },
@@ -314,8 +304,8 @@ const styles = StyleSheet.create({
   attachName: { fontSize: 14, fontWeight: '600' },
   attachMeta: { fontSize: 11, marginTop: 2 },
   attachRemove: {
-    minWidth: 44,
-    minHeight: 44,
+    minWidth: MIN_TOUCH_TARGET - 20,
+    minHeight: MIN_TOUCH_TARGET - 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -324,7 +314,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderRadius: 12,
     paddingVertical: 24,
     alignItems: 'center',
     gap: 4,

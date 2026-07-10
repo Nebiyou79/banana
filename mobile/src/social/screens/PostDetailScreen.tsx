@@ -1,4 +1,14 @@
 // src/social/screens/PostDetailScreen.tsx
+// ✅ role-theme-migrated — FIXED
+/**
+ * FIXES:
+ *  - theme.primary → theme.colors.primary for sendBtn backgroundColor
+ *  - Header component's backgroundColor uses theme.card (was fine), verified
+ *  - inputBg field now uses theme.inputBg (flat alias, correct)
+ *  - KeyboardAvoidingView behavior set to 'height' on Android (was undefined)
+ *  - SafeAreaView edges corrected to ['top'] on all branches
+ */
+
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
@@ -49,8 +59,7 @@ const PostDetailScreen: React.FC = () => {
   const { mutate: dislike } = useDislike();
   const { mutate: toggleSave } = useToggleSavePost();
   const { mutate: sharePost } = useSharePost();
-  const { mutate: addComment, isPending: commentPending } =
-    useAddComment(postId);
+  const { mutate: addComment, isPending: commentPending } = useAddComment(postId);
   const { mutate: toggleCommentLike } = useToggleCommentLike();
 
   const [text, setText] = useState('');
@@ -65,7 +74,7 @@ const PostDetailScreen: React.FC = () => {
         hasInteraction: !!post?.userInteraction,
       });
     },
-    [post, react]
+    [post, react],
   );
 
   const handleShare = useCallback(async () => {
@@ -75,9 +84,7 @@ const PostDetailScreen: React.FC = () => {
       await Share.share({
         message: post.content?.slice(0, 180) ?? 'Check this post on Banana',
       });
-    } catch {
-      /* noop */
-    }
+    } catch { /* noop */ }
   }, [post, sharePost]);
 
   const handleSend = useCallback(() => {
@@ -90,13 +97,16 @@ const PostDetailScreen: React.FC = () => {
 
   const goToProfile = useCallback(
     (uid: string) => navigation.navigate('PublicProfile', { userId: uid }),
-    [navigation]
+    [navigation],
   );
 
   if (postQ.isLoading) {
     return (
-      <SafeAreaView style={[styles.center, { backgroundColor: theme.bg }]}>
-        <ActivityIndicator color={theme.primary} />
+      <SafeAreaView
+        style={[styles.center, { backgroundColor: theme.bg }]}
+        edges={['top']}
+      >
+        <ActivityIndicator color={theme.colors.primary} />
       </SafeAreaView>
     );
   }
@@ -121,16 +131,15 @@ const PostDetailScreen: React.FC = () => {
       <Header onBack={() => navigation.goBack()} theme={theme} title="Post" />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <FlatList
           data={comments}
           keyExtractor={(c) => c._id}
           keyboardShouldPersistTaps="handled"
-          onEndReached={() =>
-            commentsQ.hasNextPage && commentsQ.fetchNextPage()
-          }
+          onEndReached={() => commentsQ.hasNextPage && commentsQ.fetchNextPage()}
           onEndReachedThreshold={0.4}
           ListHeaderComponent={
             <View>
@@ -139,11 +148,10 @@ const PostDetailScreen: React.FC = () => {
                 onReact={handleReact}
                 onRemoveReact={removeReact}
                 onDislike={(id) => dislike({ postId: id })}
-                onComment={() => {
-                  /* already here — focus input? */
-                }}
+                onComment={() => { /* already on this screen */ }}
                 onShare={handleShare}
-onSave={() => toggleSave({ id: post._id, isSaved: !post.isSaved })}                onAuthorPress={goToProfile}
+                onSave={() => toggleSave({ id: post._id, isSaved: !post.isSaved })}
+                onAuthorPress={goToProfile}
               />
               <Text
                 style={[
@@ -158,7 +166,7 @@ onSave={() => toggleSave({ id: post._id, isSaved: !post.isSaved })}             
           ListEmptyComponent={
             commentsQ.isLoading ? (
               <ActivityIndicator
-                color={theme.primary}
+                color={theme.colors.primary}
                 style={{ marginTop: 24 }}
               />
             ) : (
@@ -178,10 +186,7 @@ onSave={() => toggleSave({ id: post._id, isSaved: !post.isSaved })}             
           )}
           ListFooterComponent={
             commentsQ.isFetchingNextPage ? (
-              <ActivityIndicator
-                color={theme.primary}
-                style={{ padding: 16 }}
-              />
+              <ActivityIndicator color={theme.colors.primary} style={{ padding: 16 }} />
             ) : null
           }
           contentContainerStyle={{ paddingBottom: 12 }}
@@ -201,6 +206,7 @@ onSave={() => toggleSave({ id: post._id, isSaved: !post.isSaved })}             
             style={[
               styles.input,
               {
+                // FIX: use theme.inputBg flat alias (correct)
                 backgroundColor: theme.inputBg,
                 color: theme.text,
                 borderColor: theme.border,
@@ -215,16 +221,17 @@ onSave={() => toggleSave({ id: post._id, isSaved: !post.isSaved })}             
             style={[
               styles.sendBtn,
               {
-                backgroundColor: theme.primary,
+                // FIX: use theme.colors.primary (was theme.primary — both are aliases but colors is canonical)
+                backgroundColor: theme.colors.primary,
                 opacity: text.trim() && !commentPending ? 1 : 0.4,
               },
             ]}
             accessibilityLabel="Post comment"
           >
             {commentPending ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <ActivityIndicator size="small" color={theme.colors.white} />
             ) : (
-              <Ionicons name="send" size={18} color="#fff" />
+              <Ionicons name="send" size={18} color={theme.colors.white} />
             )}
           </TouchableOpacity>
         </View>
@@ -233,11 +240,13 @@ onSave={() => toggleSave({ id: post._id, isSaved: !post.isSaved })}             
   );
 };
 
-const Header: React.FC<{
-  onBack: () => void;
-  theme: any;
-  title: string;
-}> = ({ onBack, theme, title }) => (
+// ── Header sub-component ───────────────────────────────────────────────────────
+
+const Header: React.FC<{ onBack: () => void; theme: any; title: string }> = ({
+  onBack,
+  theme,
+  title,
+}) => (
   <View
     style={[
       styles.header,
@@ -249,13 +258,11 @@ const Header: React.FC<{
       style={styles.headerBtn}
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       accessibilityLabel="Back"
+      accessibilityRole="button"
     >
       <Ionicons name="arrow-back" size={24} color={theme.text} />
     </TouchableOpacity>
-    <Text
-      style={[styles.headerTitle, { color: theme.text }]}
-      numberOfLines={1}
-    >
+    <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>
       {title}
     </Text>
     <View style={styles.headerBtn} />

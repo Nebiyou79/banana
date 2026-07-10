@@ -1,26 +1,20 @@
 // src/social/components/post/PostCard.tsx
 /**
- * PostCard — root post card component. Composes PostHeader, PostMedia, PostActions.
- *
- * Theme migration:
- * - theme.border  → theme.colors.border  (authoritative)
- * - theme.card    → theme.colors.card    (authoritative)
- * - theme.primary → theme.colors.primary (authoritative)
- * - theme.muted   → theme.colors.muted   (authoritative)
- * - theme.text    → theme.colors.text    (authoritative)
- * - theme.cardAlt → theme.colors.cardAlt (authoritative)
- * Flat aliases left as-is where already consistent.
+ * PostCard — Design 2 (light: Soft & Friendly) / Design 3 (dark: Modern & Futuristic)
+ * - Light: white card, soft shadow, clean border, friendly typography
+ * - Dark: dark card with gradient accent border, glowing primary accents
  */
 import React, { memo, useCallback, useState } from 'react';
 import {
   Animated,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { useFadeIn } from '../../theme/animations';
-import { RADIUS, SPACING, useSocialTheme } from '../../theme/socialTheme';
+import { RADIUS, SPACING, useSocialTheme, withAlpha } from '../../theme/socialTheme';
 import type { Post, ReactionType } from '../../types';
 import PostActions from './PostActions';
 import PostHeader from './PostHeader';
@@ -42,15 +36,14 @@ interface Props {
 
 const MAX_LINES = 4;
 
-/** Renders plain text + turns #hashtags role-primary colour */
 const PostBody: React.FC<{ text: string }> = ({ text }) => {
-  const theme  = useSocialTheme();
-  const parts  = text.split(/(#\w+)/g);
+  const theme = useSocialTheme();
+  const parts = text.split(/(#\w+)/g);
   return (
     <>
       {parts.map((part, i) =>
         part.startsWith('#') ? (
-          <Text key={i} style={{ color: theme.colors.primary, fontWeight: '600' }}>
+          <Text key={i} style={{ color: theme.colors.primary, fontWeight: '700' }}>
             {part}
           </Text>
         ) : (
@@ -76,33 +69,65 @@ const PostCard: React.FC<Props> = memo(
     showMenu = true,
   }) => {
     const theme = useSocialTheme();
-    const [expanded,    setExpanded]    = useState(false);
+    const [expanded, setExpanded] = useState(false);
     const [showSeeMore, setShowSeeMore] = useState(false);
 
-    // Entrance fade
-    const opacity = useFadeIn(0, 280);
+    const opacity = useFadeIn(0, 300);
 
-    // Reactions summary
-    const reactionsTotal =
-      (post.stats?.likes ?? 0) + (post.stats?.dislikes ?? 0);
-
+    const reactionsTotal = (post.stats?.likes ?? 0) + (post.stats?.dislikes ?? 0);
     const topReactions = Object.entries(post.stats?.reactionBreakdown ?? {})
       .sort(([, a], [, b]) => (b as number) - (a as number))
       .slice(0, 3)
       .map(([type]) => theme.reactions[type])
       .filter(Boolean);
 
+    // Design 3 dark: gradient accent border using role primary
+    const cardBorderColor = theme.dark
+      ? withAlpha(theme.colors.primary, 0.45)
+      : theme.colors.border;
+
+    // Design 2 light: soft shadow; Design 3 dark: glow shadow
+    const shadowStyle = theme.dark
+      ? {
+          shadowColor: theme.colors.primary,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.18,
+          shadowRadius: 12,
+          elevation: 6,
+        }
+      : {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.07,
+          shadowRadius: 8,
+          elevation: 3,
+        };
+
     return (
       <Animated.View
         style={[
           styles.card,
+          shadowStyle,
           {
             backgroundColor: theme.colors.card,
-            borderColor:     theme.colors.border,
+            borderColor: cardBorderColor,
+            // Design 3 dark: subtle left accent strip via borderLeftWidth
+            borderLeftWidth: theme.dark ? 2.5 : 1,
+            borderLeftColor: theme.dark ? theme.colors.primary : cardBorderColor,
             opacity,
           },
         ]}
       >
+        {/* Design 3 dark: gradient accent top strip */}
+        {theme.dark && (
+          <View
+            style={[
+              styles.accentStrip,
+              { backgroundColor: withAlpha(theme.colors.primary, 0.12) },
+            ]}
+          />
+        )}
+
         {/* ── Header ── */}
         <PostHeader
           author={post.author}
@@ -118,7 +143,14 @@ const PostCard: React.FC<Props> = memo(
         {post.content ? (
           <View style={styles.textWrap}>
             <Text
-              style={[styles.bodyText, { color: theme.colors.text }]}
+              style={[
+                styles.bodyText,
+                {
+                  color: theme.colors.text,
+                  // Design 2 light: slightly looser line height for friendliness
+                  lineHeight: theme.dark ? 22 : 23,
+                },
+              ]}
               numberOfLines={expanded ? undefined : MAX_LINES}
               onTextLayout={(e) => {
                 if (!expanded && e.nativeEvent.lines.length > MAX_LINES) {
@@ -148,38 +180,52 @@ const PostCard: React.FC<Props> = memo(
           </View>
         ) : null}
 
-        {/* ── Reactions summary row ── */}
+        {/* ── Reactions summary ── */}
         {reactionsTotal > 0 ? (
           <View
             style={[
               styles.reactionsSummary,
-              { borderBottomColor: theme.colors.border },
+              {
+                borderBottomColor: theme.dark
+                  ? withAlpha(theme.colors.border, 0.5)
+                  : theme.colors.border,
+              },
             ]}
           >
-            <View style={styles.reactionsLeft}>
+            {/* Left: stacked emoji circles + total count */}
+            <TouchableOpacity
+              onPress={onComment}
+              activeOpacity={0.75}
+              style={styles.reactionsLeft}
+            >
               {topReactions.map((emoji, i) => (
                 <View
                   key={i}
                   style={[
-                    styles.emojiPill,
+                    styles.emojiCircle,
                     {
-                      backgroundColor: theme.colors.cardAlt,
-                      borderColor:     theme.colors.card,
-                      marginLeft:      i > 0 ? -6 : 0,
+                      backgroundColor: theme.dark
+                        ? withAlpha(theme.colors.primary, 0.18)
+                        : theme.colors.cardAlt,
+                      borderColor: theme.colors.card,
+                      marginLeft: i > 0 ? -7 : 0,
                     },
                   ]}
                 >
-                  <Text style={styles.emojiPillText}>{emoji}</Text>
+                  <Text style={styles.emojiCircleText}>{emoji}</Text>
                 </View>
               ))}
-              <Text style={[styles.reactionCount, { color: theme.colors.muted }]}>
-                {reactionsTotal.toLocaleString()}
+              <Text style={[styles.reactionTotalText, { color: theme.colors.muted }]}>
+                {reactionsTotal >= 1000
+                  ? `${(reactionsTotal / 1000).toFixed(1)}k`
+                  : reactionsTotal.toLocaleString()}
               </Text>
-            </View>
+            </TouchableOpacity>
 
-            {post.stats?.comments > 0 ? (
+            {/* Right: comment count tap target */}
+            {(post.stats?.comments ?? 0) > 0 ? (
               <TouchableOpacity onPress={onComment} activeOpacity={0.7}>
-                <Text style={[styles.commentCount, { color: theme.colors.muted }]}>
+                <Text style={[styles.commentCountText, { color: theme.colors.muted }]}>
                   {post.stats.comments.toLocaleString()} comment
                   {post.stats.comments !== 1 ? 's' : ''}
                 </Text>
@@ -189,7 +235,16 @@ const PostCard: React.FC<Props> = memo(
         ) : null}
 
         {/* ── Divider ── */}
-        <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+        <View
+          style={[
+            styles.divider,
+            {
+              backgroundColor: theme.dark
+                ? withAlpha(theme.colors.border, 0.6)
+                : theme.colors.border,
+            },
+          ]}
+        />
 
         {/* ── Actions ── */}
         <PostActions
@@ -211,54 +266,57 @@ PostCard.displayName = 'PostCard';
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: SPACING.md,
-    marginBottom:     SPACING.md,
-    borderRadius:     RADIUS.md,
-    borderWidth:      1,
-    overflow:         'hidden',
+    marginBottom: SPACING.md + 2,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  accentStrip: {
+    height: 3,
+    width: '100%',
   },
   textWrap: {
     paddingHorizontal: SPACING.md,
-    paddingBottom:     SPACING.sm,
+    paddingBottom: SPACING.sm,
+    paddingTop: 2,
   },
   bodyText: {
-    fontSize:      14.5,
-    lineHeight:    22,
-    fontWeight:    '400',
+    fontSize: 15,
+    fontWeight: '400',
     letterSpacing: 0.1,
   },
   seeMore: {
-    fontSize:   13.5,
-    fontWeight: '600',
-    marginTop:  3,
+    fontSize: 13.5,
+    fontWeight: '700',
+    marginTop: 4,
   },
   mediaWrap: { overflow: 'hidden' },
   reactionsSummary: {
-    flexDirection:  'row',
-    alignItems:     'center',
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.md,
-    paddingVertical:   SPACING.sm,
+    paddingVertical: SPACING.sm + 1,
     borderBottomWidth: 0.5,
   },
   reactionsLeft: {
     flexDirection: 'row',
-    alignItems:    'center',
-    gap:           5,
+    alignItems: 'center',
+    gap: 6,
   },
-  emojiPill: {
-    width:          22,
-    height:         22,
-    borderRadius:   11,
-    alignItems:     'center',
+  emojiCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
     justifyContent: 'center',
-    borderWidth:    1.5,
+    borderWidth: 1.5,
   },
-  emojiPillText:  { fontSize: 12 },
-  reactionCount:  { fontSize: 12.5, fontWeight: '500' },
-  commentCount:   { fontSize: 12.5, fontWeight: '500' },
-  divider:        { height: 0.5, opacity: 0.6 },
+  emojiCircleText: { fontSize: 13 },
+  reactionTotalText: { fontSize: 12.5, fontWeight: '500' },
+  commentCountText:  { fontSize: 12.5, fontWeight: '500' },
+  divider: { height: 0.5 },
 });
 
 export default PostCard;
 export { PostCard };
-// ✅ theme-migrated

@@ -1,15 +1,30 @@
-// controllers/jobController.js - UPDATED VERSION WITH OWNER PREVIEW
+// controllers/jobController.js - COMPLETE FIXED VERSION WITH NOTIFICATIONS
 const Job = require('../models/Job');
 const Company = require('../models/Company');
 const Organization = require('../models/Organization');
 const User = require('../models/User');
 const { validationResult } = require('express-validator');
+// 🔔 NOTIFICATION
+const notificationService = require('../services/notificationService');
 const {
   COMPANY_POPULATE_SELECT,
   ORGANIZATION_POPULATE_SELECT,
   buildOwnerPreviewFromJob,
   enrichJobsWithOwnerPreview,
 } = require('../utils/resolveOwnerPreview');
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DEBUG HELPER — defined ONCE, works everywhere
+// ═══════════════════════════════════════════════════════════════════════════════
+const DEBUG_JOBS = true;
+const jobDebugLog = (message, data) => {
+  if (!DEBUG_JOBS) return;
+  if (data !== undefined) {
+    console.log(`📋 [jobController] ${message}`, JSON.stringify(data, null, 2));
+  } else {
+    console.log(`📋 [jobController] ${message}`);
+  }
+};
 
 // Helper function to count text characters (without HTML tags)
 const countTextCharacters = (html) => {
@@ -19,7 +34,7 @@ const countTextCharacters = (html) => {
   return cleanText.length;
 };
 
-// NEW: Helper function to sanitize salary data based on salaryMode
+// Helper function to sanitize salary data based on salaryMode
 const sanitizeSalaryData = (jobData) => {
   const salaryMode = jobData.salaryMode || (jobData.salary && jobData.salary.mode) || 'range';
   if (salaryMode !== 'range') {
@@ -32,7 +47,7 @@ const sanitizeSalaryData = (jobData) => {
   return jobData;
 };
 
-// NEW: Helper to format job response with virtuals
+// Helper to format job response with virtuals
 const formatJobResponse = (job) => {
   if (!job) return null;
   const jobObj = job.toObject ? job.toObject() : job;
@@ -72,9 +87,6 @@ const formatJobResponse = (job) => {
 
 /**
  * Format job response AND attach ownerPreview.
- * ownerPreview is built from the already-populated company/org sub-doc,
- * then augmented with the Cloudinary avatar from the linked Profile
- * (same mechanism used by ProductController.buildOwnerSnapshot).
  */
 const formatJobResponseWithPreview = async (job) => {
   const base = formatJobResponse(job);
@@ -82,6 +94,10 @@ const formatJobResponseWithPreview = async (job) => {
   base.ownerPreview = await buildOwnerPreviewFromJob(base);
   return base;
 };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONTROLLER METHODS
+// ═══════════════════════════════════════════════════════════════════════════════
 
 // @desc    Get all ACTIVE jobs (public)
 // @route   GET /api/v1/job
@@ -130,7 +146,8 @@ exports.getJobs = async (req, res, next) => {
 
     const total = await Job.countDocuments(query);
 
-    // Build ownerPreview for each job (Profile-backed, same as Products)
+    jobDebugLog('getJobs: found', { count: jobs.length, total });
+
     const formattedJobs = await Promise.all(jobs.map(j => formatJobResponseWithPreview(j)));
 
     res.status(200).json({
@@ -156,7 +173,6 @@ exports.createJob = async (req, res, next) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.log('❌ Validation errors:', errors.array());
       return res.status(400).json({
         success: false, message: 'Validation failed',
         errors: errors.array(),
@@ -174,12 +190,6 @@ exports.createJob = async (req, res, next) => {
     if (!company) {
       return res.status(404).json({ success: false, message: 'Company profile not found' });
     }
-
-    console.log('📥 Received job data:', JSON.stringify({
-      ...req.body,
-      descriptionLength: req.body.description?.length,
-      textOnlyLength: countTextCharacters(req.body.description)
-    }, null, 2));
 
     const validEducationLevels = [
       'primary-education', 'secondary-education', 'tvet-level-i', 'tvet-level-ii',
@@ -241,6 +251,16 @@ exports.createJob = async (req, res, next) => {
 
     const formattedJob = await formatJobResponseWithPreview(job);
 
+    // 🔔 NOTIFICATION: Notify matching candidates (fire-and-forget)
+    setImmediate(async () => {
+      try {
+        await notificationService.notifyMatchingCandidates(job);
+      } catch (notifErr) {
+        console.warn('[Notification] Job match notification error:', notifErr.message);
+      }
+    });
+    // END NOTIFICATION
+
     res.status(201).json({ success: true, message: 'Job created successfully', data: formattedJob });
   } catch (error) {
     console.error('Create job error:', error);
@@ -263,23 +283,46 @@ exports.createJob = async (req, res, next) => {
 // @access  Public
 exports.getJob = async (req, res, next) => {
   try {
+    // Use .lean() to avoid Mongoose validators running on read
     const job = await Job.findById(req.params.id)
       .populate('company',      COMPANY_POPULATE_SELECT)
       .populate('organization', ORGANIZATION_POPULATE_SELECT)
-      .populate('createdBy', 'name email');
+      .populate('createdBy', 'name email')
+      .lean({ virtuals: true });  // virtuals: true preserves virtual fields
 
     if (!job) {
       return res.status(404).json({ success: false, message: 'Job not found' });
     }
 
-    job.viewCount = (job.viewCount || 0) + 1;
-    await job.save();
+    // Increment view count atomically without fetching the document
+    // This avoids triggering validators and is more performant
+    Job.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { viewCount: 1 } },
+      { new: false }  // Don't return the updated document
+    ).catch(err => {
+      // Log but don't fail the request if view count update fails
+      console.warn('Failed to update view count:', err.message);
+    });
 
-    const formattedJob = await formatJobResponseWithPreview(job);
+    // Build ownerPreview from the lean object
+    job.ownerPreview = await buildOwnerPreviewFromJob(job);
+
+    // Format the response with virtuals (they're included thanks to lean({ virtuals: true }))
+    const formattedJob = formatJobResponse(job);
+    
+    // Ensure ownerPreview is preserved
+    formattedJob.ownerPreview = job.ownerPreview;
 
     res.status(200).json({ success: true, data: formattedJob });
   } catch (error) {
     console.error('Get job error:', error);
+    
+    // Handle invalid ObjectId format
+    if (error.name === 'CastError' && error.kind === 'ObjectId') {
+      return res.status(400).json({ success: false, message: 'Invalid job ID format' });
+    }
+    
     res.status(500).json({ success: false, message: 'Error fetching job' });
   }
 };
@@ -308,6 +351,9 @@ exports.getCompanyJobs = async (req, res, next) => {
       .skip((page - 1) * limit);
 
     const total = await Job.countDocuments(query);
+
+    jobDebugLog('getCompanyJobs: found', { count: jobs.length, total, companyId: company._id });
+
     const formattedJobs = await Promise.all(jobs.map(j => formatJobResponseWithPreview(j)));
 
     res.status(200).json({
@@ -422,6 +468,18 @@ exports.getJobsForCandidate = async (req, res, next) => {
 
     const filter = { status: 'active' };
 
+    // Add deadline filter to show only non-expired jobs
+    const now = new Date();
+    filter.$and = [
+      {
+        $or: [
+          { applicationDeadline: { $exists: false } },
+          { applicationDeadline: null },
+          { applicationDeadline: { $gt: now } },
+        ],
+      },
+    ];
+
     if (search) {
       filter.$or = [
         { title: { $regex: search, $options: 'i' } },
@@ -438,7 +496,6 @@ exports.getJobsForCandidate = async (req, res, next) => {
     if (salaryMode)      filter.salaryMode          = salaryMode;
 
     if (minSalary || maxSalary) {
-      filter.$and = filter.$and || [];
       filter.$and.push({ salaryMode: 'range' });
       if (minSalary) filter.$and.push({ $or: [{ 'salary.min': { $gte: parseInt(minSalary) } }, { 'salary.max': { $gte: parseInt(minSalary) } }] });
       if (maxSalary) filter.$and.push({ $or: [{ 'salary.max': { $lte: parseInt(maxSalary) } }, { 'salary.min': { $lte: parseInt(maxSalary) } }] });
@@ -453,6 +510,8 @@ exports.getJobsForCandidate = async (req, res, next) => {
         .skip((page - 1) * limit),
       Job.countDocuments(filter)
     ]);
+
+    jobDebugLog('getJobsForCandidate: found', { count: jobs.length, total });
 
     const formattedJobs = await Promise.all(jobs.map(j => formatJobResponseWithPreview(j)));
 
@@ -639,6 +698,17 @@ exports.createOrganizationJob = async (req, res, next) => {
     await job.populate('organization', ORGANIZATION_POPULATE_SELECT);
 
     const formattedJob = await formatJobResponseWithPreview(job);
+
+    // 🔔 NOTIFICATION: Notify matching candidates (fire-and-forget)
+    setImmediate(async () => {
+      try {
+        await notificationService.notifyMatchingCandidates(job);
+      } catch (notifErr) {
+        console.warn('[Notification] Job match notification error:', notifErr.message);
+      }
+    });
+    // END NOTIFICATION
+
     res.status(201).json({ success: true, message: 'Opportunity created successfully', data: formattedJob });
   } catch (error) {
     console.error('Create organization job error:', error);
@@ -721,6 +791,190 @@ exports.deleteOrganizationJob = async (req, res, next) => {
     res.status(500).json({ success: false, message: 'Error deleting opportunity' });
   }
 };
+
+// @desc    Get jobs near a GPS coordinate, sorted by distance
+// @route   GET /api/v1/job/near
+// @access  Public
+// @query   lat (required), lng (required), radius (km, default 25, max 200),
+//          page, limit, search, category, type, experienceLevel,
+//          minSalary, maxSalary, salaryMode, jobType, remote
+exports.getNearbyJobs = async (req, res, next) => {
+  try {
+    const {
+      lat, lng,
+      radius        = 25,
+      page          = 1,
+      limit         = 12,
+      search, category, type, experienceLevel,
+      minSalary, maxSalary, salaryMode, jobType, remote
+    } = req.query;
+
+    // ── Validate required coordinates ────────────────────────────────────
+    const parsedLat    = parseFloat(lat);
+    const parsedLng    = parseFloat(lng);
+    const parsedRadius = Math.min(parseFloat(radius) || 25, 200); // cap 200 km
+    const pageNum      = Math.max(parseInt(page) || 1, 1);
+    const limitNum     = Math.min(parseInt(limit) || 12, 50);
+
+    if (
+      isNaN(parsedLat) || isNaN(parsedLng) ||
+      parsedLat < -90  || parsedLat > 90   ||
+      parsedLng < -180 || parsedLng > 180
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid lat and lng query parameters are required (lat: -90..90, lng: -180..180)'
+      });
+    }
+
+    const radiusInMeters = parsedRadius * 1000;
+
+    // ── Additional match filters (applied AFTER $geoNear) ────────────────
+    // $geoNear only supports a simple `query` object (no $or, $and etc.),
+    // so we push complex filters into a $match stage that follows it.
+    const matchStage = { status: 'active' };
+
+    if (search) {
+      matchStage.$or = [
+        { title:       { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { skills:      { $in: [new RegExp(search, 'i')] } }
+      ];
+    }
+    if (category)        matchStage.category        = category;
+    if (type)            matchStage.type             = type;
+    if (experienceLevel) matchStage.experienceLevel  = experienceLevel;
+    if (jobType)         matchStage.jobType          = jobType;
+    if (salaryMode)      matchStage.salaryMode       = salaryMode;
+    if (remote)          matchStage.remote           = remote;
+
+    if (minSalary || maxSalary) {
+      matchStage.$and = matchStage.$and || [];
+      matchStage.$and.push({ salaryMode: 'range' });
+      if (minSalary) matchStage.$and.push({
+        $or: [
+          { 'salary.min': { $gte: parseInt(minSalary) } },
+          { 'salary.max': { $gte: parseInt(minSalary) } }
+        ]
+      });
+      if (maxSalary) matchStage.$and.push({
+        $or: [
+          { 'salary.max': { $lte: parseInt(maxSalary) } },
+          { 'salary.min': { $lte: parseInt(maxSalary) } }
+        ]
+      });
+    }
+
+    // ── Aggregation pipeline ─────────────────────────────────────────────
+    // $geoNear MUST be the very first stage.
+    // It only returns documents that have a valid 2dsphere-indexed field.
+    const pipeline = [
+      {
+        $geoNear: {
+          near: {
+            type:        'Point',
+            coordinates: [parsedLng, parsedLat]   // MongoDB: [lng, lat]
+          },
+          distanceField:  'distanceMeters',       // new field added to each doc
+          maxDistance:    radiusInMeters,
+          spherical:      true,
+          key:            'location.coordinates', // which field to use
+          query:          { status: 'active' }    // basic pre-filter (simple only)
+        }
+      },
+      // Advanced filters
+      { $match: matchStage },
+      // Add human-readable km field rounded to 1 decimal
+      {
+        $addFields: {
+          distanceKm: {
+            $round: [{ $divide: ['$distanceMeters', 1000] }, 1]
+          }
+        }
+      },
+      // Paginate with $facet so we get both total count and data in one query
+      {
+        $facet: {
+          metadata: [{ $count: 'total' }],
+          data: [
+            { $skip:  (pageNum - 1) * limitNum },
+            { $limit: limitNum }
+          ]
+        }
+      }
+    ];
+
+    const [result] = await Job.aggregate(pipeline);
+
+    const total   = result.metadata[0]?.total ?? 0;
+    const rawJobs = result.data ?? [];
+
+    // ── Populate company / organization on the plain objects ─────────────
+    await Job.populate(rawJobs, [
+      { path: 'company',      select: COMPANY_POPULATE_SELECT },
+      { path: 'organization', select: ORGANIZATION_POPULATE_SELECT }
+    ]);
+
+    // ── Format each job (attach virtuals + ownerPreview) ─────────────────
+    const formattedJobs = await Promise.all(
+      rawJobs.map(async (rawJob) => {
+        // $aggregate returns plain objects — wrap in a Mongoose doc to get virtuals
+        const doc  = new Job(rawJob);
+        const base = formatJobResponse(doc);
+        // Carry distanceKm from the aggregation result
+        base.distanceKm = rawJob.distanceKm;
+        // Attach ownerPreview exactly like other endpoints
+        base.ownerPreview = await buildOwnerPreviewFromJob(base);
+        return base;
+      })
+    );
+
+    jobDebugLog('getNearbyJobs: found', {
+      total,
+      returned: formattedJobs.length,
+      lat: parsedLat,
+      lng: parsedLng,
+      radiusKm: parsedRadius
+    });
+
+    res.status(200).json({
+      success: true,
+      data:    formattedJobs,
+      meta: {
+        userLocation: { lat: parsedLat, lng: parsedLng },
+        radiusKm:     parsedRadius
+      },
+      pagination: {
+        current:        pageNum,
+        totalPages:     Math.ceil(total / limitNum),
+        totalResults:   total,
+        resultsPerPage: limitNum
+      }
+    });
+  } catch (error) {
+    console.error('getNearbyJobs error:', error);
+
+    // Specific error for missing 2dsphere index
+    if (
+      error.code === 2 ||
+      error.codeName === 'BadValue' ||
+      error.message?.includes('2dsphere') ||
+      error.message?.includes('unable to find index')
+    ) {
+      return res.status(500).json({
+        success: false,
+        message: 'Geospatial index not ready. Run: node src/scripts/geocodeExistingJobs.js'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching nearby jobs',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 // @desc    Get job categories
 // @route   GET /api/v1/job/categories
 // @access  Public
