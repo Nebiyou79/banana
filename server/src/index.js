@@ -434,9 +434,6 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-// 404 handler for API routes (keep this AFTER test endpoint)
-app.use('/api/*', (req, res) => { res.status(404).json({ success: false, message: `API endpoint not found: ${req.originalUrl}`, timestamp: new Date().toISOString() }); });
-
 app.get('/api/health', async (req, res) => {
   try {
     const mongoose = require('mongoose');
@@ -486,7 +483,8 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-// app.use('/api/*', (req, res) => { res.status(404).json({ success: false, message: `API endpoint not found: ${req.originalUrl}`, timestamp: new Date().toISOString() }); });
+// 404 handler for any remaining unmatched /api/* routes — must stay AFTER all real API routes (health, migration/status, etc.)
+app.use('/api/*', (req, res) => { res.status(404).json({ success: false, message: `API endpoint not found: ${req.originalUrl}`, timestamp: new Date().toISOString() }); });
 
 app.use((err, req, res, next) => {
   console.error('❌ Server error:', err);
