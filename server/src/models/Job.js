@@ -316,27 +316,24 @@ const jobSchema = new mongoose.Schema({
     // ── GeoJSON Point for proximity search ──────────────────────────────────
     // Stored as [longitude, latitude] — MongoDB GeoJSON standard.
     // Optional: jobs without coordinates still work everywhere except /near.
-    coordinates: {
-      type: {
-        type: String,
-        enum: ['Point'],
-        default: 'Point'
+coordinates: {
+  type: {
+    type: String,
+    enum: ['Point']          // no default
+  },
+  coordinates: {
+    type: [Number],
+    validate: {
+      validator: function (v) {
+        if (!v || v.length === 0) return true;
+        return v.length === 2 &&
+          v[0] >= -180 && v[0] <= 180 &&
+          v[1] >= -90  && v[1] <= 90;
       },
-      coordinates: {
-        type: [Number],  // [lng, lat]
-        validate: {
-          validator: function (v) {
-            if (!v || v.length === 0) return true; // optional field
-            return (
-              v.length === 2 &&
-              v[0] >= -180 && v[0] <= 180 &&        // longitude
-              v[1] >= -90  && v[1] <= 90             // latitude
-            );
-          },
-          message: 'location.coordinates must be [longitude, latitude]'
-        }
-      }
+      message: 'location.coordinates must be [longitude, latitude]'
     }
+  }
+}
     // ── End GeoJSON ──────────────────────────────────────────────────────────
   },
   
@@ -673,16 +670,16 @@ jobSchema.virtual('applicationStatus').get(function () {
 jobSchema.pre('validate', function (next) {
   const coords = this.location?.coordinates?.coordinates;
   const isValidPair =
-    Array.isArray(coords) &&
-    coords.length === 2 &&
+    Array.isArray(coords) && coords.length === 2 &&
     coords.every((v) => typeof v === 'number' && !Number.isNaN(v)) &&
     coords[0] >= -180 && coords[0] <= 180 &&
-    coords[1] >= -90 && coords[1] <= 90;
+    coords[1] >= -90  && coords[1] <= 90;
 
-  if (!isValidPair && this.location) {
+  if (isValidPair) {
+    this.location.coordinates.type = 'Point';
+  } else if (this.location) {
     this.location.coordinates = undefined;
   }
-
   next();
 });
 
