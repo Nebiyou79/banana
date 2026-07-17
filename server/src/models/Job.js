@@ -661,6 +661,31 @@ jobSchema.virtual('applicationStatus').get(function () {
   };
 });
 
+// PRE-VALIDATE MIDDLEWARE
+
+// Guards against the Mongoose nested-default gotcha: `location.coordinates.type`
+// has `default: 'Point'`, so it gets materialized to { type: 'Point' } even when
+// no real coordinates were ever provided (e.g. from a form that doesn't collect
+// geolocation). That half-populated GeoJSON object then fails the sparse
+// 2dsphere index ("Point must be an array or object, instead got type missing").
+// If there's no valid [lng, lat] pair, drop location.coordinates entirely so it
+// never gets persisted or indexed.
+jobSchema.pre('validate', function (next) {
+  const coords = this.location?.coordinates?.coordinates;
+  const isValidPair =
+    Array.isArray(coords) &&
+    coords.length === 2 &&
+    coords.every((v) => typeof v === 'number' && !Number.isNaN(v)) &&
+    coords[0] >= -180 && coords[0] <= 180 &&
+    coords[1] >= -90 && coords[1] <= 90;
+
+  if (!isValidPair && this.location) {
+    this.location.coordinates = undefined;
+  }
+
+  next();
+});
+
 // PRE-SAVE MIDDLEWARE
 
 jobSchema.pre('save', function (next) {
