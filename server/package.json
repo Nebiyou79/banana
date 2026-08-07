@@ -14,7 +14,10 @@
     "backfill:run": "node scripts/backfillExistingUsers.js --batch=100 --delay=500",
     "backfill:simple": "node scripts/simpleBackfill.js",
     "backfill:verify": "node scripts/verifyBackfill.js",
-    "backfill:fix": "node scripts/backfillExistingUsers.js --fix-errors --batch=50"
+    "backfill:fix": "node scripts/backfillExistingUsers.js --fix-errors --batch=50",
+    "test": "jest",
+    "test:unit": "jest --selectProjects unit",
+    "test:integration": "jest --selectProjects integration"
   },
   "dependencies": {
     "axios": "^1.13.2",
@@ -53,6 +56,10 @@
   },
   "devDependencies": {
     "@types/multer": "^2.0.0",
-    "nodemon": "^3.0.1"
+    "jest": "^29.7.0",
+    "mongodb-memory-server": "^10.1.4",
+    "nodemon": "^3.0.1",
+    "socket.io-client": "^4.8.3",
+    "supertest": "^7.0.0"
   }
 }
