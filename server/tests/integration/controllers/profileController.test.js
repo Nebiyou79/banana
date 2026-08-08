@@ -26,6 +26,22 @@ describe('profileController integration', () => {
     });
   });
 
+  describe('PUT /api/v1/profile', () => {
+    it('updates basic profile fields', async () => {
+      const user = await createUser();
+      const res = await request(app)
+        .put('/api/v1/profile')
+        .set(authHeader(user._id))
+        .send({
+          headline: 'Updated headline',
+          bio: 'Updated bio for profile integration test.',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+  });
+
   describe('GET /api/v1/profile/completion', () => {
     it('returns profile completion status', async () => {
       const user = await createUser();
@@ -36,6 +52,19 @@ describe('profileController integration', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data).toBeDefined();
+    });
+  });
+
+  describe('GET /api/v1/profile/summary', () => {
+    it('returns profile summary', async () => {
+      const user = await createUser();
+      await createProfileForUser(user);
+      const res = await request(app)
+        .get('/api/v1/profile/summary')
+        .set(authHeader(user._id));
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
     });
   });
 
@@ -51,6 +80,117 @@ describe('profileController integration', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       assertNoPassword(res.body);
+    });
+  });
+
+  describe('GET /api/v1/profile/popular', () => {
+    it('returns popular profiles', async () => {
+      const user = await createUser();
+      const res = await request(app)
+        .get('/api/v1/profile/popular')
+        .set(authHeader(user._id));
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+  });
+
+  describe('GET /api/v1/profile/search', () => {
+    it('searches profiles by query', async () => {
+      const user = await createUser({ name: 'Searchable Profile User' });
+      await createProfileForUser(user, { headline: 'Unique searchable headline' });
+
+      const res = await request(app)
+        .get('/api/v1/profile/search')
+        .set(authHeader(user._id));
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+  });
+
+  describe('PUT /api/v1/profile/professional-info', () => {
+    it('updates professional info', async () => {
+      const user = await createUser({ role: 'candidate' });
+      const res = await request(app)
+        .put('/api/v1/profile/professional-info')
+        .set(authHeader(user._id))
+        .send({
+          skills: ['JavaScript', 'Node.js'],
+          experience: [{ title: 'Developer', company: 'Test Co', startDate: '2020-01' }],
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+  });
+
+  describe('PUT /api/v1/profile/social-links', () => {
+    it('updates social links', async () => {
+      const user = await createUser();
+      const res = await request(app)
+        .put('/api/v1/profile/social-links')
+        .set(authHeader(user._id))
+        .send({ socialLinks: { linkedin: 'https://linkedin.com/in/testuser' } });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+  });
+
+  describe('PUT /api/v1/profile/privacy-settings', () => {
+    it('updates privacy settings', async () => {
+      const user = await createUser();
+      const res = await request(app)
+        .put('/api/v1/profile/privacy-settings')
+        .set(authHeader(user._id))
+        .send({ privacySettings: { profileVisibility: 'public', showEmail: false } });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+  });
+
+  describe('PUT /api/v1/profile/notification-preferences', () => {
+    it('updates notification preferences', async () => {
+      const user = await createUser();
+      const res = await request(app)
+        .put('/api/v1/profile/notification-preferences')
+        .set(authHeader(user._id))
+        .send({ notificationPreferences: { emailNotifications: true, pushNotifications: false } });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+  });
+
+  describe('POST /api/v1/profile/verification', () => {
+    it('submits verification request', async () => {
+      const user = await createUser();
+      const res = await request(app)
+        .post('/api/v1/profile/verification')
+        .set(authHeader(user._id))
+        .send({ documentType: 'national-id', documentNumber: 'ID123456' });
+
+      expect([200, 201, 400]).toContain(res.status);
+      if (res.status === 200 || res.status === 201) {
+        expect(res.body.success).toBe(true);
+      }
+    });
+  });
+
+  describe('PUT /api/v1/profile/social-stats', () => {
+    it('returns server error when Connection model is unavailable', async () => {
+      const user = await createUser();
+      await createProfileForUser(user);
+      const res = await request(app)
+        .put('/api/v1/profile/social-stats')
+        .set(authHeader(user._id))
+        .send({});
+
+      expect(res.status).toBe(500);
+      expect(res.body.success).toBe(false);
+      expect(res.body.code).toBe('SERVER_ERROR');
     });
   });
 });

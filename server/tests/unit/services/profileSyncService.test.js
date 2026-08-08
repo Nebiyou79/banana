@@ -117,4 +117,25 @@ describe('profileSyncService', () => {
       'User not found'
     );
   });
+
+  it('getLogoUrl prefixes relative company logoUrl with base URL', async () => {
+    const user = await createUser({ role: 'company', email: 'relative-logo@test.com' });
+    const company = await Company.create({
+      name: 'Relative Logo Co',
+      user: user._id,
+      logoUrl: '/uploads/logos/co.png',
+    });
+
+    const logoUrl = await ProfileSyncService.getLogoUrl(company._id, 'company');
+
+    expect(logoUrl).toBe('http://localhost:4000/uploads/logos/co.png');
+  });
+
+  it('getLogoUrl returns null for unknown entity', async () => {
+    const logoUrl = await ProfileSyncService.getLogoUrl(
+      new mongoose.Types.ObjectId(),
+      'company'
+    );
+    expect(logoUrl).toBeNull();
+  });
 });

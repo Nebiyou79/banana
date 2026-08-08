@@ -82,6 +82,62 @@ describe('notificationService', () => {
     expect(count).toBe(0);
   });
 
+  it('create deduplicates grouped notifications within one minute', async () => {
+    const recipient = await createUser();
+    const actor = await createUser({ email: 'actor2@test.com', name: 'Actor Two' });
+    const groupKey = `post_liked:${recipient._id}:post-2`;
+
+    const first = await notificationService.create({
+      recipient: recipient._id,
+      actor: actor._id,
+      type: 'post_liked',
+      title: 'Post liked',
+      body: 'Actor Two liked your post',
+      groupKey,
+      channels: { inApp: true, push: false, email: false },
+    });
+
+    const second = await notificationService.create({
+      recipient: recipient._id,
+      actor: actor._id,
+      type: 'post_liked',
+      title: 'Post liked',
+      body: 'Actor Two liked your post',
+      groupKey,
+      channels: { inApp: true, push: false, email: false },
+    });
+
+    expect(second._id.toString()).toBe(first._id.toString());
+
+    const count = await Notification.countDocuments({ groupKey, deleted: false });
+    expect(count).toBe(1);
+  });
+
+  it('create delivers push and email when channels are enabled', async () => {
+    const recipient = await createUser({ email: 'push-user@test.com' });
+    await NotificationPreference.create({
+      user: recipient._id,
+      categories: {
+        jobs: { inApp: true, push: true, email: true },
+      },
+    });
+
+    await notificationService.create({
+      recipient: recipient._id,
+      type: 'new_job_match',
+      title: 'New job match',
+      body: 'A job matches your profile',
+      channels: { inApp: true, push: true, email: true },
+    });
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(pushService.sendToUser).toHaveBeenCalled();
+    expect(emailService.sendNotificationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'push-user@test.com' })
+    );
+  });
+
   it('dismissGrouped marks grouped notifications as deleted', async () => {
     const recipient = await createUser();
     const actor = await createUser({ email: 'liker@test.com' });
@@ -125,5 +181,30 @@ describe('notificationService', () => {
     );
     expect(pushService.sendToUser).not.toHaveBeenCalled();
     expect(emailService.sendNotificationEmail).not.toHaveBeenCalled();
+  });
+
+  it('notifyMatchingCandidates creates job match notifications', async () => {
+    const candidate = await createUser({
+      email: 'match@test.com',
+      role: 'candidate',
+      skills: ['Node.js'],
+    });
+
+    const job = {
+      _id: candidate._id,
+      title: 'Backend Developer',
+      skills: ['Node.js'],
+      location: {},
+    };
+
+    await notificationService.notifyMatchingCandidates(job);
+
+    const notification = await Notification.findOne({
+      recipient: candidate._id,
+      type: 'new_job_match',
+    });
+
+    expect(notification).toBeTruthy();
+    expect(notification.body).toContain('Backend Developer');
   });
 });

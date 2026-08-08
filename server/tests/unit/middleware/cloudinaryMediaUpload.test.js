@@ -26,12 +26,24 @@ function createMocks(overrides = {}) {
 describe('cloudinaryMediaUpload', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    cloudinaryStorageService.uploadFile.mockResolvedValue({
+      success: true,
+      data: {
+        cloudinary: {
+          public_id: 'bananalink/images/test',
+          secure_url: 'https://res.cloudinary.com/test/image.jpg',
+        },
+        localBackup: null,
+        metadata: { originalName: 'photo.jpg' },
+      },
+    });
   });
 
   it('exports media upload handlers', () => {
     expect(typeof cloudinaryMediaUpload.single).toBe('function');
     expect(typeof cloudinaryMediaUpload.avatar).toBe('function');
     expect(typeof cloudinaryMediaUpload.cover).toBe('function');
+    expect(typeof cloudinaryMediaUpload.multiple).toBe('function');
   });
 
   it('continues when single upload receives no file', () => {
@@ -52,4 +64,23 @@ describe('cloudinaryMediaUpload', () => {
     expect(req.cloudinaryAvatar.success).toBe(false);
     expect(req.cloudinaryAvatar.error).toBe('No file provided');
   });
+
+  it('sets req.cloudinaryCover when cover upload receives no file', () => {
+    const { req, res, next } = createMocks();
+
+    cloudinaryMediaUpload.cover(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.cloudinaryCover.success).toBe(false);
+  });
+
+  it('continues when multiple upload receives no files', () => {
+    const { req, res, next } = createMocks();
+
+    cloudinaryMediaUpload.multiple(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(cloudinaryStorageService.uploadFile).not.toHaveBeenCalled();
+  });
+
 });
