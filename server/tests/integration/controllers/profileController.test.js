@@ -2,6 +2,7 @@ const request = require('supertest');
 const { getApp } = require('../../helpers/app');
 const { createUser, authHeader, assertNoPassword } = require('../../helpers/auth');
 const { createProfileForUser } = require('../../helpers/factories/profileFactory');
+const Profile = require('../../../src/models/Profile');
 
 describe('profileController integration', () => {
   const app = getApp();
@@ -13,14 +14,29 @@ describe('profileController integration', () => {
       expect(res.body.success).toBe(false);
     });
 
-    it('returns profile for authenticated user', async () => {
-      const user = await createUser({ name: 'Profile Test User' });
+    it('creates default profile on first access', async () => {
+      const user = await createUser();
       const res = await request(app)
         .get('/api/v1/profile')
         .set(authHeader(user._id));
 
-      expect([200, 201]).toContain(res.status);
+      expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
+      expect(res.body.code).toBe('PROFILE_CREATED');
+      expect(res.body.data).toBeDefined();
+      assertNoPassword(res.body);
+    });
+
+    it('returns existing profile for authenticated user', async () => {
+      const user = await createUser();
+      await createProfileForUser(user);
+      const res = await request(app)
+        .get('/api/v1/profile')
+        .set(authHeader(user._id));
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.code).toBe('PROFILE_RETRIEVED');
       expect(res.body.data).toBeDefined();
       assertNoPassword(res.body);
     });
@@ -165,22 +181,32 @@ describe('profileController integration', () => {
   });
 
   describe('POST /api/v1/profile/verification', () => {
-    it('submits verification request', async () => {
+    it('submits verification request with valid documents', async () => {
       const user = await createUser();
       const res = await request(app)
         .post('/api/v1/profile/verification')
         .set(authHeader(user._id))
-        .send({ documentType: 'national-id', documentNumber: 'ID123456' });
+        .send({
+          documents: [
+            {
+              documentType: 'government_id',
+              url: 'https://cdn.test/documents/national-id.pdf',
+            },
+          ],
+        });
 
-      expect([200, 201, 400]).toContain(res.status);
-      if (res.status === 200 || res.status === 201) {
-        expect(res.body.success).toBe(true);
-      }
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.status).toBe('pending');
+
+      const profile = await Profile.findOne({ user: user._id });
+      expect(profile.verificationStatus).toBe('pending');
+      expect(profile.verificationDetails.documents).toHaveLength(1);
     });
   });
 
   describe('PUT /api/v1/profile/social-stats', () => {
-    it('returns server error when Connection model is unavailable', async () => {
+    it('updates social stats for authenticated user profile', async () => {
       const user = await createUser();
       await createProfileForUser(user);
       const res = await request(app)
@@ -188,9 +214,15 @@ describe('profileController integration', () => {
         .set(authHeader(user._id))
         .send({});
 
-      expect(res.status).toBe(500);
-      expect(res.body.success).toBe(false);
-      expect(res.body.code).toBe('SERVER_ERROR');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.code).toBe('SOCIAL_STATS_UPDATED');
+      expect(res.body.data).toMatchObject({
+        followerCount: expect.any(Number),
+        followingCount: expect.any(Number),
+        postCount: expect.any(Number),
+        connectionCount: expect.any(Number),
+      });
     });
   });
 });

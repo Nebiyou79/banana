@@ -61,15 +61,30 @@ describe('promoCodeController integration', () => {
       expect(res.status).toBe(401);
     });
 
-    it('generates referral code for authenticated user', async () => {
+    it('generates referral code for authenticated user on first request', async () => {
       const user = await createUser();
       const res = await request(app)
         .post('/api/v1/promo-codes/generate')
         .set(authHeader(user._id));
 
-      expect([200, 201]).toContain(res.status);
+      expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.data.code).toBeTruthy();
+    });
+
+    it('returns existing referral code on subsequent requests', async () => {
+      const user = await createUser();
+      const first = await request(app)
+        .post('/api/v1/promo-codes/generate')
+        .set(authHeader(user._id));
+
+      const res = await request(app)
+        .post('/api/v1/promo-codes/generate')
+        .set(authHeader(user._id));
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.code).toBe(first.body.data.code);
     });
   });
 

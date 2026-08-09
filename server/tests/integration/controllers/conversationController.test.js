@@ -81,9 +81,29 @@ describe('conversationController integration', () => {
         .post(`/api/v1/conversations/with/${other._id}`)
         .set(authHeader(user._id));
 
-      expect([200, 201]).toContain(res.status);
+      expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
+      expect(res.body.created).toBe(true);
       expect(res.body.data.participants.length).toBe(2);
+    });
+
+    it('returns existing conversation without creating a duplicate', async () => {
+      const user = await createUser();
+      const other = await createUser();
+
+      const createRes = await request(app)
+        .post(`/api/v1/conversations/with/${other._id}`)
+        .set(authHeader(user._id));
+      expect(createRes.status).toBe(201);
+
+      const res = await request(app)
+        .post(`/api/v1/conversations/with/${other._id}`)
+        .set(authHeader(user._id));
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.created).toBe(false);
+      expect(res.body.data._id).toBe(createRes.body.data._id);
     });
   });
 

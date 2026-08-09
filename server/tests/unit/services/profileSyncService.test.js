@@ -131,6 +131,18 @@ describe('profileSyncService', () => {
     expect(logoUrl).toBe('http://localhost:4000/uploads/logos/co.png');
   });
 
+  it('getLogoUrl returns profile avatar for user entity', async () => {
+    const user = await createUser({ role: 'candidate', email: 'logo-user@test.com' });
+    await Profile.create({
+      user: user._id,
+      avatar: { secure_url: 'https://cdn.test/user-avatar.jpg', public_id: 'avatars/user-1' },
+    });
+
+    const logoUrl = await ProfileSyncService.getLogoUrl(user._id, 'user');
+
+    expect(logoUrl).toBe('https://cdn.test/user-avatar.jpg');
+  });
+
   it('getLogoUrl returns null for unknown entity', async () => {
     const logoUrl = await ProfileSyncService.getLogoUrl(
       new mongoose.Types.ObjectId(),

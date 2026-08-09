@@ -114,8 +114,9 @@ describe('freelancerMarketplaceController integration', () => {
           },
         });
 
-      expect([200, 201]).toContain(res.status);
+      expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
+      expect(res.body.data.rating).toBe(5);
     });
   });
 

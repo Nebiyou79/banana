@@ -255,15 +255,15 @@ describe('emailService', () => {
     ).rejects.toThrow('Email template "nonexistent_template" not found');
   });
 
-  it('sendTenderShareLinkEmail throws when template helper is missing (current behavior)', async () => {
-    await expect(
-      emailService.sendTenderShareLinkEmail(
-        'share@test.com',
-        { title: 'Shared Tender', _id: 'tender-share', tenderId: 'TND-001' },
-        { name: 'Owner' },
-        'https://example.com/share/abc'
-      )
-    ).rejects.toThrow('Failed to send tender share link email');
+  it('sendTenderShareLinkEmail sends share link email', async () => {
+    await emailService.sendTenderShareLinkEmail(
+      'share@test.com',
+      { title: 'Shared Tender', _id: 'tender-share', tenderId: 'TND-001' },
+      { name: 'Owner' },
+      'https://example.com/share/abc'
+    );
+    expect(mockSendMail).toHaveBeenCalled();
+    expect(mockSendMail.mock.calls[0][0].html).toContain('https://example.com/share/abc');
   });
 
   it('sendAppointmentConfirmationEmail sends confirmation', async () => {

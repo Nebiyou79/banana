@@ -181,14 +181,15 @@ describe('fileRoutes integration', () => {
   });
 
   describe('GET /api/v1/cloudinary/download/:publicId', () => {
-    it('returns error when cloudinary route unavailable', async () => {
+    it('redirects to cloudinary download URL for authenticated users', async () => {
       const user = await createUser();
       const res = await request(app)
-        .get('/api/v1/cloudinary/download/test-folder/sample-file')
+        .get('/api/v1/cloudinary/download/sample-file')
         .query({ filename: 'sample.pdf' })
         .set(authHeader(user._id));
 
-      expect([302, 404, 500]).toContain(res.status);
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toMatch(/cloudinary\.com/);
     });
   });
 

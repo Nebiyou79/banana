@@ -2,6 +2,7 @@ const request = require('supertest');
 const { getApp } = require('../../helpers/app');
 const { createUser, authHeader, assertNoPassword } = require('../../helpers/auth');
 const { createActiveJob } = require('../../helpers/factories/jobFactory');
+const Job = require('../../../src/models/Job');
 const { createCompanyWithUser } = require('../../helpers/factories/companyFactory');
 
 describe('jobController integration', () => {
@@ -50,6 +51,7 @@ describe('jobController integration', () => {
 
   describe('GET /api/v1/job/near', () => {
     it('returns nearby jobs with coordinates', async () => {
+      await Job.syncIndexes();
       await createActiveJob({
         title: 'Nearby Job',
         location: {
@@ -63,10 +65,9 @@ describe('jobController integration', () => {
         .get('/api/v1/job/near')
         .query({ lat: 9.0054, lng: 38.7578, radius: 50 });
 
-      expect([200, 500]).toContain(res.status);
-      if (res.status === 200) {
-        expect(res.body.success).toBe(true);
-      }
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(Array.isArray(res.body.data)).toBe(true);
     });
   });
 

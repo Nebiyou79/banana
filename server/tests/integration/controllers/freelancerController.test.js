@@ -181,10 +181,10 @@ describe('freelancerController integration', () => {
         .get('/api/v1/freelancer/stats/uploads')
         .set(authHeader(user._id));
 
-      expect([200, 500]).toContain(res.status);
-      if (res.status === 200) {
-        expect(res.body.success).toBe(true);
-      }
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.code).toBe('UPLOAD_STATS_RETRIEVED');
+      expect(res.body.data.freelancerStats).toBeDefined();
     });
   });
 

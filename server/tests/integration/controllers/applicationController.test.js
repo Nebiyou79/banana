@@ -512,7 +512,8 @@ describe('applicationController integration', () => {
           },
         },
       });
-      expect([400, 409]).toContain(res.statusCode);
+      expect(res.statusCode).toBe(400);
+      expect(res.body.message).toBe('You have already applied for this job');
     });
 
     it('getApplicationStatistics returns admin statistics', async () => {

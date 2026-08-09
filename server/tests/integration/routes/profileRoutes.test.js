@@ -14,14 +14,28 @@ describe('profileRoutes integration', () => {
       expect(res.body.success).toBe(false);
     });
 
-    it('returns profile for authenticated user', async () => {
+    it('creates default profile on first access', async () => {
       const user = await createUser();
       const res = await request(app)
         .get('/api/v1/profile')
         .set(authHeader(user._id));
 
-      expect([200, 201]).toContain(res.status);
+      expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
+      expect(res.body.code).toBe('PROFILE_CREATED');
+      assertNoPassword(res.body);
+    });
+
+    it('returns existing profile for authenticated user', async () => {
+      const user = await createUser();
+      await createProfileForUser(user);
+      const res = await request(app)
+        .get('/api/v1/profile')
+        .set(authHeader(user._id));
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.code).toBe('PROFILE_RETRIEVED');
       assertNoPassword(res.body);
     });
   });

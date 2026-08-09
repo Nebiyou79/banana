@@ -1,10 +1,7 @@
 describe('appointmentReminder job', () => {
-  it('loads the module without error', () => {
-    expect(() => require('../../../src/jobs/appointmentReminder')).not.toThrow();
-  });
-
-  it('exports an empty or minimal module when file has no implementation', () => {
+  // server/src/jobs/appointmentReminder.js is empty on main — documents missing implementation
+  it('exports run() for hourly cron scheduling', () => {
     const appointmentReminder = require('../../../src/jobs/appointmentReminder');
-    expect(appointmentReminder).toBeDefined();
+    expect(typeof appointmentReminder.run).toBe('function');
   });
 });

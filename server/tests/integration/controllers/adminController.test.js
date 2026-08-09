@@ -397,7 +397,7 @@ describe('adminController integration', () => {
       expect(res.body.success).toBe(false);
     });
 
-    it('updates user status successfully', async () => {
+    it('updates user status and deactivates suspended users', async () => {
       const target = await createCandidate();
       const req = mockReq({
         params: { id: target._id.toString() },
@@ -410,6 +410,9 @@ describe('adminController integration', () => {
       expect(res.statusCode).toBe(200);
       expect(res.body.success).toBe(true);
       assertNoPassword(res.body);
+
+      const updated = await User.findById(target._id);
+      expect(updated.isActive).toBe(false);
     });
   });
 
@@ -490,12 +493,19 @@ describe('adminController integration', () => {
   });
 
   describe('getAllTenders', () => {
-    it('returns 500 when populate fields mismatch schema (current behavior)', async () => {
+    it('returns paginated tenders list', async () => {
       await createProfessionalTender();
-      const req = mockReq({ query: { page: 1, limit: 10 } });
+      const admin = await createAdmin();
+      const req = mockReq({
+        query: { page: 1, limit: 10 },
+        user: { _id: admin._id },
+      });
       const res = mockRes();
       await adminController.getAllTenders(req, res);
-      expect(res.statusCode).toBe(500);
+      expect(res.statusCode).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data.length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -577,6 +587,9 @@ describe('adminController integration', () => {
       await adminController.bulkUserActions(req, res);
       expect(res.statusCode).toBe(200);
       expect(res.body.modifiedCount).toBe(1);
+
+      const updated = await User.findById(target._id);
+      expect(updated.isActive).toBe(false);
     });
   });
 });

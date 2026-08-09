@@ -341,16 +341,31 @@ describe('authController integration', () => {
   });
 
   describe('generateReferralCode (direct)', () => {
-    it('generates referral code for user', async () => {
+    it('generates referral code for user on first request', async () => {
       const user = await createUser();
       const req = mockReq({ user: { userId: user._id } });
       const res = mockRes();
 
       await authController.generateReferralCode(req, res);
 
-      expect([200, 201]).toContain(res.statusCode);
+      expect(res.statusCode).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.data.code).toBeTruthy();
+    });
+
+    it('returns existing referral code on subsequent requests', async () => {
+      const user = await createUser();
+      const firstReq = mockReq({ user: { userId: user._id } });
+      const firstRes = mockRes();
+      await authController.generateReferralCode(firstReq, firstRes);
+
+      const req = mockReq({ user: { userId: user._id } });
+      const res = mockRes();
+      await authController.generateReferralCode(req, res);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.code).toBe(firstRes.body.data.code);
     });
   });
 
