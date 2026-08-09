@@ -1,0 +1,87 @@
+{
+  "timestamp": "2026-08-09T01:21:46.624Z",
+  "strategy": {
+    "batchSize": 10,
+    "concurrentUploads": 5,
+    "preserveStructure": true,
+    "backupOriginal": true
+  },
+  "files": [
+    {
+      "name": "doc.pdf",
+      "path": "/var/folders/ry/wqxt7dcj1mq6b0g5s1l4zclm0000gn/T/migrator-plan-hrPFoK/doc.pdf",
+      "relativePath": "doc.pdf",
+      "size": 11,
+      "extension": ".pdf",
+      "type": "document",
+      "lastModified": "2026-08-09T01:21:46.597Z",
+      "createdAt": "2026-08-09T01:21:46.589Z",
+      "targetFolder": "bananalink/migrated/doc.pdf",
+      "uploadPreset": "bananalink_files",
+      "status": "pending",
+      "migrationId": "b98986882b3214ad"
+    }
+  ],
+  "estimated": {
+    "totalFiles": 1,
+    "totalSize": 11,
+    "estimatedTime": 1,
+    "cloudinaryCost": {
+      "storage": "0.00 GB",
+      "bandwidth": "0.00 GB (estimated)",
+      "note": "Check Cloudinary pricing for exact costs"
+    }
+  },
+  "steps": [
+    {
+      "id": 1,
+      "name": "Create backup of original files",
+      "description": "Copy all files to migration backup directory",
+      "estimatedTime": "5-10 minutes",
+      "status": "pending"
+    },
+    {
+      "id": 2,
+      "name": "Upload documents to Cloudinary",
+      "description": "Upload PDF, DOC, TXT files",
+      "estimatedTime": "1 batches",
+      "status": "pending"
+    },
+    {
+      "id": 3,
+      "name": "Upload images to Cloudinary",
+      "description": "Upload JPG, PNG, GIF files with optimization",
+      "estimatedTime": "0 batches",
+      "status": "pending"
+    },
+    {
+      "id": 4,
+      "name": "Upload videos to Cloudinary",
+      "description": "Upload MP4, MOV, AVI files",
+      "estimatedTime": "0 batches",
+      "status": "pending"
+    },
+    {
+      "id": 5,
+      "name": "Update database records",
+      "description": "Replace local file paths with Cloudinary URLs",
+      "estimatedTime": "Varies by database size",
+      "status": "pending"
+    },
+    {
+      "id": 6,
+      "name": "Verify uploads",
+      "description": "Check all files uploaded correctly",
+      "estimatedTime": "10-15 minutes",
+      "status": "pending"
+    },
+    {
+      "id": 7,
+      "name": "Cleanup local files",
+      "description": "Remove original files after verification",
+      "estimatedTime": "5 minutes",
+      "status": "pending",
+      "warning": "IRREVERSIBLE - Make sure backups exist"
+    }
+  ]
+}

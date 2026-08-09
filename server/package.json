@@ -17,7 +17,8 @@
     "backfill:fix": "node scripts/backfillExistingUsers.js --fix-errors --batch=50",
     "test": "jest",
     "test:unit": "jest --selectProjects unit",
-    "test:integration": "jest --selectProjects integration"
+    "test:integration": "jest --selectProjects integration",
+    "test:coverage": "jest --coverage --runInBand"
   },
   "dependencies": {
     "axios": "^1.13.2",

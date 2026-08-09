@@ -22,3 +22,7 @@ yarn-error.log*
 .env.development
 .env.production
 .env.test
+
+# Jest CI reports (local runs)
+server/reports/
+server/coverage/
