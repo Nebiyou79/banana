@@ -13,7 +13,7 @@ class UploadConfig {
 
   init() {
     // Base upload directory - works in both Docker and local
-    this.BASE_DIR = process.env.UPLOADS_DIR || '/app/public/uploads';
+    this.BASE_DIR = process.env.UPLOADS_DIR || 'public/uploads';
     
     // Ensure base directory exists
     if (!fs.existsSync(this.BASE_DIR)) {
