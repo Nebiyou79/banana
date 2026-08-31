@@ -59,3 +59,5 @@ hashtagSchema.methods.calculateTrendingScore = function() {
   const score = (this.postCount * 0.7) + (this.usageCount * 0.3) * recencyFactor;
   return Math.round(score * 100) / 100; // Round to 2 decimal places
 };
+
+module.exports = mongoose.model('Hashtag', hashtagSchema);

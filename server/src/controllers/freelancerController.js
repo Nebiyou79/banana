@@ -1916,62 +1916,6 @@ function getProfileSuggestions(freelancerProfile, user) {
   return suggestions;
 }
 
-async function prepareProfileData(user, freelancerProfile) {
-  // Only include Cloudinary portfolio items
-  const cloudinaryPortfolio = (user.portfolio || []).filter(item => 
-    item.mediaUrl && item.mediaUrl.includes('cloudinary.com')
-  );
-  
-  const transformedPortfolio = cloudinaryPortfolio.map(item => transformPortfolioItem(item));
-
-  const transformedSkills = (user.skills || []).map(skill => 
-    typeof skill === 'string' ? { name: skill, level: 'intermediate', yearsOfExperience: 1 } : skill
-  );
-
-  const profileCompletion = calculateProfileCompleteness(user, freelancerProfile);
-  const age = user.dateOfBirth ? calculateAge(user.dateOfBirth) : null;
-
-  const profileData = {
-    _id: user._id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    bio: user.bio,
-    location: user.location,
-    phone: user.phone,
-    website: user.website,
-    avatar: user.avatar && user.avatar.includes('cloudinary.com') ? user.avatar : '',
-    dateOfBirth: user.dateOfBirth,
-    gender: user.gender,
-    age: age,
-    skills: transformedSkills,
-    experience: user.experience || [],
-    education: user.education || [],
-    profileCompleted: user.profileCompleted || false,
-    verificationStatus: user.verificationStatus || 'none',
-    portfolio: transformedPortfolio,
-    socialLinks: user.socialLinks || {},
-    freelancerProfile: {
-      headline: freelancerProfile.headline,
-      hourlyRate: freelancerProfile.hourlyRate,
-      availability: freelancerProfile.availability,
-      experienceLevel: freelancerProfile.experienceLevel,
-      englishProficiency: freelancerProfile.englishProficiency,
-      timezone: freelancerProfile.timezone,
-      specialization: freelancerProfile.specialization || [],
-      services: freelancerProfile.services || [],
-      profileCompletion: profileCompletion,
-      totalEarnings: freelancerProfile.totalEarnings || 0,
-      successRate: freelancerProfile.successRate || 0,
-      ratings: freelancerProfile.ratings || { average: 0, count: 0 },
-      verified: freelancerProfile.verified || false,
-      profileViews: freelancerProfile.profileViews || 0
-    }
-  };
-
-  return profileData;
-}
-
 async function getTotalJobs(userId) {
   return Math.floor(Math.random() * 20);
 }

@@ -559,4 +559,8 @@ process.on('SIGINT', async () => {
 });
 process.on('SIGTERM', async () => { console.log('\n🛑 Received SIGTERM, shutting down...'); process.exit(0); });
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { app, httpServer, io, startServer };
